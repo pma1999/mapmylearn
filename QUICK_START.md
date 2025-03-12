@@ -2,6 +2,15 @@
 
 This guide will help you get started with the Learning Path Generator in just a few minutes.
 
+## What's New in Version 2.0
+
+The Learning Path Generator now features **comprehensive module development**:
+
+- Each module in your learning path is fully researched and developed with in-depth content
+- The system performs targeted research for each specific module
+- Content is structured with sections, examples, and references
+- Complete markdown export of the entire learning path
+
 ## Prerequisites
 
 Before you begin, make sure you have:
@@ -70,8 +79,20 @@ The application will open in your default web browser.
 
 1. **Enter Your Topic**: Type any topic you want to learn about
 2. **Generate Learning Path**: Click the "Generate Learning Path" button
-3. **Review & Explore**: Browse through the generated modules
-4. **Download**: Save your learning path as JSON or Markdown
+3. **Track Progress**: Monitor the progress as the system:
+   - Researches your topic
+   - Creates a learning path outline
+   - Develops each module with comprehensive content
+   - Finalizes the complete learning path
+4. **Explore Content**: Browse through the modules using either:
+   - Module View: Displays each module in expandable sections
+   - Print View: Shows all content in a single scrollable view
+5. **Download**: Save your learning path as JSON or Markdown
+
+## Important Notes
+
+- **Generation Time**: Creating a comprehensive learning path with fully developed modules takes longer than just generating an outline. Expect processing to take several minutes.
+- **API Usage**: This version uses more API calls due to the in-depth research and content generation for each module.
 
 ## Example Topics
 
@@ -88,6 +109,7 @@ Try these topics to see how the application works:
 - **API Key Issues**: Make sure your API keys are valid and correctly entered
 - **Dependency Problems**: Run `pip install -r requirements.txt` to ensure all packages are installed
 - **Connection Issues**: Check your internet connection for web search functionality
+- **Log Files**: If you encounter errors, check the `learning_path_generator.log` file for details
 
 ## Next Steps
 

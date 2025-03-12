@@ -2,6 +2,9 @@
 """
 Learning Path Generator - Launcher Script
 This script provides a simple way to start the Learning Path Generator application.
+
+The Learning Path Generator now includes enhanced functionality to fully develop 
+each module with comprehensive educational content.
 """
 
 import os
@@ -59,7 +62,8 @@ def launch_app():
     return process
 
 if __name__ == "__main__":
-    print("=== Learning Path Generator ===")
+    print("=== Learning Path Generator v2.0 ===")
+    print("Enhanced with comprehensive module development")
     
     # Check dependencies
     if not check_dependencies():
@@ -76,6 +80,14 @@ if __name__ == "__main__":
     if missing_keys:
         print(f"Warning: The following API keys are not set: {', '.join(missing_keys)}")
         print("You can still run the app and enter the keys in the web interface.")
+    
+    # Display information about the enhanced functionality
+    print("\nNew Features in v2.0:")
+    print("- Comprehensive module development")
+    print("- Each module is fully researched and developed")
+    print("- Enhanced progress tracking")
+    print("- Improved content presentation")
+    print("- Full markdown export with detailed module content")
     
     # Launch the app
     app_process = launch_app()

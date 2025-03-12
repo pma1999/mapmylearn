@@ -2,6 +2,16 @@
 
 A powerful application that generates personalized learning paths for any topic using LangGraph and LangChain.
 
+## What's New in Version 2.0
+
+**Comprehensive Module Development**: The Learning Path Generator now fully develops each module with in-depth educational content:
+
+- Each module is individually researched with targeted web searches
+- Detailed content is generated for each module with proper structure and formatting
+- The application shows real-time progress of the development process
+- Enhanced UI with module view and print view options
+- Complete markdown export with all module content
+
 ## Overview
 
 The Learning Path Generator creates comprehensive, structured learning paths for any topic of interest. It leverages:
@@ -15,15 +25,26 @@ The Learning Path Generator creates comprehensive, structured learning paths for
 - **Topic-based Learning Path Generation**: Input any topic and get a customized learning path
 - **Web Research**: Performs targeted web searches to gather up-to-date information
 - **Structured Modules**: Creates logical learning modules that build upon each other
-- **Downloadable Results**: Export your learning path as JSON for later use
+- **Comprehensive Content**: Develops detailed educational content for each module
+- **Real-time Progress Tracking**: Shows the progress of each phase of development
+- **Multiple View Options**: Module view for exploration and print view for reading
+- **Downloadable Results**: Export your learning path as JSON or Markdown
 
 ## Architecture
 
-The system follows a three-step process:
+The system follows a multi-phase process:
 
-1. **Search Query Generation**: Determines the 5 most effective search queries for gathering information on the topic
-2. **Web Search Execution**: Performs web searches to gather relevant content
-3. **Learning Path Creation**: Structures the information into logical learning modules
+1. **Initial Research Phase**:
+   - Generates optimal search queries for the topic
+   - Performs web searches to gather relevant information
+   - Creates an initial learning path outline with modules
+
+2. **Module Development Phase**:
+   - For each module in the learning path:
+     - Generates targeted search queries specific to the module
+     - Executes web searches to gather module-specific information
+     - Develops comprehensive content for the module
+   - Assembles the complete learning path with all developed modules
 
 ## Requirements
 
@@ -46,7 +67,7 @@ The system follows a three-step process:
    
    Or install individually:
    ```
-   pip install langchain langchain-core langchain-openai langgraph pydantic streamlit langchain-community
+   pip install langchain langchain-core langchain-openai langgraph pydantic streamlit langchain-community python-dotenv
    ```
 
 3. Set up your API keys:
@@ -62,40 +83,48 @@ The system follows a three-step process:
 
 1. Run the Streamlit app:
    ```
-   streamlit run app.py
+   python run.py
    ```
 
 2. Open your browser and go to the URL displayed in the terminal (usually http://localhost:8501)
 
 3. Enter a topic in the text field and click "Generate Learning Path"
 
-4. Review your personalized learning path modules
+4. Track the progress as the system develops your learning path
 
-5. Optionally download the learning path as a JSON file
+5. Explore the fully developed modules and download the complete learning path
 
 ## File Structure
 
 - `learning_path_generator.py`: Core implementation of the LangGraph workflow
 - `app.py`: Streamlit web interface
+- `run.py`: Launcher script
 - `requirements.txt`: Project dependencies
+- `test_app.py`: Test script to verify functionality
 
 ## How It Works
 
 1. **User Input**: The user enters a topic they want to learn about
-2. **Query Generation**: The system uses LLMs to generate 5 optimal search queries related to the topic
-3. **Web Search**: It performs web searches using these queries to gather information
-4. **Learning Path Creation**: The gathered information is structured into a logical sequence of learning modules
-5. **Result Presentation**: The user is presented with the complete learning path
+2. **Initial Research**: The system analyzes the topic and performs web searches
+3. **Learning Path Outline**: An initial learning path with logical modules is created
+4. **Module Development**: Each module is individually researched and developed
+   - Module-specific search queries are generated
+   - Targeted web searches are performed for each module
+   - Comprehensive content is created for each module
+5. **Final Assembly**: All developed modules are assembled into a complete learning path
+6. **Result Presentation**: The user can explore the fully developed learning path
 
 ## Example
 
-For a topic like "Machine Learning for Beginners," the system might generate these modules:
+For a topic like "Machine Learning for Beginners," the system will:
 
-1. **Introduction to Machine Learning**: Core concepts and terminology
-2. **Mathematical Foundations**: Essential statistics and linear algebra
-3. **Supervised Learning Algorithms**: Classification and regression techniques
-4. **Python for Machine Learning**: Libraries and implementation
-5. **Building Your First ML Model**: Step-by-step project
+1. Generate an initial learning path outline with modules
+2. Develop each module in depth with comprehensive content
+3. Present the complete learning path with all modules
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
