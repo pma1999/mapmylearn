@@ -80,7 +80,7 @@ with st.expander("Advanced Options", expanded=True):
     # Enable parallel processing options
     st.subheader("Parallel Processing")
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         parallel_count = st.slider(
@@ -92,6 +92,15 @@ with st.expander("Advanced Options", expanded=True):
         )
     
     with col2:
+        submodule_parallel_count = st.slider(
+            "Submodules to process in parallel", 
+            min_value=1, 
+            max_value=8, 
+            value=3,
+            help="Process multiple submodules simultaneously to reduce generation time"
+        )
+    
+    with col3:
         search_parallel_count = st.slider(
             "Searches to execute in parallel", 
             min_value=1, 
@@ -102,10 +111,11 @@ with st.expander("Advanced Options", expanded=True):
     
     st.markdown("""
     **Note about parallel processing:**
-    - Processing in parallel significantly reduces total generation time
+    - Three levels of parallelism significantly reduce total generation time
     - Higher values use more API tokens simultaneously (may affect costs)
     - Recommended values:
-      - Module parallelism: 2-3 for most topics
+      - Module parallelism: 2-3 for most topics (module planning)
+      - Submodule parallelism: 3-5 for deep content generation
       - Search parallelism: 3-5 for faster research
     """)
     
@@ -142,7 +152,7 @@ if generate_button:
                     st.write("### 🔄 Generation Progress")
                     overall_progress = st.progress(0)
                     status_text = st.empty()
-                    status_text.write("Phase 1/3: Researching your topic...")
+                    status_text.write("Phase 1/4: Researching your topic...")
                     
                     # Display a detailed progress area
                     detail_container = st.expander("View detailed progress", expanded=True)
@@ -178,6 +188,7 @@ if generate_button:
                                 topic, 
                                 parallel_count=parallel_count,
                                 search_parallel_count=search_parallel_count,
+                                submodule_parallel_count=submodule_parallel_count,
                                 progress_callback=update_progress
                             )
                         )
@@ -245,10 +256,71 @@ if generate_button:
                                         
                                         # Update phase
                                         phase = 2
-                                        status_text.write("Phase 2/3: Designing learning modules...")
+                                        status_text.write("Phase 2/4: Planning detailed submodules...")
                                         overall_progress.progress(0.3)
                                     
-                                    # Track parallel processing
+                                    # Track submodule planning
+                                    elif "Planned submodules for" in entry and "Planned submodules" not in steps_seen:
+                                        steps_seen.add("Planned submodules")
+                                        try:
+                                            import re
+                                            match = re.search(r"Planned submodules for (\d+) modules", entry)
+                                            if match:
+                                                module_count = int(match.group(1))
+                                                await update_progress(f"Planned detailed submodules for {module_count} modules")
+                                        except:
+                                            await update_progress("Planned detailed submodules for modules")
+                                        
+                                        # Update phase
+                                        phase = 3
+                                        status_text.write("Phase 3/4: Developing submodule content...")
+                                        overall_progress.progress(0.35)
+                                    
+                                    # Track submodule batch initialization
+                                    elif "Initialized submodule processing with" in entry and "Initialized submodule processing" not in steps_seen:
+                                        steps_seen.add("Initialized submodule processing")
+                                        try:
+                                            import re
+                                            match = re.search(r"Initialized submodule processing with (\d+) submodules at once", entry)
+                                            if match:
+                                                parallel_value = int(match.group(1))
+                                                await update_progress(f"Set up parallel submodule processing with {parallel_value} submodules at once")
+                                        except:
+                                            await update_progress("Set up parallel submodule processing")
+                                    
+                                    # Track organized batches
+                                    elif "Organized" in entry and "submodules into" in entry and "processing batches" in entry and "Organized submodules into batches" not in steps_seen:
+                                        steps_seen.add("Organized submodules into batches")
+                                        try:
+                                            import re
+                                            match = re.search(r"Organized (\d+) submodules into (\d+) processing batches", entry)
+                                            if match:
+                                                submodule_count = int(match.group(1))
+                                                batch_count = int(match.group(2))
+                                                await update_progress(f"Organized {submodule_count} submodules into {batch_count} processing batches")
+                                        except:
+                                            await update_progress("Organized submodules into processing batches")
+                                        
+                                    # Track submodule batch processing
+                                    elif "Processed batch" in entry and "of submodules in parallel" in entry:
+                                        try:
+                                            import re
+                                            match = re.search(r"Processed batch (\d+) of submodules", entry)
+                                            if match:
+                                                batch_num = int(match.group(1))
+                                                batch_indicator = f"Processed submodule batch {batch_num}"
+                                                if batch_indicator not in steps_seen:
+                                                    steps_seen.add(batch_indicator)
+                                                    await update_progress(f"Completed submodule batch {batch_num}")
+                                                    
+                                                    # Update progress based on batches completed
+                                                    if batch_count > 0:
+                                                        progress_value = 0.35 + (0.55 * (batch_num / batch_count))
+                                                        overall_progress.progress(min(progress_value, 0.9))
+                                        except:
+                                            pass
+                                    
+                                    # Track legacy parallel processing (for backward compatibility)
                                     elif "Initialized parallel processing with" in entry and "Initialized parallel processing" not in steps_seen:
                                         steps_seen.add("Initialized parallel processing")
                                         # Extract the parallel count if possible
@@ -261,53 +333,10 @@ if generate_button:
                                         except:
                                             await update_progress("Set up parallel processing")
                                     
-                                    elif "Created" in entry and "batches of modules" in entry:
-                                        try:
-                                            import re
-                                            match = re.search(r"Created (\d+) batches of modules", entry)
-                                            if match:
-                                                batch_count = int(match.group(1))
-                                                await update_progress(f"Organized modules into {batch_count} processing batches")
-                                        except:
-                                            pass
-                                    
-                                    # Track batch processing
-                                    elif "Started processing batch" in entry:
-                                        batch_indicator = f"Started processing batch"
-                                        if batch_indicator not in steps_seen:
-                                            steps_seen.add(batch_indicator)
-                                            await update_progress(f"Started parallel module processing")
-                                    
-                                    # Track module search parallelism
-                                    elif "Executing" in entry and "module searches in" in entry and "parallelism of" in entry:
-                                        # This is tracked via the progress callback
-                                        pass
-                                    
-                                    elif "Processed batch" in entry:
-                                        try:
-                                            import re
-                                            match = re.search(r"Processed batch (\d+)", entry)
-                                            if match:
-                                                batch_num = int(match.group(1))
-                                                batch_indicator = f"Processed batch {batch_num}"
-                                                if batch_indicator not in steps_seen:
-                                                    steps_seen.add(batch_indicator)
-                                                    await update_progress(f"Completed batch {batch_num} of {batch_count}")
-                                                    
-                                                    # Update progress based on batches completed
-                                                    if batch_count > 0:
-                                                        progress_value = 0.3 + (0.6 * (batch_num / batch_count))
-                                                        overall_progress.progress(min(progress_value, 0.9))
-                                        except:
-                                            pass
-                                            
-                                    # Track module development via progress callback
-                                    # The callback function will handle these directly
-                                    
                                     elif "Finalized comprehensive learning path" in entry and "Finalized comprehensive learning path" not in steps_seen:
                                         steps_seen.add("Finalized comprehensive learning path")
-                                        phase = 3
-                                        status_text.write("Phase 3/3: Finalizing your learning path...")
+                                        phase = 4
+                                        status_text.write("Phase 4/4: Finalizing your learning path...")
                                         await update_progress("Assembling final learning path")
                                         overall_progress.progress(0.95)
                             except Exception as e:
@@ -348,7 +377,7 @@ if generate_button:
                                 st.write(f"{i}. {step}")
                         
                         # Add info about parallel processing
-                        st.info(f"Generated using {parallel_count} parallel module(s) and {search_parallel_count} parallel search(es)")
+                        st.info(f"Generated using {parallel_count} parallel module(s), {submodule_parallel_count} submodule(s), and {search_parallel_count} parallel search(es)")
                     
                     # Display the learning path modules
                     st.success(f"Learning path for **{result['topic']}** created successfully! 🎉")
@@ -371,7 +400,22 @@ if generate_button:
                                     st.markdown(f"**Description:**")
                                     st.markdown(module["description"])
                                     
-                                    if "content" in module:
+                                    # Check for submodules
+                                    if "submodules" in module and module["submodules"]:
+                                        st.markdown("---")
+                                        st.markdown("### Submodules")
+                                        
+                                        # Display each submodule in an expander
+                                        for j, submodule in enumerate(module["submodules"], 1):
+                                            with st.expander(f"Submodule {j}: {submodule['title']}", expanded=j==1):
+                                                st.markdown(f"**Description:**")
+                                                st.markdown(submodule["description"])
+                                                
+                                                if "content" in submodule:
+                                                    st.markdown("---")
+                                                    st.markdown(submodule["content"])
+                                    # Fallback for old format with direct content
+                                    elif "content" in module:
                                         st.markdown("---")
                                         st.markdown(module["content"])
                         
@@ -383,7 +427,16 @@ if generate_button:
                                 st.markdown(f"## Module {i}: {module['title']}")
                                 st.markdown(f"*{module['description']}*")
                                 
-                                if "content" in module:
+                                # Check for submodules
+                                if "submodules" in module and module["submodules"]:
+                                    for j, submodule in enumerate(module["submodules"], 1):
+                                        st.markdown(f"### Submodule {j}: {submodule['title']}")
+                                        st.markdown(f"*{submodule['description']}*")
+                                        
+                                        if "content" in submodule:
+                                            st.markdown(submodule["content"])
+                                # Fallback for old format with direct content
+                                elif "content" in module:
                                     st.markdown(module["content"])
                                 
                                 # Add a separator between modules
@@ -395,6 +448,16 @@ if generate_button:
                             with st.expander(f"Module {i}: {module['title']}", expanded=i==1):
                                 st.markdown(f"**Description:**")
                                 st.markdown(module["description"])
+                                
+                                # Check for submodules
+                                if "submodules" in module and module["submodules"]:
+                                    st.markdown("---")
+                                    st.markdown("### Submodules")
+                                    
+                                    # Display each submodule
+                                    for j, submodule in enumerate(module["submodules"], 1):
+                                        st.markdown(f"**Submodule {j}: {submodule['title']}**")
+                                        st.markdown(submodule["description"])
                     
                     # Download options
                     st.write("### Download Options")
@@ -427,7 +490,16 @@ if generate_button:
                         markdown_content += f"## Module {i}: {module['title']}\n\n"
                         markdown_content += f"{module['description']}\n\n"
                         
-                        if "content" in module:
+                        # Check for submodules
+                        if "submodules" in module and module["submodules"]:
+                            for j, submodule in enumerate(module["submodules"], 1):
+                                markdown_content += f"### Submodule {j}: {submodule['title']}\n\n"
+                                markdown_content += f"{submodule['description']}\n\n"
+                                
+                                if "content" in submodule:
+                                    markdown_content += f"{submodule['content']}\n\n"
+                        # Fallback for old format with direct content
+                        elif "content" in module:
                             markdown_content += f"### Content\n\n"
                             markdown_content += f"{module['content']}\n\n"
                     
