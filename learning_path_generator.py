@@ -3,6 +3,8 @@ from typing import List, Dict, TypedDict, Annotated, Optional, Any, Callable, Un
 from operator import add
 import logging
 from dotenv import load_dotenv
+import asyncio
+from functools import partial
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser, PydanticOutputParser
@@ -56,6 +58,16 @@ class LearningPathState(TypedDict):
     module_search_results: Optional[List[Dict[str, Any]]]
     developed_modules: Optional[List[ModuleContent]]
     final_learning_path: Optional[Dict[str, Any]]
+    
+    # New fields for parallel processing
+    parallel_count: Optional[int]  # Number of modules to process in parallel
+    module_batches: Optional[List[List[int]]]  # Batches of module indices
+    current_batch_index: Optional[int]  # Current batch being processed
+    modules_in_process: Optional[Dict[int, Dict[str, Any]]]  # Status of modules being processed
+    progress_callback: Optional[Callable]  # Callback function for progress updates
+    
+    # New field for parallel search execution
+    search_parallel_count: Optional[int]  # Number of search queries to execute in parallel
 
 # Define output parsers using the container models
 search_queries_parser = PydanticOutputParser(pydantic_object=SearchQueryList)
@@ -86,6 +98,27 @@ def get_search_tool():
     except Exception as e:
         logger.error(f"Error initializing TavilySearchResults: {str(e)}")
         raise
+
+# Helper function for executing a single search
+async def execute_single_search(query: SearchQuery) -> Dict[str, Any]:
+    """Execute a single web search for a query."""
+    try:
+        search_tool = get_search_tool()
+        logger.info(f"Searching for: {query.keywords}")
+        result = await search_tool.ainvoke({"query": query.keywords})
+        return {
+            "query": query.keywords,
+            "rationale": query.rationale,
+            "results": result
+        }
+    except Exception as e:
+        logger.error(f"Error searching for '{query.keywords}': {str(e)}")
+        # Return an error result instead of raising to prevent batch failures
+        return {
+            "query": query.keywords,
+            "rationale": query.rationale,
+            "results": f"Error performing search: {str(e)}"
+        }
 
 # Define node functions
 async def generate_search_queries(state: LearningPathState):
@@ -132,8 +165,8 @@ async def generate_search_queries(state: LearningPathState):
         }
 
 async def execute_web_searches(state: LearningPathState):
-    """Execute web searches using the generated queries."""
-    logger.info("Executing web searches")
+    """Execute web searches using the generated queries in parallel."""
+    logger.info("Executing web searches in parallel")
     
     if not state["search_queries"]:
         logger.warning("No search queries available to execute")
@@ -142,33 +175,47 @@ async def execute_web_searches(state: LearningPathState):
             "steps": ["No search queries available to execute"]
         }
     
+    # Get the search parallel count (default to 3 if not specified)
+    search_parallel_count = state.get("search_parallel_count", 3)
+    queries = state["search_queries"]
+    
+    # Create batches of search queries based on the parallel count
+    query_batches = []
+    for i in range(0, len(queries), search_parallel_count):
+        batch = queries[i:min(i + search_parallel_count, len(queries))]
+        query_batches.append(batch)
+    
+    logger.info(f"Executing {len(queries)} searches in {len(query_batches)} batches with parallelism of {search_parallel_count}")
+    
     search_results = []
     
     try:
-        search_tool = get_search_tool()
+        # Process each batch of queries in parallel
+        for batch_index, batch in enumerate(query_batches):
+            logger.info(f"Processing search batch {batch_index + 1}/{len(query_batches)} with {len(batch)} queries")
+            
+            # Create a task for each query in the batch
+            tasks = []
+            for query in batch:
+                tasks.append(execute_single_search(query))
+            
+            # Execute the batch of searches in parallel
+            batch_results = await asyncio.gather(*tasks)
+            search_results.extend(batch_results)
+            
+            # Add a small delay between batches to prevent rate limiting
+            if batch_index < len(query_batches) - 1:
+                await asyncio.sleep(0.5)
         
-        for query in state["search_queries"]:
-            try:
-                logger.info(f"Searching for: {query.keywords}")
-                result = await search_tool.ainvoke({"query": query.keywords})
-                search_results.append({
-                    "query": query.keywords,
-                    "rationale": query.rationale,
-                    "results": result
-                })
-            except Exception as e:
-                logger.error(f"Error searching for '{query.keywords}': {str(e)}")
-                search_results.append({
-                    "query": query.keywords,
-                    "rationale": query.rationale,
-                    "results": f"Error performing search: {str(e)}"
-                })
+        logger.info(f"Completed {len(search_results)} web searches in parallel")
         
-        logger.info(f"Completed {len(search_results)} web searches")
+        # Update progress callback if available
+        if state.get("progress_callback"):
+            await state["progress_callback"](f"Executed {len(search_results)} web searches in {len(query_batches)} parallel batches")
         
         return {
             "search_results": search_results,
-            "steps": [f"Executed web searches for all queries"]
+            "steps": [f"Executed {len(search_results)} web searches in parallel batches"]
         }
     except Exception as e:
         logger.error(f"Error executing web searches: {str(e)}")
@@ -244,10 +291,10 @@ async def create_learning_path(state: LearningPathState):
             "steps": [f"Error creating learning path: {str(e)}"]
         }
 
-# New node functions for module development
-async def initialize_module_development(state: LearningPathState):
-    """Initialize the module development process."""
-    logger.info("Initializing module development process")
+# New node functions for parallel module development
+async def initialize_parallel_processing(state: LearningPathState):
+    """Initialize the parallel module development process."""
+    logger.info(f"Initializing parallel module development process with {state['parallel_count']} modules at once")
     
     if not state.get("modules"):
         logger.warning("No modules to develop")
@@ -256,29 +303,160 @@ async def initialize_module_development(state: LearningPathState):
             "steps": ["No modules to develop"]
         }
     
+    # Create module batches based on parallel_count
+    parallel_count = state.get("parallel_count", 1)  # Default to 1 if not specified
+    modules = state.get("modules", [])
+    
+    # Create batches of module indices
+    module_batches = []
+    for i in range(0, len(modules), parallel_count):
+        batch = list(range(i, min(i + parallel_count, len(modules))))
+        module_batches.append(batch)
+    
+    logger.info(f"Created {len(module_batches)} batches of modules for parallel processing")
+    
     return {
-        "current_module_index": 0,
+        "module_batches": module_batches,
+        "current_batch_index": 0,
+        "modules_in_process": {},
         "developed_modules": [],
-        "steps": ["Started module development process"]
+        "steps": [f"Initialized parallel processing with {parallel_count} modules at once"]
     }
 
-async def generate_module_queries(state: LearningPathState):
-    """Generate targeted search queries for the current module."""
-    logger.info("Generating module-specific search queries")
+async def process_module_batch(state: LearningPathState):
+    """Process the current batch of modules in parallel."""
+    logger.info("Processing a batch of modules in parallel")
     
-    if state.get("current_module_index", 0) >= len(state.get("modules", [])):
-        logger.info("All modules have been processed")
+    if state.get("current_batch_index", 0) >= len(state.get("module_batches", [])):
+        logger.info("All module batches have been processed")
         return {
-            "steps": ["All modules have been processed"]
+            "steps": ["All module batches have been processed"]
         }
     
-    current_module = state["modules"][state["current_module_index"]]
+    # Get the current batch of module indices
+    current_batch = state["module_batches"][state["current_batch_index"]]
+    modules = state["modules"]
+    
+    # Initialize modules_in_process for this batch if needed
+    modules_in_process = state.get("modules_in_process", {})
+    
+    # Create a task for each module in the batch
+    tasks = []
+    for module_index in current_batch:
+        if module_index not in modules_in_process:
+            modules_in_process[module_index] = {
+                "status": "starting",
+                "search_queries": None,
+                "search_results": None,
+                "content": None
+            }
+            
+            # Create a task to process this module
+            module = modules[module_index]
+            task = process_single_module(state, module_index, module)
+            tasks.append(task)
+    
+    # Report progress
+    progress_msg = f"Started processing batch {state['current_batch_index'] + 1} with {len(tasks)} modules"
+    logger.info(progress_msg)
+    
+    # Process the tasks in parallel
+    if tasks:
+        try:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Update modules_in_process with results
+            for i, module_index in enumerate(current_batch):
+                if i < len(results):
+                    result = results[i]
+                    if isinstance(result, Exception):
+                        logger.error(f"Error processing module {module_index}: {str(result)}")
+                        modules_in_process[module_index]["status"] = "error"
+                        modules_in_process[module_index]["error"] = str(result)
+                    else:
+                        modules_in_process[module_index] = result
+            
+            logger.info(f"Completed processing batch {state['current_batch_index'] + 1}")
+        except Exception as e:
+            logger.error(f"Error in parallel processing batch: {str(e)}")
+    
+    # Move to the next batch
+    next_batch_index = state["current_batch_index"] + 1
+    
+    # Collect developed modules from this batch
+    developed_modules = state.get("developed_modules", [])
+    for module_index in current_batch:
+        module_data = modules_in_process.get(module_index, {})
+        if module_data.get("status") == "completed":
+            developed_modules.append(ModuleContent(
+                module_id=module_index,
+                title=modules[module_index].title,
+                description=modules[module_index].description,
+                search_queries=module_data.get("search_queries", []),
+                search_results=module_data.get("search_results", []),
+                content=module_data.get("content", "")
+            ))
+    
+    return {
+        "modules_in_process": modules_in_process,
+        "current_batch_index": next_batch_index,
+        "developed_modules": developed_modules,
+        "steps": [f"Processed batch {state['current_batch_index'] + 1} of modules in parallel"]
+    }
+
+async def process_single_module(state: LearningPathState, module_index: int, module: Module) -> Dict[str, Any]:
+    """Process a single module from research to content development."""
+    logger.info(f"Processing module {module_index + 1}: {module.title}")
+    
+    try:
+        # Step 1: Generate search queries for this module
+        module_search_queries = await generate_module_specific_queries(state, module_index, module)
+        
+        # Update progress
+        if state.get("progress_callback"):
+            await state["progress_callback"](f"Generated search queries for module {module_index + 1}: {module.title}")
+        
+        # Step 2: Execute web searches for the module
+        module_search_results = await execute_module_specific_searches(state, module_index, module, module_search_queries)
+        
+        # Update progress
+        if state.get("progress_callback"):
+            await state["progress_callback"](f"Completed research for module {module_index + 1}: {module.title}")
+        
+        # Step 3: Develop the module content
+        module_content = await develop_module_specific_content(state, module_index, module, module_search_queries, module_search_results)
+        
+        # Update progress
+        if state.get("progress_callback"):
+            await state["progress_callback"](f"Completed development of module {module_index + 1}: {module.title}")
+        
+        # Return the results for this module
+        return {
+            "status": "completed",
+            "search_queries": module_search_queries,
+            "search_results": module_search_results,
+            "content": module_content
+        }
+    except Exception as e:
+        logger.error(f"Error processing module {module_index}: {str(e)}")
+        # Update progress with error
+        if state.get("progress_callback"):
+            await state["progress_callback"](f"Error processing module {module_index + 1}: {str(e)}")
+        
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+async def generate_module_specific_queries(state: LearningPathState, module_index: int, module: Module) -> List[SearchQuery]:
+    """Generate targeted search queries for a specific module."""
+    logger.info(f"Generating search queries for module {module_index + 1}: {module.title}")
     
     # Create a context of the entire learning path
     learning_path_context = "Complete Learning Path:\n"
-    for i, module in enumerate(state["modules"]):
-        learning_path_context += f"Module {i+1}: {module.title}\n"
-        learning_path_context += f"Description: {module.description}\n\n"
+    for i, mod in enumerate(state["modules"]):
+        learning_path_context += f"Module {i+1}: {mod.title}\n"
+        learning_path_context += f"Description: {mod.description}\n\n"
     
     prompt = ChatPromptTemplate.from_template("""
     You are an expert research assistant. Your task is to generate 5 search queries that 
@@ -308,89 +486,89 @@ async def generate_module_queries(state: LearningPathState):
         
         search_query_list = await chain.ainvoke({
             "user_topic": state["user_topic"],
-            "module_title": current_module.title,
-            "module_description": current_module.description,
+            "module_title": module.title,
+            "module_description": module.description,
             "learning_path_context": learning_path_context,
             "format_instructions": module_queries_parser.get_format_instructions()
         })
         
         # Extract the queries from the container object
         module_search_queries = search_query_list.queries
-        logger.info(f"Generated {len(module_search_queries)} search queries for module: {current_module.title}")
+        logger.info(f"Generated {len(module_search_queries)} search queries for module: {module.title}")
         
-        return {
-            "module_search_queries": module_search_queries,
-            "steps": [f"Generated search queries for module {state['current_module_index'] + 1}: {current_module.title}"]
-        }
+        return module_search_queries
     except Exception as e:
         logger.error(f"Error generating module search queries: {str(e)}")
-        return {
-            "module_search_queries": [],
-            "steps": [f"Error generating module search queries: {str(e)}"]
-        }
+        return []
 
-async def execute_module_searches(state: LearningPathState):
-    """Execute web searches for the current module's queries."""
-    logger.info("Executing module-specific web searches")
+async def execute_module_specific_searches(
+    state: LearningPathState, 
+    module_index: int, 
+    module: Module, 
+    module_search_queries: List[SearchQuery]
+) -> List[Dict[str, Any]]:
+    """Execute web searches for a specific module's queries in parallel."""
+    logger.info(f"Executing web searches for module {module_index + 1} in parallel: {module.title}")
     
-    if not state.get("module_search_queries"):
-        logger.warning("No module search queries available to execute")
-        return {
-            "module_search_results": [],
-            "steps": ["No module search queries available to execute"]
-        }
+    if not module_search_queries:
+        logger.warning(f"No search queries available for module {module_index + 1}")
+        return []
     
-    current_module = state["modules"][state["current_module_index"]]
+    # Get the search parallel count (default to 3 if not specified)
+    search_parallel_count = state.get("search_parallel_count", 3)
+    
+    # Create batches of search queries based on the parallel count
+    query_batches = []
+    for i in range(0, len(module_search_queries), search_parallel_count):
+        batch = module_search_queries[i:min(i + search_parallel_count, len(module_search_queries))]
+        query_batches.append(batch)
+    
+    logger.info(f"Executing {len(module_search_queries)} module searches in {len(query_batches)} batches with parallelism of {search_parallel_count}")
+    
     search_results = []
     
     try:
-        search_tool = get_search_tool()
+        # Process each batch of queries in parallel
+        for batch_index, batch in enumerate(query_batches):
+            logger.info(f"Processing module search batch {batch_index + 1}/{len(query_batches)} with {len(batch)} queries")
+            
+            # Create a task for each query in the batch
+            tasks = []
+            for query in batch:
+                tasks.append(execute_single_search(query))
+            
+            # Execute the batch of searches in parallel
+            batch_results = await asyncio.gather(*tasks)
+            search_results.extend(batch_results)
+            
+            # Add a small delay between batches to prevent rate limiting
+            if batch_index < len(query_batches) - 1:
+                await asyncio.sleep(0.5)
         
-        for query in state["module_search_queries"]:
-            try:
-                logger.info(f"Searching for module query: {query.keywords}")
-                result = await search_tool.ainvoke({"query": query.keywords})
-                search_results.append({
-                    "query": query.keywords,
-                    "rationale": query.rationale,
-                    "results": result
-                })
-            except Exception as e:
-                logger.error(f"Error searching for module query '{query.keywords}': {str(e)}")
-                search_results.append({
-                    "query": query.keywords,
-                    "rationale": query.rationale,
-                    "results": f"Error performing search: {str(e)}"
-                })
+        logger.info(f"Completed {len(search_results)} web searches for module {module_index + 1} in parallel")
         
-        logger.info(f"Completed {len(search_results)} module web searches")
-        
-        return {
-            "module_search_results": search_results,
-            "steps": [f"Executed web searches for module {state['current_module_index'] + 1}: {current_module.title}"]
-        }
+        return search_results
     except Exception as e:
         logger.error(f"Error executing module web searches: {str(e)}")
-        return {
-            "module_search_results": [],
-            "steps": [f"Error executing module web searches: {str(e)}"]
-        }
+        return []
 
-async def develop_module_content(state: LearningPathState):
-    """Develop comprehensive content for the current module."""
-    logger.info("Developing module content")
+async def develop_module_specific_content(
+    state: LearningPathState, 
+    module_index: int, 
+    module: Module, 
+    module_search_queries: List[SearchQuery],
+    module_search_results: List[Dict[str, Any]]
+) -> str:
+    """Develop comprehensive content for a specific module."""
+    logger.info(f"Developing content for module {module_index + 1}: {module.title}")
     
-    if not state.get("module_search_results"):
-        logger.warning("No module search results available to develop content")
-        return {
-            "steps": ["No module search results available to develop content"]
-        }
-    
-    current_module = state["modules"][state["current_module_index"]]
+    if not module_search_results:
+        logger.warning(f"No search results available for module {module_index + 1}")
+        return "No content could be developed due to missing search results."
     
     # Format search results for the prompt
     formatted_results = ""
-    for result in state["module_search_results"]:
+    for result in module_search_results:
         formatted_results += f"Search Query: {result['query']}\n"
         formatted_results += f"Rationale: {result['rationale']}\n"
         formatted_results += "Results:\n"
@@ -405,12 +583,12 @@ async def develop_module_content(state: LearningPathState):
     
     # Create a context of the entire learning path
     learning_path_context = "Complete Learning Path:\n"
-    for i, module in enumerate(state["modules"]):
-        if i == state["current_module_index"]:
-            learning_path_context += f"Module {i+1}: {module.title} (CURRENT MODULE)\n"
+    for i, mod in enumerate(state["modules"]):
+        if i == module_index:
+            learning_path_context += f"Module {i+1}: {mod.title} (CURRENT MODULE)\n"
         else:
-            learning_path_context += f"Module {i+1}: {module.title}\n"
-        learning_path_context += f"Description: {module.description}\n\n"
+            learning_path_context += f"Module {i+1}: {mod.title}\n"
+        learning_path_context += f"Description: {mod.description}\n\n"
     
     prompt = ChatPromptTemplate.from_template("""
     You are an expert education content developer. Your task is to create comprehensive
@@ -446,42 +624,20 @@ async def develop_module_content(state: LearningPathState):
         
         module_content = await chain.ainvoke({
             "user_topic": state["user_topic"],
-            "module_title": current_module.title,
-            "module_description": current_module.description,
-            "module_index": state["current_module_index"] + 1,
+            "module_title": module.title,
+            "module_description": module.description,
+            "module_index": module_index + 1,
             "total_modules": len(state["modules"]),
             "learning_path_context": learning_path_context,
             "search_results": formatted_results
         })
         
-        logger.info(f"Developed content for module: {current_module.title}")
+        logger.info(f"Developed content for module {module_index + 1}: {module.title}")
         
-        # Create a ModuleContent object
-        developed_module = ModuleContent(
-            module_id=state["current_module_index"],
-            title=current_module.title,
-            description=current_module.description,
-            search_queries=state["module_search_queries"],
-            search_results=state["module_search_results"],
-            content=module_content
-        )
-        
-        # Add to developed_modules
-        developed_modules = state.get("developed_modules", []) + [developed_module]
-        
-        # Advance to next module
-        next_module_index = state["current_module_index"] + 1
-        
-        return {
-            "developed_modules": developed_modules,
-            "current_module_index": next_module_index,
-            "steps": [f"Developed content for module {state['current_module_index'] + 1}: {current_module.title}"]
-        }
+        return module_content
     except Exception as e:
         logger.error(f"Error developing module content: {str(e)}")
-        return {
-            "steps": [f"Error developing module content: {str(e)}"]
-        }
+        return f"Error developing content: {str(e)}"
 
 async def finalize_learning_path(state: LearningPathState):
     """Create the final learning path with all developed modules."""
@@ -519,18 +675,18 @@ async def finalize_learning_path(state: LearningPathState):
         "steps": ["Finalized comprehensive learning path"]
     }
 
-# Function to check if all modules are processed
-def check_module_processing(state: LearningPathState) -> str:
-    """Conditional edge function to check if all modules are processed."""
-    if state["current_module_index"] >= len(state["modules"]):
-        return "all_modules_processed"
+# Function to check if all module batches are processed
+def check_batch_processing(state: LearningPathState) -> str:
+    """Conditional edge function to check if all module batches are processed."""
+    if state["current_batch_index"] >= len(state["module_batches"]):
+        return "all_batches_processed"
     else:
         return "continue_processing"
 
-# Build the enhanced graph
+# Build the enhanced graph with parallel processing
 def build_graph():
-    """Construct and return the enhanced LangGraph."""
-    logger.info("Building graph")
+    """Construct and return the enhanced LangGraph with parallel processing."""
+    logger.info("Building graph with parallel processing support")
     
     graph = StateGraph(LearningPathState)
     
@@ -539,11 +695,9 @@ def build_graph():
     graph.add_node("execute_web_searches", execute_web_searches)
     graph.add_node("create_learning_path", create_learning_path)
     
-    # Add nodes for module development
-    graph.add_node("initialize_module_development", initialize_module_development)
-    graph.add_node("generate_module_queries", generate_module_queries)
-    graph.add_node("execute_module_searches", execute_module_searches)
-    graph.add_node("develop_module_content", develop_module_content)
+    # Add nodes for parallel module development
+    graph.add_node("initialize_parallel_processing", initialize_parallel_processing)
+    graph.add_node("process_module_batch", process_module_batch)
     graph.add_node("finalize_learning_path", finalize_learning_path)
     
     # Connect initial learning path flow
@@ -552,30 +706,33 @@ def build_graph():
     graph.add_edge("execute_web_searches", "create_learning_path")
     
     # Connect module development flow
-    graph.add_edge("create_learning_path", "initialize_module_development")
-    graph.add_edge("initialize_module_development", "generate_module_queries")
+    graph.add_edge("create_learning_path", "initialize_parallel_processing")
     
-    # Create a loop for processing each module
+    # Create a loop for processing batches of modules
+    graph.add_edge("initialize_parallel_processing", "process_module_batch")
     graph.add_conditional_edges(
-        "generate_module_queries",
-        check_module_processing,
+        "process_module_batch",
+        check_batch_processing,
         {
-            "all_modules_processed": "finalize_learning_path",
-            "continue_processing": "execute_module_searches"
+            "all_batches_processed": "finalize_learning_path",
+            "continue_processing": "process_module_batch"  # Loop back to process next batch
         }
     )
     
-    graph.add_edge("execute_module_searches", "develop_module_content")
-    graph.add_edge("develop_module_content", "generate_module_queries")  # Loop back
     graph.add_edge("finalize_learning_path", END)
     
     # Compile the graph
     return graph.compile()
 
 # Main entry point to use the graph
-async def generate_learning_path(topic: str):
+async def generate_learning_path(
+    topic: str, 
+    parallel_count: int = 1, 
+    search_parallel_count: int = 3,  # Added parameter for search parallelism
+    progress_callback: Callable = None
+):
     """Generate a comprehensive learning path for the given topic."""
-    logger.info(f"Generating learning path for topic: {topic}")
+    logger.info(f"Generating learning path for topic: {topic} with {parallel_count} parallel modules and {search_parallel_count} parallel searches")
     
     # Create the graph
     learning_graph = build_graph()
@@ -587,11 +744,23 @@ async def generate_learning_path(topic: str):
         "search_results": None,
         "modules": None,
         "steps": [],
+        
+        # Module development fields
         "current_module_index": None,
         "module_search_queries": None,
         "module_search_results": None,
         "developed_modules": None,
-        "final_learning_path": None
+        "final_learning_path": None,
+        
+        # Parallel processing fields
+        "parallel_count": parallel_count,
+        "module_batches": None,
+        "current_batch_index": None,
+        "modules_in_process": None,
+        "progress_callback": progress_callback,
+        
+        # Parallel search fields
+        "search_parallel_count": search_parallel_count
     }
     
     # Execute the graph
@@ -624,7 +793,7 @@ if __name__ == "__main__":
     topic = "Quantum computing for beginners"
     
     # Run the learning path generator
-    result = asyncio.run(generate_learning_path(topic))
+    result = asyncio.run(generate_learning_path(topic, parallel_count=2, search_parallel_count=3))
     
     # Print the result
     print(f"Learning Path for: {result['topic']}")

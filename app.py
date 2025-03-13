@@ -76,8 +76,41 @@ user_topic = st.text_input("What do you want to learn about?",
                          placeholder="e.g., Machine Learning, Guitar, Spanish, Quantum Computing...")
 
 # Advanced options in an expander
-with st.expander("Advanced Options"):
-    st.write("These options will be available in future versions.")
+with st.expander("Advanced Options", expanded=True):
+    # Enable parallel processing options
+    st.subheader("Parallel Processing")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        parallel_count = st.slider(
+            "Modules to process in parallel", 
+            min_value=1, 
+            max_value=5, 
+            value=2,
+            help="Process multiple modules simultaneously to reduce generation time"
+        )
+    
+    with col2:
+        search_parallel_count = st.slider(
+            "Searches to execute in parallel", 
+            min_value=1, 
+            max_value=5, 
+            value=3,
+            help="Execute multiple search queries simultaneously to speed up research"
+        )
+    
+    st.markdown("""
+    **Note about parallel processing:**
+    - Processing in parallel significantly reduces total generation time
+    - Higher values use more API tokens simultaneously (may affect costs)
+    - Recommended values:
+      - Module parallelism: 2-3 for most topics
+      - Search parallelism: 3-5 for faster research
+    """)
+    
+    # Other advanced options
+    st.subheader("Other Options")
     st.slider("Number of modules", min_value=3, max_value=10, value=5, disabled=True)
     st.selectbox("Difficulty level", ["Beginner", "Intermediate", "Advanced"], disabled=True)
     st.checkbox("Include resources (links, books, videos)", value=True, disabled=True)
@@ -128,7 +161,7 @@ if generate_button:
                         progress_logs = []
                         
                         # Helper function to update progress
-                        def update_progress(step_info):
+                        async def update_progress(step_info):
                             progress_logs.append(f"✓ {step_info}")
                             detail_text.write("\n".join(progress_logs))
                         
@@ -136,9 +169,18 @@ if generate_button:
                         steps_seen = set()
                         module_count = 0
                         current_module = 0
+                        processed_modules = 0
+                        batch_count = 0
                         
                         # Create a task to generate the learning path
-                        generate_task = asyncio.create_task(generate_learning_path(topic))
+                        generate_task = asyncio.create_task(
+                            generate_learning_path(
+                                topic, 
+                                parallel_count=parallel_count,
+                                search_parallel_count=search_parallel_count,
+                                progress_callback=update_progress
+                            )
+                        )
                         
                         # Poll for progress updates while the task is running
                         while not generate_task.done():
@@ -157,12 +199,36 @@ if generate_button:
                                     # Look for key progress indicators
                                     if "Generated search queries for topic" in entry and "Generated search queries for topic" not in steps_seen:
                                         steps_seen.add("Generated search queries for topic")
-                                        update_progress("Generated initial search queries")
+                                        await update_progress("Generated initial search queries")
                                         overall_progress.progress(0.1)
                                     
-                                    elif "Executed web searches for all queries" in entry and "Executed web searches for all queries" not in steps_seen:
-                                        steps_seen.add("Executed web searches for all queries")
-                                        update_progress("Completed web searches for topic")
+                                    # Track parallel search execution
+                                    elif "Executing" in entry and "searches in" in entry and "batches with parallelism" in entry and "Executing searches" not in steps_seen:
+                                        steps_seen.add("Executing searches")
+                                        # Extract search info if possible
+                                        try:
+                                            import re
+                                            match = re.search(r"Executing (\d+) searches in (\d+) batches with parallelism of (\d+)", entry)
+                                            if match:
+                                                search_count = int(match.group(1))
+                                                batch_count = int(match.group(2))
+                                                parallel_value = int(match.group(3))
+                                                await update_progress(f"Executing {search_count} searches in {batch_count} batches (parallelism: {parallel_value})")
+                                        except:
+                                            await update_progress("Executing searches in parallel batches")
+                                    
+                                    elif "Executed" in entry and "web searches in parallel batch" in entry and "Web searches completed" not in steps_seen:
+                                        steps_seen.add("Web searches completed")
+                                        # Extract search info if possible
+                                        try:
+                                            import re
+                                            match = re.search(r"Executed (\d+) web searches in (\d+) parallel batches", entry)
+                                            if match:
+                                                search_count = int(match.group(1))
+                                                batch_count = int(match.group(2))
+                                                await update_progress(f"Completed {search_count} web searches in {batch_count} parallel batches")
+                                        except:
+                                            await update_progress("Completed web searches in parallel")
                                         overall_progress.progress(0.2)
                                     
                                     elif "Created learning path with" in entry and "Created learning path with" not in steps_seen:
@@ -173,45 +239,76 @@ if generate_button:
                                             match = re.search(r"Created learning path with (\d+) modules", entry)
                                             if match:
                                                 module_count = int(match.group(1))
-                                                update_progress(f"Created initial learning path outline with {module_count} modules")
+                                                await update_progress(f"Created initial learning path outline with {module_count} modules")
                                         except:
-                                            update_progress("Created initial learning path outline")
+                                            await update_progress("Created initial learning path outline")
                                         
                                         # Update phase
                                         phase = 2
                                         status_text.write("Phase 2/3: Designing learning modules...")
                                         overall_progress.progress(0.3)
                                     
-                                    # Track module development
-                                    elif "Generated search queries for module" in entry:
-                                        module_indicator = f"Generated search queries for module {current_module+1}"
-                                        if module_indicator not in steps_seen:
-                                            steps_seen.add(module_indicator)
-                                            update_progress(f"Researching for module {current_module+1}")
+                                    # Track parallel processing
+                                    elif "Initialized parallel processing with" in entry and "Initialized parallel processing" not in steps_seen:
+                                        steps_seen.add("Initialized parallel processing")
+                                        # Extract the parallel count if possible
+                                        try:
+                                            import re
+                                            match = re.search(r"Initialized parallel processing with (\d+) modules at once", entry)
+                                            if match:
+                                                parallel_value = int(match.group(1))
+                                                await update_progress(f"Set up parallel processing with {parallel_value} modules at once")
+                                        except:
+                                            await update_progress("Set up parallel processing")
                                     
-                                    elif "Executed web searches for module" in entry:
-                                        module_indicator = f"Executed web searches for module {current_module+1}"
-                                        if module_indicator not in steps_seen:
-                                            steps_seen.add(module_indicator)
-                                            update_progress(f"Completed research for module {current_module+1}")
+                                    elif "Created" in entry and "batches of modules" in entry:
+                                        try:
+                                            import re
+                                            match = re.search(r"Created (\d+) batches of modules", entry)
+                                            if match:
+                                                batch_count = int(match.group(1))
+                                                await update_progress(f"Organized modules into {batch_count} processing batches")
+                                        except:
+                                            pass
                                     
-                                    elif "Developed content for module" in entry:
-                                        module_indicator = f"Developed content for module {current_module+1}"
-                                        if module_indicator not in steps_seen:
-                                            steps_seen.add(module_indicator)
-                                            update_progress(f"Completed development of module {current_module+1}")
-                                            current_module += 1
+                                    # Track batch processing
+                                    elif "Started processing batch" in entry:
+                                        batch_indicator = f"Started processing batch"
+                                        if batch_indicator not in steps_seen:
+                                            steps_seen.add(batch_indicator)
+                                            await update_progress(f"Started parallel module processing")
+                                    
+                                    # Track module search parallelism
+                                    elif "Executing" in entry and "module searches in" in entry and "parallelism of" in entry:
+                                        # This is tracked via the progress callback
+                                        pass
+                                    
+                                    elif "Processed batch" in entry:
+                                        try:
+                                            import re
+                                            match = re.search(r"Processed batch (\d+)", entry)
+                                            if match:
+                                                batch_num = int(match.group(1))
+                                                batch_indicator = f"Processed batch {batch_num}"
+                                                if batch_indicator not in steps_seen:
+                                                    steps_seen.add(batch_indicator)
+                                                    await update_progress(f"Completed batch {batch_num} of {batch_count}")
+                                                    
+                                                    # Update progress based on batches completed
+                                                    if batch_count > 0:
+                                                        progress_value = 0.3 + (0.6 * (batch_num / batch_count))
+                                                        overall_progress.progress(min(progress_value, 0.9))
+                                        except:
+                                            pass
                                             
-                                            # Update progress based on modules completed
-                                            if module_count > 0:
-                                                progress_value = 0.3 + (0.6 * (current_module / module_count))
-                                                overall_progress.progress(min(progress_value, 0.9))
-                                            
+                                    # Track module development via progress callback
+                                    # The callback function will handle these directly
+                                    
                                     elif "Finalized comprehensive learning path" in entry and "Finalized comprehensive learning path" not in steps_seen:
                                         steps_seen.add("Finalized comprehensive learning path")
                                         phase = 3
                                         status_text.write("Phase 3/3: Finalizing your learning path...")
-                                        update_progress("Assembling final learning path")
+                                        await update_progress("Assembling final learning path")
                                         overall_progress.progress(0.95)
                             except Exception as e:
                                 # Ignore errors in progress tracking
@@ -223,7 +320,7 @@ if generate_button:
                         # Mark as complete
                         overall_progress.progress(1.0)
                         status_text.write("✅ Learning path generation complete!")
-                        update_progress("Learning path generation completed successfully")
+                        await update_progress("Learning path generation completed successfully")
                         
                         return result
                     
@@ -249,6 +346,9 @@ if generate_button:
                         with steps_expander:
                             for i, step in enumerate(result.get("execution_steps", []), 1):
                                 st.write(f"{i}. {step}")
+                        
+                        # Add info about parallel processing
+                        st.info(f"Generated using {parallel_count} parallel module(s) and {search_parallel_count} parallel search(es)")
                     
                     # Display the learning path modules
                     st.success(f"Learning path for **{result['topic']}** created successfully! 🎉")
@@ -354,14 +454,14 @@ with st.expander("About this app"):
     ## How it works
     
     1. **Topic Analysis**: The system analyzes your topic to understand what information is needed
-    2. **Smart Web Search**: It generates optimal search queries and performs targeted web searches
+    2. **Smart Web Search**: It generates optimal search queries and performs targeted web searches in parallel
     3. **Learning Path Creation**: The information is structured into logical modules that build upon each other
-    4. **Module Development**: Each module is researched and developed with comprehensive content
+    4. **Parallel Module Development**: Each module is researched and developed with comprehensive content in parallel
     5. **Final Assembly**: The complete learning path is assembled with all module content
     
     ## Technologies
     
-    - **LangGraph**: For orchestrating the complex workflow
+    - **LangGraph**: For orchestrating the complex workflow with parallel execution
     - **LangChain**: For LLM interactions and tools
     - **OpenAI's GPT**: For natural language understanding and generation
     - **Tavily**: For intelligent web search
