@@ -83,16 +83,43 @@ The system follows a multi-phase process:
 
 1. Run the Streamlit app:
    ```
+   streamlit run app.py
+   ```
+
+   Or use the provided launcher script:
+   ```
    python run.py
    ```
 
 2. Open your browser and go to the URL displayed in the terminal (usually http://localhost:8501)
 
-3. Enter a topic in the text field and click "Generate Learning Path"
+3. Set up your API keys (OpenAI and Tavily) in the Settings page
 
-4. Track the progress as the system develops your learning path
+4. Enter a topic in the text field and click "Generate Learning Path"
 
-5. Explore the fully developed modules and download the complete learning path
+5. Track the progress as the system develops your learning path
+
+6. Explore the fully developed modules and submodules, and download the complete learning path in JSON or Markdown format
+
+## Streamlit App Features
+
+The Streamlit app provides a user-friendly interface for generating and exploring learning paths:
+
+- **Home Page**: Input your topic and generation settings
+- **Settings Page**: Configure API keys and generation parameters
+- **Learning Path View**: Navigate through modules and submodules
+- **Real-time Progress Tracking**: Monitor the generation process
+- **Download Options**: Export your learning path as JSON or Markdown
+
+## Advanced Settings
+
+The app allows you to configure parallel processing settings:
+
+- **Module Parallelism**: Number of modules to process in parallel (1-4)
+- **Search Parallelism**: Number of searches to execute in parallel (1-5)
+- **Submodule Parallelism**: Number of submodules to process in parallel (1-5)
+
+Adjusting these settings can significantly impact generation speed and API costs.
 
 ## File Structure
 
