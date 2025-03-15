@@ -4,7 +4,7 @@ import re
 from typing import List, Dict, Any, Optional, Callable, Tuple
 
 from models import SearchQuery, Module, Submodule, EnhancedModule, ModuleContent, SubmoduleContent, LearningPathState
-from parsers import search_queries_parser, modules_parser, module_queries_parser, submodule_parser
+from parsers import search_queries_parser, modules_parser, module_queries_parser, submodule_parser, enhanced_modules_parser
 from services import get_llm, get_search_tool
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -38,20 +38,55 @@ async def execute_single_search(query: SearchQuery) -> Dict[str, Any]:
 
 async def generate_search_queries(state: LearningPathState) -> Dict[str, Any]:
     """
-    Generate optimal search queries for the user topic.
+    Generate optimal search queries for the user topic with comprehensive analysis.
     """
     logging.info(f"Generating search queries for topic: {state['user_topic']}")
     prompt = ChatPromptTemplate.from_template("""
-You are an expert research assistant. Your task is to generate 5 search queries that 
-will gather comprehensive information for creating a learning path about {user_topic}.
+# EXPERT TEACHING ASSISTANT INSTRUCTIONS
+
+Your task is to analyze a learning topic and generate optimal search queries to gather comprehensive information.
+
+## TOPIC ANALYSIS
+
+Please analyze the topic "{user_topic}" thoroughly:
+
+### CORE CONCEPT IDENTIFICATION
+- Primary concepts that form the foundation
+- Supporting concepts necessary for understanding
+- Advanced concepts that build on the basics
+- Practical applications and implications
+- Tools, methodologies, or frameworks involved
+
+### KNOWLEDGE STRUCTURE MAPPING
+- Fundamental principles and theories
+- Key relationships and dependencies
+- Historical or contextual elements
+- Current state and developments
+- Future implications or trends
+
+### COMPLEXITY LAYERS
+- Basic principles and definitions
+- Intermediate concepts and applications
+- Advanced theories and implementations
+- Expert-level considerations
+- Cross-domain connections
+
+## SEARCH STRATEGY
+
+Based on this analysis, generate 5 search queries that will:
+1. Cover different critical aspects of the topic
+2. Address various complexity levels
+3. Explore diverse perspectives and applications
+4. Ensure comprehensive understanding
+5. Target high-quality educational content
 
 For each search query:
-1. Make it specific and targeted
-2. Ensure it covers a different aspect of the topic
-3. Design it to return high-quality educational content
-4. Explain why this search is important for understanding the topic
+- Make it specific and targeted
+- Explain why this search is essential for understanding the topic
+- Ensure it addresses a different aspect of the topic
+- Design it to return high-quality educational content
 
-Your response should be exactly 5 search queries, each with its rationale.
+Your response should be exactly 5 search queries, each with its detailed rationale.
 
 {format_instructions}
 """)
@@ -141,27 +176,73 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
             formatted_results += "\n"
     
     prompt = ChatPromptTemplate.from_template("""
-You are an expert education specialist. Your task is to create a comprehensive learning path 
-for {user_topic}.
+# EXPERT TEACHING ASSISTANT INSTRUCTIONS
 
-Use the following research information:
+Your task is to create a comprehensive learning path for the topic "{user_topic}" based on thorough research.
+
+## RESEARCH INFORMATION
 {search_results}
 
-Design a logical sequence of learning modules. For each module, provide:
-1. A clear, informative title
-2. A detailed description of what will be covered in the module
+## MODULE PLANNING PRINCIPLES
 
-Structure your response as a series of modules that build upon each other.
+### A) Progressive Expertise Development
+- First module must be truly introductory, assuming zero knowledge
+- Each subsequent module builds expertise systematically
+- Advanced concepts are introduced only after solid foundations
+- Technical depth increases progressively but steadily
+- Final modules should reach expert-level understanding
+
+### B) Topic Focus and Granularity
+- Each module must focus on ONE specific concept or aspect
+- Break down large topics into focused, manageable modules
+- No mixing of different fundamental concepts in a single module
+- Rather than creating large, comprehensive modules, prefer smaller, focused ones
+- Ensure each module is exhaustive and detailed within its specific focus
+
+### C) Knowledge Building
+- Start with fundamental concepts accessible to complete beginners
+- Build complexity gradually but thoroughly
+- Each module should represent a clear step towards expertise
+- Connect new knowledge with previously established concepts
+- Ensure deep understanding before advancing
+
+### D) Module Independence and Interconnection
+- Each module must be self-contained within its scope
+- Clear prerequisites must be explicitly identified
+- Strong connections with previous modules
+- Preview connections to future modules
+- Create a cohesive learning journey
+
+### E) Depth and Accessibility Balance
+- Maintain exhaustiveness and detail while ensuring clarity
+- Break complex topics into digestible segments
+- Provide thorough coverage without overwhelming
+- Each module should feel complete within its scope
+- Deep diving into specifics while maintaining context
+
+## LEARNING PATH REQUIREMENTS
+
+Design a logical sequence of 4-7 learning modules that follows these principles. For each module, provide:
+
+1. A clear, informative title that indicates its specific focus
+2. The core concept this module addresses (single main concept)
+3. A detailed description of what will be covered
+4. Clear learning objectives
+5. Prerequisites (if any)
+6. Key components to be covered
+7. Expected outcomes (what will be learned)
+
+Ensure the modules build upon each other in a progressive journey from complete beginner to expert.
 
 {format_instructions}
 """)
     try:
         llm = get_llm()
-        chain = prompt | llm | modules_parser
+        chain = prompt | llm | enhanced_modules_parser
         module_list = await chain.ainvoke({
             "user_topic": state["user_topic"],
             "search_results": formatted_results,
-            "format_instructions": modules_parser.get_format_instructions()
+            "format_instructions": enhanced_modules_parser.get_format_instructions()
         })
         modules = module_list.modules
         logging.info(f"Created learning path with {len(modules)} modules")
@@ -182,7 +263,7 @@ Structure your response as a series of modules that build upon each other.
 
 async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
     """
-    Plan detailed submodules for each module in the learning path.
+    Plan detailed submodules for each module following educational best practices.
     """
     logging.info("Planning submodules for each module in the learning path")
     if not state["modules"]:
@@ -200,30 +281,56 @@ async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
             learning_path_context += f"Module {i+1}: {mod.title}\nDescription: {mod.description}\n\n"
         
         prompt = ChatPromptTemplate.from_template("""
-You are an expert education content planner. Your task is to break down a learning module 
-into logical submodules that provide a detailed, comprehensive coverage of the topic.
+# EXPERT TEACHING ASSISTANT INSTRUCTIONS
 
-The module you need to break down is:
+Your task is to break down a learning module into logical submodules that provide deep, comprehensive coverage.
+
+## MODULE INFORMATION
 Title: {module_title}
 Description: {module_description}
 
 This module is part of a learning path about "{user_topic}".
 
-Here is the context of the entire learning path:
+## CONTEXT
 {learning_path_context}
 
-For this module, create 3-5 logical submodules that:
+## SUBMODULE PLANNING PRINCIPLES
+
+### A) Progressive Depth Development
+- First submodule must establish fundamental concepts for this module
+- Each subsequent submodule builds depth systematically
+- Technical complexity increases progressively
+- Final submodules should reach deep understanding of this module's focus
+
+### B) Narrative and Conceptual Flow
+- Submodules should flow naturally like chapters in a story
+- Each submodule must have ONE clear conceptual focus
+- Ensure conceptual continuity between submodules
+- Create a narrative arc that builds understanding
+
+### C) Exhaustive Coverage
+- Together, submodules must cover ALL aspects of the module's topic
+- Each submodule should be thorough within its focused scope
+- Ensure no critical components or concepts are missed
+- Provide both breadth and depth through careful submodule design
+
+## SUBMODULE REQUIREMENTS
+
+Create 3-5 logical submodules that:
 1. Cover different aspects of the module topic
-2. Build upon each other in a logical sequence
+2. Build upon each other in a narrative sequence
 3. Are comprehensive yet focused
 4. Together completely fulfill the module's description
 
 For each submodule provide:
 1. A clear, descriptive title
 2. A detailed description explaining what this submodule will cover
-3. Ensure the submodules follow a logical order for learning
+3. The core concept this submodule focuses on
+4. Clear learning objectives
+5. Key components to be covered
+6. The depth level (basic, intermediate, advanced, or expert)
 
-Your submodules MUST create a complete, cohesive learning experience for this module.
+Ensure the submodules create a complete, cohesive learning experience for this module.
 
 {format_instructions}
 """)
@@ -240,23 +347,56 @@ Your submodules MUST create a complete, cohesive learning experience for this mo
             submodules = submodule_list.submodules
             for i, sub in enumerate(submodules):
                 sub.order = i + 1
-            enhanced_module = EnhancedModule(
-                title=module.title,
-                description=module.description,
-                submodules=submodules
-            )
+            
+            # Convert Module to EnhancedModule if needed
+            if hasattr(module, 'core_concept'):
+                # It's already an EnhancedModule
+                enhanced_module = EnhancedModule(
+                    title=module.title,
+                    description=module.description,
+                    core_concept=module.core_concept,
+                    learning_objective=module.learning_objective,
+                    prerequisites=module.prerequisites,
+                    key_components=module.key_components,
+                    expected_outcomes=module.expected_outcomes,
+                    submodules=submodules
+                )
+            else:
+                # It's a basic Module, convert to EnhancedModule
+                enhanced_module = EnhancedModule(
+                    title=module.title,
+                    description=module.description,
+                    submodules=submodules
+                )
+                
             enhanced_modules.append(enhanced_module)
             logging.info(f"Created {len(submodules)} submodules for module {module_index + 1}")
         except Exception as e:
             logging.error(f"Error planning submodules for module {module_index + 1}: {str(e)}")
-            enhanced_modules.append(EnhancedModule(
-                title=module.title,
-                description=module.description,
-                submodules=[]
-            ))
+            # Still add the module even if there was an error
+            if hasattr(module, 'core_concept'):
+                enhanced_module = EnhancedModule(
+                    title=module.title,
+                    description=module.description,
+                    core_concept=module.core_concept,
+                    learning_objective=module.learning_objective,
+                    prerequisites=module.prerequisites,
+                    key_components=module.key_components,
+                    expected_outcomes=module.expected_outcomes,
+                    submodules=[]
+                )
+            else:
+                enhanced_module = EnhancedModule(
+                    title=module.title,
+                    description=module.description,
+                    submodules=[]
+                )
+            enhanced_modules.append(enhanced_module)
+    
     if state.get("progress_callback"):
         total_submodules = sum(len(m.submodules) for m in enhanced_modules)
         await state["progress_callback"](f"Planned {total_submodules} submodules across {len(enhanced_modules)} modules")
+    
     return {
         "enhanced_modules": enhanced_modules,
         "steps": [f"Planned submodules for {len(enhanced_modules)} modules"]
@@ -575,27 +715,64 @@ async def initialize_submodule_processing(state: LearningPathState) -> Dict[str,
     Initialize the parallel submodule development process.
     """
     logging.info("Initializing parallel submodule development process")
-    if not state.get("enhanced_modules"):
+    enhanced_modules = state.get("enhanced_modules")
+    
+    if not enhanced_modules:
         logging.warning("No enhanced modules with submodules to develop")
         return {
+            "submodule_batches": [],  # Explicitly initialize to empty list
+            "current_submodule_batch_index": 0,
+            "submodules_in_process": {},
             "developed_submodules": [],
             "steps": ["No enhanced modules with submodules to develop"]
         }
+    
+    # Log information about the modules
+    logging.info(f"Found {len(enhanced_modules)} enhanced modules to process")
+    for i, module in enumerate(enhanced_modules):
+        submodule_count = len(module.submodules) if hasattr(module, 'submodules') else 0
+        logging.info(f"Module {i+1}: {module.title} - {submodule_count} submodules")
+    
     submodule_parallel_count = state.get("submodule_parallel_count", 2)
     all_submodule_pairs = []
-    for module_id, module in enumerate(state["enhanced_modules"]):
-        for submodule_id, _ in enumerate(module.submodules):
-            all_submodule_pairs.append((module_id, submodule_id))
-    submodule_batches = [all_submodule_pairs[i:i+submodule_parallel_count] for i in range(0, len(all_submodule_pairs), submodule_parallel_count)]
-    logging.info(f"Created {len(submodule_batches)} batches of submodules for parallel processing")
+    
+    for module_id, module in enumerate(enhanced_modules):
+        if hasattr(module, 'submodules') and module.submodules:
+            for submodule_id, _ in enumerate(module.submodules):
+                all_submodule_pairs.append((module_id, submodule_id))
+    
+    # Check if we found any valid submodules
+    if not all_submodule_pairs:
+        logging.warning("No valid submodules found in the enhanced modules")
+        return {
+            "submodule_batches": [],  # Explicitly initialize to empty list
+            "current_submodule_batch_index": 0,
+            "submodules_in_process": {},
+            "developed_submodules": [],
+            "steps": ["No valid submodules found in enhanced modules"]
+        }
+    
+    # Create batches with proper error handling
+    submodule_batches = []
+    try:
+        submodule_batches = [all_submodule_pairs[i:i+submodule_parallel_count] 
+                            for i in range(0, len(all_submodule_pairs), submodule_parallel_count)]
+    except Exception as e:
+        logging.error(f"Error creating submodule batches: {str(e)}")
+        submodule_batches = []  # Ensure we have a valid empty list
+    
+    batch_count = len(submodule_batches)
+    logging.info(f"Created {batch_count} batches of submodules for parallel processing from {len(all_submodule_pairs)} submodules")
+    
     if state.get("progress_callback"):
-        await state["progress_callback"](f"Organized {len(all_submodule_pairs)} submodules into {len(submodule_batches)} processing batches")
+        await state["progress_callback"](f"Organized {len(all_submodule_pairs)} submodules into {batch_count} processing batches")
+    
     return {
         "submodule_batches": submodule_batches,
         "current_submodule_batch_index": 0,
         "submodules_in_process": {},
         "developed_submodules": [],
-        "steps": [f"Initialized submodule processing with {submodule_parallel_count} submodules at once"]
+        "steps": [f"Initialized submodule processing with {submodule_parallel_count} submodules at once, created {batch_count} batches"]
     }
 
 async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
@@ -603,15 +780,36 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
     Process the current batch of submodules in parallel.
     """
     logging.info("Processing a batch of submodules in parallel")
-    if state.get("current_submodule_batch_index", 0) >= len(state.get("submodule_batches", [])):
-        logging.info("All submodule batches have been processed")
+    
+    # Safely get submodule_batches, ensuring None is converted to an empty list
+    submodule_batches = state.get("submodule_batches")
+    if submodule_batches is None:
+        logging.warning("submodule_batches is None, initializing as empty list")
+        submodule_batches = []
+        
+    current_batch_index = state.get("current_submodule_batch_index", 0)
+    
+    # Check if we've processed all batches
+    if current_batch_index >= len(submodule_batches):
+        logging.info("All submodule batches have been processed or none were created")
         return {
-            "steps": ["All submodule batches have been processed"]
+            "steps": ["All submodule batches have been processed or none were created"]
         }
-    current_batch = state["submodule_batches"][state["current_submodule_batch_index"]]
-    enhanced_modules = state["enhanced_modules"]
+    
+    current_batch = submodule_batches[current_batch_index]
+    enhanced_modules = state.get("enhanced_modules", [])
+    
+    # Check if we have enhanced modules to process
+    if not enhanced_modules:
+        logging.warning("No enhanced modules found to process submodules")
+        return {
+            "current_submodule_batch_index": current_batch_index + 1,
+            "steps": ["No enhanced modules found to process submodules"]
+        }
+    
     submodules_in_process = state.get("submodules_in_process", {})
     tasks = []
+    
     for module_id, submodule_id in current_batch:
         sub_key = (module_id, submodule_id)
         if sub_key not in submodules_in_process:
@@ -621,14 +819,25 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
                 "search_results": None,
                 "content": None
             }
-            module = enhanced_modules[module_id]
-            submodule = module.submodules[submodule_id]
-            task = process_single_submodule(state, module_id, submodule_id, module, submodule)
-            tasks.append(task)
-    progress_msg = f"Started processing submodule batch {state['current_submodule_batch_index'] + 1} with {len(tasks)} submodules"
+            
+            # Safely access module and submodule
+            if module_id < len(enhanced_modules):
+                module = enhanced_modules[module_id]
+                if hasattr(module, 'submodules') and submodule_id < len(module.submodules):
+                    submodule = module.submodules[submodule_id]
+                    task = process_single_submodule(state, module_id, submodule_id, module, submodule)
+                    tasks.append(task)
+                else:
+                    logging.warning(f"Submodule ID {submodule_id} out of range for module {module_id}")
+            else:
+                logging.warning(f"Module ID {module_id} out of range")
+    
+    progress_msg = f"Started processing submodule batch {current_batch_index + 1} with {len(tasks)} submodules"
     logging.info(progress_msg)
+    
     if state.get("progress_callback"):
-        await state["progress_callback"](f"Processing batch {state['current_submodule_batch_index'] + 1} of submodules")
+        await state["progress_callback"](f"Processing batch {current_batch_index + 1} of submodules")
+    
     if tasks:
         try:
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -642,35 +851,44 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
                         submodules_in_process[sub_key]["error"] = str(result)
                     else:
                         submodules_in_process[sub_key] = result
-            logging.info(f"Completed processing submodule batch {state['current_submodule_batch_index'] + 1}")
+            logging.info(f"Completed processing submodule batch {current_batch_index + 1}")
         except Exception as e:
             logging.error(f"Error in parallel processing submodule batch: {str(e)}")
-    next_batch_index = state["current_submodule_batch_index"] + 1
+    
+    next_batch_index = current_batch_index + 1
     developed_submodules = state.get("developed_submodules", [])
+    
+    # Process results from current batch
     for module_id, submodule_id in current_batch:
         sub_key = (module_id, submodule_id)
         sub_data = submodules_in_process.get(sub_key, {})
-        if sub_data.get("status") == "completed":
+        if sub_data.get("status") == "completed" and module_id < len(enhanced_modules):
             module = enhanced_modules[module_id]
-            submodule = module.submodules[submodule_id]
-            developed_submodules.append(SubmoduleContent(
-                module_id=module_id,
-                submodule_id=submodule_id,
-                title=submodule.title,
-                description=submodule.description,
-                search_queries=sub_data.get("search_queries", []),
-                search_results=sub_data.get("search_results", []),
-                content=sub_data.get("content", "")
-            ))
-    if state.get("progress_callback") and state.get("submodule_batches"):
-        batch_count = len(state["submodule_batches"])
-        batch_num = state["current_submodule_batch_index"] + 1
-        await state["progress_callback"](f"Completed {batch_num}/{batch_count} submodule batches")
+            if hasattr(module, 'submodules') and submodule_id < len(module.submodules):
+                submodule = module.submodules[submodule_id]
+                developed_submodules.append(SubmoduleContent(
+                    module_id=module_id,
+                    submodule_id=submodule_id,
+                    title=submodule.title,
+                    description=submodule.description,
+                    search_queries=sub_data.get("search_queries", []),
+                    search_results=sub_data.get("search_results", []),
+                    content=sub_data.get("content", "")
+                ))
+    
+    # Safely handle callback with batch progress
+    if state.get("progress_callback"):
+        if submodule_batches:
+            batch_count = len(submodule_batches)
+            await state["progress_callback"](f"Completed {current_batch_index + 1}/{batch_count} submodule batches")
+        else:
+            await state["progress_callback"](f"Completed processing current batch of submodules")
+    
     return {
         "submodules_in_process": submodules_in_process,
         "current_submodule_batch_index": next_batch_index,
         "developed_submodules": developed_submodules,
-        "steps": [f"Processed batch {state['current_submodule_batch_index'] + 1} of submodules in parallel"]
+        "steps": [f"Processed batch {current_batch_index + 1} of submodules in parallel"]
     }
 
 async def process_single_submodule(
@@ -854,7 +1072,7 @@ async def develop_submodule_specific_content(
     submodule_search_results: List[Dict[str, Any]]
 ) -> str:
     """
-    Develop comprehensive content for a specific submodule.
+    Develop comprehensive narrative content for a specific submodule.
     """
     logger = logging.getLogger("learning_path.content_developer")
     logger.info(f"Developing content for submodule {submodule_id + 1} of module {module_id + 1}: {submodule.title}")
@@ -917,39 +1135,100 @@ async def develop_submodule_specific_content(
         adjacent_context += "No next submodule in this module.\n"
     
     prompt = ChatPromptTemplate.from_template("""
-You are an expert education content developer. Your task is to create comprehensive
-educational content for a submodule titled "{submodule_title}" which is part of a module
-titled "{module_title}" in a learning path about "{user_topic}".
+# EXPERT TEACHING ASSISTANT INSTRUCTIONS
 
-Submodule description: {submodule_description}
+Your task is to create comprehensive educational content for a submodule titled "{submodule_title}" 
+which is part of the module "{module_title}" in a learning path about "{user_topic}".
 
-Position information:
-- This is submodule {submodule_order} of {submodule_count} in the current module
-- The parent module is module {module_order} of {module_count} in the learning path
+## SUBMODULE INFORMATION
+Description: {submodule_description}
+Position: Submodule {submodule_order} of {submodule_count} in Module {module_order} of {module_count}
 
-Module context:
-{module_context}
+## CONTEXT
+Module context: {module_context}
+Adjacent submodules: {adjacent_context}
+Learning path context: {learning_path_context}
 
-Adjacent submodules:
-{adjacent_context}
-
-Learning path context:
-{learning_path_context}
-
-Use the following research information to develop this submodule:
+## RESEARCH INFORMATION
 {search_results}
 
-Your content should:
-1. Be comprehensive and educational
-2. Include clear explanations of concepts
-3. Provide examples where appropriate
-4. Reference authoritative sources
-5. Build upon prior submodules in the learning path
-6. Prepare the learner for subsequent submodules
-7. Be coherent with the overall learning path flow
-8. Focus ONLY on the topics relevant to this specific submodule
+## EXPLANATION REQUIREMENTS
 
-Structure your content with appropriate sections and markdown formatting.
+### Core Principles
+
+#### A) A Deep Dive That Builds Understanding
+- Take the learner by the hand and guide them into the depths of the topic
+- Explain everything thoroughly - leave no concept unclear
+- Break down complex ideas into digestible pieces without losing their essence
+- Build understanding layer by layer, ensuring each layer is solid before adding the next
+- Make abstract concepts concrete through careful explanation
+- Connect theory with practice, showing how things work in the real world
+- Address the "why" behind every important concept
+- Anticipate and clear up potential confusions before they arise
+
+#### B) Truly Exhaustive and Detailed
+- Cover every aspect of the submodule's focus completely
+- Don't just scratch the surface - dive deep into mechanisms and processes
+- Explain how things work "under the hood"
+- Include critical nuances and edge cases
+- Share practical implications and real-world considerations
+- Provide rich context that enhances understanding
+- Address common misconceptions explicitly
+- Include expert insights that bring the topic to life
+
+#### C) Naturally Flowing and Engaging
+- Let the explanation flow like a well-told story
+- Make complex topics fascinating by revealing their inherent interest
+- Build natural connections between ideas
+- Use analogies and examples that illuminate rather than distract
+- Keep the reader engaged through narrative progression
+- Make technical content approachable without oversimplifying
+- Create "aha moments" through careful concept building
+- Maintain a tone that's both authoritative and engaging
+
+#### D) Perfect for the Learner's Journey
+- Remember this submodule's place in their path to expertise
+- Build naturally on their current knowledge
+- Fill any potential knowledge gaps seamlessly
+- Create solid foundations for future concepts
+- Help them develop expert intuition
+- Show how this piece fits into the bigger picture
+- Build confidence alongside competence
+- Ensure they're fully prepared for what comes next
+
+#### E) Absolutely Clear and Memorable 
+- Make every explanation crystal clear
+- Use precise language while remaining accessible
+- Illuminate rather than impress
+- Create understanding that sticks
+- Make complex ideas graspable
+- Ensure key points are memorable
+- Build mental models that last
+- Leave no room for confusion
+
+### Extension and Depth Requirements
+
+- Core explanation should be at least 2000 words (excluding introduction and conclusion)
+- Develop at least 15-20 substantial paragraphs that dive deep into the topic
+- Each major concept should receive multiple paragraphs of thorough treatment
+- Include detailed examples and applications that illuminate the concepts
+- Include multiple levels of understanding (surface, mechanical, theoretical, practical, expert)
+- Explore implications and connections extensively
+- Address edge cases and special considerations in detail
+- Include real-world applications and practical insights
+
+Write a comprehensive, narrative explanation that deeply explores this submodule's topic.
+Your explanation should be a single, continuous narrative. Let the nature of the content guide its flow.
+Focus entirely on helping the reader truly understand and engage with the material.
+
+At the end, include a brief section called "MODULE CLOSURE" that summarizes what was covered
+and creates a bridge to the next submodule if applicable:
+
+# MODULE CLOSURE
+
+In this submodule, we have deeply explored [topic], starting with [initial concept] and gradually developing our understanding until [final concept]. We have analyzed in detail [key aspects], considering [special cases/applications] and establishing crucial connections with [related concepts].
+
+The next submodule will focus on [next topic], where we will explore [detailed preview]. This will allow us to [benefit/connection with what was learned].
 """)
     try:
         llm = get_llm()
@@ -1069,18 +1348,52 @@ async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str,
             for sub in module_submodules:
                 sub_content = sub.content if hasattr(sub, 'content') and sub.content else ""
                 
+                # Extract summary if available, otherwise create one
+                summary = sub.summary if hasattr(sub, 'summary') and sub.summary else ""
+                if not summary and sub_content:
+                    # Take first paragraph or first 200 chars as summary
+                    first_para_end = sub_content.find("\n\n")
+                    if first_para_end > 0 and first_para_end < 500:
+                        summary = sub_content[:first_para_end].strip()
+                    else:
+                        summary = sub_content[:200].strip() + "..."
+                
                 # Log detailed content info for debugging
                 content_preview = sub_content[:100] + "..." if sub_content and len(sub_content) > 100 else sub_content
                 logger.debug(f"  Submodule {sub.submodule_id + 1}: {sub.title}")
                 logger.debug(f"    Content preview: {content_preview}")
                 logger.debug(f"    Content length: {len(sub_content)}")
                 
+                # Get enhanced metadata if available
+                core_concept = ""
+                learning_objective = ""
+                key_components = []
+                depth_level = "intermediate"
+                
+                # Get from the original submodule in enhanced_modules if available
+                if module.submodules and len(module.submodules) > sub.submodule_id:
+                    orig_sub = module.submodules[sub.submodule_id]
+                    if hasattr(orig_sub, 'core_concept') and orig_sub.core_concept:
+                        core_concept = orig_sub.core_concept
+                    if hasattr(orig_sub, 'learning_objective') and orig_sub.learning_objective:
+                        learning_objective = orig_sub.learning_objective
+                    if hasattr(orig_sub, 'key_components') and orig_sub.key_components:
+                        key_components = orig_sub.key_components
+                    if hasattr(orig_sub, 'depth_level') and orig_sub.depth_level:
+                        depth_level = orig_sub.depth_level
+                
                 submodule_data.append({
                     "id": sub.submodule_id,
                     "title": sub.title,
                     "description": sub.description,
                     "content": sub_content,
-                    "order": sub.submodule_id + 1
+                    "order": sub.submodule_id + 1,
+                    "summary": summary,
+                    "core_concept": core_concept,
+                    "learning_objective": learning_objective,
+                    "key_components": key_components,
+                    "depth_level": depth_level,
+                    "connections": getattr(sub, 'connections', {})
                 })
             
             # Check for any issues with submodule data
@@ -1088,13 +1401,20 @@ async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str,
                 if not s_data.get("content"):
                     logger.warning(f"Missing content in submodule {s_data.get('id')} '{s_data.get('title')}' of module {module_id}")
             
-            # Add completed module to final structure
-            final_modules.append({
+            # Add completed module to final structure with enhanced metadata
+            module_data = {
                 "id": module_id,
                 "title": module.title,
                 "description": module.description,
+                "core_concept": getattr(module, 'core_concept', ""),
+                "learning_objective": getattr(module, 'learning_objective', ""),
+                "prerequisites": getattr(module, 'prerequisites', []),
+                "key_components": getattr(module, 'key_components', []),
+                "expected_outcomes": getattr(module, 'expected_outcomes', []),
                 "submodules": submodule_data
-            })
+            }
+            
+            final_modules.append(module_data)
         
         # Create final learning path structure
         final_learning_path = {
@@ -1153,6 +1473,22 @@ def check_submodule_batch_processing(state: LearningPathState) -> str:
     """
     Check if all submodule batches are processed.
     """
-    if state["current_submodule_batch_index"] is not None and state["submodule_batches"] is not None:
-        return "all_batches_processed" if state["current_submodule_batch_index"] >= len(state["submodule_batches"]) else "continue_processing"
-    return "continue_processing"
+    current_index = state.get("current_submodule_batch_index")
+    batches = state.get("submodule_batches")
+    
+    # Check if either is None
+    if current_index is None:
+        logging.warning("current_submodule_batch_index is None in state")
+        return "all_batches_processed"
+        
+    if batches is None:
+        logging.warning("submodule_batches is None in state")
+        return "all_batches_processed"
+    
+    # Safe comparison with valid values
+    if current_index >= len(batches):
+        logging.info(f"All {len(batches)} submodule batches processed (current index: {current_index})")
+        return "all_batches_processed"
+    else:
+        logging.info(f"Continue processing submodule batches: {current_index+1}/{len(batches)}")
+        return "continue_processing"

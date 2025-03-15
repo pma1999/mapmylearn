@@ -12,6 +12,12 @@ TRACE = 5  # Nivel inferior a DEBUG para datos muy detallados
 class JsonFormatter(logging.Formatter):
     """Formateador que convierte los registros de log en formato JSON estructurado."""
     def format(self, record):
+        # Custom JSON encoder to handle non-serializable objects
+        def custom_json_default(obj):
+            if callable(obj):
+                return f"<function: {getattr(obj, '__name__', 'anonymous')}>"
+            return str(obj)
+        
         log_record = {
             "timestamp": datetime.now().isoformat(),
             "level": record.levelname,
@@ -33,7 +39,18 @@ class JsonFormatter(logging.Formatter):
                 "traceback": traceback.format_exception(*record.exc_info)
             }
             
-        return json.dumps(log_record)
+        try:
+            return json.dumps(log_record, default=custom_json_default)
+        except Exception as e:
+            # Fallback if JSON serialization fails
+            return json.dumps({
+                "timestamp": datetime.now().isoformat(),
+                "level": record.levelname,
+                "message": f"[JSON serialization error: {str(e)}] {record.getMessage()}",
+                "module": record.module,
+                "function": record.funcName,
+                "line": record.lineno
+            })
 
 def setup_logging(
     log_file: Optional[str] = "learning_path.log",
@@ -138,27 +155,40 @@ def log_data(logger, level: int, msg: str, data: Any, max_length: int = 10000) -
     if not DATA_LOGGING_ENABLED:
         return
     
-    if hasattr(data, '__dict__'):
-        # Convertir objetos a diccionarios
-        serialized = {
-            '__type__': data.__class__.__name__,
-            **{k: v for k, v in data.__dict__.items() if not k.startswith('_')}
-        }
-    elif isinstance(data, (list, tuple)):
-        # Para listas, serializar cada elemento
-        serialized = [
-            item.__dict__ if hasattr(item, '__dict__') else item
-            for item in data
-        ]
-    else:
-        serialized = data
+    # Función custom para serializar objetos
+    def custom_serializer(obj):
+        if callable(obj):
+            return f"<function: {obj.__name__}>"
+        return str(obj)
+    
+    # Función recursiva para limpiar datos no serializables
+    def clean_for_serialization(item):
+        if callable(item):
+            return f"<function: {getattr(item, '__name__', 'anonymous')}>"
+        elif hasattr(item, '__dict__'):
+            return {
+                '__type__': item.__class__.__name__,
+                **{k: clean_for_serialization(v) for k, v in item.__dict__.items() if not k.startswith('_')}
+            }
+        elif isinstance(item, dict):
+            return {k: clean_for_serialization(v) for k, v in item.items()}
+        elif isinstance(item, (list, tuple)):
+            return [clean_for_serialization(i) for i in item]
+        else:
+            return item
+    
+    # Limpiar datos para serialización
+    try:
+        serialized = clean_for_serialization(data)
+    except Exception as e:
+        serialized = {"__error__": f"Error cleaning data: {str(e)}"}
     
     try:
-        data_str = json.dumps(serialized, default=str, indent=2)
+        data_str = json.dumps(serialized, default=custom_serializer, indent=2)
         if len(data_str) > max_length:
             data_str = data_str[:max_length] + "... [truncado]"
-    except (TypeError, OverflowError, ValueError):
-        data_str = str(data)[:max_length] + "... [no serializable]"
+    except (TypeError, OverflowError, ValueError) as e:
+        data_str = f"{str(data)[:max_length]}... [no serializable: {str(e)}]"
     
     # Crear un registro con datos adicionales
     extra = {'data': serialized}

@@ -2,6 +2,21 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional, Callable, Tuple, TypedDict, Annotated
 from operator import add
 
+# Topic Analysis Models
+class TopicAnalysis(BaseModel):
+    """Detailed breakdown of the topic's components for comprehensive understanding."""
+    core_concepts: List[str] = Field(..., description="Primary and supporting concepts that form the foundation")
+    knowledge_structure: Dict[str, List[str]] = Field(..., description="Fundamental principles, relationships, and context")
+    complexity_layers: Dict[str, List[str]] = Field(..., description="Progression from basic to expert-level concepts")
+    
+class ModulePlanning(BaseModel):
+    """Strategic approach to module creation following pedagogical principles."""
+    progression_design: str = Field(..., description="How modules build expertise systematically")
+    topic_focus: str = Field(..., description="Specific focus of each module")
+    knowledge_building: str = Field(..., description="How complexity builds gradually")
+    module_connections: str = Field(..., description="How modules interconnect")
+    depth_balance: str = Field(..., description="How depth is balanced with accessibility")
+
 # Modelo que representa una consulta de búsqueda.
 class SearchQuery(BaseModel):
     keywords: str = Field(..., description="The search query keywords")
@@ -12,19 +27,28 @@ class Module(BaseModel):
     title: str = Field(..., description="Title of the learning module")
     description: str = Field(..., description="Detailed description of the module content")
 
+# Enhanced Module with richer metadata
+class EnhancedModule(BaseModel):
+    title: str = Field(..., description="Title of the learning module")
+    description: str = Field(..., description="Detailed description of the module content")
+    core_concept: str = Field(default="", description="Single main concept this module focuses on")
+    learning_objective: str = Field(default="", description="Clear goal of this module")
+    prerequisites: List[str] = Field(default_factory=list, description="Prerequisites for this module")
+    key_components: List[str] = Field(default_factory=list, description="Brief outline of components")
+    expected_outcomes: List[str] = Field(default_factory=list, description="What will be learned")
+    submodules: List["Submodule"] = Field(default_factory=list, description="Submodules contained in this module")
+
 # Modelo para representar un submódulo.
 class Submodule(BaseModel):
     title: str = Field(..., description="Title of the submodule")
     description: str = Field(..., description="Description of what this submodule covers")
-    order: int = Field(..., description="Order of this submodule within its parent module")
+    order: int = Field(default=0, description="Order of this submodule within its parent module")
+    core_concept: str = Field(default="", description="Single main concept this submodule focuses on")
+    learning_objective: str = Field(default="", description="Clear educational goal")
+    key_components: List[str] = Field(default_factory=list, description="Main components to be covered")
+    depth_level: str = Field(default="intermediate", description="Level of depth: basic, intermediate, advanced, or expert")
 
-# Modelo de módulo que incluye una lista de submódulos.
-class EnhancedModule(BaseModel):
-    title: str = Field(..., description="Title of the module")
-    description: str = Field(..., description="Description of the module content")
-    submodules: List[Submodule] = Field(..., description="Submodules contained in this module")
-
-# Modelo que recoge el contenido desarrollado para un submódulo.
+# Enhanced SubmoduleContent with narrative structure
 class SubmoduleContent(BaseModel):
     module_id: int = Field(..., description="ID of the parent module")
     submodule_id: int = Field(..., description="ID of the submodule within the module")
@@ -33,6 +57,8 @@ class SubmoduleContent(BaseModel):
     search_queries: List[SearchQuery] = Field(..., description="Search queries used for submodule research")
     search_results: List[Dict[str, Any]] = Field(..., description="Search results used to develop the submodule")
     content: str = Field(..., description="Fully developed submodule content")
+    summary: str = Field(default="", description="Brief summary of the submodule's content")
+    connections: Dict[str, str] = Field(default_factory=dict, description="Connections to other modules/submodules")
 
 # Modelo que recoge el contenido desarrollado para un módulo.
 class ModuleContent(BaseModel):
@@ -42,6 +68,8 @@ class ModuleContent(BaseModel):
     search_queries: List[SearchQuery] = Field(..., description="Search queries used for module research")
     search_results: List[Dict[str, Any]] = Field(..., description="Search results used to develop the module")
     content: str = Field(..., description="Fully developed module content")
+    summary: str = Field(default="", description="Brief summary of the module's content")
+    connections: Dict[str, str] = Field(default_factory=dict, description="Connections to other modules")
 
 # Contenedor para una lista de queries.
 class SearchQueryList(BaseModel):
@@ -51,6 +79,10 @@ class SearchQueryList(BaseModel):
 class ModuleList(BaseModel):
     modules: List[Module] = Field(..., description="List of learning modules")
 
+# Contenedor para una lista de módulos mejorados.
+class EnhancedModuleList(BaseModel):
+    modules: List[EnhancedModule] = Field(..., description="List of enhanced learning modules")
+
 # Contenedor para una lista de submódulos.
 class SubmoduleList(BaseModel):
     submodules: List[Submodule] = Field(..., description="List of submodules")
@@ -58,6 +90,8 @@ class SubmoduleList(BaseModel):
 # Estado global del flujo de generación de la ruta de aprendizaje.
 class LearningPathState(TypedDict):
     user_topic: str
+    topic_analysis: Optional[TopicAnalysis]
+    module_planning: Optional[ModulePlanning]
     search_queries: Optional[List[SearchQuery]]
     search_results: Optional[List[Dict[str, Any]]]
     modules: Optional[List[Module]]
