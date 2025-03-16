@@ -2,17 +2,10 @@
 """
 Debug Learning Path Generator
 
-Esta herramienta ejecuta el generador de rutas de aprendizaje con opciones de
-diagnóstico extendidas para depurar problemas como contenido faltante en submódulos.
+Usage:
+  python debug_learning_path.py "Learning Topic" --log-level DEBUG
 
-Uso:
-  python debug_learning_path.py "Tema de aprendizaje" --log-level DEBUG
-
-Opciones de depuración disponibles:
-  --log-level: Nivel de detalle para logging (TRACE, DEBUG, INFO, WARNING, ERROR)
-  --log-file: Ubicación del archivo de logs
-  --disable-json: Deshabilitar formato JSON en logs
-  --disable-data-logging: Deshabilitar logging detallado de estructuras de datos
+Provides extended diagnostic options to debug the learning path generation process.
 """
 
 import os
@@ -20,98 +13,65 @@ import sys
 import json
 import argparse
 import asyncio
-import importlib.util
 from datetime import datetime
-
 from main import generate_learning_path
-from log_config import setup_logging, get_log_level
+from config.log_config import setup_logging, get_log_level
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Debug Learning Path Generator")
-    
-    # Argumentos principales
-    parser.add_argument("topic", help="Tema para generar la ruta de aprendizaje")
-    parser.add_argument("--parallel", type=int, default=2, 
-                      help="Número de módulos a procesar en paralelo")
-    parser.add_argument("--search-parallel", type=int, default=3, 
-                      help="Número de búsquedas a ejecutar en paralelo")
-    parser.add_argument("--submodule-parallel", type=int, default=2, 
-                      help="Número de submódulos a procesar en paralelo")
-    
-    # Opciones de logging
-    parser.add_argument("--log-level", choices=["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"], 
-                      default="DEBUG", help="Nivel de detalle para logging")
-    parser.add_argument("--log-file", default="debug_learning_path.log", 
-                      help="Archivo de log")
-    parser.add_argument("--disable-json", action="store_true", 
-                      help="Deshabilitar formato JSON en logs")
-    parser.add_argument("--disable-data-logging", action="store_true", 
-                      help="Deshabilitar logging detallado de estructuras de datos")
-    
-    # Opciones de análisis post-ejecución
-    parser.add_argument("--save-result", action="store_true", 
-                      help="Guardar el resultado en un archivo JSON")
-    parser.add_argument("--output-dir", default="debug_output", 
-                      help="Directorio para guardar resultados")
-    parser.add_argument("--analyze-logs", action="store_true", 
-                      help="Ejecutar análisis automático de logs al finalizar")
-    
+    parser.add_argument("topic", help="Topic for learning path generation")
+    parser.add_argument("--parallel", type=int, default=2, help="Number of modules in parallel")
+    parser.add_argument("--search-parallel", type=int, default=3, help="Number of parallel searches")
+    parser.add_argument("--submodule-parallel", type=int, default=2, help="Number of parallel submodules")
+    parser.add_argument("--log-level", choices=["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"], default="DEBUG", help="Logging level")
+    parser.add_argument("--log-file", default="debug_learning_path.log", help="Log file location")
+    parser.add_argument("--disable-json", action="store_true", help="Disable JSON log formatting")
+    parser.add_argument("--disable-data-logging", action="store_true", help="Disable detailed data logging")
+    parser.add_argument("--save-result", action="store_true", help="Save the result in a JSON file")
+    parser.add_argument("--output-dir", default="debug_output", help="Directory to save results")
+    parser.add_argument("--analyze-logs", action="store_true", help="Run automatic log analysis after execution")
     return parser.parse_args()
 
 async def progress_callback(message: str):
-    """Callback para mostrar progreso en tiempo real."""
     timestamp = datetime.now().strftime("%H:%M:%S")
-    print(f"[{timestamp}] PROGRESO: {message}")
+    print(f"[{timestamp}] PROGRESS: {message}")
 
 def save_result(result, args):
-    """Guardar el resultado en un archivo JSON."""
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
-    
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_topic = args.topic.replace(" ", "_").replace("/", "_")[:30]
+    safe_topic = args.topic.replace(" ", "_")[:30]
     filename = f"{args.output_dir}/result_{safe_topic}_{timestamp}.json"
-    
     with open(filename, 'w', encoding='utf-8') as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
-    
-    print(f"Resultado guardado en: {filename}")
+    print(f"Result saved in: {filename}")
     return filename
 
 def run_diagnostic(log_file):
-    """Ejecutar la herramienta de diagnóstico en el archivo de log."""
-    print(f"\n=== EJECUTANDO DIAGNÓSTICO DE LOGS ===")
-    print(f"Analizando archivo: {log_file}")
-    
-    # Importar la herramienta de diagnóstico
+    print(f"\n=== RUNNING LOG DIAGNOSTIC ===")
+    print(f"Analyzing file: {log_file}")
     try:
         import diagnostic
         diagnostic.print_log_summary(diagnostic.load_log_file(log_file))
     except ImportError:
-        print("No se pudo importar el módulo de diagnóstico.")
+        print("Diagnostic module not found.")
     except Exception as e:
-        print(f"Error ejecutando diagnóstico: {str(e)}")
+        print(f"Error during diagnostic: {str(e)}")
 
 async def main():
     args = parse_arguments()
-    
-    # Configurar logging
-    print(f"Configurando logging: nivel={args.log_level}, archivo={args.log_file}")
+    print(f"Configuring logging: level={args.log_level}, file={args.log_file}")
     setup_logging(
         log_file=args.log_file,
         console_level=get_log_level(args.log_level),
-        file_level=get_log_level("DEBUG"),  # Siempre DEBUG en archivo para diagnóstico
+        file_level=get_log_level("DEBUG"),
         enable_json_logs=not args.disable_json,
         data_logging=not args.disable_data_logging
     )
-    
-    # Ejecutar generación de ruta
-    print(f"\n=== INICIANDO GENERACIÓN DE RUTA DE APRENDIZAJE ===")
-    print(f"Tema: {args.topic}")
-    print(f"Configuración de paralelismo: módulos={args.parallel}, búsquedas={args.search_parallel}, submódulos={args.submodule_parallel}")
-    
+    print(f"\n=== STARTING LEARNING PATH GENERATION ===")
+    print(f"Topic: {args.topic}")
+    print(f"Parallel config: modules={args.parallel}, searches={args.search_parallel}, submodules={args.submodule_parallel}")
     start_time = datetime.now()
-    
     try:
         result = await generate_learning_path(
             topic=args.topic,
@@ -120,49 +80,31 @@ async def main():
             submodule_parallel_count=args.submodule_parallel,
             progress_callback=progress_callback
         )
-        
-        end_time = datetime.now()
-        duration = end_time - start_time
-        
-        print(f"\n=== GENERACIÓN COMPLETADA ===")
-        print(f"Duración: {duration}")
-        
-        # Mostrar estadísticas básicas
+        duration = datetime.now() - start_time
+        print(f"\n=== GENERATION COMPLETED in {duration} ===")
         modules = result.get("modules", [])
-        total_submodules = sum(len(module.get("submodules", [])) for module in modules)
-        print(f"Módulos generados: {len(modules)}")
-        print(f"Submódulos totales: {total_submodules}")
-        
-        # Comprobar contenido en submódulos
+        print(f"Modules generated: {len(modules)}")
         empty_submodules = []
         for i, module in enumerate(modules):
-            for j, submodule in enumerate(module.get("submodules", [])):
-                if not submodule.get("content"):
-                    empty_submodules.append((i+1, j+1, submodule.get("title")))
-        
+            for j, sub in enumerate(module.get("submodules", [])):
+                if not sub.get("content"):
+                    empty_submodules.append((i+1, j+1, sub.get("title")))
         if empty_submodules:
-            print(f"\n⚠️ ALERTA: Se encontraron {len(empty_submodules)} submódulos sin contenido:")
-            for module_idx, submodule_idx, title in empty_submodules:
-                print(f"  - Módulo {module_idx}, Submódulo {submodule_idx}: {title}")
+            print(f"\n⚠️ {len(empty_submodules)} submodules with no content found:")
+            for mod_idx, sub_idx, title in empty_submodules:
+                print(f"  - Module {mod_idx}, Submodule {sub_idx}: {title}")
         else:
-            print("\n✅ Todos los submódulos tienen contenido.")
-        
-        # Guardar resultado
+            print("\n✅ All submodules have content.")
         if args.save_result:
-            result_file = save_result(result, args)
-        
-        # Ejecutar análisis de logs
+            save_result(result, args)
         if args.analyze_logs:
             run_diagnostic(args.log_file)
-        
-        # Mostrar instrucciones finales
-        print("\nPara ver un análisis detallado de los logs, ejecute:")
+        print("\nTo view detailed log analysis, run:")
         print(f"python diagnostic.py {args.log_file} --summary")
-        
     except Exception as e:
-        print(f"\n❌ ERROR durante la generación: {str(e)}")
+        print(f"\n❌ Error during generation: {str(e)}")
         import traceback
         traceback.print_exc()
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

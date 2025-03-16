@@ -3,7 +3,7 @@ import json
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 import io
-import history_service as hs
+import history.history_service as hs
 
 def format_date(date_str: str) -> str:
     """Formatea una fecha ISO a un formato legible."""

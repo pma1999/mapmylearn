@@ -2,26 +2,23 @@ import logging
 from typing import List, Dict, Any, Callable, Optional
 from dataclasses import dataclass, field
 
-# Configuration
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("learning_path_generator")
+# These dataclasses represent legacy state structures for module/submodule processing.
+# The main execution uses the TypedDict from models.
+logger = logging.getLogger("learning_path_state")
 
 @dataclass
 class Submodule:
-    """A submodule within a learning module."""
     title: str
     description: str
 
 @dataclass
 class Module:
-    """A module in the learning path."""
     id: int
     title: str
     description: str
 
 @dataclass
 class EnhancedModule:
-    """A module with planned submodules."""
     id: int
     title: str
     description: str
@@ -29,7 +26,6 @@ class EnhancedModule:
 
 @dataclass
 class SubmoduleContent:
-    """Content for a processed submodule."""
     id: int
     title: str
     content: str
@@ -38,7 +34,6 @@ class SubmoduleContent:
 
 @dataclass
 class CompletedModule:
-    """A completely processed module with all its submodules."""
     id: int
     title: str
     description: str
@@ -46,41 +41,29 @@ class CompletedModule:
 
 class LearningPathState:
     """
-    State for the Learning Path Generator.
-    Holds all data needed during the generation process.
+    Legacy state class for learning path generation.
+    The current implementation uses a TypedDict defined in models.
     """
-    
     def __init__(
         self, 
         user_topic: str, 
         llm=None, 
         search_tool=None,
         parallel_count: int = 2,
-        progress_callback=None
+        progress_callback: Optional[Callable] = None
     ):
-        # Core data
         self.user_topic = user_topic
         self.llm = llm
         self.search_tool = search_tool
         self.progress_callback = progress_callback
-        
-        # Topic exploration 
         self.search_queries = []
         self.search_results = []
-        
-        # Module definition
         self.initial_modules = []
         self.enhanced_modules = []
-        
-        # Parallel processing parameters
         self.parallel_count = parallel_count
         self.module_batches = []
         self.current_batch_index = 0
         self.modules_in_parallel_process = {}
-        
-        # Output collection
         self.completed_modules = []
         self.finalized_learning_path = None
-        
-        # Tracking
-        self.steps = [] 
+        self.steps = []

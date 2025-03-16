@@ -9,4 +9,4 @@ echo The Learning Path Generator will open in your web browser.
 echo Press Ctrl+C in this window to stop the application.
 echo.
 
-python -m streamlit run app.py 
+python -m streamlit run ui/app.py
