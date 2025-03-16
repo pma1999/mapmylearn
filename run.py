@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
 """
-Learning Path Generator v2.3 - Launcher Script
+Learning Path Generator v2.3 - FastAPI Launcher Script
 
-This script verifies dependencies, checks API keys, and launches the Streamlit app.
+This script verifies dependencies, checks API keys, and launches the FastAPI backend.
+The backend (located in frontend/api/app.py) exposes all learning path generation
+functionality via REST and WebSocket endpoints for consumption by the React frontend.
 """
 
 import os
 import sys
 import subprocess
-import webbrowser
 import argparse
+import webbrowser
 from time import sleep
 from dotenv import load_dotenv
 
 def check_dependencies():
     try:
-        import streamlit
+        import fastapi
+        import uvicorn
         import langchain
         import langgraph
         import pydantic
@@ -39,28 +42,20 @@ def check_api_keys():
     return missing_keys
 
 def launch_app():
-    print("Starting Learning Path Generator...")
-    print("The application will open in your web browser.")
-    process = subprocess.Popen([sys.executable, "-m", "streamlit", "run", "ui/app.py"])
+    print("Starting Learning Path Generator FastAPI backend...")
+    print("API available at http://localhost:8000")
+    process = subprocess.Popen([
+        sys.executable, "-m", "uvicorn", "frontend/api/app:app",
+        "--reload", "--host", "0.0.0.0", "--port", "8000"
+    ])
     sleep(2)
-    webbrowser.open("http://localhost:8501")
     return process
 
-def launch_debug_mode(topic=None):
-    print("Starting Learning Path Generator in DEBUG mode...")
-    debug_args = ["python", "debug_learning_path.py"]
-    debug_args.append(topic if topic else "Python programming for beginners")
-    debug_args.extend(["--log-level", "DEBUG", "--analyze-logs", "--save-result"])
-    print(f"Executing: {' '.join(debug_args)}")
-    subprocess.call(debug_args)
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Learning Path Generator Launcher")
-    parser.add_argument("--debug", action="store_true", help="Run in debug mode")
-    parser.add_argument("--topic", help="Specify a topic when running in debug mode")
+    parser = argparse.ArgumentParser(description="Learning Path Generator FastAPI Launcher")
     args = parser.parse_args()
 
-    print("=== Learning Path Generator v2.3 ===")
+    print("=== Learning Path Generator v2.3 (FastAPI) ===")
     if not check_dependencies():
         print("Some dependencies are missing.")
         if input("Install now? (y/n): ").lower() == 'y':
@@ -71,16 +66,13 @@ if __name__ == "__main__":
     missing_keys = check_api_keys()
     if missing_keys:
         print(f"Warning: Missing API keys: {', '.join(missing_keys)}")
-        print("You can still run the app and enter keys in the web interface.")
+        print("You can still run the backend and enter keys via the React app's settings.")
     
-    if args.debug:
-        launch_debug_mode(args.topic)
-    else:
-        app_process = launch_app()
-        try:
-            print("Press Ctrl+C to stop the application...")
-            app_process.wait()
-        except KeyboardInterrupt:
-            print("Stopping the application...")
-            app_process.terminate()
-            print("Application stopped.")
+    app_process = launch_app()
+    try:
+        print("Press Ctrl+C to stop the backend...")
+        app_process.wait()
+    except KeyboardInterrupt:
+        print("Stopping the backend...")
+        app_process.terminate()
+        print("Backend stopped.")

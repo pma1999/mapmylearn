@@ -1,8 +1,11 @@
 import axios from 'axios';
 
-// Base API configuration
+// Use an environment variable for the API base URL (set REACT_APP_API_BASE_URL in your .env file)
+// If not set, it defaults to '/api' (which works with the create-react-app proxy)
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -29,7 +32,7 @@ export const startGeneration = async (connectionId, params) => {
 
 // WebSocket connection
 export const createWebSocketConnection = (connectionId, onMessage, onClose, onError) => {
-  // Determine WebSocket URL based on current URL
+  // Determine WebSocket URL based on current URL and API_BASE_URL
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const host = window.location.host;
   const wsUrl = `${protocol}//${host}/ws/${connectionId}`;
@@ -156,4 +159,4 @@ export const updateSettings = async (settings) => {
   } catch (error) {
     throw error.response?.data || { error: 'Failed to update settings' };
   }
-}; 
+};

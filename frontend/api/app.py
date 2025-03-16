@@ -22,7 +22,8 @@ from models.models import SearchQuery
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("api")
 
-# Define models
+# Define models for API endpoints
+
 class LearningPathRequest(BaseModel):
     topic: str
     parallel_count: int = 2
@@ -35,6 +36,16 @@ class TagUpdateRequest(BaseModel):
 
 class FavoriteUpdateRequest(BaseModel):
     favorite: bool
+
+# NEW: Modelo para actualización de settings
+class SettingsUpdate(BaseModel):
+    darkMode: Optional[bool] = None
+    parallelCount: Optional[int] = None
+    searchParallelCount: Optional[int] = None
+    submoduleParallelCount: Optional[int] = None
+    saveToHistory: Optional[bool] = None
+    openaiApiKey: Optional[str] = None
+    tavilyApiKey: Optional[str] = None
 
 # Create FastAPI app
 app = FastAPI(title="Learning Path Generator API")
@@ -304,24 +315,22 @@ async def clear_history():
             content={"error": f"Failed to clear history: {str(e)}"}
         )
 
-# Settings routes
-@app.get("/api/settings")
-async def get_settings():
-    return {
-        "openai_api_key_set": bool(os.environ.get("OPENAI_API_KEY")),
-        "tavily_api_key_set": bool(os.environ.get("TAVILY_API_KEY")),
-    }
-
+# --- Updated Settings Endpoint ---
 @app.post("/api/settings")
-async def update_settings(settings: Dict[str, str]):
+async def update_settings(settings: SettingsUpdate):
     try:
-        if "openai_api_key" in settings and settings["openai_api_key"]:
-            os.environ["OPENAI_API_KEY"] = settings["openai_api_key"]
-        
-        if "tavily_api_key" in settings and settings["tavily_api_key"]:
-            os.environ["TAVILY_API_KEY"] = settings["tavily_api_key"]
-            
-        return {"status": "success", "message": "Settings updated successfully"}
+        # Update API keys if provided
+        if settings.openaiApiKey:
+            os.environ["OPENAI_API_KEY"] = settings.openaiApiKey
+        if settings.tavilyApiKey:
+            os.environ["TAVILY_API_KEY"] = settings.tavilyApiKey
+        # For other settings, simply return them as updated (simulate persistencia)
+        updated = settings.dict(exclude_unset=True)
+        return {
+            "status": "success",
+            "message": "Settings updated successfully",
+            **updated
+        }
     except Exception as e:
         logger.error(f"Error updating settings: {str(e)}")
         return JSONResponse(
@@ -329,7 +338,14 @@ async def update_settings(settings: Dict[str, str]):
             content={"error": f"Failed to update settings: {str(e)}"}
         )
 
+@app.get("/api/settings")
+async def get_settings():
+    return {
+        "openaiApiKeySet": bool(os.environ.get("OPENAI_API_KEY")),
+        "tavilyApiKeySet": bool(os.environ.get("TAVILY_API_KEY"))
+    }
+
 if __name__ == "__main__":
     import uvicorn
     # Run the FastAPI app
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True) 
+    uvicorn.run("frontend.api.app:app", host="0.0.0.0", port=8000, reload=True)

@@ -42,3 +42,4 @@ Thumbs.db
 
 # Node.js
 node_modules/
+frontend/package-lock.json
