@@ -1,158 +1,128 @@
-# Learning Path Generator
+# Learning Path Generator 🎓
 
-A powerful application that generates personalized learning paths for any topic using LangGraph and LangChain.
+Generador de Rutas de Aprendizaje impulsado por IA. Una aplicación que crea planes estructurados de aprendizaje para cualquier tema usando OpenAI y Tavily.
 
-## What's New in Version 2.0
+## Características ✨
 
-**Comprehensive Module Development**: The Learning Path Generator now fully develops each module with in-depth educational content:
+- Generación de rutas de aprendizaje personalizadas para cualquier tema
+- Procesamiento en paralelo para mayor velocidad
+- Búsqueda web en tiempo real para obtener recursos actualizados
+- Historial de rutas generadas con opciones de favoritos y etiquetas
+- Interfaz moderna y responsive con soporte para modo oscuro
+- API RESTful con documentación interactiva
 
-- Each module is individually researched with targeted web searches
-- Detailed content is generated for each module with proper structure and formatting
-- The application shows real-time progress of the development process
-- Enhanced UI with module view and print view options
-- Complete markdown export with all module content
+## Requisitos 📋
 
-## Overview
+- Python 3.8 o superior
+- Node.js 14 o superior
+- Claves API:
+  - OpenAI API Key (para generación de texto)
+  - Tavily API Key (para búsqueda web)
 
-The Learning Path Generator creates comprehensive, structured learning paths for any topic of interest. It leverages:
+## Instalación 🔧
 
-- **LangGraph** for orchestrating the workflow
-- **LangChain** for LLM interactions and tools
-- **Streamlit** for a user-friendly web interface
-
-## Features
-
-- **Topic-based Learning Path Generation**: Input any topic and get a customized learning path
-- **Web Research**: Performs targeted web searches to gather up-to-date information
-- **Structured Modules**: Creates logical learning modules that build upon each other
-- **Comprehensive Content**: Develops detailed educational content for each module
-- **Real-time Progress Tracking**: Shows the progress of each phase of development
-- **Multiple View Options**: Module view for exploration and print view for reading
-- **Downloadable Results**: Export your learning path as JSON or Markdown
-
-## Architecture
-
-The system follows a multi-phase process:
-
-1. **Initial Research Phase**:
-   - Generates optimal search queries for the topic
-   - Performs web searches to gather relevant information
-   - Creates an initial learning path outline with modules
-
-2. **Module Development Phase**:
-   - For each module in the learning path:
-     - Generates targeted search queries specific to the module
-     - Executes web searches to gather module-specific information
-     - Develops comprehensive content for the module
-   - Assembles the complete learning path with all developed modules
-
-## Requirements
-
-- Python 3.7+
-- OpenAI API Key
-- Tavily API Key (for web searches)
-
-## Installation
-
-1. Clone this repository:
+1. Clona este repositorio:
    ```
-   git clone <repository-url>
+   git clone https://github.com/tuusuario/learning-path-generator.git
    cd learning-path-generator
    ```
 
-2. Install dependencies:
+2. Ejecuta el script de inicio en desarrollo:
+   
+   **Windows (PowerShell o CMD)**:
    ```
-   pip install -r requirements.txt
+   .\start-dev.bat
+   ```
+   o
+   ```
+   powershell -ExecutionPolicy Bypass -File .\start-dev.ps1
+   ```
+
+   **Linux/macOS**:
+   ```
+   chmod +x start-dev.sh
+   ./start-dev.sh
    ```
    
-   Or install individually:
-   ```
-   pip install langchain langchain-core langchain-openai langgraph pydantic streamlit langchain-community python-dotenv
-   ```
+   Este script automáticamente:
+   - Crea un entorno virtual de Python
+   - Instala todas las dependencias necesarias
+   - Inicia el backend en http://localhost:8000
+   - Inicia el frontend en http://localhost:3000
 
-3. Set up your API keys:
-   - Create a `.env` file in the root directory
-   - Add your API keys:
-     ```
-     OPENAI_API_KEY=your_openai_api_key
-     TAVILY_API_KEY=your_tavily_api_key
-     ```
-   - Or enter them in the web interface
+3. Abre un navegador y ve a http://localhost:3000
 
-## Usage
+## Configuración ⚙️
 
-1. Run the Streamlit app:
-   ```
-   streamlit run app.py
-   ```
+En la primera ejecución, necesitarás configurar las claves API:
 
-   Or use the provided launcher script:
-   ```
-   python run.py
-   ```
+1. Ve a la página de Configuración desde el menú de navegación
+2. Introduce tus claves API:
+   - OpenAI API Key (obténla en https://platform.openai.com/api-keys)
+   - Tavily API Key (obténla en https://tavily.com/)
+3. Guarda los cambios
 
-2. Open your browser and go to the URL displayed in the terminal (usually http://localhost:8501)
+## Estructura del Proyecto 🏗️
 
-3. Set up your API keys (OpenAI and Tavily) in the Settings page
+```
+learning-path-generator/
+├── frontend/                # Frontend de React
+│   ├── api/                 # API de FastAPI para servir al frontend
+│   │   ├── api/                 # API de FastAPI para servir al frontend
+│   │   ├── src/                 # Código fuente de React
+│   │   │   ├── components/      # Componentes reutilizables
+│   │   │   ├── contexts/        # Contextos de React (gestión de estado)
+│   │   │   ├── pages/           # Páginas de la aplicación
+│   │   │   ├── services/        # Servicios para comunicación con API
+│   │   │   └── utils/           # Utilidades
+│   │   ├── public/              # Archivos estáticos
+│   │   └── package.json         # Dependencias de NPM
+│   ├── history/                 # Servicio para gestionar el historial
+│   ├── models/                  # Modelos y estructuras de datos
+│   ├── prompts/                 # Plantillas para LLM
+│   ├── start-dev.ps1            # Script para desarrollo (PowerShell)
+│   ├── start-dev.sh             # Script para desarrollo (Bash)
+│   └── start-dev.bat            # Script para desarrollo (Windows Batch)
+```
 
-4. Enter a topic in the text field and click "Generate Learning Path"
+## Modo de Uso 📝
 
-5. Track the progress as the system develops your learning path
+1. **Generación de Rutas de Aprendizaje**:
+   - Introduce un tema en la página principal
+   - Ajusta las opciones de generación si lo deseas
+   - Haz clic en "Generar Ruta de Aprendizaje"
 
-6. Explore the fully developed modules and submodules, and download the complete learning path in JSON or Markdown format
+2. **Gestión del Historial**:
+   - Visualiza todas tus rutas de aprendizaje generadas
+   - Marca favoritos, añade etiquetas, busca y filtra
+   - Descarga rutas como archivos JSON
 
-## Streamlit App Features
+3. **Configuración**:
+   - Gestiona tus claves API
+   - Cambia entre modo claro y oscuro
+   - Ajusta los valores predeterminados de generación
 
-The Streamlit app provides a user-friendly interface for generating and exploring learning paths:
+## Desarrollo 🧑‍💻
 
-- **Home Page**: Input your topic and generation settings
-- **Settings Page**: Configure API keys and generation parameters
-- **Learning Path View**: Navigate through modules and submodules
-- **Real-time Progress Tracking**: Monitor the generation process
-- **Download Options**: Export your learning path as JSON or Markdown
+Para ejecutar la aplicación en modo desarrollo:
 
-## Advanced Settings
+```bash
+# Inicia el backend y frontend juntos
+./start-dev.sh  # o .\start-dev.ps1 en Windows
 
-The app allows you to configure parallel processing settings:
+# Para iniciar solo el backend
+cd frontend/api
+uvicorn app:app --reload --host 0.0.0.0 --port 8000
 
-- **Module Parallelism**: Number of modules to process in parallel (1-4)
-- **Search Parallelism**: Number of searches to execute in parallel (1-5)
-- **Submodule Parallelism**: Number of submodules to process in parallel (1-5)
+# Para iniciar solo el frontend
+cd frontend
+npm start
+```
 
-Adjusting these settings can significantly impact generation speed and API costs.
+## Licencia 📄
 
-## File Structure
+Este proyecto está licenciado bajo [MIT License](LICENSE)
 
-- `learning_path_generator.py`: Core implementation of the LangGraph workflow
-- `app.py`: Streamlit web interface
-- `run.py`: Launcher script
-- `requirements.txt`: Project dependencies
-- `test_app.py`: Test script to verify functionality
+---
 
-## How It Works
-
-1. **User Input**: The user enters a topic they want to learn about
-2. **Initial Research**: The system analyzes the topic and performs web searches
-3. **Learning Path Outline**: An initial learning path with logical modules is created
-4. **Module Development**: Each module is individually researched and developed
-   - Module-specific search queries are generated
-   - Targeted web searches are performed for each module
-   - Comprehensive content is created for each module
-5. **Final Assembly**: All developed modules are assembled into a complete learning path
-6. **Result Presentation**: The user can explore the fully developed learning path
-
-## Example
-
-For a topic like "Machine Learning for Beginners," the system will:
-
-1. Generate an initial learning path outline with modules
-2. Develop each module in depth with comprehensive content
-3. Present the complete learning path with all modules
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-[MIT License](LICENSE) 
+Hecho con ❤️ y OpenAI 

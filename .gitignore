@@ -38,4 +38,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
-*.swo 
+*.swo
+
+# Node.js
+node_modules/
