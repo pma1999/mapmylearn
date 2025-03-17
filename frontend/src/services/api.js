@@ -146,30 +146,45 @@ export const getLearningPath = async (taskId) => {
 
 // Get progress updates for a learning path using SSE (Server-Sent Events)
 export const getProgressUpdates = (taskId, onMessage, onError, onComplete) => {
-  // CORRECCIÓN: se añade el prefijo '/api/' para que la URL sea correcta
-  const eventSource = new EventSource(`${API_URL}/api/progress/${taskId}`);
+  // Create the correct URL using the same API_URL base
+  const url = new URL(`/api/progress/${taskId}`, API_URL);
   
-  eventSource.onmessage = (event) => {
-    const data = JSON.parse(event.data);
+  try {
+    const eventSource = new EventSource(url.toString());
     
-    if (data.complete) {
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        if (data.complete) {
+          eventSource.close();
+          if (onComplete) onComplete();
+          return;
+        }
+        
+        if (onMessage) onMessage(data);
+      } catch (err) {
+        console.error('Error parsing SSE message:', err);
+        if (onError) onError(err);
+      }
+    };
+    
+    eventSource.onerror = (error) => {
+      console.error('SSE Error:', error);
       eventSource.close();
-      if (onComplete) onComplete();
-      return;
-    }
+      if (onError) onError(error);
+    };
     
-    if (onMessage) onMessage(data);
-  };
-  
-  eventSource.onerror = (error) => {
-    console.error('SSE Error:', error);
-    eventSource.close();
-    if (onError) onError(error);
-  };
-  
-  return {
-    close: () => eventSource.close(),
-  };
+    return {
+      close: () => eventSource.close(),
+    };
+  } catch (initError) {
+    console.error('Error initializing SSE connection:', initError);
+    if (onError) onError(initError);
+    return {
+      close: () => {}, // Dummy close function for consistent API
+    };
+  }
 };
 
 // Delete a learning path task
