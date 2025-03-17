@@ -1,6 +1,56 @@
 # Deployment Guide for Learny
 
-This guide explains how to deploy the Learny application using Vercel for the frontend and Railway for the backend.
+This guide explains how to deploy the Learny application using Vercel for the frontend and Railway for the backend, as well as how to run it locally for development and testing.
+
+## Local Development
+
+### Setting Up Local Backend
+
+1. **Create a virtual environment:**
+
+   ```bash
+   python -m venv venv
+   .\venv\Scripts\activate  # On Windows PowerShell
+   ```
+
+2. **Install dependencies:**
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Set up environment variables:**
+   
+   Create a `.env` file in the root directory with:
+
+   ```
+   OPENAI_API_KEY=your_openai_api_key_here
+   TAVILY_API_KEY=your_tavily_api_key_here
+   ```
+
+4. **Run the backend:**
+
+   ```bash
+   uvicorn api:app --reload --host 0.0.0.0 --port 8000
+   ```
+
+### Setting Up Local Frontend
+
+1. **Install dependencies:**
+
+   ```bash
+   cd frontend
+   npm install
+   ```
+
+2. **Run the frontend:**
+
+   ```bash
+   npm start
+   ```
+
+3. **Access the application:**
+   Open your browser and go to `http://localhost:3000`
 
 ## Prerequisites
 
@@ -117,6 +167,30 @@ This guide explains how to deploy the Learny application using Vercel for the fr
 5. **Deploy the frontend**
 
    Click "Deploy" and Vercel will build and deploy your frontend application.
+
+## Switching Between Local and Deployed Environments
+
+### Frontend
+
+1. **For local development:**
+   - No environment variable changes needed
+   - The frontend will automatically use `http://localhost:8000` as the API URL
+
+2. **For testing with deployed backend:**
+   - Create a `frontend/.env.local` file with:
+     ```
+     REACT_APP_API_URL=https://your-railway-app-name.railway.app
+     ```
+
+### Backend
+
+1. **For local development:**
+   - The CORS settings already include `http://localhost:3000`
+   - No changes needed
+
+2. **For production:**
+   - Ensure the `FRONTEND_URL` environment variable is set in Railway
+   - Make sure your frontend Vercel domain is in the allowed_origins list in `api.py`
 
 ## Connecting Frontend and Backend
 

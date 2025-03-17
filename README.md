@@ -4,7 +4,7 @@
 ![Platform](https://img.shields.io/badge/platform-Web-brightgreen)
 ![Python](https://img.shields.io/badge/Python-3.8+-yellow)
 ![React](https://img.shields.io/badge/React-18.x-61DAFB)
-![Deployed](https://img.shields.io/badge/deployment-Vercel%20%26%20Railway-success)
+![Deployment](https://img.shields.io/badge/deployment-Local%20%7C%20Vercel%20%7C%20Railway-success)
 
 Learny is an innovative web application that creates personalized learning paths for any topic using artificial intelligence. The system leverages large language models (LLMs) to research, organize, and generate comprehensive educational content, saving you hours of curriculum planning.
 
@@ -157,9 +157,34 @@ yarn start
 
 ## 🌐 Deployment
 
-Learny is configured for deployment on Vercel (frontend) and Railway (backend). For detailed deployment instructions, please see the [Deployment Guide](DEPLOYMENT.md).
+Learny supports both local development and cloud deployment:
 
-### Quick Deployment Overview
+### Local Development
+
+Run the application locally for development and testing:
+
+1. **Start the backend server:**
+
+```bash
+# Activate virtual environment (Windows PowerShell)
+.\venv\Scripts\activate
+
+# Run the backend
+uvicorn api:app --reload --host 0.0.0.0 --port 8000
+```
+
+2. **Start the frontend development server:**
+
+```bash
+cd frontend
+npm start
+```
+
+3. **Access the application at:** `http://localhost:3000`
+
+### Cloud Deployment
+
+Deploy to Vercel (frontend) and Railway (backend) for production:
 
 1. **Backend (Railway)**
    - Push your code to GitHub
@@ -172,7 +197,7 @@ Learny is configured for deployment on Vercel (frontend) and Railway (backend). 
    - Set the root directory to "frontend"
    - Deploy the application
 
-For a more detailed step-by-step guide, please refer to the [Deployment Guide](DEPLOYMENT.md).
+For a complete step-by-step guide, please refer to the [Deployment Guide](DEPLOYMENT.md).
 
 ## 📡 API Documentation
 

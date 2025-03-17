@@ -23,13 +23,14 @@ logger = logging.getLogger("api")
 
 # Create FastAPI app
 app = FastAPI(title="Learning Path Generator API")
-
-# Define allowed origins
+# Define allowed origins for both local development and production
 allowed_origins = [
     "http://localhost:3000",  # Local development
-    "https://learny-frontend.vercel.app",  # Vercel production domain - update this!
+    "https://learny-peach.vercel.app",  # Vercel production domain
+    "https://learny-*.vercel.app",      # Any Vercel deployment with learny- prefix
 ]
 
+# Add any custom domain from environment variable (used in production)
 if os.getenv("FRONTEND_URL"):
     allowed_origins.append(os.getenv("FRONTEND_URL"))
 
