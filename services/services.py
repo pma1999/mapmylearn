@@ -41,7 +41,7 @@ def get_search_tool(api_key=None):
     if not tavily_api_key:
         logger.warning("TAVILY_API_KEY not set")
     try:
-        return TavilySearchResults(max_results=5, api_key=tavily_api_key)
+        return TavilySearchResults(max_results=5, tavily_api_key=tavily_api_key)
     except Exception as e:
         logger.error(f"Error initializing TavilySearchResults: {str(e)}")
         raise
@@ -88,7 +88,7 @@ def validate_tavily_key(api_key):
         
     try:
         # Minimal test to validate key functionality
-        search_tool = TavilySearchResults(max_results=1, api_key=api_key)
+        search_tool = TavilySearchResults(max_results=1, tavily_api_key=api_key)
         search_tool.invoke({"query": "test"})
         return True, None
     except Exception as e:
