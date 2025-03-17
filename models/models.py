@@ -83,6 +83,7 @@ class SubmoduleList(BaseModel):
     submodules: List[Submodule] = Field(..., description="List of submodules")
 
 # Global State for the Graph (TypedDict)
+# Global State for the Graph (TypedDict)
 class LearningPathState(TypedDict):
     user_topic: str
     topic_analysis: Optional[TopicAnalysis]
@@ -108,6 +109,9 @@ class LearningPathState(TypedDict):
     current_submodule_batch_index: Optional[int]
     submodules_in_process: Optional[Dict[tuple, Dict[str, Any]]]
     developed_submodules: Optional[List[SubmoduleContent]]
+    openai_api_key: Optional[str]      # ← NUEVO CAMPO
+    tavily_api_key: Optional[str]       # ← NUEVO CAMPO
+
     
 # Enable forward references for EnhancedModule.submodules
 EnhancedModule.update_forward_refs()

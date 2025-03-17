@@ -34,7 +34,7 @@ async def generate_learning_path(
     logger.info(f"Generating learning path for topic: {topic} with {parallel_count} parallel modules, " +
                 f"{submodule_parallel_count} parallel submodules, and {search_parallel_count} parallel searches")
     
-    # Validate API keys provided by the user (no fallback to variables de entorno)
+    # Validar que se proporcionen las API keys (sin fallback a variables de entorno)
     if not openai_api_key:
         error_msg = "OpenAI API key is required but not provided. Please provide an API key."
         logger.error(error_msg)
@@ -45,7 +45,7 @@ async def generate_learning_path(
         logger.error(error_msg)
         raise ValueError(error_msg)
     
-    learning_graph = build_graph()
+    # Construir el estado inicial (incluyendo las API keys)
     initial_state: LearningPathState = {
         "user_topic": topic,
         "search_queries": None,
@@ -75,7 +75,7 @@ async def generate_learning_path(
     logger.debug("Initialized learning path state")
     log_debug_data(logger, "Initial state", initial_state)
     try:
-        result = await learning_graph.ainvoke(initial_state)
+        result = await build_graph().ainvoke(initial_state)
         logger.info(f"Graph execution completed successfully for topic: {topic}")
         log_info_data(logger, "Raw graph result", result)
         formatted_output = result["final_learning_path"] if result.get("final_learning_path") else {
