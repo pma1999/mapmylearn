@@ -146,7 +146,8 @@ export const getLearningPath = async (taskId) => {
 
 // Get progress updates for a learning path using SSE (Server-Sent Events)
 export const getProgressUpdates = (taskId, onMessage, onError, onComplete) => {
-  const eventSource = new EventSource(`${API_URL}/progress/${taskId}`);
+  // CORRECCIÓN: se añade el prefijo '/api/' para que la URL sea correcta
+  const eventSource = new EventSource(`${API_URL}/api/progress/${taskId}`);
   
   eventSource.onmessage = (event) => {
     const data = JSON.parse(event.data);
@@ -295,4 +296,4 @@ export default {
   saveApiKeys,
   getSavedApiKeys,
   clearSavedApiKeys,
-}; 
+};
