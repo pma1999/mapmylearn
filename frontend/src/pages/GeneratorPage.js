@@ -105,8 +105,21 @@ function GeneratorPage() {
 
   // Handle validation of API keys
   const handleValidateApiKeys = async () => {
-    if (!openaiApiKey && !tavilyApiKey) {
+    if (!openaiApiKey.trim() && !tavilyApiKey.trim()) {
       showNotification('Please enter at least one API key to validate', 'warning');
+      return;
+    }
+    
+    // Check basic format before sending to backend
+    if (openaiApiKey.trim() && !openaiApiKey.trim().startsWith("sk-")) {
+      showNotification('Invalid OpenAI API key format. The key should start with "sk-".', 'error');
+      setOpenaiKeyValid(false);
+      return;
+    }
+    
+    if (tavilyApiKey.trim() && !tavilyApiKey.trim().startsWith("tvly-")) {
+      showNotification('Invalid Tavily API key format. The key should start with "tvly-".', 'error');
+      setTavilyKeyValid(false);
       return;
     }
     
@@ -116,37 +129,52 @@ function GeneratorPage() {
     
     try {
       showNotification('Validating API keys...', 'info');
-      const result = await validateApiKeys(openaiApiKey, tavilyApiKey);
+      console.log("Sending API keys for validation");
+      
+      const trimmedOpenaiKey = openaiApiKey.trim();
+      const trimmedTavilyKey = tavilyApiKey.trim();
+      
+      const result = await validateApiKeys(trimmedOpenaiKey, trimmedTavilyKey);
       
       // Update validation status
-      if (result.openai) {
-        setOpenaiKeyValid(result.openai.valid);
-        if (!result.openai.valid && openaiApiKey) {
-          showNotification(`OpenAI API key invalid: ${result.openai.error}`, 'error');
+      if (trimmedOpenaiKey) {
+        setOpenaiKeyValid(result.openai?.valid || false);
+        if (!result.openai?.valid) {
+          showNotification(`OpenAI API key invalid: ${result.openai?.error || 'Unknown error'}`, 'error');
+        } else {
+          showNotification('OpenAI API key validation successful!', 'success');
         }
       }
       
-      if (result.tavily) {
-        setTavilyKeyValid(result.tavily.valid);
-        if (!result.tavily.valid && tavilyApiKey) {
-          showNotification(`Tavily API key invalid: ${result.tavily.error}`, 'error');
+      if (trimmedTavilyKey) {
+        setTavilyKeyValid(result.tavily?.valid || false);
+        if (!result.tavily?.valid) {
+          showNotification(`Tavily API key invalid: ${result.tavily?.error || 'Unknown error'}`, 'error');
+        } else {
+          showNotification('Tavily API key validation successful!', 'success');
         }
       }
       
       // Show success notification if all provided keys are valid
-      const openaiSuccess = openaiApiKey ? result.openai?.valid : true;
-      const tavilySuccess = tavilyApiKey ? result.tavily?.valid : true;
+      const openaiSuccess = trimmedOpenaiKey ? result.openai?.valid : true;
+      const tavilySuccess = trimmedTavilyKey ? result.tavily?.valid : true;
       
       if (openaiSuccess && tavilySuccess) {
-        showNotification('API key validation successful!', 'success');
+        if (trimmedOpenaiKey && trimmedTavilyKey) {
+          showNotification('Both API keys validated successfully!', 'success');
+        }
         
         // Save keys if remember is checked
         if (rememberApiKeys) {
-          saveApiKeys(openaiApiKey, tavilyApiKey, true);
+          saveApiKeys(trimmedOpenaiKey, trimmedTavilyKey, true);
+          showNotification('API keys saved for this session', 'info');
         }
       }
     } catch (error) {
-      showNotification('Error validating API keys. Please try again.', 'error');
+      console.error('Error during API key validation:', error);
+      showNotification('Network error validating API keys. Please check your internet connection and try again.', 'error');
+      setOpenaiKeyValid(false);
+      setTavilyKeyValid(false);
     } finally {
       setValidatingKeys(false);
     }
@@ -290,6 +318,19 @@ function GeneratorPage() {
       showNotification('API keys must be validated before proceeding.', 'warning');
       return;
     }
+
+    // Additional API key format validation
+    if (!openaiApiKey.startsWith("sk-")) {
+      setError('Invalid OpenAI API key format. The key should start with "sk-".');
+      setApiSettingsOpen(true);
+      return;
+    }
+
+    if (!tavilyApiKey.startsWith("tvly-")) {
+      setError('Invalid Tavily API key format. The key should start with "tvly-".');
+      setApiSettingsOpen(true);
+      return;
+    }
     
     // Save API keys if remember option is checked
     if (rememberApiKeys && (openaiApiKey || tavilyApiKey)) {
@@ -300,12 +341,13 @@ function GeneratorPage() {
     setIsGenerating(true);
     
     try {
+      console.log("Generating learning path with user-provided API keys");
       const response = await generateLearningPath(topic, {
         parallelCount,
         searchParallelCount,
         submoduleParallelCount,
-        openaiApiKey: openaiApiKey || undefined,
-        tavilyApiKey: tavilyApiKey || undefined
+        openaiApiKey: openaiApiKey.trim(),
+        tavilyApiKey: tavilyApiKey.trim()
       });
       
       setTaskId(response.task_id);
@@ -338,10 +380,22 @@ function GeneratorPage() {
       console.error('Error generating learning path:', err);
       
       // Check if this is an API key validation error
-      if (err.response && err.response.status === 400 && err.response.data.detail && 
-          (err.response.data.detail.includes('OpenAI API key') || 
-           err.response.data.detail.includes('Tavily API key'))) {
-        setError(err.response.data.detail);
+      if (err.response && err.response.status === 400 && err.response.data.detail) {
+        if (err.response.data.detail.includes('OpenAI API key') || 
+            err.response.data.detail.includes('Tavily API key')) {
+          setError(err.response.data.detail);
+          setApiSettingsOpen(true);
+          
+          // Reset validation status as the keys were rejected by the backend
+          if (err.response.data.detail.includes('OpenAI API key')) {
+            setOpenaiKeyValid(false);
+          }
+          if (err.response.data.detail.includes('Tavily API key')) {
+            setTavilyKeyValid(false);
+          }
+        } else {
+          setError(err.response.data.detail);
+        }
       } else {
         setError('Failed to generate learning path. Please try again.');
       }

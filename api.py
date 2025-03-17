@@ -9,6 +9,7 @@ import json
 import os
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+import uuid
 
 # Import the backend functionality
 from main import generate_learning_path
@@ -114,39 +115,47 @@ def save_history(history: LearningPathHistory) -> bool:
 @app.post("/api/generate-learning-path")
 async def api_generate_learning_path(request: LearningPathRequest, background_tasks: BackgroundTasks):
     """
-    Start generating a learning path for the given topic.
-    Returns a task_id that can be used to check the status and retrieve the result.
+    Generate a learning path for the specified topic.
+    This endpoint starts a background task to generate the learning path.
+    The task ID can be used to retrieve the result or track progress.
     """
-    from datetime import datetime
-    import uuid
+    # Validate required API keys
+    if not request.openai_api_key or not request.tavily_api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="Both OpenAI API key and Tavily API key are required. Please provide both keys."
+        )
     
-    # Validate API keys if provided
-    if request.openai_api_key:
-        valid, error_msg = validate_openai_key(request.openai_api_key)
-        if not valid:
-            raise HTTPException(status_code=400, detail=f"Invalid OpenAI API key: {error_msg}")
+    # Validate the API keys format
+    if not request.openai_api_key.startswith("sk-"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid OpenAI API key format. API key should start with 'sk-'."
+        )
     
-    if request.tavily_api_key:
-        valid, error_msg = validate_tavily_key(request.tavily_api_key)
-        if not valid:
-            raise HTTPException(status_code=400, detail=f"Invalid Tavily API key: {error_msg}")
+    if not request.tavily_api_key.startswith("tvly-"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid Tavily API key format. API key should start with 'tvly-'."
+        )
     
+    # Create a unique task ID
     task_id = str(uuid.uuid4())
     
-    # Safely create and add queue to progress_queues
+    # Create a queue for progress updates
+    progress_queue = asyncio.Queue()
     async with progress_queues_lock:
-        progress_queues[task_id] = asyncio.Queue()
-    
-    # Define async progress callback
+        progress_queues[task_id] = progress_queue
+
+    # Define a progress callback that puts messages into the queue
     async def progress_callback(message: str):
+        timestamp = datetime.now().isoformat()
+        update = ProgressUpdate(message=message, timestamp=timestamp)
         async with progress_queues_lock:
             if task_id in progress_queues:
-                await progress_queues[task_id].put({
-                    "message": message,
-                    "timestamp": datetime.now().isoformat()
-                })
+                await progress_queues[task_id].put(update)
     
-    # Create background task
+    # Start the learning path generation as a background task
     background_tasks.add_task(
         generate_learning_path_task,
         task_id=task_id,

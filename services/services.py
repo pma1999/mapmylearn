@@ -22,10 +22,16 @@ def get_llm(api_key=None):
     openai_api_key = api_key or os.environ.get("OPENAI_API_KEY")
     if not openai_api_key:
         logger.warning("OPENAI_API_KEY not set")
+        logger.debug("No OpenAI API key provided in state or environment variables")
+    else:
+        logger.debug(f"Using {'provided' if api_key else 'environment'} OpenAI API key")
+    
     try:
         return ChatOpenAI(temperature=0.2, model="gpt-4o-mini", api_key=openai_api_key)
     except Exception as e:
         logger.error(f"Error initializing ChatOpenAI: {str(e)}")
+        if not openai_api_key:
+            logger.error("OpenAI API key is required. Make sure to provide a valid API key.")
         raise
 
 def get_search_tool(api_key=None):
@@ -41,11 +47,17 @@ def get_search_tool(api_key=None):
     tavily_api_key = api_key or os.environ.get("TAVILY_API_KEY")
     if not tavily_api_key:
         logger.warning("TAVILY_API_KEY not set")
+        logger.debug("No Tavily API key provided in state or environment variables")
+    else:
+        logger.debug(f"Using {'provided' if api_key else 'environment'} Tavily API key")
+    
     try:
         search_wrapper = TavilySearchAPIWrapper(tavily_api_key=tavily_api_key)
         return TavilySearchResults(api_wrapper=search_wrapper)
     except Exception as e:
         logger.error(f"Error initializing TavilySearchResults: {str(e)}")
+        if not tavily_api_key:
+            logger.error("Tavily API key is required. Make sure to provide a valid API key.")
         raise
 
 def validate_openai_key(api_key):

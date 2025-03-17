@@ -33,6 +33,18 @@ async def generate_learning_path(
     logger = logging.getLogger("learning_path_generator")
     logger.info(f"Generating learning path for topic: {topic} with {parallel_count} parallel modules, " +
                 f"{submodule_parallel_count} parallel submodules, and {search_parallel_count} parallel searches")
+    
+    # Validate API keys before starting
+    if not openai_api_key and not os.environ.get("OPENAI_API_KEY"):
+        error_msg = "OpenAI API key is required but not provided. Please provide an API key."
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+        
+    if not tavily_api_key and not os.environ.get("TAVILY_API_KEY"):
+        error_msg = "Tavily API key is required but not provided. Please provide an API key."
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+    
     learning_graph = build_graph()
     initial_state: LearningPathState = {
         "user_topic": topic,

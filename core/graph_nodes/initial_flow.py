@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from typing import Dict, Any
+from datetime import datetime
 
 from models.models import SearchQuery, LearningPathState
 from parsers.parsers import search_queries_parser, enhanced_modules_parser
@@ -99,7 +100,14 @@ Your response should be exactly 5 search queries, each with its detailed rationa
 """
     prompt = ChatPromptTemplate.from_template(prompt_text)
     try:
-        result = await run_chain(prompt, lambda: get_llm(api_key=state.get("openai_api_key")), search_queries_parser, {
+        # Access the OpenAI API key from state with logging
+        openai_api_key = state.get("openai_api_key")
+        if not openai_api_key:
+            logging.warning("OpenAI API key not found in state, this may cause errors")
+        else:
+            logging.debug("Found OpenAI API key in state, using for search query generation")
+            
+        result = await run_chain(prompt, lambda: get_llm(api_key=openai_api_key), search_queries_parser, {
             "user_topic": state["user_topic"],
             "format_instructions": search_queries_parser.get_format_instructions()
         })
@@ -115,125 +123,164 @@ Your response should be exactly 5 search queries, each with its detailed rationa
 
 async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
     """
-    Executes all search queries in parallel batches.
-    
-    Args:
-        state: The current LearningPathState containing 'search_queries'.
-        
-    Returns:
-        A dictionary with aggregated search results and execution steps.
+    Execute web searches for each search query in parallel.
     """
-    logging.info("Executing web searches in parallel")
     if not state.get("search_queries"):
-        logging.warning("No search queries to execute")
-        return {"search_results": [], "steps": ["No search queries available"]}
+        logging.info("No search queries to execute")
+        return {
+            "search_results": [],
+            "steps": state.get("steps", []) + ["No search queries to execute"]
+        }
     
-    search_parallel_count = state.get("search_parallel_count", 3)
-    queries = state["search_queries"]
-    query_batches = batch_items(queries, search_parallel_count)
-    logging.info(f"Executing {len(queries)} searches in {len(query_batches)} batches")
-    search_results = []
+    search_queries = state["search_queries"]
+    
+    # Get the tavily API key from state with logging
+    tavily_api_key = state.get("tavily_api_key")
+    if not tavily_api_key:
+        logging.warning("Tavily API key not found in state, this may cause errors")
+    else:
+        logging.debug("Found Tavily API key in state, using for web searches")
+    
+    # Set up parallel processing
+    batch_size = min(len(search_queries), state.get("search_parallel_count", 3))
+    logging.info(f"Executing web searches in parallel with batch size {batch_size}")
+    
+    all_results = []
+    
     try:
-        for batch_index, batch in enumerate(query_batches):
-            tasks = [execute_single_search(query, tavily_api_key=state.get("tavily_api_key")) for query in batch]
-            batch_results = await asyncio.gather(*tasks)
-            search_results.extend(batch_results)
-            if batch_index < len(query_batches) - 1:
-                await asyncio.sleep(0.5)
-        logging.info(f"Completed {len(search_results)} web searches")
-        if state.get("progress_callback"):
-            await state["progress_callback"](f"Executed {len(search_results)} web searches")
-        return {"search_results": search_results, "steps": [f"Executed {len(search_results)} searches"]}
+        for i in range(0, len(search_queries), batch_size):
+            batch = search_queries[i:i+batch_size]
+            logging.info(f"Processing batch of {len(batch)} searches")
+            
+            # Create tasks for parallel execution
+            tasks = [execute_single_search(query, tavily_api_key=tavily_api_key) for query in batch]
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Process results and handle any exceptions
+            for j, result in enumerate(batch_results):
+                if isinstance(result, Exception):
+                    logging.error(f"Error executing search: {str(result)}")
+                    # Add a placeholder for failed searches
+                    all_results.append({
+                        "query": batch[j].query,
+                        "results": [],
+                        "error": str(result)
+                    })
+                else:
+                    all_results.append(result)
+        
+        logging.info(f"Completed {len(all_results)} web searches")
+        
+        return {
+            "search_results": all_results,
+            "steps": state.get("steps", []) + [f"Executed {len(all_results)} web searches"]
+        }
     except Exception as e:
-        logging.error(f"Error executing web searches: {str(e)}")
-        return {"search_results": [], "steps": [f"Error: {str(e)}"]}
+        logging.exception(f"Error executing web searches: {str(e)}")
+        return {
+            "search_results": all_results,
+            "steps": state.get("steps", []) + [f"Error executing web searches: {str(e)}"]
+        }
 
 async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
     """
-    Creates a comprehensive learning path based on search results using an LLM chain.
-    
-    Args:
-        state: The current LearningPathState containing 'search_results'.
-        
-    Returns:
-        A dictionary with generated learning modules and execution steps.
+    Create a structured learning path from search results.
     """
-    logging.info("Creating learning path")
-    if not state.get("search_results"):
-        logging.warning("No search results available")
-        return {"modules": [], "steps": ["No search results available"]}
+    if not state.get("search_results") or len(state["search_results"]) == 0:
+        logging.info("No search results available")
+        return {
+            "modules": [],
+            "final_learning_path": {
+                "topic": state["user_topic"],
+                "modules": []
+            },
+            "steps": state.get("steps", []) + ["No search results available"]
+        }
     
-    formatted_results = format_search_results(state["search_results"])
+    # Get the OpenAI API key from state with logging
+    openai_api_key = state.get("openai_api_key")
+    if not openai_api_key:
+        logging.warning("OpenAI API key not found in state, this may cause errors")
+    else:
+        logging.debug("Found OpenAI API key in state, using for learning path creation")
     
-    prompt_text = """
-# EXPERT TEACHING ASSISTANT INSTRUCTIONS
-
-Your task is to create a comprehensive learning path for the topic "{user_topic}" based on thorough research.
-
-## RESEARCH INFORMATION
-{search_results}
-
-## MODULE PLANNING PRINCIPLES
-
-### A) Progressive Expertise Development
-- First module must be truly introductory, assuming zero knowledge
-- Each subsequent module builds expertise systematically
-- Advanced concepts are introduced only after solid foundations
-- Technical depth increases progressively but steadily
-- Final modules should reach expert-level understanding
-
-### B) Topic Focus and Granularity
-- Each module must focus on ONE specific concept or aspect
-- Break down large topics into focused, manageable modules
-- No mixing of different fundamental concepts in a single module
-- Prefer smaller, focused modules for clarity
-- Ensure each module is exhaustive within its focus
-
-### C) Knowledge Building
-- Start with fundamentals accessible to beginners
-- Build complexity gradually but thoroughly
-- Each module represents a clear step toward expertise
-- Connect new knowledge with established concepts
-- Ensure deep understanding before advancing
-
-### D) Module Independence and Interconnection
-- Each module must be self-contained
-- Clear prerequisites must be identified
-- Strong connections with previous modules
-- Preview future module connections
-- Create a cohesive learning journey
-
-### E) Depth and Accessibility Balance
-- Maintain detail while ensuring clarity
-- Break complex topics into digestible segments
-- Provide thorough coverage without overwhelming
-- Each module should feel complete and focused
-
-## LEARNING PATH REQUIREMENTS
-
-Design a logical sequence of 4-7 learning modules that follows these principles. For each module, provide:
-1. A clear title indicating its focus.
-2. The core concept addressed.
-3. A detailed description of content.
-4. Clear learning objectives.
-5. Prerequisites (if any).
-6. Key components to cover.
-7. Expected outcomes.
-
-Ensure the modules build upon each other progressively.
-
-{format_instructions}
-"""
-    prompt = ChatPromptTemplate.from_template(prompt_text)
+    # Build the learning path
     try:
-        result = await run_chain(prompt, lambda: get_llm(api_key=state.get("openai_api_key")), enhanced_modules_parser, {
-            "user_topic": state["user_topic"],
-            "search_results": formatted_results,
-            "format_instructions": enhanced_modules_parser.get_format_instructions()
-        })
+        # Process search results into a format suitable for generating modules
+        processed_results = []
+        for result in state["search_results"]:
+            query = result.get("query", "Unknown query")
+            search_results = result.get("results", [])
+            
+            # Skip empty results
+            if not search_results:
+                continue
+                
+            processed_results.append({
+                "query": query,
+                "relevant_information": "\n\n".join([
+                    f"Source: {item.get('source', 'Unknown')}\n{item.get('content', 'No content')}" 
+                    for item in search_results[:3]  # Limit to top 3 results per query
+                ])
+            })
+        
+        # Convert search results to a text representation for the prompt
+        results_text = ""
+        for i, result in enumerate(processed_results, 1):
+            results_text += f"""
+Search {i}: "{result['query']}"
+{result['relevant_information']}
+---
+"""
+
+        # Prepare the prompt for creating modules
+        prompt_text = f"""
+You are an expert curriculum designer. Create a comprehensive learning path for the topic: {state['user_topic']}.
+
+Based on the following search results, organize the learning into logical modules:
+
+{results_text}
+
+Create a structured learning path with 3-7 modules. For each module:
+1. Give it a clear, descriptive title
+2. Write a comprehensive overview (100-200 words)
+3. Identify 3-5 key learning objectives
+4. Explain why this module is important in the overall learning journey
+
+Format your response as a structured curriculum. Each module should build on previous knowledge.
+
+{enhanced_modules_parser.get_format_instructions()}
+"""
+        prompt = ChatPromptTemplate.from_template(prompt_text)
+        
+        result = await run_chain(prompt, lambda: get_llm(api_key=openai_api_key), enhanced_modules_parser, {})
+        
         modules = result.modules
+        
+        # Create the final learning path structure
+        final_learning_path = {
+            "topic": state["user_topic"],
+            "modules": modules,
+            "metadata": {
+                "generated_at": datetime.now().isoformat(),
+                "num_modules": len(modules)
+            }
+        }
+        
         logging.info(f"Created learning path with {len(modules)} modules")
-        return {"modules": modules, "steps": [f"Created learning path with {len(modules)} modules"]}
+        
+        return {
+            "modules": modules,
+            "final_learning_path": final_learning_path,
+            "steps": state.get("steps", []) + [f"Created learning path with {len(modules)} modules"]
+        }
     except Exception as e:
-        logging.error(f"Error creating learning path: {str(e)}")
-        return {"modules": [], "steps": [f"Error: {str(e)}"]}
+        logging.exception(f"Error creating learning path: {str(e)}")
+        return {
+            "modules": [],
+            "final_learning_path": {
+                "topic": state["user_topic"],
+                "modules": []
+            },
+            "steps": state.get("steps", []) + [f"Error creating learning path: {str(e)}"]
+        }

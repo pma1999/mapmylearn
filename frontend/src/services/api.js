@@ -102,7 +102,22 @@ export const generateLearningPath = async (topic, options = {}) => {
     }
   }
   
+  // Validate that both API keys are present
+  if (!finalOpenaiKey || !finalTavilyKey) {
+    throw new Error("Both OpenAI and Tavily API keys are required");
+  }
+  
+  // Trim API keys to remove any whitespace
+  finalOpenaiKey = finalOpenaiKey.trim();
+  finalTavilyKey = finalTavilyKey.trim();
+  
+  // Final validation check
+  if (!finalOpenaiKey || !finalTavilyKey) {
+    throw new Error("API keys cannot be empty");
+  }
+  
   try {
+    console.log("Sending API keys to backend for learning path generation");
     const response = await api.post('/generate-learning-path', {
       topic,
       parallel_count: parallelCount,
