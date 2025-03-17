@@ -1,30 +1,55 @@
 import React from 'react';
-import { Snackbar, Alert } from '@mui/material';
+import {
+  Snackbar,
+  Alert,
+  IconButton,
+  useMediaQuery,
+  useTheme
+} from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
 
-function NotificationSystem({ notification, onClose }) {
+const NotificationSystem = ({ notification, onClose }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
   return (
     <Snackbar
       open={notification.open}
       autoHideDuration={notification.duration || 6000}
       onClose={onClose}
-      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      anchorOrigin={{
+        vertical: 'bottom',
+        horizontal: isMobile ? 'center' : 'right'
+      }}
+      sx={{
+        '& .MuiPaper-root': {
+          maxWidth: isMobile ? '90%' : '400px',
+        }
+      }}
     >
-      <Alert 
-        onClose={onClose}
-        severity={notification.severity}
-        variant={notification.severity === 'error' ? "filled" : "standard"}
+      <Alert
+        severity={notification.severity || 'info'}
+        variant="filled"
+        action={
+          <IconButton
+            aria-label="close"
+            color="inherit"
+            size={isMobile ? "small" : "medium"}
+            onClick={onClose}
+          >
+            <CloseIcon fontSize={isMobile ? "small" : "medium"} />
+          </IconButton>
+        }
         sx={{ 
           width: '100%',
-          whiteSpace: 'pre-line',
-          '& .MuiAlert-message': {
-            maxWidth: '500px'
-          }
+          fontSize: { xs: '0.75rem', sm: '0.875rem' },
+          alignItems: 'center'
         }}
       >
         {notification.message}
       </Alert>
     </Snackbar>
   );
-}
+};
 
 export default NotificationSystem; 

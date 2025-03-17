@@ -1,5 +1,8 @@
 import React from 'react';
 import {
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
   Typography,
   Box,
   TextField,
@@ -7,21 +10,26 @@ import {
   FormControlLabel,
   Checkbox,
   Chip,
+  Stack,
   InputAdornment,
-  IconButton,
-  Divider
+  IconButton
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
-import AddIcon from '@mui/icons-material/Add';
-import StarIcon from '@mui/icons-material/Star';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
-import StorageIcon from '@mui/icons-material/Storage';
+import StarIcon from '@mui/icons-material/Star';
+import HistoryIcon from '@mui/icons-material/History';
+import AddIcon from '@mui/icons-material/Add';
 
 const StyledChip = styled(Chip)(({ theme }) => ({
   margin: theme.spacing(0.5),
+  [theme.breakpoints.down('sm')]: {
+    fontSize: '0.75rem',
+    height: '28px',
+  },
 }));
 
-function HistorySettings({
+const HistorySettings = ({
   autoSaveToHistory,
   setAutoSaveToHistory,
   initialFavorite,
@@ -33,98 +41,125 @@ function HistorySettings({
   handleAddTag,
   handleDeleteTag,
   handleTagKeyDown,
-  isGenerating
-}) {
+  isGenerating,
+  isMobile
+}) => {
   return (
-    <>
-      <Divider sx={{ my: 2 }} />
-      <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 2 }}>
-        History Settings
-      </Typography>
-      
-      <FormControlLabel
-        control={
-          <Checkbox 
-            checked={autoSaveToHistory} 
-            onChange={(e) => setAutoSaveToHistory(e.target.checked)}
-            disabled={isGenerating}
-          />
-        }
-        label="Automatically save to history"
-      />
-      
-      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, ml: 4 }}>
-        <StorageIcon fontSize="inherit" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
-        History is stored locally in your browser and is not shared across devices.
-      </Typography>
-      
-      {autoSaveToHistory && (
-        <Box sx={{ mt: 2 }}>
-          <Grid container spacing={2}>
-            <Grid item xs={12}>
-              <FormControlLabel
-                control={
-                  <Checkbox 
-                    icon={<StarBorderIcon />}
-                    checkedIcon={<StarIcon />}
-                    checked={initialFavorite} 
-                    onChange={(e) => setInitialFavorite(e.target.checked)}
-                    disabled={isGenerating}
-                  />
-                }
-                label="Mark as favorite"
-              />
-            </Grid>
-            
-            <Grid item xs={12}>
-              <Typography variant="body2" gutterBottom>
-                Tags:
-              </Typography>
-              
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', mb: 1 }}>
-                {initialTags.map((tag) => (
-                  <StyledChip
-                    key={tag}
-                    label={tag}
-                    onDelete={() => handleDeleteTag(tag)}
-                    size="small"
-                    disabled={isGenerating}
-                  />
-                ))}
-              </Box>
-              
-              <Box sx={{ display: 'flex' }}>
-                <TextField
-                  size="small"
-                  value={newTag}
-                  onChange={(e) => setNewTag(e.target.value)}
-                  onKeyDown={handleTagKeyDown}
-                  placeholder="Add tag..."
-                  variant="outlined"
-                  fullWidth
-                  sx={{ mr: 1 }}
+    <Accordion disabled={isGenerating} sx={{ mb: 2 }}>
+      <AccordionSummary
+        expandIcon={<ExpandMoreIcon />}
+        aria-controls="history-settings-content"
+        id="history-settings-header"
+      >
+        <Stack direction="row" spacing={1} alignItems="center">
+          <HistoryIcon color="primary" />
+          <Typography variant="h6" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>History Settings</Typography>
+        </Stack>
+      </AccordionSummary>
+      <AccordionDetails>
+        <Typography variant="body2" color="text.secondary" paragraph sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+          Configure how your learning path will be saved to your history.
+        </Typography>
+        
+        <Grid container spacing={isMobile ? 2 : 3} direction="column">
+          <Grid item>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={autoSaveToHistory}
+                  onChange={(e) => setAutoSaveToHistory(e.target.checked)}
                   disabled={isGenerating}
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton 
-                          onClick={handleAddTag} 
-                          disabled={!newTag.trim() || isGenerating}
-                          size="small"
-                        >
-                          <AddIcon />
-                        </IconButton>
-                      </InputAdornment>
-                    ),
-                  }}
+                  size={isMobile ? "small" : "medium"}
                 />
-              </Box>
-            </Grid>
+              }
+              label={
+                <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+                  Automatically save to history
+                </Typography>
+              }
+            />
           </Grid>
-        </Box>
-      )}
-    </>
+          
+          <Grid item>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={initialFavorite}
+                  onChange={(e) => setInitialFavorite(e.target.checked)}
+                  disabled={isGenerating}
+                  size={isMobile ? "small" : "medium"}
+                  icon={<StarBorderIcon />}
+                  checkedIcon={<StarIcon />}
+                />
+              }
+              label={
+                <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+                  Add to favorites
+                </Typography>
+              }
+            />
+          </Grid>
+          
+          <Grid item>
+            <Typography variant="body2" sx={{ mb: 1, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+              Tags:
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', mb: 1 }}>
+              {initialTags.map(tag => (
+                <StyledChip
+                  key={tag}
+                  label={tag}
+                  onDelete={() => handleDeleteTag(tag)}
+                  size={isMobile ? "small" : "medium"}
+                />
+              ))}
+              {initialTags.length === 0 && (
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.8rem' } }}>
+                  No tags added
+                </Typography>
+              )}
+            </Box>
+            
+            <TextField
+              label="Add Tag"
+              variant="outlined"
+              size={isMobile ? "small" : "medium"}
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              onKeyDown={handleTagKeyDown}
+              disabled={isGenerating}
+              fullWidth
+              margin="dense"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton 
+                      onClick={handleAddTag}
+                      disabled={!newTag.trim()} 
+                      edge="end"
+                      size={isMobile ? "small" : "medium"}
+                    >
+                      <AddIcon />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+              placeholder="Type and press Enter to add"
+              sx={{ mt: 1 }}
+            />
+          </Grid>
+        </Grid>
+        
+        {!autoSaveToHistory && (
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="body2" color="info.main" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+              You will be prompted to save after generation completes.
+            </Typography>
+          </Box>
+        )}
+      </AccordionDetails>
+    </Accordion>
   );
-}
+};
 
 export default HistorySettings; 

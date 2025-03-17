@@ -31,7 +31,9 @@ import {
   Alert,
   CircularProgress,
   Stack,
-  InputAdornment
+  InputAdornment,
+  useMediaQuery,
+  Slide
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import HistoryIcon from '@mui/icons-material/History';
@@ -64,7 +66,7 @@ const StyledCard = styled(Card)(({ theme }) => ({
   height: '100%',
   display: 'flex',
   flexDirection: 'column',
-  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+  transition: 'transform 0.2s ease, box-shadow 0.2s ease, all 0.3s ease-in-out',
   '&:hover': {
     transform: 'translateY(-4px)',
     boxShadow: theme.shadows[4],
@@ -73,6 +75,25 @@ const StyledCard = styled(Card)(({ theme }) => ({
 
 const StyledChip = styled(Chip)(({ theme }) => ({
   margin: theme.spacing(0.5),
+}));
+
+const ActionButtonsWrapper = styled(Stack)(({ theme }) => ({
+  [theme.breakpoints.down('sm')]: {
+    marginTop: theme.spacing(2),
+    justifyContent: 'flex-start',
+    width: '100%',
+  },
+}));
+
+const PageHeaderWrapper = styled(Box)(({ theme }) => ({
+  display: 'flex', 
+  justifyContent: 'space-between', 
+  alignItems: 'flex-start',
+  marginBottom: theme.spacing(3),
+  [theme.breakpoints.down('sm')]: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+  },
 }));
 
 // Component for the tags input and display
@@ -131,22 +152,63 @@ const TagsInput = ({ tags = [], onAddTag, onDeleteTag }) => {
 };
 
 // Confirmation dialog component
-const ConfirmationDialog = ({ open, title, message, onConfirm, onCancel }) => (
-  <Dialog open={open} onClose={onCancel}>
-    <DialogTitle>{title}</DialogTitle>
-    <DialogContent>
-      <DialogContentText>{message}</DialogContentText>
-    </DialogContent>
-    <DialogActions>
-      <Button onClick={onCancel} color="primary">
-        Cancel
-      </Button>
-      <Button onClick={onConfirm} color="primary" variant="contained" autoFocus>
-        Confirm
-      </Button>
-    </DialogActions>
-  </Dialog>
-);
+const ConfirmationDialog = ({ open, title, message, onConfirm, onCancel }) => {
+  const isMobile = useMediaQuery(theme => theme.breakpoints.down('sm'));
+  
+  return (
+    <Dialog 
+      open={open} 
+      onClose={onCancel}
+      fullWidth
+      maxWidth="xs"
+      fullScreen={isMobile}
+      TransitionComponent={Slide}
+      TransitionProps={{ direction: 'up' }}
+    >
+      <DialogTitle>
+        {isMobile && (
+          <IconButton
+            edge="start"
+            color="inherit"
+            onClick={onCancel}
+            aria-label="close"
+            sx={{ mr: 2 }}
+          >
+            <ArrowBackIcon />
+          </IconButton>
+        )}
+        {title}
+      </DialogTitle>
+      <DialogContent>
+        <DialogContentText>{message}</DialogContentText>
+      </DialogContent>
+      <DialogActions sx={{ 
+        px: { xs: 2, sm: 3 }, 
+        py: { xs: 2, sm: 1 }, 
+        flexDirection: isMobile ? 'column' : 'row', 
+        alignItems: isMobile ? 'stretch' : 'center' 
+      }}>
+        <Button 
+          onClick={onCancel} 
+          color="primary"
+          fullWidth={isMobile}
+          sx={{ mb: isMobile ? 1 : 0 }}
+        >
+          Cancel
+        </Button>
+        <Button 
+          onClick={onConfirm} 
+          color="primary" 
+          variant="contained" 
+          autoFocus
+          fullWidth={isMobile}
+        >
+          Confirm
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
 
 // Import dialog component
 const ImportDialog = ({ open, onClose, onImport }) => {
@@ -154,6 +216,7 @@ const ImportDialog = ({ open, onClose, onImport }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef(null);
+  const isMobile = useMediaQuery(theme => theme.breakpoints.down('sm'));
 
   const handleImport = async () => {
     if (!jsonInput.trim()) {
@@ -242,8 +305,27 @@ const ImportDialog = ({ open, onClose, onImport }) => {
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>Import Learning Path</DialogTitle>
+    <Dialog 
+      open={open} 
+      onClose={onClose} 
+      maxWidth="md" 
+      fullWidth
+      fullScreen={isMobile}
+    >
+      <DialogTitle>
+        {isMobile && (
+          <IconButton
+            edge="start"
+            color="inherit"
+            onClick={onClose}
+            aria-label="close"
+            sx={{ mr: 2 }}
+          >
+            <ArrowBackIcon />
+          </IconButton>
+        )}
+        Import Learning Path
+      </DialogTitle>
       <DialogContent>
         <DialogContentText sx={{ mb: 2 }}>
           Paste a valid learning path JSON or upload a JSON file to import it into your history.
@@ -259,7 +341,7 @@ const ImportDialog = ({ open, onClose, onImport }) => {
             border: '2px dashed',
             borderColor: 'divider',
             borderRadius: 1,
-            p: 2,
+            p: { xs: 1, sm: 2 },
             mb: 2,
             textAlign: 'center',
             cursor: 'pointer'
@@ -275,13 +357,14 @@ const ImportDialog = ({ open, onClose, onImport }) => {
             onChange={handleFileUpload}
             ref={fileInputRef}
           />
-          <Typography sx={{ mb: 1 }}>
+          <Typography sx={{ mb: 1, fontSize: { xs: '0.875rem', sm: '1rem' } }}>
             Drag & drop a JSON file here or click to browse
           </Typography>
           <Button
             variant="outlined"
             component="span"
             startIcon={<UploadIcon />}
+            size={isMobile ? "small" : "medium"}
           >
             Choose File
           </Button>
@@ -293,7 +376,7 @@ const ImportDialog = ({ open, onClose, onImport }) => {
         
         <TextField
           multiline
-          rows={10}
+          rows={isMobile ? 6 : 10}
           fullWidth
           variant="outlined"
           value={jsonInput}
@@ -302,14 +385,21 @@ const ImportDialog = ({ open, onClose, onImport }) => {
           error={!!error}
         />
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
+      <DialogActions sx={{ px: { xs: 2, sm: 3 }, py: { xs: 2, sm: 1 }, flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center' }}>
+        <Button 
+          onClick={onClose}
+          fullWidth={isMobile}
+          sx={{ mb: isMobile ? 1 : 0 }}
+        >
+          Cancel
+        </Button>
         <Button
           onClick={handleImport}
           color="primary"
           variant="contained"
           disabled={loading}
           startIcon={loading ? <CircularProgress size={16} /> : <UploadIcon />}
+          fullWidth={isMobile}
         >
           Import
         </Button>
@@ -321,6 +411,7 @@ const ImportDialog = ({ open, onClose, onImport }) => {
 // History entry card component
 const HistoryEntryCard = ({ entry, onView, onDelete, onToggleFavorite, onUpdateTags, onExport }) => {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const isMobile = useMediaQuery(theme => theme.breakpoints.down('sm'));
 
   const handleAddTag = async (newTag) => {
     const updatedTags = [...entry.tags, newTag];
@@ -333,11 +424,14 @@ const HistoryEntryCard = ({ entry, onView, onDelete, onToggleFavorite, onUpdateT
   };
 
   return (
-    <Grid item xs={12} md={4}>
+    <Grid item xs={12} sm={6} md={4}>
       <StyledCard variant="outlined">
-        <CardContent sx={{ flexGrow: 1 }}>
+        <CardContent sx={{ flexGrow: 1, p: { xs: 2, md: 3 } }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-            <Typography variant="h6" sx={{ fontWeight: 'medium' }} noWrap>
+            <Typography variant="h6" sx={{ 
+              fontWeight: 'medium', 
+              fontSize: { xs: '1rem', sm: '1.15rem', md: '1.25rem' }
+            }} noWrap>
               {entry.topic}
             </Typography>
             <IconButton
@@ -349,21 +443,21 @@ const HistoryEntryCard = ({ entry, onView, onDelete, onToggleFavorite, onUpdateT
             </IconButton>
           </Box>
           
-          <Typography variant="body2" color="text.secondary" gutterBottom>
+          <Typography variant="body2" color="text.secondary" gutterBottom fontSize={{ xs: '0.75rem', sm: '0.875rem' }}>
             Created: {formatDate(entry.creation_date)}
           </Typography>
           
           {entry.last_modified_date && (
-            <Typography variant="body2" color="text.secondary" gutterBottom>
+            <Typography variant="body2" color="text.secondary" gutterBottom fontSize={{ xs: '0.75rem', sm: '0.875rem' }}>
               Modified: {formatDate(entry.last_modified_date)}
             </Typography>
           )}
           
-          <Box sx={{ mt: 1, mb: 2 }}>
+          <Box sx={{ mt: 1, mb: 2, display: 'flex', flexWrap: 'wrap' }}>
             <Chip
               label={`${entry.modules_count} modules`}
               size="small"
-              sx={{ mr: 1 }}
+              sx={{ mr: 1, mb: { xs: 1, sm: 0 } }}
             />
             <Chip
               label={entry.source === 'generated' ? 'Generated' : 'Imported'}
@@ -380,16 +474,22 @@ const HistoryEntryCard = ({ entry, onView, onDelete, onToggleFavorite, onUpdateT
           
           <Divider sx={{ my: 2 }} />
           
-          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-between',
+            flexDirection: { xs: isMobile ? 'column' : 'row', sm: 'row' },
+            alignItems: { xs: isMobile ? 'stretch' : 'center', sm: 'center' }
+          }}>
             <Button
               startIcon={<ExpandMoreIcon />}
               onClick={() => onView(entry.id)}
               size="small"
+              sx={{ mb: isMobile ? 1 : 0, width: isMobile ? '100%' : 'auto' }}
             >
               View Details
             </Button>
             
-            <Box>
+            <Box sx={{ display: 'flex', justifyContent: isMobile ? 'space-between' : 'flex-end', width: isMobile ? '100%' : 'auto' }}>
               <IconButton size="small" onClick={() => onExport(entry.id)} title="Export">
                 <DownloadIcon fontSize="small" />
               </IconButton>
@@ -422,13 +522,24 @@ const HistoryEntryCard = ({ entry, onView, onDelete, onToggleFavorite, onUpdateT
 
 // Learning path viewer component
 const LearningPathViewer = ({ learningPath, onBack, onExport }) => {
+  const isMobile = useMediaQuery(theme => theme.breakpoints.down('sm'));
+  
   return (
-    <Paper elevation={3} sx={{ p: 4, borderRadius: 2 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+    <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, borderRadius: 2 }}>
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        mb: 4,
+        flexDirection: isMobile ? 'column' : 'row',
+        gap: isMobile ? 2 : 0
+      }}>
         <Button
           variant="outlined"
           startIcon={<ArrowBackIcon />}
           onClick={onBack}
+          fullWidth={isMobile}
+          size={isMobile ? "small" : "medium"}
         >
           Back to History
         </Button>
@@ -436,21 +547,31 @@ const LearningPathViewer = ({ learningPath, onBack, onExport }) => {
           variant="outlined"
           startIcon={<DownloadIcon />}
           onClick={onExport}
+          fullWidth={isMobile}
+          size={isMobile ? "small" : "medium"}
         >
           Export as JSON
         </Button>
       </Box>
       
-      <Typography variant="h4" component="h1" sx={{ mb: 3 }}>
+      <Typography 
+        variant="h4" 
+        component="h1" 
+        sx={{ 
+          mb: 3,
+          fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' },
+          wordBreak: 'break-word'
+        }}
+      >
         {learningPath.topic}
       </Typography>
       
       {learningPath.execution_steps && (
         <Box sx={{ mb: 4 }}>
           <Typography variant="h6" sx={{ mb: 2 }}>Execution Steps</Typography>
-          <Paper variant="outlined" sx={{ p: 2, bgcolor: 'background.default' }}>
+          <Paper variant="outlined" sx={{ p: { xs: 1, sm: 2 }, bgcolor: 'background.default' }}>
             {learningPath.execution_steps.map((step, index) => (
-              <Typography key={index} variant="body2" sx={{ mb: 1 }}>
+              <Typography key={index} variant="body2" sx={{ mb: 1, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
                 {step}
               </Typography>
             ))}
@@ -458,7 +579,7 @@ const LearningPathViewer = ({ learningPath, onBack, onExport }) => {
         </Box>
       )}
       
-      <Typography variant="h5" sx={{ mb: 3 }}>
+      <Typography variant="h5" sx={{ mb: 3, fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
         Modules
       </Typography>
       
@@ -467,13 +588,13 @@ const LearningPathViewer = ({ learningPath, onBack, onExport }) => {
           <Paper
             key={moduleIndex}
             variant="outlined"
-            sx={{ p: 3, mb: 3, bgcolor: 'background.default' }}
+            sx={{ p: { xs: 2, sm: 3 }, mb: 3, bgcolor: 'background.default' }}
           >
-            <Typography variant="h6" sx={{ mb: 1 }}>
+            <Typography variant="h6" sx={{ mb: 1, fontSize: { xs: '1rem', sm: '1.25rem' } }}>
               {module.title}
             </Typography>
             
-            <Typography variant="body1" paragraph>
+            <Typography variant="body1" paragraph fontSize={{ xs: '0.875rem', sm: '1rem' }}>
               {module.description}
             </Typography>
             
@@ -484,22 +605,22 @@ const LearningPathViewer = ({ learningPath, onBack, onExport }) => {
                 </Typography>
                 
                 {module.submodules.map((submodule, subIndex) => (
-                  <Box key={subIndex} sx={{ ml: 2, mb: 3 }}>
+                  <Box key={subIndex} sx={{ ml: { xs: 1, sm: 2 }, mb: 3 }}>
                     <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
                       <SubdirectoryArrowRightIcon
-                        sx={{ mr: 1, color: 'text.secondary', fontSize: 20 }}
+                        sx={{ mr: 1, color: 'text.secondary', fontSize: { xs: 16, sm: 20 } }}
                       />
-                      <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 'bold', fontSize: { xs: '0.875rem', sm: '1rem' } }}>
                         {submodule.title}
                       </Typography>
                     </Box>
                     
-                    <Typography variant="body2" paragraph sx={{ ml: 4, mt: 1 }}>
+                    <Typography variant="body2" paragraph sx={{ ml: { xs: 3, sm: 4 }, mt: 1, fontSize: { xs: '0.8rem', sm: '0.875rem' } }}>
                       {submodule.description}
                     </Typography>
                     
                     {submodule.content && (
-                      <Box sx={{ ml: 4 }}>
+                      <Box sx={{ ml: { xs: 3, sm: 4 } }}>
                         <MarkdownRenderer>{submodule.content}</MarkdownRenderer>
                       </Box>
                     )}
@@ -530,8 +651,8 @@ const LearningPathViewer = ({ learningPath, onBack, onExport }) => {
 // History filters component
 const HistoryFilters = ({ sortBy, onSortChange, filterSource, onFilterChange, search, onSearchChange }) => {
   return (
-    <Grid container spacing={3} sx={{ mb: 3 }}>
-      <Grid item xs={12} md={5}>
+    <Grid container spacing={2} sx={{ mb: 3 }}>
+      <Grid item xs={12} sm={12} md={5}>
         <TextField
           fullWidth
           placeholder="Search by topic..."
@@ -544,10 +665,11 @@ const HistoryFilters = ({ sortBy, onSortChange, filterSource, onFilterChange, se
               </InputAdornment>
             ),
           }}
+          size="small"
         />
       </Grid>
-      <Grid item xs={12} md={4}>
-        <FormControl fullWidth>
+      <Grid item xs={6} sm={6} md={4}>
+        <FormControl fullWidth size="small">
           <InputLabel id="sort-by-label">Sort By</InputLabel>
           <Select
             labelId="sort-by-label"
@@ -562,8 +684,8 @@ const HistoryFilters = ({ sortBy, onSortChange, filterSource, onFilterChange, se
           </Select>
         </FormControl>
       </Grid>
-      <Grid item xs={12} md={3}>
-        <FormControl fullWidth>
+      <Grid item xs={6} sm={6} md={3}>
+        <FormControl fullWidth size="small">
           <InputLabel id="filter-source-label">Source</InputLabel>
           <Select
             labelId="filter-source-label"
@@ -795,12 +917,15 @@ function HistoryPage() {
           onExport={() => handleExportLearningPath(selectedEntry)}
         />
       ) : (
-        <Paper elevation={3} sx={{ p: 4, borderRadius: 2, mb: 4 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', flexDirection: 'column', alignItems: 'flex-start' }}>
+        <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, borderRadius: 2, mb: 4 }}>
+          <PageHeaderWrapper>
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <HistoryIcon sx={{ mr: 1, fontSize: 32, color: 'primary.main' }} />
-                <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
+                <HistoryIcon sx={{ mr: 1, fontSize: { xs: 24, sm: 32 }, color: 'primary.main' }} />
+                <Typography variant="h4" component="h1" sx={{ 
+                  fontWeight: 'bold',
+                  fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' }
+                }}>
                   Learning Path History
                 </Typography>
               </Box>
@@ -813,11 +938,17 @@ function HistoryPage() {
                 sx={{ mt: 1, mb: 1 }}
               />
             </Box>
-            <Stack direction="row" spacing={2}>
+            
+            <ActionButtonsWrapper 
+              direction={{ xs: 'column', sm: 'row' }} 
+              spacing={{ xs: 1, sm: 2 }}
+            >
               <Button
                 variant="outlined"
                 startIcon={<UploadIcon />}
                 onClick={() => setImportDialogOpen(true)}
+                fullWidth={useMediaQuery(theme => theme.breakpoints.down('sm'))}
+                size="small"
               >
                 Import
               </Button>
@@ -826,6 +957,8 @@ function HistoryPage() {
                 startIcon={<DownloadIcon />}
                 onClick={handleExportAllHistory}
                 disabled={entries.length === 0}
+                fullWidth={useMediaQuery(theme => theme.breakpoints.down('sm'))}
+                size="small"
               >
                 Export All
               </Button>
@@ -835,6 +968,8 @@ function HistoryPage() {
                 startIcon={<ClearAllIcon />}
                 onClick={() => setClearHistoryDialog(true)}
                 disabled={entries.length === 0}
+                fullWidth={useMediaQuery(theme => theme.breakpoints.down('sm'))}
+                size="small"
               >
                 Clear All
               </Button>
@@ -844,13 +979,15 @@ function HistoryPage() {
                 startIcon={<AddIcon />}
                 component={RouterLink}
                 to="/generator"
+                fullWidth={useMediaQuery(theme => theme.breakpoints.down('sm'))}
+                size="small"
               >
                 Create New Path
               </Button>
-            </Stack>
-          </Box>
+            </ActionButtonsWrapper>
+          </PageHeaderWrapper>
           
-          <Divider sx={{ mb: 4 }} />
+          <Divider sx={{ mb: 3 }} />
           
           <HistoryFilters
             sortBy={sortBy}
@@ -862,13 +999,13 @@ function HistoryPage() {
           />
           
           {loading ? (
-            <Grid container spacing={3}>
+            <Grid container spacing={2}>
               {[...Array(6)].map((_, index) => (
                 <HistoryEntrySkeleton key={index} />
               ))}
             </Grid>
           ) : entries.length > 0 ? (
-            <Grid container spacing={3}>
+            <Grid container spacing={2}>
               {entries.map((entry) => (
                 <HistoryEntryCard
                   key={entry.id}
@@ -882,7 +1019,7 @@ function HistoryPage() {
               ))}
             </Grid>
           ) : (
-            <Box sx={{ textAlign: 'center', py: 5 }}>
+            <Box sx={{ textAlign: 'center', py: { xs: 3, sm: 5 } }}>
               <Typography variant="h6" color="text.secondary" gutterBottom>
                 No learning paths found
               </Typography>

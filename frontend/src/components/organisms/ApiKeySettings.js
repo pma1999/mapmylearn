@@ -1,20 +1,19 @@
 import React from 'react';
 import {
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
   Typography,
   Box,
   TextField,
   Button,
-  Paper,
-  Grid,
-  Stack,
   FormControlLabel,
   Checkbox,
   InputAdornment,
   IconButton,
-  CircularProgress,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails
+  Grid,
+  Stack,
+  CircularProgress
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import KeyIcon from '@mui/icons-material/Key';
@@ -23,7 +22,7 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 
-function ApiKeySettings({
+const ApiKeySettings = ({
   apiSettingsOpen,
   setApiSettingsOpen,
   openaiApiKey,
@@ -37,153 +36,172 @@ function ApiKeySettings({
   rememberApiKeys,
   setRememberApiKeys,
   openaiKeyValid,
-  setOpenaiKeyValid,
   tavilyKeyValid,
-  setTavilyKeyValid,
   validatingKeys,
   isGenerating,
   handleValidateApiKeys,
-  handleClearApiKeys
-}) {
+  handleClearApiKeys,
+  isMobile
+}) => {
   return (
-    <Accordion
-      expanded={apiSettingsOpen}
+    <Accordion 
+      expanded={apiSettingsOpen} 
       onChange={() => setApiSettingsOpen(!apiSettingsOpen)}
+      disabled={isGenerating}
+      sx={{ mb: 2 }}
     >
-      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+      <AccordionSummary
+        expandIcon={<ExpandMoreIcon />}
+        aria-controls="api-key-settings-content"
+        id="api-key-settings-header"
+      >
         <Stack direction="row" spacing={1} alignItems="center">
           <KeyIcon color="primary" />
-          <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
-            API Key Settings
-          </Typography>
-          <Typography variant="caption" color="error">
-            (Required)
-          </Typography>
+          <Typography variant="h6" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>API Key Settings</Typography>
         </Stack>
       </AccordionSummary>
       <AccordionDetails>
-        <Typography variant="body2" paragraph>
-          Please provide your API keys to use for generating learning paths. Both OpenAI and Tavily API keys are required.
+        <Typography variant="body2" color="text.secondary" paragraph sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+          To generate learning paths, you need to provide your own API keys. These keys are required to make requests to external AI and search services.
         </Typography>
         
-        <Grid container spacing={2}>
-          <Grid item xs={12}>
+        <Grid container spacing={isMobile ? 2 : 3} direction="column">
+          <Grid item>
             <TextField
               label="OpenAI API Key"
               variant="outlined"
               fullWidth
               value={openaiApiKey}
-              onChange={(e) => {
-                setOpenaiApiKey(e.target.value);
-                setOpenaiKeyValid(null);
-              }}
+              onChange={(e) => setOpenaiApiKey(e.target.value)}
+              type={showOpenaiKey ? 'text' : 'password'}
               placeholder="sk-..."
               disabled={isGenerating}
-              type={showOpenaiKey ? 'text' : 'password'}
-              required
+              margin="dense"
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
                     <IconButton
+                      aria-label="toggle password visibility"
                       onClick={() => setShowOpenaiKey(!showOpenaiKey)}
                       edge="end"
+                      size={isMobile ? "small" : "medium"}
                     >
                       {showOpenaiKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
                     </IconButton>
-                    {openaiKeyValid !== null && (
-                      <Box ml={1}>
-                        {openaiKeyValid ? 
-                          <CheckCircleIcon color="success" /> : 
-                          <ErrorIcon color="error" />
-                        }
-                      </Box>
+                    {openaiKeyValid === true && (
+                      <CheckCircleIcon color="success" sx={{ ml: 1 }} />
+                    )}
+                    {openaiKeyValid === false && (
+                      <ErrorIcon color="error" sx={{ ml: 1 }} />
                     )}
                   </InputAdornment>
                 ),
               }}
-              sx={{ mb: 2 }}
+              helperText={
+                openaiKeyValid === false ? "Invalid OpenAI API key" : 
+                openaiKeyValid === true ? "API key validated" : 
+                "Required - Enter your OpenAI API key (starts with sk-)"
+              }
             />
           </Grid>
           
-          <Grid item xs={12}>
+          <Grid item>
             <TextField
               label="Tavily API Key"
               variant="outlined"
               fullWidth
               value={tavilyApiKey}
-              onChange={(e) => {
-                setTavilyApiKey(e.target.value);
-                setTavilyKeyValid(null);
-              }}
+              onChange={(e) => setTavilyApiKey(e.target.value)}
+              type={showTavilyKey ? 'text' : 'password'}
               placeholder="tvly-..."
               disabled={isGenerating}
-              type={showTavilyKey ? 'text' : 'password'}
-              required
+              margin="dense"
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
                     <IconButton
+                      aria-label="toggle password visibility"
                       onClick={() => setShowTavilyKey(!showTavilyKey)}
                       edge="end"
+                      size={isMobile ? "small" : "medium"}
                     >
                       {showTavilyKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
                     </IconButton>
-                    {tavilyKeyValid !== null && (
-                      <Box ml={1}>
-                        {tavilyKeyValid ? 
-                          <CheckCircleIcon color="success" /> : 
-                          <ErrorIcon color="error" />
-                        }
-                      </Box>
+                    {tavilyKeyValid === true && (
+                      <CheckCircleIcon color="success" sx={{ ml: 1 }} />
+                    )}
+                    {tavilyKeyValid === false && (
+                      <ErrorIcon color="error" sx={{ ml: 1 }} />
                     )}
                   </InputAdornment>
                 ),
               }}
-              sx={{ mb: 2 }}
+              helperText={
+                tavilyKeyValid === false ? "Invalid Tavily API key" : 
+                tavilyKeyValid === true ? "API key validated" : 
+                "Required - Enter your Tavily API key (starts with tvly-)"
+              }
             />
           </Grid>
           
-          <Grid item xs={12}>
+          <Grid item>
             <FormControlLabel
               control={
-                <Checkbox 
-                  checked={rememberApiKeys} 
+                <Checkbox
+                  checked={rememberApiKeys}
                   onChange={(e) => setRememberApiKeys(e.target.checked)}
                   disabled={isGenerating}
+                  size={isMobile ? "small" : "medium"}
                 />
               }
-              label="Remember API keys for this session"
+              label={
+                <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+                  Remember API keys for this session
+                </Typography>
+              }
             />
-            <Typography variant="caption" color="text.secondary" display="block">
-              Keys are stored in browser session storage and will be cleared when you close your browser.
-            </Typography>
           </Grid>
           
-          <Grid item xs={12}>
-            <Stack direction="row" spacing={2} sx={{ mt: 1 }}>
-              <Button 
-                variant="outlined" 
+          <Grid item>
+            <Stack 
+              direction={isMobile ? "column" : "row"} 
+              spacing={isMobile ? 1 : 2} 
+              sx={{ mt: 1 }}
+            >
+              <Button
+                variant="contained"
+                color="primary"
                 onClick={handleValidateApiKeys}
-                disabled={isGenerating || validatingKeys || (!openaiApiKey && !tavilyApiKey)}
-                startIcon={validatingKeys ? <CircularProgress size={20} /> : null}
-                color={openaiKeyValid === true && tavilyKeyValid === true ? "success" : "primary"}
+                disabled={isGenerating || validatingKeys || (!openaiApiKey.trim() && !tavilyApiKey.trim())}
+                startIcon={validatingKeys ? <CircularProgress size={20} color="inherit" /> : null}
+                fullWidth={isMobile}
+                size={isMobile ? "small" : "medium"}
               >
-                {validatingKeys ? 'Validating...' : openaiKeyValid === true && tavilyKeyValid === true ? 'Keys Validated ✓' : 'Validate API Keys'}
+                {validatingKeys ? "Validating..." : "Validate API Keys"}
               </Button>
-              <Button 
-                variant="outlined" 
-                color="error" 
+              
+              <Button
+                variant="outlined"
+                color="secondary"
                 onClick={handleClearApiKeys}
                 disabled={isGenerating || (!openaiApiKey && !tavilyApiKey)}
+                fullWidth={isMobile}
+                size={isMobile ? "small" : "medium"}
               >
-                Clear Keys
+                Clear API Keys
               </Button>
             </Stack>
           </Grid>
         </Grid>
+        
+        <Box sx={{ mt: 2 }}>
+          <Typography variant="body2" color="info.main" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+            Note: Your API keys are used only for your requests and are not stored on our servers unless you choose "Remember API keys".
+          </Typography>
+        </Box>
       </AccordionDetails>
     </Accordion>
   );
-}
+};
 
 export default ApiKeySettings; 

@@ -26,7 +26,9 @@ import {
   DialogActions,
   Snackbar,
   IconButton,
-  InputAdornment
+  InputAdornment,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -64,8 +66,17 @@ const StyledChip = styled(Chip)(({ theme }) => ({
   margin: theme.spacing(0.5),
 }));
 
+const ResponsiveContainer = styled(Container)(({ theme }) => ({
+  [theme.breakpoints.down('sm')]: {
+    padding: theme.spacing(1),
+  },
+}));
+
 function GeneratorPage() {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const [topic, setTopic] = useState('');
   const [parallelCount, setParallelCount] = useState(2);
   const [searchParallelCount, setSearchParallelCount] = useState(3);
@@ -437,19 +448,31 @@ function GeneratorPage() {
   };
 
   return (
-    <Container maxWidth="md">
-      <Paper elevation={3} sx={{ p: 4, borderRadius: 2 }}>
+    <ResponsiveContainer maxWidth="md">
+      <Paper elevation={3} sx={{ 
+        p: { xs: 2, sm: 3, md: 4 }, 
+        borderRadius: 2 
+      }}>
         <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
           <Typography
             variant="h4"
             component="h1"
             gutterBottom
-            sx={{ fontWeight: 'bold', textAlign: 'center', mb: 3 }}
+            sx={{ 
+              fontWeight: 'bold', 
+              textAlign: 'center', 
+              mb: 3,
+              fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' }
+            }}
           >
             Generate Learning Path
           </Typography>
           
-          <Typography variant="body1" sx={{ mb: 4, textAlign: 'center' }}>
+          <Typography variant="body1" sx={{ 
+            mb: 4, 
+            textAlign: 'center',
+            fontSize: { xs: '0.875rem', sm: '1rem' }
+          }}>
             Enter any topic you want to learn about and we'll create a personalized learning path for you.
           </Typography>
           
@@ -494,6 +517,7 @@ function GeneratorPage() {
             desiredSubmoduleCount={desiredSubmoduleCount}
             setDesiredSubmoduleCount={setDesiredSubmoduleCount}
             isGenerating={isGenerating}
+            isMobile={isMobile}
           />
           
           {/* API Key Settings */}
@@ -518,6 +542,7 @@ function GeneratorPage() {
             isGenerating={isGenerating}
             handleValidateApiKeys={handleValidateApiKeys}
             handleClearApiKeys={handleClearApiKeys}
+            isMobile={isMobile}
           />
           
           {/* History Settings */}
@@ -534,43 +559,73 @@ function GeneratorPage() {
             handleDeleteTag={handleDeleteTag}
             handleTagKeyDown={handleTagKeyDown}
             isGenerating={isGenerating}
+            isMobile={isMobile}
           />
           
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            mt: 3,
+            flexDirection: { xs: 'column', sm: 'row' },
+            gap: { xs: 2, sm: 0 }
+          }}>
             <Button
               type="submit"
               variant="contained"
               color="primary"
-              size="large"
+              size={isMobile ? "medium" : "large"}
               disabled={isGenerating || !topic.trim() || !openaiApiKey.trim() || !tavilyApiKey.trim() || openaiKeyValid !== true || tavilyKeyValid !== true}
               startIcon={isGenerating ? <CircularProgress size={20} color="inherit" /> : <BoltIcon />}
-              sx={{ py: 1.5, px: 4, borderRadius: 2, fontWeight: 'bold', fontSize: '1.1rem' }}
+              sx={{ 
+                py: { xs: 1, sm: 1.5 }, 
+                px: { xs: 2, sm: 4 }, 
+                borderRadius: 2, 
+                fontWeight: 'bold', 
+                fontSize: { xs: '0.9rem', sm: '1.1rem' },
+                width: { xs: '100%', sm: 'auto' }
+              }}
             >
               {isGenerating ? 'Generating...' : 'Generate Learning Path'}
             </Button>
           </Box>
           
           {(!openaiApiKey.trim() || !tavilyApiKey.trim()) && !isGenerating && (
-            <Typography color="error" variant="body2" sx={{ mt: 2, textAlign: 'center' }}>
+            <Typography color="error" variant="body2" sx={{ 
+              mt: 2, 
+              textAlign: 'center',
+              fontSize: { xs: '0.75rem', sm: '0.875rem' }
+            }}>
               Please provide both OpenAI and Tavily API keys in the API Key Settings section to generate a learning path.
             </Typography>
           )}
           
           {(openaiApiKey.trim() && tavilyApiKey.trim() && (openaiKeyValid !== true || tavilyKeyValid !== true)) && !isGenerating && (
-            <Typography color="error" variant="body2" sx={{ mt: 2, textAlign: 'center' }}>
+            <Typography color="error" variant="body2" sx={{ 
+              mt: 2, 
+              textAlign: 'center',
+              fontSize: { xs: '0.75rem', sm: '0.875rem' } 
+            }}>
               Please validate your API keys before generating a learning path.
             </Typography>
           )}
           
           {isGenerating && (
             <Box sx={{ mt: 4, textAlign: 'center' }}>
-              <Stack direction="row" spacing={2} alignItems="center" justifyContent="center">
+              <Stack 
+                direction={isMobile ? "column" : "row"} 
+                spacing={isMobile ? 1 : 2} 
+                alignItems="center" 
+                justifyContent="center"
+              >
                 <AutorenewIcon sx={{ animation: 'spin 2s linear infinite' }} />
                 <Typography>
                   Researching your topic and creating your personalized learning path...
                 </Typography>
               </Stack>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ 
+                mt: 2,
+                fontSize: { xs: '0.75rem', sm: '0.875rem' }
+              }}>
                 This may take a few minutes depending on the complexity of the topic.
               </Typography>
             </Box>
@@ -579,7 +634,10 @@ function GeneratorPage() {
       </Paper>
       
       <Box sx={{ mt: 4, textAlign: 'center' }}>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" color="text.secondary" sx={{
+          fontSize: { xs: '0.75rem', sm: '0.875rem' },
+          px: { xs: 2, sm: 0 }
+        }}>
           Our AI will research your topic and create a comprehensive learning path
           with modules and submodules to help you master the subject efficiently.
         </Typography>
@@ -600,6 +658,7 @@ function GeneratorPage() {
         handleAddTag={handleAddDialogTag}
         handleDeleteTag={handleDeleteDialogTag}
         handleTagKeyDown={handleDialogTagKeyDown}
+        isMobile={isMobile}
       />
       
       {/* Notification System */}
@@ -607,7 +666,7 @@ function GeneratorPage() {
         notification={notification}
         onClose={handleNotificationClose}
       />
-    </Container>
+    </ResponsiveContainer>
   );
 }
 

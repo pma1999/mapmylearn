@@ -1,30 +1,35 @@
 import React from 'react';
 import {
-  Button,
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogContentText,
   DialogActions,
-  Box,
+  Button,
   TextField,
+  Box,
+  Typography,
+  Chip,
   FormControlLabel,
   Checkbox,
-  Chip,
   InputAdornment,
   IconButton,
-  Typography
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import AddIcon from '@mui/icons-material/Add';
-import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
+import StarIcon from '@mui/icons-material/Star';
 
 const StyledChip = styled(Chip)(({ theme }) => ({
   margin: theme.spacing(0.5),
+  [theme.breakpoints.down('sm')]: {
+    fontSize: '0.75rem',
+    height: '28px',
+  },
 }));
 
-function SaveDialog({
+const SaveDialog = ({
   open,
   onClose,
   onSave,
@@ -37,83 +42,134 @@ function SaveDialog({
   setNewTag,
   handleAddTag,
   handleDeleteTag,
-  handleTagKeyDown
-}) {
+  handleTagKeyDown,
+  isMobile
+}) => {
+  const theme = useTheme();
+  const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
+
   return (
-    <Dialog open={open} onClose={onClose}>
-      <DialogTitle>Save to History</DialogTitle>
-      <DialogContent>
-        <DialogContentText>
-          Do you want to save this learning path to your history?
-        </DialogContentText>
+    <Dialog 
+      open={open} 
+      onClose={onClose}
+      fullScreen={fullScreen}
+      maxWidth="sm"
+      fullWidth
+    >
+      <DialogTitle sx={{ 
+        pb: 1,
+        fontSize: { xs: '1.2rem', sm: '1.5rem' }
+      }}>
+        Save to History
+      </DialogTitle>
+      
+      <DialogContent dividers>
+        <Typography variant="body2" sx={{ 
+          mb: 3,
+          fontSize: { xs: '0.875rem', sm: '1rem' }  
+        }}>
+          Your learning path has been generated. Would you like to save it to your history?
+        </Typography>
         
-        <Box sx={{ mt: 3 }}>
+        <Box sx={{ mb: 3 }}>
           <FormControlLabel
             control={
-              <Checkbox 
-                icon={<StarBorderIcon />}
-                checkedIcon={<StarIcon />}
-                checked={favorite} 
+              <Checkbox
+                checked={favorite}
                 onChange={(e) => setFavorite(e.target.checked)}
+                icon={<StarBorderIcon />}
+                checkedIcon={<StarIcon color="warning" />}
+                size={isMobile ? "small" : "medium"}
               />
             }
-            label="Mark as favorite"
+            label={
+              <Typography variant="body2" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>
+                Add to favorites
+              </Typography>
+            }
           />
         </Box>
         
-        <Box sx={{ mt: 2 }}>
-          <Typography variant="body2" gutterBottom>
+        <Box sx={{ mb: 1 }}>
+          <Typography variant="body2" sx={{ 
+            mb: 1,
+            fontSize: { xs: '0.875rem', sm: '1rem' }
+          }}>
             Tags:
           </Typography>
           
           <Box sx={{ display: 'flex', flexWrap: 'wrap', mb: 1 }}>
-            {tags.map((tag) => (
+            {tags.map(tag => (
               <StyledChip
                 key={tag}
                 label={tag}
                 onDelete={() => handleDeleteTag(tag)}
-                size="small"
+                size={isMobile ? "small" : "medium"}
               />
             ))}
+            {tags.length === 0 && (
+              <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+                No tags added
+              </Typography>
+            )}
           </Box>
           
-          <Box sx={{ display: 'flex' }}>
-            <TextField
-              size="small"
-              value={newTag}
-              onChange={(e) => setNewTag(e.target.value)}
-              onKeyDown={handleTagKeyDown}
-              placeholder="Add tag..."
-              variant="outlined"
-              fullWidth
-              sx={{ mr: 1 }}
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton 
-                      onClick={handleAddTag} 
-                      disabled={!newTag.trim()}
-                      size="small"
-                    >
-                      <AddIcon />
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
-            />
-          </Box>
+          <TextField
+            label="Add Tag"
+            variant="outlined"
+            size={isMobile ? "small" : "medium"}
+            value={newTag}
+            onChange={(e) => setNewTag(e.target.value)}
+            onKeyDown={handleTagKeyDown}
+            fullWidth
+            margin="dense"
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton 
+                    onClick={handleAddTag}
+                    disabled={!newTag.trim()} 
+                    size={isMobile ? "small" : "medium"}
+                  >
+                    <AddIcon />
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
+            placeholder="Type and press Enter to add"
+          />
         </Box>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onCancel}>
-          Skip & Continue
+      
+      <DialogActions sx={{ 
+        py: { xs: 1.5, sm: 2 },
+        px: { xs: 2, sm: 3 },
+        flexDirection: { xs: 'column', sm: 'row' },
+        gap: { xs: 1, sm: 0 }
+      }}>
+        <Button 
+          onClick={onCancel}
+          sx={{ 
+            width: { xs: '100%', sm: 'auto' },
+            order: { xs: 2, sm: 1 }
+          }}
+        >
+          Don't Save
         </Button>
-        <Button onClick={onSave} variant="contained" color="primary">
+        <Button 
+          onClick={onSave} 
+          variant="contained" 
+          color="primary"
+          sx={{ 
+            width: { xs: '100%', sm: 'auto' },
+            order: { xs: 1, sm: 2 }
+          }}
+        >
           Save to History
         </Button>
       </DialogActions>
     </Dialog>
   );
-}
+};
 
 export default SaveDialog; 
