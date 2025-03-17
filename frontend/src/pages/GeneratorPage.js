@@ -98,6 +98,9 @@ function GeneratorPage() {
     if (openaiKey) setOpenaiApiKey(openaiKey);
     if (tavilyKey) setTavilyApiKey(tavilyKey);
     if (remember) setRememberApiKeys(remember);
+    
+    // Auto-expand API settings section to make it more obvious to users
+    setApiSettingsOpen(true);
   }, []);
 
   // Handle validation of API keys
@@ -112,6 +115,7 @@ function GeneratorPage() {
     setTavilyKeyValid(null);
     
     try {
+      showNotification('Validating API keys...', 'info');
       const result = await validateApiKeys(openaiApiKey, tavilyApiKey);
       
       // Update validation status
@@ -276,6 +280,14 @@ function GeneratorPage() {
     if (!openaiApiKey.trim() || !tavilyApiKey.trim()) {
       setError('Both OpenAI and Tavily API keys are required. Please enter them in the API Key Settings section.');
       setApiSettingsOpen(true); // Open the API settings accordion
+      return;
+    }
+    
+    // Validate API keys before proceeding
+    if (openaiKeyValid !== true || tavilyKeyValid !== true) {
+      setError('Please validate your API keys before generating a learning path.');
+      setApiSettingsOpen(true);
+      showNotification('API keys must be validated before proceeding.', 'warning');
       return;
     }
     
@@ -582,8 +594,9 @@ function GeneratorPage() {
                               onClick={handleValidateApiKeys}
                               disabled={isGenerating || validatingKeys || (!openaiApiKey && !tavilyApiKey)}
                               startIcon={validatingKeys ? <CircularProgress size={20} /> : null}
+                              color={openaiKeyValid === true && tavilyKeyValid === true ? "success" : "primary"}
                             >
-                              {validatingKeys ? 'Validating...' : 'Validate API Keys'}
+                              {validatingKeys ? 'Validating...' : openaiKeyValid === true && tavilyKeyValid === true ? 'Keys Validated ✓' : 'Validate API Keys'}
                             </Button>
                             <Button 
                               variant="outlined" 
@@ -693,7 +706,7 @@ function GeneratorPage() {
               variant="contained"
               color="primary"
               size="large"
-              disabled={isGenerating || !topic.trim() || !openaiApiKey.trim() || !tavilyApiKey.trim()}
+              disabled={isGenerating || !topic.trim() || !openaiApiKey.trim() || !tavilyApiKey.trim() || openaiKeyValid !== true || tavilyKeyValid !== true}
               startIcon={isGenerating ? <CircularProgress size={20} color="inherit" /> : <BoltIcon />}
               sx={{ py: 1.5, px: 4, borderRadius: 2, fontWeight: 'bold', fontSize: '1.1rem' }}
             >
@@ -703,6 +716,12 @@ function GeneratorPage() {
             {(!openaiApiKey.trim() || !tavilyApiKey.trim()) && !isGenerating && (
               <Typography color="error" variant="body2" sx={{ mt: 2, textAlign: 'center' }}>
                 Please provide both OpenAI and Tavily API keys in the API Key Settings section to generate a learning path.
+              </Typography>
+            )}
+            
+            {(openaiApiKey.trim() && tavilyApiKey.trim() && (openaiKeyValid !== true || tavilyKeyValid !== true)) && !isGenerating && (
+              <Typography color="error" variant="body2" sx={{ mt: 2, textAlign: 'center' }}>
+                Please validate your API keys before generating a learning path.
               </Typography>
             )}
           </Box>
