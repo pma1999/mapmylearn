@@ -91,7 +91,7 @@ def validate_tavily_key(api_key):
     try:
         # Minimal test to validate key functionality using proper Tavily API wrapper
         search_wrapper = TavilySearchAPIWrapper(tavily_api_key=api_key)
-        search_wrapper.results({"query": "test"})
+        search_wrapper.results(query="test")
         return True, None
     except Exception as e:
         return False, f"API key validation failed: {str(e)}"
