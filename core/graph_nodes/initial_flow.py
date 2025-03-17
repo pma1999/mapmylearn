@@ -197,36 +197,34 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
             "steps": state.get("steps", []) + ["No search results available"]
         }
     
-    # Get the OpenAI API key from state with logging
+    # Obtener la API key de OpenAI desde el estado
     openai_api_key = state.get("openai_api_key")
     if not openai_api_key:
         logging.warning("OpenAI API key not found in state, this may cause errors")
     else:
         logging.debug("Found OpenAI API key in state, using for learning path creation")
     
-    # Build the learning path
     try:
-        # Process search results into a format suitable for generating modules
+        # Procesar los resultados de búsqueda para generar módulos
         processed_results = []
         for result in state["search_results"]:
             query = result.get("query", "Unknown query")
             raw_results = result.get("results", [])
-            # Si raw_results no es una lista, se omite este resultado
+            # Comprobar que raw_results es una lista
             if not isinstance(raw_results, list):
                 logging.warning(f"Search results for query '{query}' is not a list; skipping this result.")
                 continue
-            # Si no hay resultados, se omite
             if not raw_results:
                 continue
             processed_results.append({
                 "query": query,
                 "relevant_information": "\n\n".join([
-                    f"Source: {item.get('source', 'Unknown')}\n{item.get('content', 'No content')}" 
+                    f"Source: {item.get('source', 'Unknown')}\n{item.get('content', 'No content')}"
                     for item in raw_results[:3]  # Limitar a los 3 mejores resultados por búsqueda
                 ])
             })
         
-        # Convertir los resultados procesados a un texto para incluir en el prompt
+        # Convertir los resultados procesados a texto para incluir en el prompt
         results_text = ""
         for i, result in enumerate(processed_results, 1):
             results_text += f"""
@@ -234,7 +232,7 @@ Search {i}: "{result['query']}"
 {result['relevant_information']}
 ---
 """
-        # Preparar el prompt para la creación de módulos
+        # Preparar el prompt con un placeholder para format_instructions
         prompt_text = f"""
 You are an expert curriculum designer. Create a comprehensive learning path for the topic: {state['user_topic']}.
 
@@ -250,15 +248,24 @@ Create a structured learning path with 3-7 modules. For each module:
 
 Format your response as a structured curriculum. Each module should build on previous knowledge.
 
-{enhanced_modules_parser.get_format_instructions()}
+{{format_instructions}}
 """
+        # Crear la plantilla de prompt
         prompt = ChatPromptTemplate.from_template(prompt_text)
         
-        result = await run_chain(prompt, lambda: get_llm(api_key=openai_api_key), enhanced_modules_parser, {})
+        # Escapar las llaves del contenido de format_instructions para que no se interpreten como variables
+        format_instructions_value = enhanced_modules_parser.get_format_instructions().replace("{", "{{").replace("}", "}}")
         
+        # Llamar a la cadena LLM proporcionando el valor para 'format_instructions'
+        result = await run_chain(
+            prompt,
+            lambda: get_llm(api_key=openai_api_key),
+            enhanced_modules_parser,
+            { "format_instructions": format_instructions_value }
+        )
         modules = result.modules
         
-        # Create the final learning path structure
+        # Crear la estructura final del learning path
         final_learning_path = {
             "topic": state["user_topic"],
             "modules": modules,
