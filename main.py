@@ -6,7 +6,7 @@ from core.graph_builder import build_graph
 from models.models import LearningPathState
 from config.log_config import setup_logging, log_debug_data, log_info_data, get_log_level
 
-# Configuration from environment variables
+# Configuration from environment variables (for development only, no fallback in production)
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 LOG_FILE = os.environ.get("LOG_FILE", "learning_path.log")
 DATA_LOGGING = os.environ.get("DATA_LOGGING", "true").lower() == "true"
@@ -34,17 +34,22 @@ async def generate_learning_path(
     logger.info(f"Generating learning path for topic: {topic} with {parallel_count} parallel modules, " +
                 f"{submodule_parallel_count} parallel submodules, and {search_parallel_count} parallel searches")
     
-    # Validate API keys before starting
-    if not openai_api_key and not os.environ.get("OPENAI_API_KEY"):
+    # Asegurarse de limpiar (trim) las claves para evitar espacios en blanco accidentales
+    openai_api_key = openai_api_key.strip() if openai_api_key else None
+    tavily_api_key = tavily_api_key.strip() if tavily_api_key else None
+
+    # Validar que se hayan proporcionado las claves (no se usa fallback a env en producción)
+    if not openai_api_key:
         error_msg = "OpenAI API key is required but not provided. Please provide an API key."
         logger.error(error_msg)
         raise ValueError(error_msg)
         
-    if not tavily_api_key and not os.environ.get("TAVILY_API_KEY"):
+    if not tavily_api_key:
         error_msg = "Tavily API key is required but not provided. Please provide an API key."
         logger.error(error_msg)
         raise ValueError(error_msg)
     
+    # Construir el grafo de generación
     learning_graph = build_graph()
     initial_state: LearningPathState = {
         "user_topic": topic,
