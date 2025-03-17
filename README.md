@@ -38,7 +38,6 @@ Learny follows a modern web application architecture:
 - **Search Integration**: Tavily API for web research
 - **Processing**: Graph-based workflow for parallelized content generation
 
-![Architecture Diagram](https://i.imgur.com/5nX1UZu.png)
 
 ## 🔍 Prerequisites
 
