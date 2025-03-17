@@ -16,16 +16,42 @@ import {
   Card,
   CardContent,
   Stack,
-  Chip
+  Chip,
+  Snackbar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  TextField,
+  FormControlLabel,
+  Checkbox,
+  InputAdornment,
+  IconButton
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import DownloadIcon from '@mui/icons-material/Download';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
 import HomeIcon from '@mui/icons-material/Home';
 import ErrorIcon from '@mui/icons-material/Error';
+import AddIcon from '@mui/icons-material/Add';
+import SaveIcon from '@mui/icons-material/Save';
+import StorageIcon from '@mui/icons-material/Storage';
+import StarIcon from '@mui/icons-material/Star';
+import StarBorderIcon from '@mui/icons-material/StarBorder';
 
 // Import API service
-import { getLearningPath, getProgressUpdates } from '../services/api';
+import { getLearningPath, getProgressUpdates, saveToHistory, updateHistoryEntry } from '../services/api';
+
+// Styled chip component for tags
+const StyledChip = ({ label, onDelete }) => (
+  <Chip
+    label={label}
+    onDelete={onDelete}
+    size="small"
+    sx={{ margin: 0.5 }}
+  />
+);
 
 function ResultPage() {
   const { taskId } = useParams();
@@ -35,6 +61,13 @@ function ResultPage() {
   const [error, setError] = useState('');
   const [progressMessages, setProgressMessages] = useState([]);
   const progressEventSourceRef = useRef(null);
+  
+  // Save to history dialog state
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [tags, setTags] = useState([]);
+  const [newTag, setNewTag] = useState('');
+  const [favorite, setFavorite] = useState(false);
+  const [notification, setNotification] = useState({ open: false, message: '', severity: 'success' });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -128,8 +161,11 @@ function ResultPage() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      
+      showNotification('Learning path downloaded successfully', 'success');
     } catch (err) {
       console.error('Error downloading JSON:', err);
+      showNotification('Failed to download learning path', 'error');
     }
   };
 
@@ -139,6 +175,76 @@ function ResultPage() {
 
   const handleNewLearningPathClick = () => {
     navigate('/generator');
+  };
+  
+  const handleSaveToHistory = () => {
+    setSaveDialogOpen(true);
+  };
+  
+  const handleSaveDialogClose = () => {
+    setSaveDialogOpen(false);
+  };
+  
+  const handleSaveConfirm = async () => {
+    if (!learningPath) return;
+    
+    try {
+      const result = await saveToHistory(learningPath, 'generated');
+      
+      if (result.success) {
+        showNotification('Learning path saved to history successfully', 'success');
+        
+        // If tags or favorite are set, update the entry
+        if (tags.length > 0 || favorite) {
+          try {
+            await updateHistoryEntry(result.entry_id, { tags, favorite });
+          } catch (error) {
+            console.error('Error updating history entry:', error);
+          }
+        }
+      } else {
+        showNotification('Failed to save learning path to history', 'error');
+      }
+      
+      setSaveDialogOpen(false);
+    } catch (error) {
+      console.error('Error saving to history:', error);
+      showNotification('Failed to save learning path to history', 'error');
+      setSaveDialogOpen(false);
+    }
+  };
+  
+  // Tag management functions
+  const handleAddTag = () => {
+    if (newTag.trim() && !tags.includes(newTag.trim())) {
+      setTags([...tags, newTag.trim()]);
+      setNewTag('');
+    }
+  };
+  
+  const handleDeleteTag = (tagToDelete) => {
+    setTags(tags.filter(tag => tag !== tagToDelete));
+  };
+  
+  const handleTagKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAddTag();
+    }
+  };
+  
+  // Notification helper
+  const showNotification = (message, severity = 'success') => {
+    setNotification({
+      open: true,
+      message,
+      severity
+    });
+  };
+  
+  const handleNotificationClose = (event, reason) => {
+    if (reason === 'clickaway') return;
+    setNotification({ ...notification, open: false });
   };
 
   // Loading state
@@ -234,6 +340,14 @@ function ResultPage() {
               Download JSON
             </Button>
             <Button
+              variant="outlined"
+              color="secondary"
+              startIcon={<SaveIcon />}
+              onClick={handleSaveToHistory}
+            >
+              Save to History
+            </Button>
+            <Button
               variant="contained"
               color="primary"
               startIcon={<BookmarkIcon />}
@@ -326,6 +440,94 @@ function ResultPage() {
           </Alert>
         )}
       </Paper>
+      
+      {/* Save to History Dialog */}
+      <Dialog open={saveDialogOpen} onClose={handleSaveDialogClose} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <StorageIcon sx={{ mr: 1 }} />
+            Save to Local History
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            This learning path will be saved to your browser's local storage. It will be available only on this device and browser.
+          </DialogContentText>
+          
+          <FormControlLabel
+            control={
+              <Checkbox
+                icon={<StarBorderIcon />}
+                checkedIcon={<StarIcon />}
+                checked={favorite}
+                onChange={(e) => setFavorite(e.target.checked)}
+              />
+            }
+            label="Mark as favorite"
+            sx={{ mb: 2 }}
+          />
+          
+          <Typography variant="subtitle2" gutterBottom>
+            Tags:
+          </Typography>
+          
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', mb: 1 }}>
+            {tags.map((tag) => (
+              <StyledChip
+                key={tag}
+                label={tag}
+                onDelete={() => handleDeleteTag(tag)}
+              />
+            ))}
+          </Box>
+          
+          <Box sx={{ display: 'flex' }}>
+            <TextField
+              size="small"
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              onKeyDown={handleTagKeyDown}
+              placeholder="Add tag..."
+              variant="outlined"
+              fullWidth
+              sx={{ mr: 1 }}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton 
+                      onClick={handleAddTag} 
+                      disabled={!newTag.trim()}
+                      size="small"
+                    >
+                      <AddIcon />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleSaveDialogClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleSaveConfirm} color="primary" variant="contained" startIcon={<SaveIcon />}>
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Notification Snackbar */}
+      <Snackbar
+        open={notification.open}
+        autoHideDuration={6000}
+        onClose={handleNotificationClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert onClose={handleNotificationClose} severity={notification.severity}>
+          {notification.message}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 }

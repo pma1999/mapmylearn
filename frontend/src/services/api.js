@@ -1,4 +1,5 @@
 import axios from 'axios';
+import * as localHistoryService from './localHistoryService';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -198,100 +199,47 @@ export const deleteLearningPath = async (taskId) => {
   }
 };
 
-// HISTORY API METHODS
+// HISTORY API METHODS - Using local storage instead of server
 
 // Get history preview list
 export const getHistoryPreview = async (sortBy = 'creation_date', filterSource = null, search = null) => {
-  try {
-    const params = { sort_by: sortBy };
-    if (filterSource) params.filter_source = filterSource;
-    if (search) params.search = search;
-    
-    const response = await api.get('/history', { params });
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching history preview:', error);
-    throw error;
-  }
+  const entries = localHistoryService.getHistoryPreview(sortBy, filterSource, search);
+  return { entries };
 };
 
 // Get complete learning path data for a specific entry
 export const getHistoryEntry = async (entryId) => {
-  try {
-    const response = await api.get(`/history/${entryId}`);
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching history entry:', error);
-    throw error;
-  }
+  return localHistoryService.getHistoryEntry(entryId);
 };
 
 // Save a new learning path to history
 export const saveToHistory = async (learningPath, source = 'generated') => {
-  try {
-    const response = await api.post('/history', learningPath, {
-      params: { source }
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Error saving to history:', error);
-    throw error;
-  }
+  return localHistoryService.saveToHistory(learningPath, source);
 };
 
 // Update history entry metadata (favorite status, tags)
 export const updateHistoryEntry = async (entryId, data) => {
-  try {
-    const response = await api.put(`/history/${entryId}`, data);
-    return response.data;
-  } catch (error) {
-    console.error('Error updating history entry:', error);
-    throw error;
-  }
+  return localHistoryService.updateHistoryEntry(entryId, data);
 };
 
 // Delete history entry
 export const deleteHistoryEntry = async (entryId) => {
-  try {
-    const response = await api.delete(`/history/${entryId}`);
-    return response.data;
-  } catch (error) {
-    console.error('Error deleting history entry:', error);
-    throw error;
-  }
+  return localHistoryService.deleteHistoryEntry(entryId);
 };
 
 // Import learning path from JSON
 export const importLearningPath = async (jsonData) => {
-  try {
-    const response = await api.post('/history/import', { json_data: jsonData });
-    return response.data;
-  } catch (error) {
-    console.error('Error importing learning path:', error);
-    throw error;
-  }
+  return localHistoryService.importLearningPath(jsonData);
 };
 
 // Export all history as JSON
 export const exportHistory = async () => {
-  try {
-    const response = await api.get('/history/export');
-    return response.data;
-  } catch (error) {
-    console.error('Error exporting history:', error);
-    throw error;
-  }
+  return localHistoryService.exportHistory();
 };
 
 // Clear all history
 export const clearHistory = async () => {
-  try {
-    const response = await api.delete('/history/clear');
-    return response.data;
-  } catch (error) {
-    console.error('Error clearing history:', error);
-    throw error;
-  }
+  return localHistoryService.clearHistory();
 };
 
 export default {

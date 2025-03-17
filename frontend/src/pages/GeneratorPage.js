@@ -41,6 +41,7 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import KeyIcon from '@mui/icons-material/Key';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
+import StorageIcon from '@mui/icons-material/Storage';
 
 // Import API service
 import { 
@@ -683,6 +684,11 @@ function GeneratorPage() {
                     }
                     label="Automatically save to history"
                   />
+                  
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, ml: 4 }}>
+                    <StorageIcon fontSize="inherit" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
+                    History is stored locally in your browser and is not shared across devices.
+                  </Typography>
                   
                   {autoSaveToHistory && (
                     <Box sx={{ mt: 2 }}>

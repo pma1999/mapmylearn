@@ -43,6 +43,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import LabelIcon from '@mui/icons-material/Label';
 import ClearAllIcon from '@mui/icons-material/ClearAll';
 import SubdirectoryArrowRightIcon from '@mui/icons-material/SubdirectoryArrowRight';
+import StorageIcon from '@mui/icons-material/Storage';
 
 import * as api from '../services/api';
 
@@ -793,11 +794,21 @@ function HistoryPage() {
       ) : (
         <Paper elevation={3} sx={{ p: 4, borderRadius: 2, mb: 4 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <HistoryIcon sx={{ mr: 1, fontSize: 32, color: 'primary.main' }} />
-              <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
-                Learning Path History
-              </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', flexDirection: 'column', alignItems: 'flex-start' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <HistoryIcon sx={{ mr: 1, fontSize: 32, color: 'primary.main' }} />
+                <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
+                  Learning Path History
+                </Typography>
+              </Box>
+              <Chip
+                icon={<StorageIcon />}
+                label="Stored locally in your browser"
+                size="small"
+                color="secondary"
+                variant="outlined"
+                sx={{ mt: 1, mb: 1 }}
+              />
             </Box>
             <Stack direction="row" spacing={2}>
               <Button
