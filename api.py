@@ -30,16 +30,22 @@ allowed_origins = [
     "http://localhost:3000",  # Local development
     "https://learny-peach.vercel.app",  # Vercel production domain
     "https://learny-*.vercel.app",      # Any Vercel deployment with learny- prefix
+    "https://web-production-62f88.up.railway.app/"  # Railway production domain
 ]
 
 # Add any custom domain from environment variable (used in production)
 if os.getenv("FRONTEND_URL"):
     allowed_origins.append(os.getenv("FRONTEND_URL"))
 
+# For development with Railway
+railway_url = os.getenv("RAILWAY_STATIC_URL")
+if railway_url:
+    allowed_origins.append(railway_url)
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=["*"],  # Temporarily allow all origins for debugging
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -51,6 +57,8 @@ class LearningPathRequest(BaseModel):
     parallel_count: Optional[int] = 2
     search_parallel_count: Optional[int] = 3
     submodule_parallel_count: Optional[int] = 2
+    desired_module_count: Optional[int] = None
+    desired_submodule_count: Optional[int] = None
     openai_api_key: Optional[str] = Field(None, description="OpenAI API key for LLM operations")
     tavily_api_key: Optional[str] = Field(None, description="Tavily API key for search operations")
 
@@ -165,7 +173,9 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
         submodule_parallel_count=request.submodule_parallel_count,
         progress_callback=progress_callback,
         openai_api_key=request.openai_api_key,
-        tavily_api_key=request.tavily_api_key
+        tavily_api_key=request.tavily_api_key,
+        desired_module_count=request.desired_module_count,
+        desired_submodule_count=request.desired_submodule_count
     )
     
     logger.info(f"Started learning path generation for topic '{request.topic}' with task_id: {task_id}")
@@ -179,7 +189,9 @@ async def generate_learning_path_task(
     submodule_parallel_count: int = 2,
     progress_callback = None,
     openai_api_key: Optional[str] = None,
-    tavily_api_key: Optional[str] = None
+    tavily_api_key: Optional[str] = None,
+    desired_module_count: Optional[int] = None,
+    desired_submodule_count: Optional[int] = None
 ):
     """Background task to generate learning path."""
     try:
@@ -195,7 +207,9 @@ async def generate_learning_path_task(
             submodule_parallel_count=submodule_parallel_count,
             progress_callback=progress_callback,
             openai_api_key=openai_api_key,
-            tavily_api_key=tavily_api_key
+            tavily_api_key=tavily_api_key,
+            desired_module_count=desired_module_count,
+            desired_submodule_count=desired_submodule_count
         )
         
         # Safely update active_generations with result
