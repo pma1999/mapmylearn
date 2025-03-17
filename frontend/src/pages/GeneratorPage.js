@@ -203,10 +203,21 @@ function GeneratorPage() {
 
   // Show notification
   const showNotification = (message, severity = 'success') => {
+    // Ajustar la duración dependiendo del tipo de mensaje
+    const duration = severity === 'error' ? 10000 : 6000;
+    
+    // Para errores de API key, formatear mejor el mensaje
+    let formattedMessage = message;
+    if (severity === 'error' && (message.includes('API key') || message.includes('Tavily'))) {
+      // Si el mensaje es muy largo, dividirlo en párrafos para mejor legibilidad
+      formattedMessage = message.replace('. ', '.\n\n');
+    }
+    
     setNotification({
       open: true,
-      message,
+      message: formattedMessage,
       severity,
+      duration
     });
   };
 
@@ -779,14 +790,21 @@ function GeneratorPage() {
       {/* Notification Snackbar */}
       <Snackbar
         open={notification.open}
-        autoHideDuration={6000}
+        autoHideDuration={notification.duration || 6000}
         onClose={() => setNotification({ ...notification, open: false })}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
         <Alert 
           onClose={() => setNotification({ ...notification, open: false })}
           severity={notification.severity}
-          sx={{ width: '100%' }}
+          variant={notification.severity === 'error' ? "filled" : "standard"}
+          sx={{ 
+            width: '100%',
+            whiteSpace: 'pre-line',
+            '& .MuiAlert-message': {
+              maxWidth: '500px'
+            }
+          }}
         >
           {notification.message}
         </Alert>

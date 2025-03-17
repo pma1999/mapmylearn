@@ -94,4 +94,20 @@ def validate_tavily_key(api_key):
         search_wrapper.results(query="test")
         return True, None
     except Exception as e:
-        return False, f"API key validation failed: {str(e)}"
+        error_str = str(e)
+        
+        # Check for specific error cases and provide more helpful messages
+        if "403" in error_str and "Forbidden" in error_str:
+            return False, "API key error: Access forbidden. This may be due to an invalid API key or your account has run out of available credits. Please check your Tavily dashboard or try a different API key."
+        
+        if "401" in error_str and "Unauthorized" in error_str:
+            return False, "API key error: Unauthorized access. The API key appears to be invalid or has been revoked."
+        
+        if "429" in error_str and "Too Many Requests" in error_str:
+            return False, "API key error: Rate limit exceeded. Your account has made too many requests. Please try again later."
+        
+        if "422" in error_str and "Unprocessable Entity" in error_str:
+            return False, "API formatting error: The request was properly formatted but contains invalid parameters."
+            
+        # Default error message if none of the specific cases match
+        return False, f"API key validation failed: {error_str}"
