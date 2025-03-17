@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import remarkGfm from 'remark-gfm';
 import {
   Typography,
   Box,
@@ -45,6 +49,7 @@ import ClearAllIcon from '@mui/icons-material/ClearAll';
 import SubdirectoryArrowRightIcon from '@mui/icons-material/SubdirectoryArrowRight';
 import StorageIcon from '@mui/icons-material/Storage';
 
+import MarkdownRenderer from '../components/MarkdownRenderer';
 import * as api from '../services/api';
 
 // Helper functions
@@ -494,9 +499,9 @@ const LearningPathViewer = ({ learningPath, onBack, onExport }) => {
                     </Typography>
                     
                     {submodule.content && (
-                      <Typography variant="body2" paragraph sx={{ ml: 4 }}>
-                        {submodule.content}
-                      </Typography>
+                      <Box sx={{ ml: 4 }}>
+                        <MarkdownRenderer>{submodule.content}</MarkdownRenderer>
+                      </Box>
                     )}
                   </Box>
                 ))}
@@ -507,9 +512,7 @@ const LearningPathViewer = ({ learningPath, onBack, onExport }) => {
                   <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
                     Content:
                   </Typography>
-                  <Typography variant="body2" paragraph>
-                    {module.content}
-                  </Typography>
+                  <MarkdownRenderer>{module.content}</MarkdownRenderer>
                 </Box>
               )
             )}

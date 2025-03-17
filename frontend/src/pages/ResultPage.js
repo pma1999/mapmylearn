@@ -40,6 +40,9 @@ import StorageIcon from '@mui/icons-material/Storage';
 import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 
+// Import shared MarkdownRenderer component
+import MarkdownRenderer from '../components/MarkdownRenderer';
+
 // Import API service
 import { getLearningPath, getProgressUpdates, saveToHistory, updateHistoryEntry } from '../services/api';
 
@@ -411,9 +414,9 @@ function ResultPage() {
                               {submodule.content && (
                                 <Box sx={{ mt: 2 }}>
                                   <Divider sx={{ mb: 2 }} />
-                                  <Typography variant="body1" sx={{ whiteSpace: 'pre-line' }}>
+                                  <MarkdownRenderer>
                                     {submodule.content}
-                                  </Typography>
+                                  </MarkdownRenderer>
                                 </Box>
                               )}
                             </CardContent>
@@ -423,9 +426,9 @@ function ResultPage() {
                     ) : (
                       module.content && (
                         <Box sx={{ mt: 3 }}>
-                          <Typography variant="body1" sx={{ whiteSpace: 'pre-line' }}>
+                          <MarkdownRenderer>
                             {module.content}
-                          </Typography>
+                          </MarkdownRenderer>
                         </Box>
                       )
                     )}
