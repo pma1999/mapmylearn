@@ -210,21 +210,23 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
         processed_results = []
         for result in state["search_results"]:
             query = result.get("query", "Unknown query")
-            search_results = result.get("results", [])
-            
-            # Skip empty results
-            if not search_results:
+            raw_results = result.get("results", [])
+            # Si raw_results no es una lista, se omite este resultado
+            if not isinstance(raw_results, list):
+                logging.warning(f"Search results for query '{query}' is not a list; skipping this result.")
                 continue
-                
+            # Si no hay resultados, se omite
+            if not raw_results:
+                continue
             processed_results.append({
                 "query": query,
                 "relevant_information": "\n\n".join([
                     f"Source: {item.get('source', 'Unknown')}\n{item.get('content', 'No content')}" 
-                    for item in search_results[:3]  # Limit to top 3 results per query
+                    for item in raw_results[:3]  # Limitar a los 3 mejores resultados por búsqueda
                 ])
             })
         
-        # Convert search results to a text representation for the prompt
+        # Convertir los resultados procesados a un texto para incluir en el prompt
         results_text = ""
         for i, result in enumerate(processed_results, 1):
             results_text += f"""
@@ -232,8 +234,7 @@ Search {i}: "{result['query']}"
 {result['relevant_information']}
 ---
 """
-
-        # Prepare the prompt for creating modules
+        # Preparar el prompt para la creación de módulos
         prompt_text = f"""
 You are an expert curriculum designer. Create a comprehensive learning path for the topic: {state['user_topic']}.
 

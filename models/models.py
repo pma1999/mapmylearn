@@ -114,5 +114,5 @@ class LearningPathState(TypedDict):
 
     
 # Enable forward references for EnhancedModule.submodules
-EnhancedModule.update_forward_refs()
-SubmoduleList.update_forward_refs()
+EnhancedModule.model_rebuild()
+SubmoduleList.model_rebuild()
