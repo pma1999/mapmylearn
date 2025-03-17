@@ -3,6 +3,7 @@ import logging
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_community.tools.tavily_search import TavilySearchResults
+from langchain_community.utilities.tavily_search import TavilySearchAPIWrapper
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -41,7 +42,8 @@ def get_search_tool(api_key=None):
     if not tavily_api_key:
         logger.warning("TAVILY_API_KEY not set")
     try:
-        return TavilySearchResults(max_results=5, tavily_api_key=tavily_api_key)
+        search_wrapper = TavilySearchAPIWrapper(tavily_api_key=tavily_api_key)
+        return TavilySearchResults(api_wrapper=search_wrapper)
     except Exception as e:
         logger.error(f"Error initializing TavilySearchResults: {str(e)}")
         raise
@@ -87,9 +89,9 @@ def validate_tavily_key(api_key):
         return False, "Invalid Tavily API key format"
         
     try:
-        # Minimal test to validate key functionality
-        search_tool = TavilySearchResults(max_results=1, tavily_api_key=api_key)
-        search_tool.invoke({"query": "test"})
+        # Minimal test to validate key functionality using proper Tavily API wrapper
+        search_wrapper = TavilySearchAPIWrapper(tavily_api_key=api_key)
+        search_wrapper.results({"query": "test"})
         return True, None
     except Exception as e:
         return False, f"API key validation failed: {str(e)}"
