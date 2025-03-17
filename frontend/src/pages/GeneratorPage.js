@@ -43,6 +43,13 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import StorageIcon from '@mui/icons-material/Storage';
 
+// Import components
+import ApiKeySettings from '../components/organisms/ApiKeySettings';
+import AdvancedSettings from '../components/organisms/AdvancedSettings';
+import HistorySettings from '../components/organisms/HistorySettings';
+import SaveDialog from '../components/molecules/SaveDialog';
+import NotificationSystem from '../components/molecules/NotificationSystem';
+
 // Import API service
 import { 
   generateLearningPath, 
@@ -242,13 +249,12 @@ function GeneratorPage() {
 
   // Show notification
   const showNotification = (message, severity = 'success') => {
-    // Ajustar la duración dependiendo del tipo de mensaje
+    // Adjust duration based on message type
     const duration = severity === 'error' ? 10000 : 6000;
     
-    // Para errores de API key, formatear mejor el mensaje
+    // Format error messages for better readability
     let formattedMessage = message;
     if (severity === 'error' && (message.includes('API key') || message.includes('Tavily'))) {
-      // Si el mensaje es muy largo, dividirlo en párrafos para mejor legibilidad
       formattedMessage = message.replace('. ', '.\n\n');
     }
     
@@ -425,14 +431,9 @@ function GeneratorPage() {
     }
   };
 
-  // Get validation status icon for API key fields
-  const getValidationIcon = (isValid) => {
-    if (isValid === true) {
-      return <CheckCircleIcon color="success" />;
-    } else if (isValid === false) {
-      return <ErrorIcon color="error" />;
-    }
-    return null;
+  // Handle notification close
+  const handleNotificationClose = () => {
+    setNotification({ ...notification, open: false });
   };
 
   return (
@@ -474,401 +475,68 @@ function GeneratorPage() {
           
           <Divider sx={{ my: 3 }} />
           
-          <Accordion
-            expanded={advancedSettingsOpen}
-            onChange={() => setAdvancedSettingsOpen(!advancedSettingsOpen)}
-            sx={{ mb: 3 }}
-          >
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
-                Advanced Settings
-              </Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Grid container spacing={4}>
-                <Grid item xs={12}>
-                  <Typography gutterBottom>
-                    Parallel Module Processing: {parallelCount}
-                  </Typography>
-                  <Slider
-                    value={parallelCount}
-                    min={1}
-                    max={4}
-                    step={1}
-                    marks
-                    onChange={(_, value) => setParallelCount(value)}
-                    valueLabelDisplay="auto"
-                    disabled={isGenerating}
-                  />
-                  <Typography variant="body2" color="text.secondary">
-                    Higher values may generate learning paths faster but could use more resources.
-                  </Typography>
-                </Grid>
-                
-                <Grid item xs={12}>
-                  <Typography gutterBottom>
-                    Search Parallel Count: {searchParallelCount}
-                  </Typography>
-                  <Slider
-                    value={searchParallelCount}
-                    min={1}
-                    max={5}
-                    step={1}
-                    marks
-                    onChange={(_, value) => setSearchParallelCount(value)}
-                    valueLabelDisplay="auto"
-                    disabled={isGenerating}
-                  />
-                  <Typography variant="body2" color="text.secondary">
-                    Controls how many searches run in parallel during research phase.
-                  </Typography>
-                </Grid>
-                
-                <Grid item xs={12}>
-                  <Typography gutterBottom>
-                    Submodule Parallel Count: {submoduleParallelCount}
-                  </Typography>
-                  <Slider
-                    value={submoduleParallelCount}
-                    min={1}
-                    max={4}
-                    step={1}
-                    marks
-                    onChange={(_, value) => setSubmoduleParallelCount(value)}
-                    valueLabelDisplay="auto"
-                    disabled={isGenerating}
-                  />
-                  <Typography variant="body2" color="text.secondary">
-                    Controls how many submodules are processed in parallel.
-                  </Typography>
-                </Grid>
-                
-                <Grid item xs={12}>
-                  <Divider sx={{ my: 2 }} />
-                  <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 2 }}>
-                    Content Structure Settings
-                  </Typography>
-                  <Alert severity="info" sx={{ mb: 3 }}>
-                    Control exactly how many modules and submodules your learning path should have. 
-                    By default, the AI will determine the optimal number based on the topic.
-                    Disable "Automatic" mode to specify exact counts.
-                  </Alert>
-                </Grid>
-                
-                <Grid item xs={12}>
-                  <Box sx={{ mb: 2 }}>
-                    <FormControlLabel
-                      control={
-                        <Checkbox 
-                          checked={autoModuleCount} 
-                          onChange={(e) => setAutoModuleCount(e.target.checked)}
-                          disabled={isGenerating}
-                        />
-                      }
-                      label="Automatic module count (let AI decide)"
-                    />
-                  </Box>
-                  
-                  <Typography gutterBottom>
-                    Desired Number of Modules: {desiredModuleCount}
-                  </Typography>
-                  <Slider
-                    value={desiredModuleCount}
-                    min={1}
-                    max={10}
-                    step={1}
-                    marks
-                    onChange={(_, value) => setDesiredModuleCount(value)}
-                    valueLabelDisplay="auto"
-                    disabled={isGenerating || autoModuleCount}
-                    sx={{
-                      opacity: autoModuleCount ? 0.5 : 1,
-                      '& .MuiSlider-markLabel': {
-                        fontSize: '0.75rem'
-                      }
-                    }}
-                  />
-                  <Typography variant="body2" color="text.secondary" sx={{ opacity: autoModuleCount ? 0.5 : 1 }}>
-                    Specify exactly how many modules should be in your learning path.
-                  </Typography>
-                </Grid>
-                
-                <Grid item xs={12}>
-                  <Box sx={{ mt: 3, mb: 2 }}>
-                    <FormControlLabel
-                      control={
-                        <Checkbox 
-                          checked={autoSubmoduleCount} 
-                          onChange={(e) => setAutoSubmoduleCount(e.target.checked)}
-                          disabled={isGenerating}
-                        />
-                      }
-                      label="Automatic submodule count (let AI decide)"
-                    />
-                  </Box>
-                  
-                  <Typography gutterBottom>
-                    Desired Number of Submodules per Module: {desiredSubmoduleCount}
-                  </Typography>
-                  <Slider
-                    value={desiredSubmoduleCount}
-                    min={1}
-                    max={5}
-                    step={1}
-                    marks
-                    onChange={(_, value) => setDesiredSubmoduleCount(value)}
-                    valueLabelDisplay="auto"
-                    disabled={isGenerating || autoSubmoduleCount}
-                    sx={{
-                      opacity: autoSubmoduleCount ? 0.5 : 1,
-                      '& .MuiSlider-markLabel': {
-                        fontSize: '0.75rem'
-                      }
-                    }}
-                  />
-                  <Typography variant="body2" color="text.secondary" sx={{ opacity: autoSubmoduleCount ? 0.5 : 1 }}>
-                    Specify exactly how many submodules each module should have.
-                  </Typography>
-                </Grid>
-                
-                <Grid item xs={12}>
-                  <Divider sx={{ my: 2 }} />
-                </Grid>
-                
-                {/* API Key Settings */}
-                <Grid item xs={12}>
-                  <Accordion
-                    expanded={apiSettingsOpen}
-                    onChange={() => setApiSettingsOpen(!apiSettingsOpen)}
-                  >
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <KeyIcon color="primary" />
-                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
-                          API Key Settings
-                        </Typography>
-                        <Typography variant="caption" color="error">
-                          (Required)
-                        </Typography>
-                      </Stack>
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      <Typography variant="body2" paragraph>
-                        Please provide your API keys to use for generating learning paths. Both OpenAI and Tavily API keys are required.
-                      </Typography>
-                      
-                      <Grid container spacing={2}>
-                        <Grid item xs={12}>
-                          <TextField
-                            label="OpenAI API Key"
-                            variant="outlined"
-                            fullWidth
-                            value={openaiApiKey}
-                            onChange={(e) => {
-                              setOpenaiApiKey(e.target.value);
-                              setOpenaiKeyValid(null);
-                            }}
-                            placeholder="sk-..."
-                            disabled={isGenerating}
-                            type={showOpenaiKey ? 'text' : 'password'}
-                            required
-                            InputProps={{
-                              endAdornment: (
-                                <InputAdornment position="end">
-                                  <IconButton
-                                    onClick={() => setShowOpenaiKey(!showOpenaiKey)}
-                                    edge="end"
-                                  >
-                                    {showOpenaiKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                                  </IconButton>
-                                  {openaiKeyValid !== null && (
-                                    <Box ml={1}>
-                                      {openaiKeyValid ? 
-                                        <CheckCircleIcon color="success" /> : 
-                                        <ErrorIcon color="error" />
-                                      }
-                                    </Box>
-                                  )}
-                                </InputAdornment>
-                              ),
-                            }}
-                            sx={{ mb: 2 }}
-                          />
-                        </Grid>
-                        
-                        <Grid item xs={12}>
-                          <TextField
-                            label="Tavily API Key"
-                            variant="outlined"
-                            fullWidth
-                            value={tavilyApiKey}
-                            onChange={(e) => {
-                              setTavilyApiKey(e.target.value);
-                              setTavilyKeyValid(null);
-                            }}
-                            placeholder="tvly-..."
-                            disabled={isGenerating}
-                            type={showTavilyKey ? 'text' : 'password'}
-                            required
-                            InputProps={{
-                              endAdornment: (
-                                <InputAdornment position="end">
-                                  <IconButton
-                                    onClick={() => setShowTavilyKey(!showTavilyKey)}
-                                    edge="end"
-                                  >
-                                    {showTavilyKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                                  </IconButton>
-                                  {tavilyKeyValid !== null && (
-                                    <Box ml={1}>
-                                      {tavilyKeyValid ? 
-                                        <CheckCircleIcon color="success" /> : 
-                                        <ErrorIcon color="error" />
-                                      }
-                                    </Box>
-                                  )}
-                                </InputAdornment>
-                              ),
-                            }}
-                            sx={{ mb: 2 }}
-                          />
-                        </Grid>
-                        
-                        <Grid item xs={12}>
-                          <FormControlLabel
-                            control={
-                              <Checkbox 
-                                checked={rememberApiKeys} 
-                                onChange={(e) => setRememberApiKeys(e.target.checked)}
-                                disabled={isGenerating}
-                              />
-                            }
-                            label="Remember API keys for this session"
-                          />
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            Keys are stored in browser session storage and will be cleared when you close your browser.
-                          </Typography>
-                        </Grid>
-                        
-                        <Grid item xs={12}>
-                          <Stack direction="row" spacing={2} sx={{ mt: 1 }}>
-                            <Button 
-                              variant="outlined" 
-                              onClick={handleValidateApiKeys}
-                              disabled={isGenerating || validatingKeys || (!openaiApiKey && !tavilyApiKey)}
-                              startIcon={validatingKeys ? <CircularProgress size={20} /> : null}
-                              color={openaiKeyValid === true && tavilyKeyValid === true ? "success" : "primary"}
-                            >
-                              {validatingKeys ? 'Validating...' : openaiKeyValid === true && tavilyKeyValid === true ? 'Keys Validated ✓' : 'Validate API Keys'}
-                            </Button>
-                            <Button 
-                              variant="outlined" 
-                              color="error" 
-                              onClick={handleClearApiKeys}
-                              disabled={isGenerating || (!openaiApiKey && !tavilyApiKey)}
-                            >
-                              Clear Keys
-                            </Button>
-                          </Stack>
-                        </Grid>
-                      </Grid>
-                    </AccordionDetails>
-                  </Accordion>
-                </Grid>
-                
-                <Grid item xs={12}>
-                  <Divider sx={{ my: 2 }} />
-                  <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 2 }}>
-                    History Settings
-                  </Typography>
-                  
-                  <FormControlLabel
-                    control={
-                      <Checkbox 
-                        checked={autoSaveToHistory} 
-                        onChange={(e) => setAutoSaveToHistory(e.target.checked)}
-                        disabled={isGenerating}
-                      />
-                    }
-                    label="Automatically save to history"
-                  />
-                  
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, ml: 4 }}>
-                    <StorageIcon fontSize="inherit" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
-                    History is stored locally in your browser and is not shared across devices.
-                  </Typography>
-                  
-                  {autoSaveToHistory && (
-                    <Box sx={{ mt: 2 }}>
-                      <Grid container spacing={2}>
-                        <Grid item xs={12}>
-                          <FormControlLabel
-                            control={
-                              <Checkbox 
-                                icon={<StarBorderIcon />}
-                                checkedIcon={<StarIcon />}
-                                checked={initialFavorite} 
-                                onChange={(e) => setInitialFavorite(e.target.checked)}
-                                disabled={isGenerating}
-                              />
-                            }
-                            label="Mark as favorite"
-                          />
-                        </Grid>
-                        
-                        <Grid item xs={12}>
-                          <Typography variant="body2" gutterBottom>
-                            Tags:
-                          </Typography>
-                          
-                          <Box sx={{ display: 'flex', flexWrap: 'wrap', mb: 1 }}>
-                            {initialTags.map((tag) => (
-                              <StyledChip
-                                key={tag}
-                                label={tag}
-                                onDelete={() => handleDeleteTag(tag)}
-                                size="small"
-                                disabled={isGenerating}
-                              />
-                            ))}
-                          </Box>
-                          
-                          <Box sx={{ display: 'flex' }}>
-                            <TextField
-                              size="small"
-                              value={newTag}
-                              onChange={(e) => setNewTag(e.target.value)}
-                              onKeyDown={handleTagKeyDown}
-                              placeholder="Add tag..."
-                              variant="outlined"
-                              fullWidth
-                              sx={{ mr: 1 }}
-                              disabled={isGenerating}
-                              InputProps={{
-                                endAdornment: (
-                                  <InputAdornment position="end">
-                                    <IconButton 
-                                      onClick={handleAddTag} 
-                                      disabled={!newTag.trim() || isGenerating}
-                                      size="small"
-                                    >
-                                      <AddIcon />
-                                    </IconButton>
-                                  </InputAdornment>
-                                ),
-                              }}
-                            />
-                          </Box>
-                        </Grid>
-                      </Grid>
-                    </Box>
-                  )}
-                </Grid>
-              </Grid>
-            </AccordionDetails>
-          </Accordion>
+          {/* Advanced Settings */}
+          <AdvancedSettings 
+            advancedSettingsOpen={advancedSettingsOpen}
+            setAdvancedSettingsOpen={setAdvancedSettingsOpen}
+            parallelCount={parallelCount}
+            setParallelCount={setParallelCount}
+            searchParallelCount={searchParallelCount}
+            setSearchParallelCount={setSearchParallelCount}
+            submoduleParallelCount={submoduleParallelCount}
+            setSubmoduleParallelCount={setSubmoduleParallelCount}
+            autoModuleCount={autoModuleCount}
+            setAutoModuleCount={setAutoModuleCount}
+            desiredModuleCount={desiredModuleCount}
+            setDesiredModuleCount={setDesiredModuleCount}
+            autoSubmoduleCount={autoSubmoduleCount}
+            setAutoSubmoduleCount={setAutoSubmoduleCount}
+            desiredSubmoduleCount={desiredSubmoduleCount}
+            setDesiredSubmoduleCount={setDesiredSubmoduleCount}
+            isGenerating={isGenerating}
+          />
           
-          <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+          {/* API Key Settings */}
+          <ApiKeySettings 
+            apiSettingsOpen={apiSettingsOpen}
+            setApiSettingsOpen={setApiSettingsOpen}
+            openaiApiKey={openaiApiKey}
+            setOpenaiApiKey={setOpenaiApiKey}
+            tavilyApiKey={tavilyApiKey}
+            setTavilyApiKey={setTavilyApiKey}
+            showOpenaiKey={showOpenaiKey}
+            setShowOpenaiKey={setShowOpenaiKey}
+            showTavilyKey={showTavilyKey}
+            setShowTavilyKey={setShowTavilyKey}
+            rememberApiKeys={rememberApiKeys}
+            setRememberApiKeys={setRememberApiKeys}
+            openaiKeyValid={openaiKeyValid}
+            setOpenaiKeyValid={setOpenaiKeyValid}
+            tavilyKeyValid={tavilyKeyValid}
+            setTavilyKeyValid={setTavilyKeyValid}
+            validatingKeys={validatingKeys}
+            isGenerating={isGenerating}
+            handleValidateApiKeys={handleValidateApiKeys}
+            handleClearApiKeys={handleClearApiKeys}
+          />
+          
+          {/* History Settings */}
+          <HistorySettings 
+            autoSaveToHistory={autoSaveToHistory}
+            setAutoSaveToHistory={setAutoSaveToHistory}
+            initialFavorite={initialFavorite}
+            setInitialFavorite={setInitialFavorite}
+            initialTags={initialTags}
+            setInitialTags={setInitialTags}
+            newTag={newTag}
+            setNewTag={setNewTag}
+            handleAddTag={handleAddTag}
+            handleDeleteTag={handleDeleteTag}
+            handleTagKeyDown={handleTagKeyDown}
+            isGenerating={isGenerating}
+          />
+          
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
             <Button
               type="submit"
               variant="contained"
@@ -880,19 +548,19 @@ function GeneratorPage() {
             >
               {isGenerating ? 'Generating...' : 'Generate Learning Path'}
             </Button>
-            
-            {(!openaiApiKey.trim() || !tavilyApiKey.trim()) && !isGenerating && (
-              <Typography color="error" variant="body2" sx={{ mt: 2, textAlign: 'center' }}>
-                Please provide both OpenAI and Tavily API keys in the API Key Settings section to generate a learning path.
-              </Typography>
-            )}
-            
-            {(openaiApiKey.trim() && tavilyApiKey.trim() && (openaiKeyValid !== true || tavilyKeyValid !== true)) && !isGenerating && (
-              <Typography color="error" variant="body2" sx={{ mt: 2, textAlign: 'center' }}>
-                Please validate your API keys before generating a learning path.
-              </Typography>
-            )}
           </Box>
+          
+          {(!openaiApiKey.trim() || !tavilyApiKey.trim()) && !isGenerating && (
+            <Typography color="error" variant="body2" sx={{ mt: 2, textAlign: 'center' }}>
+              Please provide both OpenAI and Tavily API keys in the API Key Settings section to generate a learning path.
+            </Typography>
+          )}
+          
+          {(openaiApiKey.trim() && tavilyApiKey.trim() && (openaiKeyValid !== true || tavilyKeyValid !== true)) && !isGenerating && (
+            <Typography color="error" variant="body2" sx={{ mt: 2, textAlign: 'center' }}>
+              Please validate your API keys before generating a learning path.
+            </Typography>
+          )}
           
           {isGenerating && (
             <Box sx={{ mt: 4, textAlign: 'center' }}>
@@ -918,102 +586,27 @@ function GeneratorPage() {
       </Box>
       
       {/* Save Dialog */}
-      <Dialog open={saveDialogOpen} onClose={handleSaveCancel}>
-        <DialogTitle>Save to History</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Do you want to save this learning path to your history?
-          </DialogContentText>
-          
-          <Box sx={{ mt: 3 }}>
-            <FormControlLabel
-              control={
-                <Checkbox 
-                  icon={<StarBorderIcon />}
-                  checkedIcon={<StarIcon />}
-                  checked={saveDialogFavorite} 
-                  onChange={(e) => setSaveDialogFavorite(e.target.checked)}
-                />
-              }
-              label="Mark as favorite"
-            />
-          </Box>
-          
-          <Box sx={{ mt: 2 }}>
-            <Typography variant="body2" gutterBottom>
-              Tags:
-            </Typography>
-            
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', mb: 1 }}>
-              {saveDialogTags.map((tag) => (
-                <StyledChip
-                  key={tag}
-                  label={tag}
-                  onDelete={() => handleDeleteDialogTag(tag)}
-                  size="small"
-                />
-              ))}
-            </Box>
-            
-            <Box sx={{ display: 'flex' }}>
-              <TextField
-                size="small"
-                value={saveDialogNewTag}
-                onChange={(e) => setSaveDialogNewTag(e.target.value)}
-                onKeyDown={handleDialogTagKeyDown}
-                placeholder="Add tag..."
-                variant="outlined"
-                fullWidth
-                sx={{ mr: 1 }}
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton 
-                        onClick={handleAddDialogTag} 
-                        disabled={!saveDialogNewTag.trim()}
-                        size="small"
-                      >
-                        <AddIcon />
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                }}
-              />
-            </Box>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleSaveCancel}>
-            Skip & Continue
-          </Button>
-          <Button onClick={handleSaveConfirm} variant="contained" color="primary">
-            Save to History
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <SaveDialog 
+        open={saveDialogOpen}
+        onClose={handleSaveCancel}
+        onSave={handleSaveConfirm}
+        onCancel={handleSaveCancel}
+        tags={saveDialogTags}
+        setTags={setSaveDialogTags}
+        favorite={saveDialogFavorite}
+        setFavorite={setSaveDialogFavorite}
+        newTag={saveDialogNewTag}
+        setNewTag={setSaveDialogNewTag}
+        handleAddTag={handleAddDialogTag}
+        handleDeleteTag={handleDeleteDialogTag}
+        handleTagKeyDown={handleDialogTagKeyDown}
+      />
       
-      {/* Notification Snackbar */}
-      <Snackbar
-        open={notification.open}
-        autoHideDuration={notification.duration || 6000}
-        onClose={() => setNotification({ ...notification, open: false })}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      >
-        <Alert 
-          onClose={() => setNotification({ ...notification, open: false })}
-          severity={notification.severity}
-          variant={notification.severity === 'error' ? "filled" : "standard"}
-          sx={{ 
-            width: '100%',
-            whiteSpace: 'pre-line',
-            '& .MuiAlert-message': {
-              maxWidth: '500px'
-            }
-          }}
-        >
-          {notification.message}
-        </Alert>
-      </Snackbar>
+      {/* Notification System */}
+      <NotificationSystem 
+        notification={notification}
+        onClose={handleNotificationClose}
+      />
     </Container>
   );
 }
