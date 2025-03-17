@@ -8,6 +8,7 @@ import logging
 import json
 import os
 from typing import Optional, List, Dict, Any
+from datetime import datetime
 
 # Import the backend functionality
 from main import generate_learning_path
@@ -75,6 +76,13 @@ active_generations_lock = asyncio.Lock()
 progress_queues = {}
 progress_queues_lock = asyncio.Lock()
 
+# Custom class for handling datetime object serialization
+class DateTimeEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
+
 # Helper functions for history management
 def load_history() -> LearningPathHistory:
     try:
@@ -95,7 +103,9 @@ def save_history(history: LearningPathHistory) -> bool:
     try:
         history_file = get_history_file_path()
         with open(history_file, "w", encoding="utf-8") as f:
-            json.dump({"entries": [entry.dict() for entry in history.entries]}, f, ensure_ascii=False, indent=2)
+            # Use the to_dict method which properly converts datetime objects to ISO strings
+            history_dict = history.to_dict()
+            json.dump(history_dict, f, ensure_ascii=False, indent=2)
         return True
     except Exception as e:
         logger.error(f"Error saving history: {str(e)}")
