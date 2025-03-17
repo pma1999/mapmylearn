@@ -5,10 +5,13 @@ from pydantic import BaseModel
 import asyncio
 import uvicorn
 import logging
+import json
+import os
 from typing import Optional, List, Dict, Any
 
 # Import the backend functionality
 from main import generate_learning_path
+from history.history_models import LearningPathHistory, LearningPathHistoryEntry
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -37,11 +40,45 @@ class ProgressUpdate(BaseModel):
     message: str
     timestamp: str
 
+class HistoryEntryUpdate(BaseModel):
+    favorite: Optional[bool] = None
+    tags: Optional[List[str]] = None
+
+class ImportPathRequest(BaseModel):
+    json_data: str
+
 # Store for active generation tasks
 active_generations = {}
 
 # Progress callback queue for each generation
 progress_queues = {}
+
+# Path for storing history data
+HISTORY_FILE = "learning_path_history.json"
+
+# Helper functions for history management
+def load_history() -> LearningPathHistory:
+    try:
+        if os.path.exists(HISTORY_FILE):
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                entries = []
+                for entry_data in data.get("entries", []):
+                    entries.append(LearningPathHistoryEntry(**entry_data))
+                return LearningPathHistory(entries=entries)
+        return LearningPathHistory()
+    except Exception as e:
+        logger.error(f"Error loading history: {str(e)}")
+        return LearningPathHistory()
+
+def save_history(history: LearningPathHistory) -> bool:
+    try:
+        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(history.to_dict(), f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        logger.error(f"Error saving history: {str(e)}")
+        return False
 
 @app.post("/api/generate-learning-path")
 async def api_generate_learning_path(request: LearningPathRequest, background_tasks: BackgroundTasks):
@@ -162,6 +199,155 @@ async def delete_learning_path(task_id: str):
         del progress_queues[task_id]
     
     return {"status": "deleted"}
+
+# History API endpoints
+@app.get("/api/history")
+async def get_history_preview(sort_by: str = "creation_date", filter_source: Optional[str] = None, search: Optional[str] = None):
+    """
+    Get list of learning path history entries with optional filtering and sorting.
+    """
+    history = load_history()
+    entries = history.get_sorted_entries(sort_by=sort_by)
+    
+    # Apply filtering
+    filtered_entries = entries
+    if filter_source:
+        if filter_source.lower() == "generated":
+            filtered_entries = [e for e in filtered_entries if e.source == "generated"]
+        elif filter_source.lower() == "imported":
+            filtered_entries = [e for e in filtered_entries if e.source == "imported"]
+    
+    # Apply search
+    if search and search.strip():
+        search_term = search.lower().strip()
+        filtered_entries = [e for e in filtered_entries if search_term in e.topic.lower()]
+    
+    # Convert to preview format
+    preview_data = [entry.to_preview_dict() for entry in filtered_entries]
+    return {"entries": preview_data}
+
+@app.get("/api/history/{entry_id}")
+async def get_history_entry(entry_id: str):
+    """
+    Get complete learning path data for a specific entry.
+    """
+    history = load_history()
+    entry = history.get_entry(entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="History entry not found")
+    
+    return {"entry": entry.model_dump()}
+
+@app.post("/api/history")
+async def add_to_history(learning_path: dict, source: str = "generated"):
+    """
+    Save a new learning path to history.
+    """
+    try:
+        history = load_history()
+        entry = LearningPathHistoryEntry(
+            topic=learning_path.get("topic", "Untitled"),
+            path_data=learning_path,
+            source=source
+        )
+        history.add_entry(entry)
+        if save_history(history):
+            return {"success": True, "entry_id": entry.id}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save history")
+    except Exception as e:
+        logger.error(f"Error adding to history: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/history/{entry_id}")
+async def update_history_entry(entry_id: str, update_data: HistoryEntryUpdate):
+    """
+    Update metadata for an existing history entry.
+    """
+    history = load_history()
+    updates = {}
+    if update_data.favorite is not None:
+        updates["favorite"] = update_data.favorite
+    if update_data.tags is not None:
+        updates["tags"] = update_data.tags
+    
+    if not updates:
+        return {"success": True, "message": "No updates provided"}
+    
+    success = history.update_entry(entry_id, **updates)
+    if not success:
+        raise HTTPException(status_code=404, detail="History entry not found")
+    
+    if save_history(history):
+        return {"success": True}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to save history updates")
+
+@app.delete("/api/history/{entry_id}")
+async def delete_history_entry(entry_id: str):
+    """
+    Remove a learning path from history.
+    """
+    history = load_history()
+    success = history.remove_entry(entry_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="History entry not found")
+    
+    if save_history(history):
+        return {"success": True}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to save history after deletion")
+
+@app.post("/api/history/import")
+async def import_learning_path(request: ImportPathRequest):
+    """
+    Import a learning path from JSON.
+    """
+    try:
+        learning_path = json.loads(request.json_data)
+        if not isinstance(learning_path, dict) or "topic" not in learning_path or "modules" not in learning_path:
+            raise HTTPException(status_code=400, detail="Invalid learning path format")
+        
+        history = load_history()
+        entry = LearningPathHistoryEntry(
+            topic=learning_path.get("topic", "Untitled"),
+            path_data=learning_path,
+            source="imported"
+        )
+        history.add_entry(entry)
+        
+        if save_history(history):
+            return {"success": True, "entry_id": entry.id, "topic": entry.topic}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save imported learning path")
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON data")
+    except Exception as e:
+        logger.error(f"Error importing learning path: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/history/export")
+async def export_history():
+    """
+    Export all history entries as JSON.
+    """
+    history = load_history()
+    history_data = history.to_dict()
+    
+    return history_data
+
+@app.delete("/api/history/clear")
+async def clear_history():
+    """
+    Clear all history entries.
+    """
+    try:
+        if os.path.exists(HISTORY_FILE):
+            os.remove(HISTORY_FILE)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Error clearing history: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True) 
