@@ -53,7 +53,7 @@ async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
             for i, sub in enumerate(submodules):
                 sub.order = i + 1
             try:
-                enhanced_module = module.copy(update={"submodules": submodules})
+                enhanced_module = module.model_copy(update={"submodules": submodules})
             except Exception:
                 from models.models import EnhancedModule
                 enhanced_module = EnhancedModule(
@@ -145,6 +145,7 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
     enhanced_modules = state.get("enhanced_modules", [])
     submodules_in_process = state.get("submodules_in_process", {})
     tasks = []
+    task_to_submodule_map = []  # Track which task corresponds to which submodule
     for module_id, sub_id in current_batch:
         key = (module_id, sub_id)
         if key not in submodules_in_process:
@@ -154,6 +155,7 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
                 submodule = module.submodules[sub_id]
                 task = process_single_submodule(state, module_id, sub_id, module, submodule)
                 tasks.append(task)
+                task_to_submodule_map.append(key)  # Record which submodule this task is for
             else:
                 logging.warning(f"Invalid submodule indices: module {module_id}, submodule {sub_id}")
     if state.get("progress_callback"):
@@ -161,10 +163,10 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
     if tasks:
         try:
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            for i, (module_id, sub_id) in enumerate(current_batch):
-                key = (module_id, sub_id)
-                if i < len(results):
-                    result = results[i]
+            for i, result in enumerate(results):
+                if i < len(task_to_submodule_map):
+                    module_id, sub_id = task_to_submodule_map[i]
+                    key = (module_id, sub_id)
                     if isinstance(result, Exception):
                         logging.error(f"Error in submodule {module_id}.{sub_id}: {str(result)}")
                         submodules_in_process[key]["status"] = "error"

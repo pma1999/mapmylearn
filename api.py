@@ -47,11 +47,13 @@ class HistoryEntryUpdate(BaseModel):
 class ImportPathRequest(BaseModel):
     json_data: str
 
-# Store for active generation tasks
+# Store for active generation tasks with lock for thread safety
 active_generations = {}
+active_generations_lock = asyncio.Lock()
 
-# Progress callback queue for each generation
+# Progress callback queue for each generation with lock for thread safety
 progress_queues = {}
+progress_queues_lock = asyncio.Lock()
 
 # Path for storing history data
 HISTORY_FILE = "learning_path_history.json"
@@ -90,14 +92,19 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
     import uuid
     
     task_id = str(uuid.uuid4())
-    progress_queues[task_id] = asyncio.Queue()
+    
+    # Safely create and add queue to progress_queues
+    async with progress_queues_lock:
+        progress_queues[task_id] = asyncio.Queue()
     
     # Define async progress callback
     async def progress_callback(message: str):
-        await progress_queues[task_id].put({
-            "message": message,
-            "timestamp": datetime.now().isoformat()
-        })
+        async with progress_queues_lock:
+            if task_id in progress_queues:
+                await progress_queues[task_id].put({
+                    "message": message,
+                    "timestamp": datetime.now().isoformat()
+                })
     
     # Create background task
     background_tasks.add_task(
@@ -123,7 +130,9 @@ async def generate_learning_path_task(
 ):
     """Background task to generate learning path."""
     try:
-        active_generations[task_id] = {"status": "running", "result": None}
+        # Safely update active_generations
+        async with active_generations_lock:
+            active_generations[task_id] = {"status": "running", "result": None}
         
         # Generate the learning path
         result = await generate_learning_path(
@@ -134,27 +143,33 @@ async def generate_learning_path_task(
             progress_callback=progress_callback
         )
         
-        # Store the result
-        active_generations[task_id] = {"status": "completed", "result": result}
+        # Safely update active_generations with result
+        async with active_generations_lock:
+            active_generations[task_id] = {"status": "completed", "result": result}
+        
         logger.info(f"Learning path generation completed for task_id: {task_id}")
         
     except Exception as e:
         logger.exception(f"Error generating learning path for task_id {task_id}: {str(e)}")
-        active_generations[task_id] = {"status": "error", "error": str(e)}
+        async with active_generations_lock:
+            active_generations[task_id] = {"status": "error", "error": str(e)}
     finally:
-        # Close the progress queue
-        if task_id in progress_queues:
-            await progress_queues[task_id].put(None)  # Sentinel to indicate completion
+        # Close the progress queue with proper locking
+        async with progress_queues_lock:
+            if task_id in progress_queues:
+                await progress_queues[task_id].put(None)  # Sentinel to indicate completion
 
 @app.get("/api/learning-path/{task_id}")
 async def get_learning_path(task_id: str):
     """
     Get the status and result of a learning path generation task.
     """
-    if task_id not in active_generations:
-        raise HTTPException(status_code=404, detail="Task not found")
+    async with active_generations_lock:
+        if task_id not in active_generations:
+            raise HTTPException(status_code=404, detail="Task not found")
+        
+        task_data = active_generations[task_id].copy()  # Create a copy to avoid race conditions
     
-    task_data = active_generations[task_id]
     return {
         "task_id": task_id,
         "status": task_data["status"],
@@ -167,10 +182,12 @@ async def get_progress(task_id: str):
     """
     Get progress updates for a learning path generation task using Server-Sent Events.
     """
-    if task_id not in progress_queues:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    queue = progress_queues[task_id]
+    # Safely check if task exists
+    async with progress_queues_lock:
+        if task_id not in progress_queues:
+            raise HTTPException(status_code=404, detail="Task not found")
+        
+        queue = progress_queues[task_id]
     
     async def event_generator():
         while True:
@@ -191,16 +208,19 @@ async def delete_learning_path(task_id: str):
     """
     Delete a completed learning path task to free up resources.
     """
-    if task_id not in active_generations:
-        raise HTTPException(status_code=404, detail="Task not found")
+    async with active_generations_lock:
+        if task_id not in active_generations:
+            raise HTTPException(status_code=404, detail="Task not found")
+        
+        del active_generations[task_id]
     
-    del active_generations[task_id]
-    if task_id in progress_queues:
-        del progress_queues[task_id]
+    async with progress_queues_lock:
+        if task_id in progress_queues:
+            del progress_queues[task_id]
     
     return {"status": "deleted"}
 
-# History API endpoints
+# History API endpoints (no locking needed as they don't modify the global state)
 @app.get("/api/history")
 async def get_history_preview(sort_by: str = "creation_date", filter_source: Optional[str] = None, search: Optional[str] = None):
     """

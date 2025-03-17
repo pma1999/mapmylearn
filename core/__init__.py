@@ -1,1 +1,1 @@
-# Archivo vacío para declarar el paquete core
+# Empty file to declare the core package

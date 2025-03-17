@@ -7,18 +7,18 @@ from datetime import datetime
 import logging
 from history.history_models import LearningPathHistory, LearningPathHistoryEntry
 
-# Configuración de las claves de almacenamiento
+# Storage key configuration
 HISTORY_KEY = "learning_path_history"
 HISTORY_META_KEY = "learning_path_history_meta"
 HISTORY_SEGMENT_KEY_PREFIX = "learning_path_history_segment_"
 
-# Tamaño máximo recomendado para un segmento (en bytes)
+# Maximum recommended size for a segment (in bytes)
 MAX_SEGMENT_SIZE = 1024 * 1024  # 1MB
 
-# Configuración de logging
+# Logging configuration
 logger = logging.getLogger("history_service")
 
-# Clase personalizada para manejar la serialización de objetos datetime
+# Custom class for handling datetime object serialization
 class DateTimeEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, datetime):
@@ -26,70 +26,70 @@ class DateTimeEncoder(json.JSONEncoder):
         return super().default(obj)
 
 def _compress_data(data: str) -> str:
-    """Comprime una cadena de texto usando zlib y la codifica en base64."""
+    """Compresses a text string using zlib and encodes it in base64."""
     compressed = zlib.compress(data.encode('utf-8'))
     return base64.b64encode(compressed).decode('utf-8')
 
 def _decompress_data(compressed_data: str) -> str:
-    """Descomprime una cadena codificada en base64 y comprimida con zlib."""
+    """Decompresses a string encoded in base64 and compressed with zlib."""
     try:
         decoded = base64.b64decode(compressed_data)
         decompressed = zlib.decompress(decoded)
         return decompressed.decode('utf-8')
     except Exception as e:
-        logger.error(f"Error al descomprimir datos: {str(e)}")
+        logger.error(f"Error decompressing data: {str(e)}")
         return ""
 
 def _serialize_history(history: LearningPathHistory) -> str:
-    """Serializa el historial a formato JSON."""
+    """Serializes the history to JSON format."""
     try:
-        # Intentar con model_dump() para Pydantic v2
+        # Try model_dump() for Pydantic v2
         history_dict = history.model_dump()
     except AttributeError:
         try:
-            # Fallback a dict() para Pydantic v1
+            # Fallback to dict() for Pydantic v1
             history_dict = history.dict()
         except AttributeError:
-            # Último fallback a to_dict() personalizado
+            # Last fallback to custom to_dict()
             history_dict = history.to_dict()
     
     return json.dumps(history_dict, ensure_ascii=False, cls=DateTimeEncoder)
 
 def _deserialize_history(data: str) -> LearningPathHistory:
-    """Deserializa un JSON a objeto LearningPathHistory."""
+    """Deserializes a JSON to LearningPathHistory object."""
     try:
         json_data = json.loads(data)
         
-        # Convertimos el formato ISO de las fechas a objetos datetime
+        # Convert ISO format dates to datetime objects
         entries = []
         for entry_data in json_data.get("entries", []):
-            # Convertir fechas ISO a datetime
+            # Convert ISO dates to datetime
             if "creation_date" in entry_data:
                 entry_data["creation_date"] = datetime.fromisoformat(entry_data["creation_date"])
             if "last_modified_date" in entry_data and entry_data["last_modified_date"]:
                 entry_data["last_modified_date"] = datetime.fromisoformat(entry_data["last_modified_date"])
             
-            # Crear objeto de entrada
+            # Create entry object
             entry = LearningPathHistoryEntry(**entry_data)
             entries.append(entry)
         
-        # Crear objeto de historial
+        # Create history object
         last_updated = datetime.fromisoformat(json_data.get("last_updated", datetime.now().isoformat()))
         return LearningPathHistory(entries=entries, last_updated=last_updated)
     except Exception as e:
-        logger.error(f"Error al deserializar historial: {str(e)}")
+        logger.error(f"Error deserializing history: {str(e)}")
         return LearningPathHistory()
 
 def _store_in_session_state(history: LearningPathHistory) -> None:
-    """Almacena el historial en el estado de la sesión."""
+    """Stores the history in session state."""
     st.session_state["learning_path_history"] = history
 
 def _get_from_session_state() -> Optional[LearningPathHistory]:
-    """Recupera el historial del estado de la sesión."""
+    """Retrieves the history from session state."""
     return st.session_state.get("learning_path_history")
 
 def _segment_data(data: str) -> List[str]:
-    """Divide los datos en segmentos si exceden el tamaño máximo."""
+    """Divides data into segments if it exceeds the maximum size."""
     if len(data) <= MAX_SEGMENT_SIZE:
         return [data]
     
@@ -100,23 +100,23 @@ def _segment_data(data: str) -> List[str]:
     return segments
 
 def _save_segmented(data: str) -> None:
-    """Guarda datos segmentados en localStorage."""
+    """Saves segmented data in localStorage."""
     segments = _segment_data(data)
     
-    # Almacenar metadatos de segmentación
+    # Store segmentation metadata
     meta = {
         "segments_count": len(segments),
         "timestamp": datetime.now().isoformat()
     }
     st.session_state[HISTORY_META_KEY] = meta
     
-    # Almacenar cada segmento
+    # Store each segment
     for i, segment in enumerate(segments):
         segment_key = f"{HISTORY_SEGMENT_KEY_PREFIX}{i}"
         st.session_state[segment_key] = segment
 
 def _load_segmented() -> Optional[str]:
-    """Carga datos segmentados desde localStorage."""
+    """Loads segmented data from localStorage."""
     meta = st.session_state.get(HISTORY_META_KEY)
     if not meta:
         return None
@@ -130,123 +130,123 @@ def _load_segmented() -> Optional[str]:
         if segment:
             segments.append(segment)
         else:
-            logger.error(f"Segmento {i} no encontrado, datos posiblemente corruptos")
+            logger.error(f"Segment {i} not found, possibly corrupted data")
             return None
     
     return "".join(segments)
 
 def save_history(history: LearningPathHistory) -> bool:
-    """Guarda el historial en localStorage de forma persistente."""
+    """Saves the history to localStorage persistently."""
     try:
-        # Serializar y comprimir
+        # Serialize and compress
         serialized = _serialize_history(history)
         compressed = _compress_data(serialized)
         
-        # Guardar datos (segmentados si es necesario)
+        # Save data (segmented if necessary)
         if len(compressed) > MAX_SEGMENT_SIZE:
             _save_segmented(compressed)
         else:
             st.session_state[HISTORY_KEY] = compressed
         
-        # Actualizar estado de sesión
+        # Update session state
         _store_in_session_state(history)
         return True
     except Exception as e:
-        logger.error(f"Error al guardar historial: {str(e)}")
+        logger.error(f"Error saving history: {str(e)}")
         return False
 
 def load_history() -> LearningPathHistory:
-    """Carga el historial desde localStorage."""
-    # Primero intentamos obtener del estado de la sesión
+    """Loads the history from localStorage."""
+    # First try to get from session state
     cached_history = _get_from_session_state()
     if cached_history:
         return cached_history
     
     try:
-        # Intentar cargar datos directos o segmentados
+        # Try to load direct data or segmented
         compressed = st.session_state.get(HISTORY_KEY)
         if not compressed:
             compressed = _load_segmented()
         
         if not compressed:
-            logger.info("No se encontró historial guardado, creando uno nuevo")
+            logger.info("No saved history found, creating a new one")
             new_history = LearningPathHistory()
             _store_in_session_state(new_history)
             return new_history
         
-        # Descomprimir y deserializar
+        # Decompress and deserialize
         decompressed = _decompress_data(compressed)
         history = _deserialize_history(decompressed)
         
-        # Guardar en estado de sesión
+        # Save to session state
         _store_in_session_state(history)
         return history
     except Exception as e:
-        logger.error(f"Error al cargar historial: {str(e)}")
+        logger.error(f"Error loading history: {str(e)}")
         return LearningPathHistory()
 
 def add_learning_path(learning_path: Dict[str, Any], source: str = "generated") -> bool:
-    """Añade un nuevo learning path al historial."""
+    """Adds a new learning path to the history."""
     try:
-        # Obtener historial actual
+        # Get current history
         history = load_history()
         
-        # Crear nueva entrada
+        # Create new entry
         entry = LearningPathHistoryEntry(
-            topic=learning_path.get("topic", "Sin título"),
+            topic=learning_path.get("topic", "Untitled"),
             path_data=learning_path,
             source=source
         )
         
-        # Añadir al historial
+        # Add to history
         history.add_entry(entry)
         
-        # Guardar historial actualizado
+        # Save updated history
         return save_history(history)
     except Exception as e:
-        logger.error(f"Error al añadir learning path: {str(e)}")
+        logger.error(f"Error adding learning path: {str(e)}")
         return False
 
 def import_learning_path(json_data: str) -> Tuple[bool, str]:
-    """Importa un learning path desde JSON."""
+    """Imports a learning path from JSON."""
     try:
-        # Deserializar JSON
+        # Deserialize JSON
         learning_path = json.loads(json_data)
         
-        # Validar que tenga la estructura básica esperada
+        # Validate that it has the expected basic structure
         if not isinstance(learning_path, dict) or "topic" not in learning_path or "modules" not in learning_path:
-            return False, "El archivo JSON no tiene el formato correcto de learning path"
+            return False, "The JSON file does not have the correct learning path format"
         
-        # Verificar si ya existe un path similar
+        # Check if a similar path already exists
         history = load_history()
         topic = learning_path.get("topic", "")
         
         for entry in history.entries:
             if entry.topic == topic:
-                # Podríamos implementar una comparación más sofisticada aquí
-                logger.warning(f"Ya existe un learning path con el tema '{topic}'")
-                # No obstante, permitimos importarlo igualmente
+                # We could implement a more sophisticated comparison here
+                logger.warning(f"A learning path with the topic '{topic}' already exists")
+                # However, we still allow importing it
         
-        # Añadir al historial
+        # Add to history
         success = add_learning_path(learning_path, source="imported")
         if success:
-            return True, f"Learning path '{topic}' importado correctamente"
+            return True, f"Learning path '{topic}' imported successfully"
         else:
-            return False, "Error al guardar el learning path importado"
+            return False, "Error saving the imported learning path"
     except json.JSONDecodeError:
-        return False, "El archivo no es un JSON válido"
+        return False, "The file is not a valid JSON"
     except Exception as e:
-        logger.error(f"Error al importar learning path: {str(e)}")
+        logger.error(f"Error importing learning path: {str(e)}")
         return False, f"Error: {str(e)}"
 
 def get_history_preview() -> List[Dict[str, Any]]:
-    """Obtiene una vista previa del historial para mostrar en la UI."""
+    """Gets a preview of the history for display in the UI."""
     history = load_history()
     entries = history.get_sorted_entries()
     return [entry.to_preview_dict() for entry in entries]
 
 def get_learning_path(entry_id: str) -> Optional[Dict[str, Any]]:
-    """Obtiene un learning path específico por su ID."""
+    """Gets a specific learning path by its ID."""
     history = load_history()
     entry = history.get_entry(entry_id)
     if entry:
@@ -254,7 +254,7 @@ def get_learning_path(entry_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 def delete_learning_path(entry_id: str) -> bool:
-    """Elimina un learning path del historial."""
+    """Deletes a learning path from the history."""
     history = load_history()
     success = history.remove_entry(entry_id)
     if success:
@@ -262,7 +262,7 @@ def delete_learning_path(entry_id: str) -> bool:
     return False
 
 def update_learning_path_metadata(entry_id: str, favorite: bool = None, tags: List[str] = None) -> bool:
-    """Actualiza los metadatos de un learning path en el historial."""
+    """Updates the metadata of a learning path in the history."""
     history = load_history()
     updates = {}
     
@@ -272,7 +272,7 @@ def update_learning_path_metadata(entry_id: str, favorite: bool = None, tags: Li
         updates["tags"] = tags
     
     if not updates:
-        return True  # No hay nada que actualizar
+        return True  # Nothing to update
     
     success = history.update_entry(entry_id, **updates)
     if success:
@@ -280,36 +280,36 @@ def update_learning_path_metadata(entry_id: str, favorite: bool = None, tags: Li
     return False
 
 def export_history() -> str:
-    """Exporta todo el historial como JSON para respaldo."""
+    """Exports all history as JSON for backup."""
     history = load_history()
     return json.dumps(history.to_dict(), ensure_ascii=False, indent=2)
 
 def clear_history() -> bool:
-    """Borra todo el historial."""
+    """Clears all history."""
     try:
-        # Eliminar del estado de sesión
+        # Remove from session state
         if "learning_path_history" in st.session_state:
             del st.session_state["learning_path_history"]
         
-        # Eliminar de localStorage
+        # Remove from localStorage
         if HISTORY_KEY in st.session_state:
             del st.session_state[HISTORY_KEY]
         
-        # Eliminar metadatos de segmentación si existen
+        # Remove segmentation metadata if exists
         if HISTORY_META_KEY in st.session_state:
             meta = st.session_state[HISTORY_META_KEY]
             segments_count = meta.get("segments_count", 0)
             
-            # Eliminar segmentos
+            # Remove segments
             for i in range(segments_count):
                 segment_key = f"{HISTORY_SEGMENT_KEY_PREFIX}{i}"
                 if segment_key in st.session_state:
                     del st.session_state[segment_key]
             
-            # Eliminar metadatos
+            # Remove metadata
             del st.session_state[HISTORY_META_KEY]
         
         return True
     except Exception as e:
-        logger.error(f"Error al limpiar historial: {str(e)}")
+        logger.error(f"Error clearing history: {str(e)}")
         return False 

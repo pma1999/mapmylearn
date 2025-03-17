@@ -4,7 +4,7 @@ import traceback
 from datetime import datetime
 
 class JsonFormatter(logging.Formatter):
-    """Formateador que convierte los registros de log en formato JSON estructurado."""
+    """Formatter that converts log records into structured JSON format."""
     def format(self, record):
         # Custom JSON encoder to handle non-serializable objects
         def custom_json_default(obj):
@@ -21,11 +21,11 @@ class JsonFormatter(logging.Formatter):
             "line": record.lineno
         }
         
-        # Agregar datos extra si existen
+        # Add extra data if it exists
         if hasattr(record, 'data') and record.data:
             log_record["data"] = record.data
             
-        # Agregar información de excepción si existe
+        # Add exception information if it exists
         if record.exc_info:
             log_record["exception"] = {
                 "type": record.exc_info[0].__name__,
