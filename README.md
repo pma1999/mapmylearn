@@ -4,6 +4,7 @@
 ![Platform](https://img.shields.io/badge/platform-Web-brightgreen)
 ![Python](https://img.shields.io/badge/Python-3.8+-yellow)
 ![React](https://img.shields.io/badge/React-18.x-61DAFB)
+![Deployed](https://img.shields.io/badge/deployment-Vercel%20%26%20Railway-success)
 
 Learny is an innovative web application that creates personalized learning paths for any topic using artificial intelligence. The system leverages large language models (LLMs) to research, organize, and generate comprehensive educational content, saving you hours of curriculum planning.
 
@@ -24,6 +25,7 @@ Learny is an innovative web application that creates personalized learning paths
 - [Installation](#-installation)
 - [Configuration](#-configuration)
 - [Usage](#-usage)
+- [Deployment](#-deployment)
 - [API Documentation](#-api-documentation)
 - [Development](#-development)
 - [License](#-license)
@@ -152,6 +154,25 @@ yarn start
 - **Favorite**: Mark paths as favorites for quick access
 - **Export/Import**: Share your learning paths with others via JSON files
 - **Search**: Find specific learning paths in your history
+
+## 🌐 Deployment
+
+Learny is configured for deployment on Vercel (frontend) and Railway (backend). For detailed deployment instructions, please see the [Deployment Guide](DEPLOYMENT.md).
+
+### Quick Deployment Overview
+
+1. **Backend (Railway)**
+   - Push your code to GitHub
+   - Create a new project in Railway linking to your repository
+   - Set required environment variables (API keys)
+   
+2. **Frontend (Vercel)**
+   - Update the API URL in frontend/vercel.json with your Railway URL
+   - Create a new project in Vercel linking to your repository
+   - Set the root directory to "frontend"
+   - Deploy the application
+
+For a more detailed step-by-step guide, please refer to the [Deployment Guide](DEPLOYMENT.md).
 
 ## 📡 API Documentation
 

@@ -1,5 +1,9 @@
 # Environment variables
 .env
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
 
 # Python cache
 __pycache__/
@@ -42,5 +46,12 @@ Thumbs.db
 
 # Node.js
 node_modules/
-frontend/package-lock.json
+frontend/node_modules/
+frontend/build/
+frontend/coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Application data
 learning_path_history.json

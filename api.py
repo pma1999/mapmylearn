@@ -14,6 +14,9 @@ from main import generate_learning_path
 from history.history_models import LearningPathHistory, LearningPathHistoryEntry
 from services.services import validate_openai_key, validate_tavily_key
 
+# Import the database configuration
+from history.db_config import get_history_file_path
+
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("api")
@@ -21,10 +24,19 @@ logger = logging.getLogger("api")
 # Create FastAPI app
 app = FastAPI(title="Learning Path Generator API")
 
+# Define allowed origins
+allowed_origins = [
+    "http://localhost:3000",  # Local development
+    "https://learny-frontend.vercel.app",  # Vercel production domain - update this!
+]
+
+if os.getenv("FRONTEND_URL"):
+    allowed_origins.append(os.getenv("FRONTEND_URL"))
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, restrict this to your frontend domain
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -62,14 +74,12 @@ active_generations_lock = asyncio.Lock()
 progress_queues = {}
 progress_queues_lock = asyncio.Lock()
 
-# Path for storing history data
-HISTORY_FILE = "learning_path_history.json"
-
 # Helper functions for history management
 def load_history() -> LearningPathHistory:
     try:
-        if os.path.exists(HISTORY_FILE):
-            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+        history_file = get_history_file_path()
+        if os.path.exists(history_file):
+            with open(history_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 entries = []
                 for entry_data in data.get("entries", []):
@@ -82,8 +92,9 @@ def load_history() -> LearningPathHistory:
 
 def save_history(history: LearningPathHistory) -> bool:
     try:
-        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-            json.dump(history.to_dict(), f, ensure_ascii=False, indent=2)
+        history_file = get_history_file_path()
+        with open(history_file, "w", encoding="utf-8") as f:
+            json.dump({"entries": [entry.dict() for entry in history.entries]}, f, ensure_ascii=False, indent=2)
         return True
     except Exception as e:
         logger.error(f"Error saving history: {str(e)}")
@@ -403,12 +414,17 @@ async def clear_history():
     Clear all history entries.
     """
     try:
-        if os.path.exists(HISTORY_FILE):
-            os.remove(HISTORY_FILE)
+        if os.path.exists(get_history_file_path()):
+            os.remove(get_history_file_path())
         return {"success": True}
     except Exception as e:
         logger.error(f"Error clearing history: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint for deployment platforms"""
+    return {"status": "ok", "version": "1.0.0"}
 
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True) 
