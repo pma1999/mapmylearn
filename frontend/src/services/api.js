@@ -10,13 +10,97 @@ const api = axios.create({
   },
 });
 
+// Session storage keys
+const OPENAI_KEY_STORAGE = 'learning_path_openai_key';
+const TAVILY_KEY_STORAGE = 'learning_path_tavily_key';
+const REMEMBER_KEYS_STORAGE = 'learning_path_remember_keys';
+
+// API key management functions
+export const saveApiKeys = (openaiKey, tavilyKey, remember = false) => {
+  // Only save if remember is true
+  if (remember) {
+    try {
+      // Use sessionStorage for temporary storage during the browser session
+      sessionStorage.setItem(OPENAI_KEY_STORAGE, openaiKey || '');
+      sessionStorage.setItem(TAVILY_KEY_STORAGE, tavilyKey || '');
+      sessionStorage.setItem(REMEMBER_KEYS_STORAGE, 'true');
+    } catch (error) {
+      console.error('Error saving API keys to session storage:', error);
+    }
+  } else {
+    clearSavedApiKeys();
+  }
+  
+  return { openaiKey, tavilyKey, remember };
+};
+
+export const getSavedApiKeys = () => {
+  try {
+    const remember = sessionStorage.getItem(REMEMBER_KEYS_STORAGE) === 'true';
+    if (remember) {
+      return {
+        openaiKey: sessionStorage.getItem(OPENAI_KEY_STORAGE) || null,
+        tavilyKey: sessionStorage.getItem(TAVILY_KEY_STORAGE) || null,
+        remember,
+      };
+    }
+  } catch (error) {
+    console.error('Error retrieving API keys from session storage:', error);
+  }
+  
+  return { openaiKey: null, tavilyKey: null, remember: false };
+};
+
+export const clearSavedApiKeys = () => {
+  try {
+    sessionStorage.removeItem(OPENAI_KEY_STORAGE);
+    sessionStorage.removeItem(TAVILY_KEY_STORAGE);
+    sessionStorage.removeItem(REMEMBER_KEYS_STORAGE);
+  } catch (error) {
+    console.error('Error clearing API keys from session storage:', error);
+  }
+};
+
+// Validate API keys
+export const validateApiKeys = async (openaiKey, tavilyKey) => {
+  try {
+    const response = await api.post('/validate-api-keys', {
+      openai_api_key: openaiKey,
+      tavily_api_key: tavilyKey,
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error validating API keys:', error);
+    throw error;
+  }
+};
+
 // Generate learning path
 export const generateLearningPath = async (topic, options = {}) => {
   const { 
     parallelCount = 2, 
     searchParallelCount = 3, 
-    submoduleParallelCount = 2 
+    submoduleParallelCount = 2,
+    openaiApiKey = null,
+    tavilyApiKey = null
   } = options;
+  
+  // Get stored API keys if not provided
+  let finalOpenaiKey = openaiApiKey;
+  let finalTavilyKey = tavilyApiKey;
+  
+  // If keys not explicitly provided, try to get from session storage
+  if (!finalOpenaiKey || !finalTavilyKey) {
+    const savedKeys = getSavedApiKeys();
+    
+    if (!finalOpenaiKey && savedKeys.openaiKey) {
+      finalOpenaiKey = savedKeys.openaiKey;
+    }
+    
+    if (!finalTavilyKey && savedKeys.tavilyKey) {
+      finalTavilyKey = savedKeys.tavilyKey;
+    }
+  }
   
   try {
     const response = await api.post('/generate-learning-path', {
@@ -24,6 +108,8 @@ export const generateLearningPath = async (topic, options = {}) => {
       parallel_count: parallelCount,
       search_parallel_count: searchParallelCount,
       submodule_parallel_count: submoduleParallelCount,
+      openai_api_key: finalOpenaiKey,
+      tavily_api_key: finalTavilyKey,
     });
     return response.data;
   } catch (error) {
@@ -190,4 +276,8 @@ export default {
   importLearningPath,
   exportHistory,
   clearHistory,
+  validateApiKeys,
+  saveApiKeys,
+  getSavedApiKeys,
+  clearSavedApiKeys,
 }; 

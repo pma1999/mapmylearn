@@ -26,7 +26,9 @@ async def generate_learning_path(
     parallel_count: int = 1, 
     search_parallel_count: int = 3,
     submodule_parallel_count: int = 2,
-    progress_callback: Optional[Callable] = None
+    progress_callback: Optional[Callable] = None,
+    openai_api_key: Optional[str] = None,
+    tavily_api_key: Optional[str] = None
 ) -> dict:
     logger = logging.getLogger("learning_path_generator")
     logger.info(f"Generating learning path for topic: {topic} with {parallel_count} parallel modules, " +
@@ -54,7 +56,9 @@ async def generate_learning_path(
         "submodule_batches": None,
         "current_submodule_batch_index": None,
         "submodules_in_process": None,
-        "developed_submodules": None
+        "developed_submodules": None,
+        "openai_api_key": openai_api_key,
+        "tavily_api_key": tavily_api_key
     }
     logger.debug("Initialized learning path state")
     log_debug_data(logger, "Initial state", initial_state)
@@ -90,6 +94,8 @@ if __name__ == "__main__":
     parser.add_argument("--log-file", default="learning_path.log", help="Log file path")
     parser.add_argument("--disable-json", action="store_true", help="Disable JSON formatting in logs")
     parser.add_argument("--disable-data-logging", action="store_true", help="Disable detailed data logging")
+    parser.add_argument("--openai-api-key", help="OpenAI API key for LLM operations")
+    parser.add_argument("--tavily-api-key", help="Tavily API key for search operations")
     args = parser.parse_args()
     
     setup_logging(
@@ -106,7 +112,9 @@ if __name__ == "__main__":
         topic=args.topic,
         parallel_count=args.parallel,
         search_parallel_count=args.search_parallel,
-        submodule_parallel_count=args.submodule_parallel
+        submodule_parallel_count=args.submodule_parallel,
+        openai_api_key=args.openai_api_key,
+        tavily_api_key=args.tavily_api_key
     ))
     
     logger.info("Learning path generation completed")

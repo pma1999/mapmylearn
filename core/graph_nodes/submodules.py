@@ -42,7 +42,7 @@ async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
         # Using the extracted prompt template instead of an inline string
         prompt = ChatPromptTemplate.from_template(SUBMODULE_PLANNING_PROMPT)
         try:
-            result = await run_chain(prompt, get_llm, submodule_parser, {
+            result = await run_chain(prompt, lambda: get_llm(api_key=state.get("openai_api_key")), submodule_parser, {
                 "user_topic": state["user_topic"],
                 "module_title": module.title,
                 "module_description": module.description,
@@ -279,7 +279,7 @@ async def generate_submodule_specific_queries(
     # Using the extracted prompt template
     prompt = ChatPromptTemplate.from_template(SUBMODULE_QUERY_GENERATION_PROMPT)
     try:
-        result = await run_chain(prompt, get_llm, module_queries_parser, {
+        result = await run_chain(prompt, lambda: get_llm(api_key=state.get("openai_api_key")), module_queries_parser, {
             "user_topic": state["user_topic"],
             "module_title": module.title,
             "module_description": module.description,
@@ -331,7 +331,7 @@ async def execute_submodule_specific_searches(
     search_results = []
     try:
         for idx, batch in enumerate(batches):
-            tasks = [execute_single_search(query) for query in batch]
+            tasks = [execute_single_search(query, tavily_api_key=state.get("tavily_api_key")) for query in batch]
             results = await asyncio.gather(*tasks)
             search_results.extend(results)
             if idx < len(batches) - 1:
@@ -407,7 +407,7 @@ async def develop_submodule_specific_content(
     # Using the extracted prompt template
     prompt = ChatPromptTemplate.from_template(SUBMODULE_CONTENT_DEVELOPMENT_PROMPT)
     try:
-        llm = get_llm()
+        llm = get_llm(api_key=state.get("openai_api_key"))
         output_parser = StrOutputParser()
         chain = prompt | llm | output_parser
         sub_content = await chain.ainvoke({

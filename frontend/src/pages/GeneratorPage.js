@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Typography,
@@ -36,9 +36,21 @@ import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 import CloseIcon from '@mui/icons-material/Close';
 import AddIcon from '@mui/icons-material/Add';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import KeyIcon from '@mui/icons-material/Key';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ErrorIcon from '@mui/icons-material/Error';
 
 // Import API service
-import { generateLearningPath, saveToHistory } from '../services/api';
+import { 
+  generateLearningPath, 
+  saveToHistory,
+  validateApiKeys,
+  saveApiKeys,
+  getSavedApiKeys,
+  clearSavedApiKeys
+} from '../services/api';
 
 const StyledChip = styled(Chip)(({ theme }) => ({
   margin: theme.spacing(0.5),
@@ -51,8 +63,19 @@ function GeneratorPage() {
   const [searchParallelCount, setSearchParallelCount] = useState(3);
   const [submoduleParallelCount, setSubmoduleParallelCount] = useState(2);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
+  const [apiSettingsOpen, setApiSettingsOpen] = useState(false);
   const [error, setError] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  
+  // API Key states
+  const [openaiApiKey, setOpenaiApiKey] = useState('');
+  const [tavilyApiKey, setTavilyApiKey] = useState('');
+  const [showOpenaiKey, setShowOpenaiKey] = useState(false);
+  const [showTavilyKey, setShowTavilyKey] = useState(false);
+  const [rememberApiKeys, setRememberApiKeys] = useState(false);
+  const [openaiKeyValid, setOpenaiKeyValid] = useState(null);
+  const [tavilyKeyValid, setTavilyKeyValid] = useState(null);
+  const [validatingKeys, setValidatingKeys] = useState(false);
   
   // History states
   const [autoSaveToHistory, setAutoSaveToHistory] = useState(true);
@@ -68,6 +91,73 @@ function GeneratorPage() {
   const [generatedPath, setGeneratedPath] = useState(null);
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'success' });
   const [taskId, setTaskId] = useState(null);
+
+  // Load saved API keys on component mount
+  useEffect(() => {
+    const { openaiKey, tavilyKey, remember } = getSavedApiKeys();
+    if (openaiKey) setOpenaiApiKey(openaiKey);
+    if (tavilyKey) setTavilyApiKey(tavilyKey);
+    if (remember) setRememberApiKeys(remember);
+  }, []);
+
+  // Handle validation of API keys
+  const handleValidateApiKeys = async () => {
+    if (!openaiApiKey && !tavilyApiKey) {
+      showNotification('Please enter at least one API key to validate', 'warning');
+      return;
+    }
+    
+    setValidatingKeys(true);
+    setOpenaiKeyValid(null);
+    setTavilyKeyValid(null);
+    
+    try {
+      const result = await validateApiKeys(openaiApiKey, tavilyApiKey);
+      
+      // Update validation status
+      if (result.openai) {
+        setOpenaiKeyValid(result.openai.valid);
+        if (!result.openai.valid && openaiApiKey) {
+          showNotification(`OpenAI API key invalid: ${result.openai.error}`, 'error');
+        }
+      }
+      
+      if (result.tavily) {
+        setTavilyKeyValid(result.tavily.valid);
+        if (!result.tavily.valid && tavilyApiKey) {
+          showNotification(`Tavily API key invalid: ${result.tavily.error}`, 'error');
+        }
+      }
+      
+      // Show success notification if all provided keys are valid
+      const openaiSuccess = openaiApiKey ? result.openai?.valid : true;
+      const tavilySuccess = tavilyApiKey ? result.tavily?.valid : true;
+      
+      if (openaiSuccess && tavilySuccess) {
+        showNotification('API key validation successful!', 'success');
+        
+        // Save keys if remember is checked
+        if (rememberApiKeys) {
+          saveApiKeys(openaiApiKey, tavilyApiKey, true);
+        }
+      }
+    } catch (error) {
+      showNotification('Error validating API keys. Please try again.', 'error');
+    } finally {
+      setValidatingKeys(false);
+    }
+  };
+
+  // Clear API keys
+  const handleClearApiKeys = () => {
+    setOpenaiApiKey('');
+    setTavilyApiKey('');
+    setOpenaiKeyValid(null);
+    setTavilyKeyValid(null);
+    clearSavedApiKeys();
+    setRememberApiKeys(false);
+    showNotification('API keys cleared', 'success');
+  };
 
   // Handle tag addition
   const handleAddTag = () => {
@@ -171,6 +261,11 @@ function GeneratorPage() {
       return;
     }
     
+    // Save API keys if remember option is checked
+    if (rememberApiKeys && (openaiApiKey || tavilyApiKey)) {
+      saveApiKeys(openaiApiKey, tavilyApiKey, true);
+    }
+    
     setError('');
     setIsGenerating(true);
     
@@ -178,7 +273,9 @@ function GeneratorPage() {
       const response = await generateLearningPath(topic, {
         parallelCount,
         searchParallelCount,
-        submoduleParallelCount
+        submoduleParallelCount,
+        openaiApiKey: openaiApiKey || undefined,
+        tavilyApiKey: tavilyApiKey || undefined
       });
       
       setTaskId(response.task_id);
@@ -209,9 +306,28 @@ function GeneratorPage() {
       }
     } catch (err) {
       console.error('Error generating learning path:', err);
-      setError('Failed to generate learning path. Please try again.');
+      
+      // Check if this is an API key validation error
+      if (err.response && err.response.status === 400 && err.response.data.detail && 
+          (err.response.data.detail.includes('OpenAI API key') || 
+           err.response.data.detail.includes('Tavily API key'))) {
+        setError(err.response.data.detail);
+      } else {
+        setError('Failed to generate learning path. Please try again.');
+      }
+      
       setIsGenerating(false);
     }
+  };
+
+  // Get validation status icon for API key fields
+  const getValidationIcon = (isValid) => {
+    if (isValid === true) {
+      return <CheckCircleIcon color="success" />;
+    } else if (isValid === false) {
+      return <ErrorIcon color="error" />;
+    }
+    return null;
   };
 
   return (
@@ -320,6 +436,145 @@ function GeneratorPage() {
                   <Typography variant="body2" color="text.secondary">
                     Controls how many submodules are processed in parallel.
                   </Typography>
+                </Grid>
+                
+                <Grid item xs={12}>
+                  <Divider sx={{ my: 2 }} />
+                </Grid>
+                
+                {/* API Key Settings */}
+                <Grid item xs={12}>
+                  <Accordion
+                    expanded={apiSettingsOpen}
+                    onChange={() => setApiSettingsOpen(!apiSettingsOpen)}
+                  >
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <KeyIcon color="primary" />
+                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
+                          API Key Settings
+                        </Typography>
+                      </Stack>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <Typography variant="body2" paragraph>
+                        Provide your own API keys to use for generating learning paths. If not provided, the system will use server-configured keys.
+                      </Typography>
+                      
+                      <Grid container spacing={2}>
+                        <Grid item xs={12}>
+                          <TextField
+                            label="OpenAI API Key"
+                            variant="outlined"
+                            fullWidth
+                            value={openaiApiKey}
+                            onChange={(e) => {
+                              setOpenaiApiKey(e.target.value);
+                              setOpenaiKeyValid(null);
+                            }}
+                            placeholder="sk-..."
+                            disabled={isGenerating}
+                            type={showOpenaiKey ? 'text' : 'password'}
+                            InputProps={{
+                              endAdornment: (
+                                <InputAdornment position="end">
+                                  <IconButton
+                                    onClick={() => setShowOpenaiKey(!showOpenaiKey)}
+                                    edge="end"
+                                  >
+                                    {showOpenaiKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                                  </IconButton>
+                                  {openaiKeyValid !== null && (
+                                    <Box ml={1}>
+                                      {openaiKeyValid ? 
+                                        <CheckCircleIcon color="success" /> : 
+                                        <ErrorIcon color="error" />
+                                      }
+                                    </Box>
+                                  )}
+                                </InputAdornment>
+                              ),
+                            }}
+                            sx={{ mb: 2 }}
+                          />
+                        </Grid>
+                        
+                        <Grid item xs={12}>
+                          <TextField
+                            label="Tavily API Key"
+                            variant="outlined"
+                            fullWidth
+                            value={tavilyApiKey}
+                            onChange={(e) => {
+                              setTavilyApiKey(e.target.value);
+                              setTavilyKeyValid(null);
+                            }}
+                            placeholder="tvly-..."
+                            disabled={isGenerating}
+                            type={showTavilyKey ? 'text' : 'password'}
+                            InputProps={{
+                              endAdornment: (
+                                <InputAdornment position="end">
+                                  <IconButton
+                                    onClick={() => setShowTavilyKey(!showTavilyKey)}
+                                    edge="end"
+                                  >
+                                    {showTavilyKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                                  </IconButton>
+                                  {tavilyKeyValid !== null && (
+                                    <Box ml={1}>
+                                      {tavilyKeyValid ? 
+                                        <CheckCircleIcon color="success" /> : 
+                                        <ErrorIcon color="error" />
+                                      }
+                                    </Box>
+                                  )}
+                                </InputAdornment>
+                              ),
+                            }}
+                            sx={{ mb: 2 }}
+                          />
+                        </Grid>
+                        
+                        <Grid item xs={12}>
+                          <FormControlLabel
+                            control={
+                              <Checkbox 
+                                checked={rememberApiKeys} 
+                                onChange={(e) => setRememberApiKeys(e.target.checked)}
+                                disabled={isGenerating}
+                              />
+                            }
+                            label="Remember API keys for this session"
+                          />
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            Keys are stored in browser session storage and will be cleared when you close your browser.
+                          </Typography>
+                        </Grid>
+                        
+                        <Grid item xs={12}>
+                          <Stack direction="row" spacing={2} sx={{ mt: 1 }}>
+                            <Button 
+                              variant="outlined" 
+                              onClick={handleValidateApiKeys}
+                              disabled={isGenerating || validatingKeys || (!openaiApiKey && !tavilyApiKey)}
+                              startIcon={validatingKeys ? <CircularProgress size={20} /> : null}
+                            >
+                              {validatingKeys ? 'Validating...' : 'Validate API Keys'}
+                            </Button>
+                            <Button 
+                              variant="outlined" 
+                              color="error" 
+                              onClick={handleClearApiKeys}
+                              disabled={isGenerating || (!openaiApiKey && !tavilyApiKey)}
+                            >
+                              Clear Keys
+                            </Button>
+                          </Stack>
+                        </Grid>
+                      </Grid>
+                    </AccordionDetails>
+                  </Accordion>
                 </Grid>
                 
                 <Grid item xs={12}>

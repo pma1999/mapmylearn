@@ -9,18 +9,19 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from core.graph_nodes.helpers import run_chain, batch_items, format_search_results
 
-async def execute_single_search(query: SearchQuery) -> Dict[str, Any]:
+async def execute_single_search(query: SearchQuery, tavily_api_key: str = None) -> Dict[str, Any]:
     """
     Executes a single web search using the search tool.
     
     Args:
         query: A SearchQuery instance with keywords and rationale.
+        tavily_api_key: Optional Tavily API key for search.
         
     Returns:
         A dictionary with the query, rationale, and search results.
     """
     try:
-        search_tool = get_search_tool()
+        search_tool = get_search_tool(api_key=tavily_api_key)
         logging.info(f"Searching for: {query.keywords}")
         result = await search_tool.ainvoke({"query": query.keywords})
         return {
@@ -98,7 +99,7 @@ Your response should be exactly 5 search queries, each with its detailed rationa
 """
     prompt = ChatPromptTemplate.from_template(prompt_text)
     try:
-        result = await run_chain(prompt, get_llm, search_queries_parser, {
+        result = await run_chain(prompt, lambda: get_llm(api_key=state.get("openai_api_key")), search_queries_parser, {
             "user_topic": state["user_topic"],
             "format_instructions": search_queries_parser.get_format_instructions()
         })
@@ -134,7 +135,7 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
     search_results = []
     try:
         for batch_index, batch in enumerate(query_batches):
-            tasks = [execute_single_search(query) for query in batch]
+            tasks = [execute_single_search(query, tavily_api_key=state.get("tavily_api_key")) for query in batch]
             batch_results = await asyncio.gather(*tasks)
             search_results.extend(batch_results)
             if batch_index < len(query_batches) - 1:
@@ -225,7 +226,7 @@ Ensure the modules build upon each other progressively.
 """
     prompt = ChatPromptTemplate.from_template(prompt_text)
     try:
-        result = await run_chain(prompt, get_llm, enhanced_modules_parser, {
+        result = await run_chain(prompt, lambda: get_llm(api_key=state.get("openai_api_key")), enhanced_modules_parser, {
             "user_topic": state["user_topic"],
             "search_results": formatted_results,
             "format_instructions": enhanced_modules_parser.get_format_instructions()

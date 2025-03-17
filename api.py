@@ -1,7 +1,7 @@
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import asyncio
 import uvicorn
 import logging
@@ -12,6 +12,7 @@ from typing import Optional, List, Dict, Any
 # Import the backend functionality
 from main import generate_learning_path
 from history.history_models import LearningPathHistory, LearningPathHistoryEntry
+from services.services import validate_openai_key, validate_tavily_key
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -35,6 +36,12 @@ class LearningPathRequest(BaseModel):
     parallel_count: Optional[int] = 2
     search_parallel_count: Optional[int] = 3
     submodule_parallel_count: Optional[int] = 2
+    openai_api_key: Optional[str] = Field(None, description="OpenAI API key for LLM operations")
+    tavily_api_key: Optional[str] = Field(None, description="Tavily API key for search operations")
+
+class ApiKeyValidationRequest(BaseModel):
+    openai_api_key: Optional[str] = None
+    tavily_api_key: Optional[str] = None
 
 class ProgressUpdate(BaseModel):
     message: str
@@ -91,6 +98,17 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
     from datetime import datetime
     import uuid
     
+    # Validate API keys if provided
+    if request.openai_api_key:
+        valid, error_msg = validate_openai_key(request.openai_api_key)
+        if not valid:
+            raise HTTPException(status_code=400, detail=f"Invalid OpenAI API key: {error_msg}")
+    
+    if request.tavily_api_key:
+        valid, error_msg = validate_tavily_key(request.tavily_api_key)
+        if not valid:
+            raise HTTPException(status_code=400, detail=f"Invalid Tavily API key: {error_msg}")
+    
     task_id = str(uuid.uuid4())
     
     # Safely create and add queue to progress_queues
@@ -114,7 +132,9 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
         parallel_count=request.parallel_count,
         search_parallel_count=request.search_parallel_count,
         submodule_parallel_count=request.submodule_parallel_count,
-        progress_callback=progress_callback
+        progress_callback=progress_callback,
+        openai_api_key=request.openai_api_key,
+        tavily_api_key=request.tavily_api_key
     )
     
     logger.info(f"Started learning path generation for topic '{request.topic}' with task_id: {task_id}")
@@ -126,7 +146,9 @@ async def generate_learning_path_task(
     parallel_count: int = 2,
     search_parallel_count: int = 3,
     submodule_parallel_count: int = 2,
-    progress_callback = None
+    progress_callback = None,
+    openai_api_key: Optional[str] = None,
+    tavily_api_key: Optional[str] = None
 ):
     """Background task to generate learning path."""
     try:
@@ -140,7 +162,9 @@ async def generate_learning_path_task(
             parallel_count=parallel_count,
             search_parallel_count=search_parallel_count,
             submodule_parallel_count=submodule_parallel_count,
-            progress_callback=progress_callback
+            progress_callback=progress_callback,
+            openai_api_key=openai_api_key,
+            tavily_api_key=tavily_api_key
         )
         
         # Safely update active_generations with result
@@ -158,6 +182,23 @@ async def generate_learning_path_task(
         async with progress_queues_lock:
             if task_id in progress_queues:
                 await progress_queues[task_id].put(None)  # Sentinel to indicate completion
+
+@app.post("/api/validate-api-keys")
+async def validate_api_keys(request: ApiKeyValidationRequest):
+    """
+    Validate the provided API keys
+    """
+    response = {"openai": None, "tavily": None}
+    
+    if request.openai_api_key:
+        valid, error_msg = validate_openai_key(request.openai_api_key)
+        response["openai"] = {"valid": valid, "error": error_msg if not valid else None}
+    
+    if request.tavily_api_key:
+        valid, error_msg = validate_tavily_key(request.tavily_api_key)
+        response["tavily"] = {"valid": valid, "error": error_msg if not valid else None}
+    
+    return response
 
 @app.get("/api/learning-path/{task_id}")
 async def get_learning_path(task_id: str):
