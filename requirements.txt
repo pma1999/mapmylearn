@@ -14,4 +14,8 @@ aiohttp>=3.8.5
 nest-asyncio>=1.5.6
 jsonschema>=4.17.3
 tqdm>=4.65.0
-watchdog>=3.0.0 
+watchdog>=3.0.0
+# API Requirements
+fastapi>=0.95.0
+uvicorn>=0.21.0
+starlette>=0.26.0 

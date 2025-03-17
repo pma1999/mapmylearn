@@ -1,0 +1,70 @@
+/* Animation for spinning elements */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: spin 2s linear infinite;
+}
+
+/* Animation for fading in elements */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease-in;
+}
+
+/* Pulse animation for attention */
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.pulse {
+  animation: pulse 2s infinite;
+}
+
+/* Slide in from top animation */
+@keyframes slideInFromTop {
+  0% { transform: translateY(-20px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+.slide-in-top {
+  animation: slideInFromTop 0.5s ease-out;
+}
+
+/* Slide in from left animation */
+@keyframes slideInFromLeft {
+  0% { transform: translateX(-20px); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+
+.slide-in-left {
+  animation: slideInFromLeft 0.5s ease-out;
+}
+
+/* Scale animation for buttons */
+@keyframes scaleOnHover {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.05); }
+}
+
+.scale-on-hover:hover {
+  animation: scaleOnHover 0.2s forwards;
+}
+
+/* Progress bar animation */
+@keyframes progressAnimation {
+  0% { width: 0%; }
+  100% { width: 100%; }
+}
+
+.progress-animation {
+  animation: progressAnimation 30s linear forwards;
+} 
