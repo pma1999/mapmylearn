@@ -267,7 +267,9 @@ async def get_progress(task_id: str):
             if update is None:  # Sentinel to indicate completion
                 yield f"data: {JSONResponse(content={'complete': True}).body.decode()}\n\n"
                 break
-            yield f"data: {JSONResponse(content=update).body.decode()}\n\n"
+            # Convert ProgressUpdate model to dict before sending
+            update_dict = update.dict() if hasattr(update, 'dict') else update
+            yield f"data: {JSONResponse(content=update_dict).body.decode()}\n\n"
     
     from starlette.responses import StreamingResponse
     return StreamingResponse(
