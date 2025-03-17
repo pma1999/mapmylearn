@@ -1,7 +1,11 @@
 import axios from 'axios';
 import * as localHistoryService from './localHistoryService';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+// Use local API when in development mode, Railway API in production
+const API_URL = process.env.NODE_ENV === 'development' 
+  ? 'http://localhost:8000' 
+  : 'https://web-production-62f88.up.railway.app';
+console.log('Using API URL:', API_URL);
 
 // Create axios instance with base URL
 const api = axios.create({
@@ -82,6 +86,8 @@ export const generateLearningPath = async (topic, options = {}) => {
     parallelCount = 2, 
     searchParallelCount = 3, 
     submoduleParallelCount = 2,
+    desiredModuleCount = null,
+    desiredSubmoduleCount = null,
     openaiApiKey = null,
     tavilyApiKey = null
   } = options;
@@ -119,14 +125,28 @@ export const generateLearningPath = async (topic, options = {}) => {
   
   try {
     console.log("Sending API keys to backend for learning path generation");
-    const response = await api.post('/generate-learning-path', {
+    
+    // Prepare request data
+    const requestData = {
       topic,
       parallel_count: parallelCount,
       search_parallel_count: searchParallelCount,
       submodule_parallel_count: submoduleParallelCount,
       openai_api_key: finalOpenaiKey,
-      tavily_api_key: finalTavilyKey,
-    });
+      tavily_api_key: finalTavilyKey
+    };
+    
+    // Add desired module count if specified
+    if (desiredModuleCount !== null) {
+      requestData.desired_module_count = desiredModuleCount;
+    }
+    
+    // Add desired submodule count if specified
+    if (desiredSubmoduleCount !== null) {
+      requestData.desired_submodule_count = desiredSubmoduleCount;
+    }
+    
+    const response = await api.post('/generate-learning-path', requestData);
     return response.data;
   } catch (error) {
     console.error('Error generating learning path:', error);

@@ -28,7 +28,9 @@ async def generate_learning_path(
     submodule_parallel_count: int = 2,
     progress_callback: Optional[Callable] = None,
     openai_api_key: Optional[str] = None,
-    tavily_api_key: Optional[str] = None
+    tavily_api_key: Optional[str] = None,
+    desired_module_count: Optional[int] = None,
+    desired_submodule_count: Optional[int] = None
 ) -> dict:
     logger = logging.getLogger("learning_path_generator")
     logger.info(f"Generating learning path for topic: {topic} with {parallel_count} parallel modules, " +
@@ -70,7 +72,9 @@ async def generate_learning_path(
         "submodules_in_process": None,
         "developed_submodules": None,
         "openai_api_key": openai_api_key,
-        "tavily_api_key": tavily_api_key
+        "tavily_api_key": tavily_api_key,
+        "desired_module_count": desired_module_count,
+        "desired_submodule_count": desired_submodule_count
     }
     logger.debug("Initialized learning path state")
     log_debug_data(logger, "Initial state", initial_state)
@@ -102,6 +106,8 @@ if __name__ == "__main__":
     parser.add_argument("--parallel", type=int, default=2, help="Number of modules to process in parallel")
     parser.add_argument("--search-parallel", type=int, default=3, help="Number of searches to execute in parallel")
     parser.add_argument("--submodule-parallel", type=int, default=2, help="Number of submodules to process in parallel")
+    parser.add_argument("--module-count", type=int, help="Desired number of modules (leave empty for automatic)")
+    parser.add_argument("--submodule-count", type=int, help="Desired number of submodules per module (leave empty for automatic)")
     parser.add_argument("--log-level", choices=["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"], default="INFO", help="Set logging level")
     parser.add_argument("--log-file", default="learning_path.log", help="Log file path")
     parser.add_argument("--disable-json", action="store_true", help="Disable JSON formatting in logs")
@@ -126,7 +132,9 @@ if __name__ == "__main__":
         search_parallel_count=args.search_parallel,
         submodule_parallel_count=args.submodule_parallel,
         openai_api_key=args.openai_api_key,
-        tavily_api_key=args.tavily_api_key
+        tavily_api_key=args.tavily_api_key,
+        desired_module_count=args.module_count,
+        desired_submodule_count=args.submodule_count
     ))
     
     logger.info("Learning path generation completed")

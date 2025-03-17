@@ -30,7 +30,7 @@ allowed_origins = [
     "http://localhost:3000",  # Local development
     "https://learny-peach.vercel.app",  # Vercel production domain
     "https://learny-*.vercel.app",      # Any Vercel deployment with learny- prefix
-    "https://web-production-62f88.up.railway.app/"  # Railway production domain
+    "https://web-production-62f88.up.railway.app"  # Railway production domain
 ]
 
 # Add any custom domain from environment variable (used in production)

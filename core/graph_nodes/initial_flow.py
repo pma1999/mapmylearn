@@ -232,6 +232,13 @@ Search {i}: "{result['query']}"
 {result['relevant_information']}
 ---
 """
+        # Check if a specific number of modules was requested
+        module_count_instruction = ""
+        if state.get("desired_module_count"):
+            module_count_instruction = f"\nIMPORTANT: Create EXACTLY {state['desired_module_count']} modules for this learning path. Not more, not less."
+        else:
+            module_count_instruction = "\nCreate a structured learning path with 3-7 modules."
+        
         # Preparar el prompt con un placeholder para format_instructions
         prompt_text = f"""
 You are an expert curriculum designer. Create a comprehensive learning path for the topic: {state['user_topic']}.
@@ -239,8 +246,7 @@ You are an expert curriculum designer. Create a comprehensive learning path for 
 Based on the following search results, organize the learning into logical modules:
 
 {results_text}
-
-Create a structured learning path with 3-7 modules. For each module:
+{module_count_instruction} For each module:
 1. Give it a clear, descriptive title
 2. Write a comprehensive overview (100-200 words)
 3. Identify 3-5 key learning objectives
@@ -264,6 +270,14 @@ Format your response as a structured curriculum. Each module should build on pre
             { "format_instructions": format_instructions_value }
         )
         modules = result.modules
+        
+        # If a specific number of modules was requested but not achieved, log a warning
+        if state.get("desired_module_count") and len(modules) != state["desired_module_count"]:
+            logging.warning(f"Requested {state['desired_module_count']} modules but got {len(modules)}")
+            if len(modules) > state["desired_module_count"]:
+                # Trim excess modules if we got too many
+                modules = modules[:state["desired_module_count"]]
+                logging.info(f"Trimmed modules to match requested count of {state['desired_module_count']}")
         
         # Crear la estructura final del learning path
         final_learning_path = {

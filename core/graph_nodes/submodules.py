@@ -39,8 +39,20 @@ async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
     for idx, module in enumerate(state["modules"]):
         logging.info(f"Planning submodules for module {idx+1}: {module.title}")
         learning_path_context = "\n".join([f"Module {i+1}: {mod.title}\n{mod.description}" for i, mod in enumerate(state["modules"])])
+        
+        # Check if a specific number of submodules was requested
+        submodule_count_instruction = ""
+        if state.get("desired_submodule_count"):
+            submodule_count_instruction = f"IMPORTANT: Create EXACTLY {state['desired_submodule_count']} submodules for this module. Not more, not less."
+        
+        # Modify the prompt to include the submodule count instruction if specified
+        base_prompt = SUBMODULE_PLANNING_PROMPT
+        if submodule_count_instruction:
+            # Insert the instruction before the format_instructions placeholder
+            base_prompt = base_prompt.replace("{format_instructions}", f"{submodule_count_instruction}\n\n{{format_instructions}}")
+        
         # Using the extracted prompt template instead of an inline string
-        prompt = ChatPromptTemplate.from_template(SUBMODULE_PLANNING_PROMPT)
+        prompt = ChatPromptTemplate.from_template(base_prompt)
         try:
             result = await run_chain(prompt, lambda: get_llm(api_key=state.get("openai_api_key")), submodule_parser, {
                 "user_topic": state["user_topic"],
@@ -50,6 +62,15 @@ async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
                 "format_instructions": submodule_parser.get_format_instructions()
             })
             submodules = result.submodules
+            
+            # If a specific number of submodules was requested but not achieved, adjust the list
+            if state.get("desired_submodule_count") and len(submodules) != state["desired_submodule_count"]:
+                logging.warning(f"Requested {state['desired_submodule_count']} submodules but got {len(submodules)} for module {idx+1}")
+                if len(submodules) > state["desired_submodule_count"]:
+                    # Trim excess submodules if we got too many
+                    submodules = submodules[:state["desired_submodule_count"]]
+                    logging.info(f"Trimmed submodules to match requested count of {state['desired_submodule_count']}")
+            
             for i, sub in enumerate(submodules):
                 sub.order = i + 1
             try:
