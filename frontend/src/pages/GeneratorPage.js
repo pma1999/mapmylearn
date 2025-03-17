@@ -271,6 +271,13 @@ function GeneratorPage() {
       setError('Please enter a topic');
       return;
     }
+
+    // Check if API keys are provided
+    if (!openaiApiKey.trim() || !tavilyApiKey.trim()) {
+      setError('Both OpenAI and Tavily API keys are required. Please enter them in the API Key Settings section.');
+      setApiSettingsOpen(true); // Open the API settings accordion
+      return;
+    }
     
     // Save API keys if remember option is checked
     if (rememberApiKeys && (openaiApiKey || tavilyApiKey)) {
@@ -465,11 +472,14 @@ function GeneratorPage() {
                         <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
                           API Key Settings
                         </Typography>
+                        <Typography variant="caption" color="error">
+                          (Required)
+                        </Typography>
                       </Stack>
                     </AccordionSummary>
                     <AccordionDetails>
                       <Typography variant="body2" paragraph>
-                        Provide your own API keys to use for generating learning paths. If not provided, the system will use server-configured keys.
+                        Please provide your API keys to use for generating learning paths. Both OpenAI and Tavily API keys are required.
                       </Typography>
                       
                       <Grid container spacing={2}>
@@ -486,6 +496,7 @@ function GeneratorPage() {
                             placeholder="sk-..."
                             disabled={isGenerating}
                             type={showOpenaiKey ? 'text' : 'password'}
+                            required
                             InputProps={{
                               endAdornment: (
                                 <InputAdornment position="end">
@@ -523,6 +534,7 @@ function GeneratorPage() {
                             placeholder="tvly-..."
                             disabled={isGenerating}
                             type={showTavilyKey ? 'text' : 'password'}
+                            required
                             InputProps={{
                               endAdornment: (
                                 <InputAdornment position="end">
@@ -681,12 +693,18 @@ function GeneratorPage() {
               variant="contained"
               color="primary"
               size="large"
-              disabled={isGenerating || !topic.trim()}
+              disabled={isGenerating || !topic.trim() || !openaiApiKey.trim() || !tavilyApiKey.trim()}
               startIcon={isGenerating ? <CircularProgress size={20} color="inherit" /> : <BoltIcon />}
               sx={{ py: 1.5, px: 4, borderRadius: 2, fontWeight: 'bold', fontSize: '1.1rem' }}
             >
               {isGenerating ? 'Generating...' : 'Generate Learning Path'}
             </Button>
+            
+            {(!openaiApiKey.trim() || !tavilyApiKey.trim()) && !isGenerating && (
+              <Typography color="error" variant="body2" sx={{ mt: 2, textAlign: 'center' }}>
+                Please provide both OpenAI and Tavily API keys in the API Key Settings section to generate a learning path.
+              </Typography>
+            )}
           </Box>
           
           {isGenerating && (
