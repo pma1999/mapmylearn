@@ -20,4 +20,6 @@ fastapi>=0.95.0
 uvicorn>=0.21.0
 starlette>=0.26.0 
 langsmith>=0.1.10
+# Security requirements
+cryptography>=41.0.0
 # openai>=1.1.0

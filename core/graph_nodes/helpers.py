@@ -21,14 +21,20 @@ async def run_chain(prompt, llm_getter, parser, params: Dict[str, Any]) -> Any:
     
     Args:
         prompt: A ChatPromptTemplate instance.
-        llm_getter: A function that returns an initialized LLM.
+        llm_getter: A function that returns an initialized LLM (may be async).
         parser: An output parser instance (e.g., a PydanticOutputParser).
         params: Parameters for the chain invocation.
         
     Returns:
         The parsed result from the LLM chain.
     """
-    llm = llm_getter()
+    # Handle both async and sync llm_getter functions
+    llm_or_coroutine = llm_getter()
+    if asyncio.iscoroutine(llm_or_coroutine):
+        llm = await llm_or_coroutine
+    else:
+        llm = llm_or_coroutine
+        
     chain = prompt | llm | parser
     return await chain.ainvoke(params)
 

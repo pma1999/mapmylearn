@@ -3,27 +3,52 @@ import logging
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.chat_models import ChatPerplexity
+from typing import Optional, Union, Tuple, Any
+
+# Import key provider for type hints but with proper import protection
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from services.key_provider import KeyProvider, GoogleKeyProvider, PerplexityKeyProvider
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def get_llm(api_key=None):
+async def get_llm(key_provider=None):
     """
-    Initialize the Google Gemini LLM with provided API key or from environment variables.
+    Initialize the Google Gemini LLM with a key from the provider or directly.
     
     Args:
-        api_key: Optional explicit Google API key
+        key_provider: KeyProvider object for Google API key (or direct API key as string)
         
     Returns:
         Initialized ChatGoogleGenerativeAI instance
     """
-    google_api_key = api_key or os.environ.get("GOOGLE_API_KEY")
-    if not google_api_key:
-        logger.warning("GOOGLE_API_KEY not set")
-        logger.debug("No Google API key provided in state or environment variables")
+    google_api_key = None
+    
+    # Handle different input types
+    if hasattr(key_provider, 'get_key') and callable(key_provider.get_key):
+        # It's a KeyProvider
+        try:
+            google_api_key = await key_provider.get_key()
+            logger.debug("Retrieved Google API key from provider")
+        except Exception as e:
+            logger.error(f"Error retrieving Google API key from provider: {str(e)}")
+            raise
+    elif isinstance(key_provider, str):
+        # Direct API key
+        google_api_key = key_provider
+        logger.debug("Using provided Google API key directly")
     else:
-        logger.debug(f"Using {'provided' if api_key else 'environment'} Google API key")
+        # Fallback to environment
+        google_api_key = os.environ.get("GOOGLE_API_KEY")
+        if not google_api_key:
+            logger.warning("GOOGLE_API_KEY not set in environment")
+        else:
+            logger.debug("Using Google API key from environment")
+    
+    if not google_api_key:
+        raise ValueError("No Google API key available from any source")
     
     try:
         return ChatGoogleGenerativeAI(
@@ -33,26 +58,43 @@ def get_llm(api_key=None):
         )
     except Exception as e:
         logger.error(f"Error initializing ChatGoogleGenerativeAI: {str(e)}")
-        if not google_api_key:
-            logger.error("Google API key is required. Make sure to provide a valid API key.")
         raise
 
-def get_search_tool(api_key=None):
+async def get_search_tool(key_provider=None):
     """
-    Initialize the Perplexity LLM search tool with either provided API key or from environment variables.
+    Initialize the Perplexity LLM search tool with a key from the provider or directly.
     
     Args:
-        api_key: Optional explicit Perplexity API key
+        key_provider: KeyProvider object for Perplexity API key (or direct API key as string)
         
     Returns:
         Initialized ChatPerplexity instance
     """
-    perplexity_api_key = api_key or os.environ.get("PPLX_API_KEY")
-    if not perplexity_api_key:
-        logger.warning("PPLX_API_KEY not set")
-        logger.debug("No Perplexity API key provided in state or environment variables")
+    perplexity_api_key = None
+    
+    # Handle different input types
+    if hasattr(key_provider, 'get_key') and callable(key_provider.get_key):
+        # It's a KeyProvider
+        try:
+            perplexity_api_key = await key_provider.get_key()
+            logger.debug("Retrieved Perplexity API key from provider")
+        except Exception as e:
+            logger.error(f"Error retrieving Perplexity API key from provider: {str(e)}")
+            raise
+    elif isinstance(key_provider, str):
+        # Direct API key
+        perplexity_api_key = key_provider
+        logger.debug("Using provided Perplexity API key directly")
     else:
-        logger.debug(f"Using {'provided' if api_key else 'environment'} Perplexity API key")
+        # Fallback to environment
+        perplexity_api_key = os.environ.get("PPLX_API_KEY")
+        if not perplexity_api_key:
+            logger.warning("PPLX_API_KEY not set in environment")
+        else:
+            logger.debug("Using Perplexity API key from environment")
+    
+    if not perplexity_api_key:
+        raise ValueError("No Perplexity API key available from any source")
     
     try:
         # Using the sonar model which has search capabilities
@@ -63,8 +105,6 @@ def get_search_tool(api_key=None):
         )
     except Exception as e:
         logger.error(f"Error initializing ChatPerplexity: {str(e)}")
-        if not perplexity_api_key:
-            logger.error("Perplexity API key is required. Make sure to provide a valid API key.")
         raise
 
 def validate_google_key(api_key):

@@ -16,57 +16,94 @@ const api = axios.create({
 });
 
 // Session storage keys
-const GOOGLE_KEY_STORAGE = 'learning_path_google_key';
-const PPLX_KEY_STORAGE = 'learning_path_pplx_key';
-const REMEMBER_KEYS_STORAGE = 'learning_path_remember_keys';
+const GOOGLE_KEY_TOKEN_STORAGE = 'learning_path_google_key_token';
+const PPLX_KEY_TOKEN_STORAGE = 'learning_path_pplx_key_token';
+const REMEMBER_TOKENS_STORAGE = 'learning_path_remember_tokens';
 
-// API key management functions
-export const saveApiKeys = (googleKey, pplxKey, remember = false) => {
+// API token management functions
+export const saveApiTokens = (googleKeyToken, pplxKeyToken, remember = false) => {
   // Only save if remember is true
   if (remember) {
     try {
       // Use sessionStorage for temporary storage during the browser session
-      sessionStorage.setItem(GOOGLE_KEY_STORAGE, googleKey || '');
-      sessionStorage.setItem(PPLX_KEY_STORAGE, pplxKey || '');
-      sessionStorage.setItem(REMEMBER_KEYS_STORAGE, 'true');
+      sessionStorage.setItem(GOOGLE_KEY_TOKEN_STORAGE, googleKeyToken || '');
+      sessionStorage.setItem(PPLX_KEY_TOKEN_STORAGE, pplxKeyToken || '');
+      sessionStorage.setItem(REMEMBER_TOKENS_STORAGE, 'true');
     } catch (error) {
-      console.error('Error saving API keys to session storage:', error);
+      console.error('Error saving API tokens to session storage:', error);
     }
   } else {
-    clearSavedApiKeys();
+    clearSavedApiTokens();
   }
   
-  return { googleKey, pplxKey, remember };
+  return { googleKeyToken, pplxKeyToken, remember };
 };
 
-export const getSavedApiKeys = () => {
+export const getSavedApiTokens = () => {
   try {
-    const remember = sessionStorage.getItem(REMEMBER_KEYS_STORAGE) === 'true';
+    const remember = sessionStorage.getItem(REMEMBER_TOKENS_STORAGE) === 'true';
     if (remember) {
       return {
-        googleKey: sessionStorage.getItem(GOOGLE_KEY_STORAGE) || null,
-        pplxKey: sessionStorage.getItem(PPLX_KEY_STORAGE) || null,
+        googleKeyToken: sessionStorage.getItem(GOOGLE_KEY_TOKEN_STORAGE) || null,
+        pplxKeyToken: sessionStorage.getItem(PPLX_KEY_TOKEN_STORAGE) || null,
         remember,
       };
     }
   } catch (error) {
-    console.error('Error retrieving API keys from session storage:', error);
+    console.error('Error retrieving API tokens from session storage:', error);
   }
   
-  return { googleKey: null, pplxKey: null, remember: false };
+  return { googleKeyToken: null, pplxKeyToken: null, remember: false };
 };
 
-export const clearSavedApiKeys = () => {
+export const clearSavedApiTokens = () => {
   try {
-    sessionStorage.removeItem(GOOGLE_KEY_STORAGE);
-    sessionStorage.removeItem(PPLX_KEY_STORAGE);
-    sessionStorage.removeItem(REMEMBER_KEYS_STORAGE);
+    sessionStorage.removeItem(GOOGLE_KEY_TOKEN_STORAGE);
+    sessionStorage.removeItem(PPLX_KEY_TOKEN_STORAGE);
+    sessionStorage.removeItem(REMEMBER_TOKENS_STORAGE);
   } catch (error) {
-    console.error('Error clearing API keys from session storage:', error);
+    console.error('Error clearing API tokens from session storage:', error);
   }
 };
 
-// Validate API keys
+// Get tokens for API keys (either authenticate and get new tokens or use stored ones)
+export const authenticateApiKeys = async (googleKey, pplxKey, remember = false) => {
+  try {
+    // Call the new authentication endpoint to get tokens
+    const response = await api.post('/auth/api-keys', {
+      google_api_key: googleKey,
+      pplx_api_key: pplxKey,
+    });
+    
+    const { 
+      google_key_token, 
+      pplx_key_token, 
+      google_key_valid, 
+      pplx_key_valid,
+      google_key_error,
+      pplx_key_error
+    } = response.data;
+    
+    // Save tokens if remember option is checked
+    if (remember && (google_key_token || pplx_key_token)) {
+      saveApiTokens(google_key_token, pplx_key_token, true);
+    }
+    
+    return {
+      googleKeyToken: google_key_token,
+      pplxKeyToken: pplx_key_token,
+      googleKeyValid: google_key_valid,
+      pplxKeyValid: pplx_key_valid,
+      googleKeyError: google_key_error,
+      pplxKeyError: pplx_key_error
+    };
+  } catch (error) {
+    console.error('Error authenticating API keys:', error);
+    throw error;
+  }
+};
+
+// Validate API keys (legacy method, uses the same validation endpoint but doesn't store tokens)
 export const validateApiKeys = async (googleKey, pplxKey) => {
   try {
     const response = await api.post('/validate-api-keys', {
@@ -80,7 +117,7 @@ export const validateApiKeys = async (googleKey, pplxKey) => {
   }
 };
 
-// Generate learning path
+// Generate learning path with tokens
 export const generateLearningPath = async (topic, options = {}) => {
   const { 
     parallelCount = 2, 
@@ -88,43 +125,35 @@ export const generateLearningPath = async (topic, options = {}) => {
     submoduleParallelCount = 2,
     desiredModuleCount = null,
     desiredSubmoduleCount = null,
-    googleApiKey = null,
-    pplxApiKey = null
+    googleKeyToken = null,
+    pplxKeyToken = null,
+    rememberTokens = false
   } = options;
   
-  // Get stored API keys if not provided
-  let finalGoogleKey = googleApiKey;
-  let finalPplxKey = pplxApiKey;
+  // Get stored API tokens if not provided
+  let finalGoogleKeyToken = googleKeyToken;
+  let finalPplxKeyToken = pplxKeyToken;
   
-  // If keys not explicitly provided, try to get from session storage
-  if (!finalGoogleKey || !finalPplxKey) {
-    const savedKeys = getSavedApiKeys();
+  // If tokens not explicitly provided, try to get from session storage
+  if (!finalGoogleKeyToken || !finalPplxKeyToken) {
+    const savedTokens = getSavedApiTokens();
     
-    if (!finalGoogleKey && savedKeys.googleKey) {
-      finalGoogleKey = savedKeys.googleKey;
+    if (!finalGoogleKeyToken && savedTokens.googleKeyToken) {
+      finalGoogleKeyToken = savedTokens.googleKeyToken;
     }
     
-    if (!finalPplxKey && savedKeys.pplxKey) {
-      finalPplxKey = savedKeys.pplxKey;
+    if (!finalPplxKeyToken && savedTokens.pplxKeyToken) {
+      finalPplxKeyToken = savedTokens.pplxKeyToken;
     }
   }
   
-  // Validate that both API keys are present
-  if (!finalGoogleKey || !finalPplxKey) {
-    throw new Error("Both Google and Perplexity API keys are required");
-  }
-  
-  // Trim API keys to remove any whitespace
-  finalGoogleKey = finalGoogleKey.trim();
-  finalPplxKey = finalPplxKey.trim();
-  
-  // Final validation check
-  if (!finalGoogleKey || !finalPplxKey) {
-    throw new Error("API keys cannot be empty");
+  // Validate that at least one token is present (backend will fall back to env vars if needed)
+  if (!finalGoogleKeyToken && !finalPplxKeyToken) {
+    throw new Error("At least one API key token is required. Please authenticate your API keys first.");
   }
   
   try {
-    console.log("Sending API keys to backend for learning path generation");
+    console.log("Using token-based API key access for learning path generation");
     
     // Prepare request data
     const requestData = {
@@ -132,8 +161,8 @@ export const generateLearningPath = async (topic, options = {}) => {
       parallel_count: parallelCount,
       search_parallel_count: searchParallelCount,
       submodule_parallel_count: submoduleParallelCount,
-      google_api_key: finalGoogleKey,
-      pplx_api_key: finalPplxKey
+      google_key_token: finalGoogleKeyToken,
+      pplx_key_token: finalPplxKeyToken
     };
     
     // Add desired module count if specified
@@ -276,7 +305,9 @@ export default {
   exportHistory,
   clearHistory,
   validateApiKeys,
-  saveApiKeys,
-  getSavedApiKeys,
-  clearSavedApiKeys,
+  authenticateApiKeys,
+  saveApiTokens,
+  getSavedApiTokens,
+  clearSavedApiTokens,
 };
+

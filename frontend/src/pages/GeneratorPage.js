@@ -57,9 +57,10 @@ import {
   generateLearningPath, 
   saveToHistory,
   validateApiKeys,
-  saveApiKeys,
-  getSavedApiKeys,
-  clearSavedApiKeys
+  authenticateApiKeys,
+  saveApiTokens,
+  getSavedApiTokens,
+  clearSavedApiTokens
 } from '../services/api';
 
 const StyledChip = styled(Chip)(({ theme }) => ({
@@ -102,6 +103,10 @@ function GeneratorPage() {
   const [pplxKeyValid, setPplxKeyValid] = useState(null);
   const [validatingKeys, setValidatingKeys] = useState(false);
   
+  // Token states for secure API requests
+  const [googleKeyToken, setGoogleKeyToken] = useState(null);
+  const [pplxKeyToken, setPplxKeyToken] = useState(null);
+  
   // History states
   const [autoSaveToHistory, setAutoSaveToHistory] = useState(true);
   const [initialTags, setInitialTags] = useState([]);
@@ -117,11 +122,19 @@ function GeneratorPage() {
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'success' });
   const [taskId, setTaskId] = useState(null);
 
-  // Load saved API keys on component mount
+  // Load saved API tokens on component mount
   useEffect(() => {
-    const { googleKey, pplxKey, remember } = getSavedApiKeys();
-    if (googleKey) setGoogleApiKey(googleKey);
-    if (pplxKey) setPplxApiKey(pplxKey);
+    const { googleKeyToken, pplxKeyToken, remember } = getSavedApiTokens();
+    if (googleKeyToken) {
+      setGoogleKeyToken(googleKeyToken);
+      setGoogleKeyValid(true); // Assume token is valid if it exists
+    }
+    
+    if (pplxKeyToken) {
+      setPplxKeyToken(pplxKeyToken);
+      setPplxKeyValid(true); // Assume token is valid if it exists
+    }
+    
     if (remember) setRememberApiKeys(remember);
     
     // Auto-expand API settings section to make it more obvious to users
@@ -131,7 +144,7 @@ function GeneratorPage() {
   // Handle validation of API keys
   const handleValidateApiKeys = async () => {
     if (!googleApiKey.trim() && !pplxApiKey.trim()) {
-      showNotification('Please enter at least one API key to validate', 'warning');
+      showNotification('Please enter at least one API key to authenticate', 'warning');
       return;
     }
     
@@ -153,53 +166,53 @@ function GeneratorPage() {
     setPplxKeyValid(null);
     
     try {
-      showNotification('Validating API keys...', 'info');
-      console.log("Sending API keys for validation");
+      showNotification('Authenticating API keys...', 'info');
+      console.log("Authenticating API keys to get secure tokens");
       
       const trimmedGoogleKey = googleApiKey.trim();
       const trimmedPplxKey = pplxApiKey.trim();
       
-      const result = await validateApiKeys(trimmedGoogleKey, trimmedPplxKey);
+      const result = await authenticateApiKeys(trimmedGoogleKey, trimmedPplxKey, rememberApiKeys);
       
-      // Update validation status
+      // Update validation status and tokens
       if (trimmedGoogleKey) {
-        setGoogleKeyValid(result.google_key_valid || false);
-        if (!result.google_key_valid) {
-          showNotification(`Google API key invalid: ${result.google_key_error || 'Unknown error'}`, 'error');
+        setGoogleKeyValid(result.googleKeyValid || false);
+        if (result.googleKeyValid) {
+          setGoogleKeyToken(result.googleKeyToken);
+          showNotification('Google API key authenticated successfully!', 'success');
         } else {
-          showNotification('Google API key validation successful!', 'success');
+          setGoogleKeyToken(null);
+          showNotification(`Google API key invalid: ${result.googleKeyError || 'Unknown error'}`, 'error');
         }
       }
       
       if (trimmedPplxKey) {
-        setPplxKeyValid(result.pplx_key_valid || false);
-        if (!result.pplx_key_valid) {
-          showNotification(`Perplexity API key invalid: ${result.pplx_key_error || 'Unknown error'}`, 'error');
+        setPplxKeyValid(result.pplxKeyValid || false);
+        if (result.pplxKeyValid) {
+          setPplxKeyToken(result.pplxKeyToken);
+          showNotification('Perplexity API key authenticated successfully!', 'success');
         } else {
-          showNotification('Perplexity API key validation successful!', 'success');
+          setPplxKeyToken(null);
+          showNotification(`Perplexity API key invalid: ${result.pplxKeyError || 'Unknown error'}`, 'error');
         }
       }
       
       // Show success notification if all provided keys are valid
-      const googleSuccess = trimmedGoogleKey ? result.google_key_valid : true;
-      const pplxSuccess = trimmedPplxKey ? result.pplx_key_valid : true;
+      const googleSuccess = trimmedGoogleKey ? result.googleKeyValid : true;
+      const pplxSuccess = trimmedPplxKey ? result.pplxKeyValid : true;
       
       if (googleSuccess && pplxSuccess) {
         if (trimmedGoogleKey && trimmedPplxKey) {
-          showNotification('Both API keys validated successfully!', 'success');
-        }
-        
-        // Save keys if remember is checked
-        if (rememberApiKeys) {
-          saveApiKeys(trimmedGoogleKey, trimmedPplxKey, true);
-          showNotification('API keys saved for this session', 'info');
+          showNotification('Both API keys authenticated successfully!', 'success');
         }
       }
     } catch (error) {
-      console.error('Error during API key validation:', error);
-      showNotification('Network error validating API keys. Please check your internet connection and try again.', 'error');
+      console.error('Error during API key authentication:', error);
+      showNotification('Network error authenticating API keys. Please check your internet connection and try again.', 'error');
       setGoogleKeyValid(false);
       setPplxKeyValid(false);
+      setGoogleKeyToken(null);
+      setPplxKeyToken(null);
     } finally {
       setValidatingKeys(false);
     }
@@ -211,7 +224,9 @@ function GeneratorPage() {
     setPplxApiKey('');
     setGoogleKeyValid(null);
     setPplxKeyValid(null);
-    clearSavedApiKeys();
+    setGoogleKeyToken(null);
+    setPplxKeyToken(null);
+    clearSavedApiTokens();
     setRememberApiKeys(false);
     showNotification('API keys cleared', 'success');
   };
@@ -328,52 +343,27 @@ function GeneratorPage() {
       return;
     }
 
-    // Check if API keys are provided
-    if (!googleApiKey.trim() || !pplxApiKey.trim()) {
-      setError('Both Google and Perplexity API keys are required. Please enter them in the API Key Settings section.');
+    // Check if API key tokens are available
+    if (!googleKeyToken && !pplxKeyToken) {
+      setError('API keys are required. Please authenticate your API keys in the API Key Settings section.');
       setApiSettingsOpen(true); // Open the API settings accordion
       return;
-    }
-    
-    // Validate API keys before proceeding
-    if (googleKeyValid !== true || pplxKeyValid !== true) {
-      setError('Please validate your API keys before generating a learning path.');
-      setApiSettingsOpen(true);
-      showNotification('API keys must be validated before proceeding.', 'warning');
-      return;
-    }
-
-    // Additional API key format validation
-    if (!googleApiKey.startsWith("AIza")) {
-      setError('Invalid Google API key format. The key should start with "AIza".');
-      setApiSettingsOpen(true);
-      return;
-    }
-
-    if (!pplxApiKey.startsWith("pplx-")) {
-      setError('Invalid Perplexity API key format. The key should start with "pplx-".');
-      setApiSettingsOpen(true);
-      return;
-    }
-    
-    // Save API keys if remember option is checked
-    if (rememberApiKeys && (googleApiKey || pplxApiKey)) {
-      saveApiKeys(googleApiKey, pplxApiKey, true);
     }
     
     setError('');
     setIsGenerating(true);
     
     try {
-      console.log("Generating learning path with user-provided API keys");
+      console.log("Using secure token-based API access for learning path generation");
       
       // Prepare the request data, including the new module and submodule count parameters
       const requestData = {
         parallelCount,
         searchParallelCount,
         submoduleParallelCount,
-        googleApiKey: googleApiKey.trim(),
-        pplxApiKey: pplxApiKey.trim()
+        googleKeyToken,
+        pplxKeyToken,
+        rememberTokens: rememberApiKeys
       };
       
       // Only include module count if automatic mode is disabled
@@ -419,18 +409,10 @@ function GeneratorPage() {
       
       // Check if this is an API key validation error
       if (err.response && err.response.status === 400 && err.response.data.detail) {
-        if (err.response.data.detail.includes('Google API key') || 
-            err.response.data.detail.includes('Perplexity API key')) {
+        if (err.response.data.detail.includes('API key tokens') || 
+            err.response.data.detail.includes('token')) {
           setError(err.response.data.detail);
           setApiSettingsOpen(true);
-          
-          // Reset validation status as the keys were rejected by the backend
-          if (err.response.data.detail.includes('Google API key')) {
-            setGoogleKeyValid(false);
-          }
-          if (err.response.data.detail.includes('Perplexity API key')) {
-            setPplxKeyValid(false);
-          }
         } else {
           setError(err.response.data.detail);
         }
@@ -572,7 +554,7 @@ function GeneratorPage() {
               variant="contained"
               color="primary"
               size={isMobile ? "medium" : "large"}
-              disabled={isGenerating || !topic.trim() || !googleApiKey.trim() || !pplxApiKey.trim() || googleKeyValid !== true || pplxKeyValid !== true}
+              disabled={isGenerating || !topic.trim() || (!googleKeyToken && !pplxKeyToken)}
               startIcon={isGenerating ? <CircularProgress size={20} color="inherit" /> : <BoltIcon />}
               sx={{ 
                 py: { xs: 1, sm: 1.5 }, 
@@ -587,13 +569,13 @@ function GeneratorPage() {
             </Button>
           </Box>
           
-          {(!googleApiKey.trim() || !pplxApiKey.trim()) && !isGenerating && (
+          {(!googleKeyToken && !pplxKeyToken) && !isGenerating && (
             <Typography color="error" variant="body2" sx={{ 
               mt: 2, 
               textAlign: 'center',
               fontSize: { xs: '0.75rem', sm: '0.875rem' }
             }}>
-              Please provide both Google and Perplexity API keys in the API Key Settings section to generate a learning path.
+              Please authenticate at least one API key in the API Key Settings section to generate a learning path.
             </Typography>
           )}
           
@@ -603,7 +585,7 @@ function GeneratorPage() {
               textAlign: 'center',
               fontSize: { xs: '0.75rem', sm: '0.875rem' } 
             }}>
-              Please validate your API keys before generating a learning path.
+              Please authenticate your API keys before generating a learning path.
             </Typography>
           )}
           

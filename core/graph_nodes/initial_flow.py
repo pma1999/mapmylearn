@@ -11,19 +11,19 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from core.graph_nodes.helpers import run_chain, batch_items, format_search_results
 
-async def execute_single_search(query: SearchQuery, perplexity_api_key: str = None) -> Dict[str, Any]:
+async def execute_single_search(query: SearchQuery, key_provider = None) -> Dict[str, Any]:
     """
     Executes a single web search using the Perplexity LLM.
     
     Args:
         query: A SearchQuery instance with keywords and rationale.
-        perplexity_api_key: Optional Perplexity API key for search.
+        key_provider: Optional key provider for Perplexity search.
         
     Returns:
         A dictionary with the query, rationale, and search results.
     """
     try:
-        search_model = get_search_tool(api_key=perplexity_api_key)
+        search_model = get_search_tool(key_provider=key_provider)
         logging.info(f"Searching for: {query.keywords}")
         
         # Create a prompt that asks for web search results
@@ -116,14 +116,14 @@ Your response should be exactly 5 search queries, each with its detailed rationa
 """
     prompt = ChatPromptTemplate.from_template(prompt_text)
     try:
-        # Access the Google API key from state with logging
-        google_api_key = state.get("google_api_key")
-        if not google_api_key:
-            logging.warning("Google API key not found in state, this may cause errors")
+        # Get Google key provider from state
+        google_key_provider = state.get("google_key_provider")
+        if not google_key_provider:
+            logging.warning("Google key provider not found in state, this may cause errors")
         else:
-            logging.debug("Found Google API key in state, using for search query generation")
+            logging.debug("Found Google key provider in state, using for search query generation")
             
-        result = await run_chain(prompt, lambda: get_llm(api_key=google_api_key), search_queries_parser, {
+        result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), search_queries_parser, {
             "user_topic": state["user_topic"],
             "format_instructions": search_queries_parser.get_format_instructions()
         })
@@ -150,12 +150,12 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
     
     search_queries = state["search_queries"]
     
-    # Get the Perplexity API key from state with logging
-    perplexity_api_key = state.get("pplx_api_key")
-    if not perplexity_api_key:
-        logging.warning("Perplexity API key not found in state, this may cause errors")
+    # Get the Perplexity key provider from state
+    pplx_key_provider = state.get("pplx_key_provider")
+    if not pplx_key_provider:
+        logging.warning("Perplexity key provider not found in state, this may cause errors")
     else:
-        logging.debug("Found Perplexity API key in state, using for web searches")
+        logging.debug("Found Perplexity key provider in state, using for web searches")
     
     # Set up parallel processing
     batch_size = min(len(search_queries), state.get("search_parallel_count", 3))
@@ -169,7 +169,7 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
             logging.info(f"Processing batch of {len(batch)} searches")
             
             # Create tasks for parallel execution
-            tasks = [execute_single_search(query, perplexity_api_key=perplexity_api_key) for query in batch]
+            tasks = [execute_single_search(query, key_provider=pplx_key_provider) for query in batch]
             batch_results = await asyncio.gather(*tasks, return_exceptions=True)
             
             # Process results and handle any exceptions
@@ -213,12 +213,12 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
             "steps": state.get("steps", []) + ["No search results available"]
         }
     
-    # Get the Google API key from state
-    google_api_key = state.get("google_api_key")
-    if not google_api_key:
-        logging.warning("Google API key not found in state, this may cause errors")
+    # Get the Google key provider from state
+    google_key_provider = state.get("google_key_provider")
+    if not google_key_provider:
+        logging.warning("Google key provider not found in state, this may cause errors")
     else:
-        logging.debug("Found Google API key in state, using for learning path creation")
+        logging.debug("Found Google key provider in state, using for learning path creation")
     
     try:
         # Procesar los resultados de búsqueda para generar módulos
@@ -281,7 +281,7 @@ Format your response as a structured curriculum. Each module should build on pre
         # Llamar a la cadena LLM proporcionando el valor para 'format_instructions'
         result = await run_chain(
             prompt,
-            lambda: get_llm(api_key=google_api_key),
+            lambda: get_llm(key_provider=google_key_provider),
             enhanced_modules_parser,
             { "format_instructions": format_instructions_value }
         )

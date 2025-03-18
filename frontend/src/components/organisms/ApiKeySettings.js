@@ -13,7 +13,8 @@ import {
   IconButton,
   Grid,
   Stack,
-  CircularProgress
+  CircularProgress,
+  Tooltip
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import KeyIcon from '@mui/icons-material/Key';
@@ -21,6 +22,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
+import SecurityIcon from '@mui/icons-material/Security';
 
 const ApiKeySettings = ({
   apiSettingsOpen,
@@ -61,9 +63,24 @@ const ApiKeySettings = ({
         </Stack>
       </AccordionSummary>
       <AccordionDetails>
-        <Typography variant="body2" color="text.secondary" paragraph sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
-          To generate learning paths, you need to provide your own API keys. These keys are required to make requests to external AI and search services.
-        </Typography>
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="body2" color="text.secondary" paragraph sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+            To generate learning paths, you need to provide your own API keys. These keys are required to make requests to external AI and search services.
+          </Typography>
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            bgcolor: 'success.light', 
+            p: 1.5, 
+            borderRadius: 1,
+            color: 'success.contrastText'
+          }}>
+            <SecurityIcon sx={{ mr: 1 }} />
+            <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+              Your API keys are now securely handled using tokens and are never stored directly in the application state.
+            </Typography>
+          </Box>
+        </Box>
         
         <Grid container spacing={isMobile ? 2 : 3} direction="column">
           <Grid item>
@@ -89,17 +106,21 @@ const ApiKeySettings = ({
                       {showGoogleKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
                     </IconButton>
                     {googleKeyValid === true && (
-                      <CheckCircleIcon color="success" sx={{ ml: 1 }} />
+                      <Tooltip title="API key authenticated">
+                        <CheckCircleIcon color="success" sx={{ ml: 1 }} />
+                      </Tooltip>
                     )}
                     {googleKeyValid === false && (
-                      <ErrorIcon color="error" sx={{ ml: 1 }} />
+                      <Tooltip title="API key authentication failed">
+                        <ErrorIcon color="error" sx={{ ml: 1 }} />
+                      </Tooltip>
                     )}
                   </InputAdornment>
                 ),
               }}
               helperText={
                 googleKeyValid === false ? "Invalid Google API key" : 
-                googleKeyValid === true ? "API key validated" : 
+                googleKeyValid === true ? "API key authenticated securely" : 
                 "Required - Enter your Google API key (starts with AIza...)"
               }
             />
@@ -128,17 +149,21 @@ const ApiKeySettings = ({
                       {showPplxKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
                     </IconButton>
                     {pplxKeyValid === true && (
-                      <CheckCircleIcon color="success" sx={{ ml: 1 }} />
+                      <Tooltip title="API key authenticated">
+                        <CheckCircleIcon color="success" sx={{ ml: 1 }} />
+                      </Tooltip>
                     )}
                     {pplxKeyValid === false && (
-                      <ErrorIcon color="error" sx={{ ml: 1 }} />
+                      <Tooltip title="API key authentication failed">
+                        <ErrorIcon color="error" sx={{ ml: 1 }} />
+                      </Tooltip>
                     )}
                   </InputAdornment>
                 ),
               }}
               helperText={
                 pplxKeyValid === false ? "Invalid Perplexity API key" : 
-                pplxKeyValid === true ? "API key validated" : 
+                pplxKeyValid === true ? "API key authenticated securely" : 
                 "Required - Enter your Perplexity API key (starts with pplx-)"
               }
             />
@@ -173,11 +198,11 @@ const ApiKeySettings = ({
                 color="primary"
                 onClick={handleValidateApiKeys}
                 disabled={isGenerating || validatingKeys || (!googleApiKey.trim() && !pplxApiKey.trim())}
-                startIcon={validatingKeys ? <CircularProgress size={20} color="inherit" /> : null}
+                startIcon={validatingKeys ? <CircularProgress size={20} color="inherit" /> : <SecurityIcon />}
                 fullWidth={isMobile}
                 size={isMobile ? "small" : "medium"}
               >
-                {validatingKeys ? "Validating..." : "Validate API Keys"}
+                {validatingKeys ? "Authenticating..." : "Authenticate Keys"}
               </Button>
               
               <Button
@@ -188,7 +213,7 @@ const ApiKeySettings = ({
                 fullWidth={isMobile}
                 size={isMobile ? "small" : "medium"}
               >
-                Clear API Keys
+                Clear Keys
               </Button>
             </Stack>
           </Grid>
@@ -196,7 +221,7 @@ const ApiKeySettings = ({
         
         <Box sx={{ mt: 2 }}>
           <Typography variant="body2" color="info.main" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
-            Note: Your API keys are used only for your requests and are not stored on our servers unless you choose "Remember API keys".
+            Note: Your API keys are securely processed and never stored directly on our servers. We use temporary security tokens to manage access.
           </Typography>
         </Box>
       </AccordionDetails>

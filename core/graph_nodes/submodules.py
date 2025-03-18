@@ -54,7 +54,7 @@ async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
         # Using the extracted prompt template instead of an inline string
         prompt = ChatPromptTemplate.from_template(base_prompt)
         try:
-            result = await run_chain(prompt, lambda: get_llm(api_key=state.get("google_api_key")), submodule_parser, {
+            result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider")), submodule_parser, {
                 "user_topic": state["user_topic"],
                 "module_title": module.title,
                 "module_description": module.description,
@@ -289,8 +289,8 @@ async def generate_submodule_specific_queries(
     logger = logging.getLogger("learning_path.query_generator")
     logger.info(f"Generating search queries for submodule {module_id}.{sub_id}: {submodule.title}")
     
-    # Get the Google API key from state
-    google_api_key = state.get("google_api_key")
+    # Get the Google key provider from state
+    google_key_provider = state.get("google_key_provider")
     
     # Prepare context about the module and submodule
     learning_context = {
@@ -329,7 +329,7 @@ Other Modules in Learning Path:
     
     prompt = ChatPromptTemplate.from_template(SUBMODULE_QUERY_GENERATION_PROMPT)
     try:
-        result = await run_chain(prompt, lambda: get_llm(api_key=google_api_key), module_queries_parser, {
+        result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), module_queries_parser, {
             "context": context_str,
             "format_instructions": module_queries_parser.get_format_instructions()
         })
@@ -377,7 +377,7 @@ async def execute_submodule_specific_searches(
     search_results = []
     try:
         for idx, batch in enumerate(batches):
-            tasks = [execute_single_search(query, perplexity_api_key=state.get("pplx_api_key")) for query in batch]
+            tasks = [execute_single_search(query, key_provider=state.get("pplx_key_provider")) for query in batch]
             results = await asyncio.gather(*tasks)
             search_results.extend(results)
             if idx < len(batches) - 1:
@@ -453,7 +453,7 @@ async def develop_submodule_specific_content(
     # Using the extracted prompt template
     prompt = ChatPromptTemplate.from_template(SUBMODULE_CONTENT_DEVELOPMENT_PROMPT)
     try:
-        llm = get_llm(api_key=state.get("google_api_key"))
+        llm = get_llm(key_provider=state.get("google_key_provider"))
         output_parser = StrOutputParser()
         chain = prompt | llm | output_parser
         sub_content = await chain.ainvoke({

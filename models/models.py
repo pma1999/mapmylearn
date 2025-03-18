@@ -1,5 +1,9 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional, TypedDict, Annotated, Callable
+from typing import List, Dict, Any, Optional, TypedDict, Annotated, Callable, TYPE_CHECKING
+
+# Import the key provider types but only for type checking
+if TYPE_CHECKING:  
+    from services.key_provider import GoogleKeyProvider, PerplexityKeyProvider
 
 # Topic Analysis Models
 class TopicAnalysis(BaseModel):
@@ -108,8 +112,13 @@ class LearningPathState(TypedDict):
     current_submodule_batch_index: Optional[int]
     submodules_in_process: Optional[Dict[tuple, Dict[str, Any]]]
     developed_submodules: Optional[List[SubmoduleContent]]
-    google_api_key: Optional[str]
-    pplx_api_key: Optional[str]
+    # Key provider references instead of direct API keys
+    google_key_provider: Optional[Any]  # GoogleKeyProvider but avoiding import cycles
+    pplx_key_provider: Optional[Any]    # PerplexityKeyProvider but avoiding import cycles
+    # Optional token fields for reference
+    google_key_token: Optional[str]
+    pplx_key_token: Optional[str]
+    # Other optional settings
     desired_module_count: Optional[int]
     desired_submodule_count: Optional[int]
 
