@@ -54,7 +54,7 @@ async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
         # Using the extracted prompt template instead of an inline string
         prompt = ChatPromptTemplate.from_template(base_prompt)
         try:
-            result = await run_chain(prompt, lambda: get_llm(api_key=state.get("openai_api_key")), submodule_parser, {
+            result = await run_chain(prompt, lambda: get_llm(api_key=state.get("google_api_key")), submodule_parser, {
                 "user_topic": state["user_topic"],
                 "module_title": module.title,
                 "module_description": module.description,
@@ -274,7 +274,7 @@ async def generate_submodule_specific_queries(
     submodule: Submodule
 ) -> List[SearchQuery]:
     """
-    Generates search queries for a specific submodule.
+    Generates search queries specific to a submodule.
     
     Args:
         state: The current LearningPathState.
@@ -284,49 +284,54 @@ async def generate_submodule_specific_queries(
         submodule: The Submodule instance.
         
     Returns:
-        A list of SearchQuery objects.
+        A list of SearchQuery instances.
     """
-    # Get the OpenAI API key from state
-    openai_api_key = state.get("openai_api_key")
+    logger = logging.getLogger("learning_path.query_generator")
+    logger.info(f"Generating search queries for submodule {module_id}.{sub_id}: {submodule.title}")
+    
+    # Get the Google API key from state
+    google_api_key = state.get("google_api_key")
     
     # Prepare context about the module and submodule
-    module_context = f"Module: {module.title}\nDescription: {module.description}"
-    submodule_context = f"Submodule: {submodule.title}\nDescription: {submodule.description}"
+    learning_context = {
+        "topic": state["user_topic"],
+        "module_title": module.title,
+        "module_description": module.description,
+        "submodule_title": submodule.title,
+        "submodule_description": submodule.description,
+        "depth_level": submodule.depth_level
+    }
     
-    # Prepare the prompt template
-    prompt_text = """
-# EXPERT RESEARCH ASSISTANT INSTRUCTIONS
+    # Create context about other modules and submodules
+    other_modules = []
+    for i, m in enumerate(state.get("enhanced_modules", [])):
+        other_modules.append({
+            "title": m.title,
+            "description": m.description[:200] + "..." if len(m.description) > 200 else m.description,
+            "is_current": i == module_id
+        })
+    
+    # Compile the context with a description of other modules
+    context_str = f"""
+Topic: {learning_context['topic']}
 
-You need to generate targeted search queries to gather information for a specific submodule in a learning path.
+Current Module: {learning_context['module_title']} 
+Description: {learning_context['module_description']}
 
-## CONTEXT
-{module_context}
+Current Submodule: {learning_context['submodule_title']}
+Description: {learning_context['submodule_description']}
+Depth Level: {learning_context['depth_level']}
 
-{submodule_context}
-
-## TASK
-Create 1 highly targeted search query to gather comprehensive information for the submodule.
-
-Your search query should:
-1. Be specific and focused on the submodule topic
-2. Target high-quality educational content
-3. Be formulated to retrieve detailed information that helps explain this specific concept
-4. Cover what a learner needs to understand about this specific topic
-
-Provide exactly 1 search query with a clear rationale for why it will be valuable.
-
-{format_instructions}
+Other Modules in Learning Path:
 """
+    for m in other_modules:
+        context_str += f"- {'[Current] ' if m['is_current'] else ''}{m['title']}: {m['description']}\n"
     
-    # Create the prompt from the template
-    prompt = ChatPromptTemplate.from_template(prompt_text)
-    
+    prompt = ChatPromptTemplate.from_template(SUBMODULE_QUERY_GENERATION_PROMPT)
     try:
-        # Run the query generation chain
-        result = await run_chain(prompt, lambda: get_llm(api_key=openai_api_key), search_queries_parser, {
-            "module_context": module_context,
-            "submodule_context": submodule_context,
-            "format_instructions": search_queries_parser.get_format_instructions()
+        result = await run_chain(prompt, lambda: get_llm(api_key=google_api_key), module_queries_parser, {
+            "context": context_str,
+            "format_instructions": module_queries_parser.get_format_instructions()
         })
         
         queries = result.queries if hasattr(result, 'queries') else []
@@ -448,7 +453,7 @@ async def develop_submodule_specific_content(
     # Using the extracted prompt template
     prompt = ChatPromptTemplate.from_template(SUBMODULE_CONTENT_DEVELOPMENT_PROMPT)
     try:
-        llm = get_llm(api_key=state.get("openai_api_key"))
+        llm = get_llm(api_key=state.get("google_api_key"))
         output_parser = StrOutputParser()
         chain = prompt | llm | output_parser
         sub_content = await chain.ainvoke({

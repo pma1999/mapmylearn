@@ -14,7 +14,7 @@ import uuid
 # Import the backend functionality
 from main import generate_learning_path
 from history.history_models import LearningPathHistory, LearningPathHistoryEntry
-from services.services import validate_openai_key, validate_perplexity_key
+from services.services import validate_google_key, validate_perplexity_key
 
 # Import the database configuration
 from history.db_config import get_history_file_path
@@ -66,11 +66,11 @@ class LearningPathRequest(BaseModel):
     submodule_parallel_count: Optional[int] = 2
     desired_module_count: Optional[int] = None
     desired_submodule_count: Optional[int] = None
-    openai_api_key: Optional[str] = Field(None, description="OpenAI API key for LLM operations")
+    google_api_key: Optional[str] = Field(None, description="Google API key for LLM operations")
     pplx_api_key: Optional[str] = Field(None, description="Perplexity API key for search operations")
 
 class ApiKeyValidationRequest(BaseModel):
-    openai_api_key: Optional[str] = None
+    google_api_key: Optional[str] = None
     pplx_api_key: Optional[str] = None
 
 class ProgressUpdate(BaseModel):
@@ -135,19 +135,13 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
     The task ID can be used to retrieve the result or track progress.
     """
     # Validate required API keys
-    if not request.openai_api_key or not request.pplx_api_key:
+    if not request.google_api_key or not request.pplx_api_key:
         raise HTTPException(
             status_code=400,
-            detail="Both OpenAI API key and Perplexity API key are required. Please provide both keys."
+            detail="Both Google API key and Perplexity API key are required. Please provide both keys."
         )
     
-    # Validate the API keys format
-    if not request.openai_api_key.startswith("sk-"):
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid OpenAI API key format. API key should start with 'sk-'."
-        )
-    
+    # Validate the Perplexity API key format
     if not request.pplx_api_key.startswith("pplx-"):
         raise HTTPException(
             status_code=400,
@@ -183,7 +177,7 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
         search_parallel_count=request.search_parallel_count,
         submodule_parallel_count=request.submodule_parallel_count,
         progress_callback=progress_callback,
-        openai_api_key=request.openai_api_key,
+        google_api_key=request.google_api_key,
         pplx_api_key=request.pplx_api_key,
         desired_module_count=request.desired_module_count,
         desired_submodule_count=request.desired_submodule_count
@@ -199,7 +193,7 @@ async def generate_learning_path_task(
     search_parallel_count: int = 3,
     submodule_parallel_count: int = 2,
     progress_callback = None,
-    openai_api_key: Optional[str] = None,
+    google_api_key: Optional[str] = None,
     pplx_api_key: Optional[str] = None,
     desired_module_count: Optional[int] = None,
     desired_submodule_count: Optional[int] = None
@@ -211,10 +205,10 @@ async def generate_learning_path_task(
         logging.info(f"Starting learning path generation for: {topic}")
         
         # Check if API keys are provided
-        if not openai_api_key:
-            logging.warning("No OpenAI API key provided, will use environment variable")
+        if not google_api_key:
+            logging.warning("No Google API key provided, will use environment variable")
         else:
-            logging.debug("Using provided OpenAI API key")
+            logging.debug("Using provided Google API key")
             
         if not pplx_api_key:
             logging.warning("No Perplexity API key provided, will use environment variable")
@@ -228,7 +222,7 @@ async def generate_learning_path_task(
             search_parallel_count=search_parallel_count, 
             submodule_parallel_count=submodule_parallel_count,
             progress_callback=progress_callback,
-            openai_api_key=openai_api_key,
+            google_api_key=google_api_key,
             pplx_api_key=pplx_api_key,
             desired_module_count=desired_module_count,
             desired_submodule_count=desired_submodule_count
@@ -254,22 +248,23 @@ async def generate_learning_path_task(
 @app.post("/api/validate-api-keys")
 async def validate_api_keys(request: ApiKeyValidationRequest):
     """
-    Validate API keys for OpenAI and Perplexity.
+    Validate the format and functionality of API keys.
     """
-    response = {"openai": {"valid": False, "error": None}, 
-                "perplexity": {"valid": False, "error": None}}
+    response = {}
     
-    # Validate OpenAI key if provided
-    if request.openai_api_key:
-        valid, error_msg = validate_openai_key(request.openai_api_key)
-        response["openai"]["valid"] = valid
-        response["openai"]["error"] = error_msg
+    # Validate Google API key if provided
+    if request.google_api_key:
+        is_valid, error_message = validate_google_key(request.google_api_key)
+        response["google_key_valid"] = is_valid
+        if not is_valid:
+            response["google_key_error"] = error_message
     
-    # Validate Perplexity key if provided
+    # Validate Perplexity API key if provided
     if request.pplx_api_key:
-        valid, error_msg = validate_perplexity_key(request.pplx_api_key)
-        response["perplexity"]["valid"] = valid
-        response["perplexity"]["error"] = error_msg
+        is_valid, error_message = validate_perplexity_key(request.pplx_api_key)
+        response["pplx_key_valid"] = is_valid
+        if not is_valid:
+            response["pplx_key_error"] = error_message
     
     return response
 

@@ -1,7 +1,7 @@
 import os
 import logging
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.chat_models import ChatPerplexity
 
 load_dotenv()
@@ -10,27 +10,31 @@ logger = logging.getLogger(__name__)
 
 def get_llm(api_key=None):
     """
-    Initialize the LLM with either provided API key or from environment variables.
+    Initialize the Google Gemini LLM with provided API key or from environment variables.
     
     Args:
-        api_key: Optional explicit OpenAI API key
+        api_key: Optional explicit Google API key
         
     Returns:
-        Initialized ChatOpenAI instance
+        Initialized ChatGoogleGenerativeAI instance
     """
-    openai_api_key = api_key or os.environ.get("OPENAI_API_KEY")
-    if not openai_api_key:
-        logger.warning("OPENAI_API_KEY not set")
-        logger.debug("No OpenAI API key provided in state or environment variables")
+    google_api_key = api_key or os.environ.get("GOOGLE_API_KEY")
+    if not google_api_key:
+        logger.warning("GOOGLE_API_KEY not set")
+        logger.debug("No Google API key provided in state or environment variables")
     else:
-        logger.debug(f"Using {'provided' if api_key else 'environment'} OpenAI API key")
+        logger.debug(f"Using {'provided' if api_key else 'environment'} Google API key")
     
     try:
-        return ChatOpenAI(temperature=0.2, model="gpt-4o-mini", api_key=openai_api_key)
+        return ChatGoogleGenerativeAI(
+            model="gemini-2.0-pro-exp-02-05",
+            temperature=0.2,
+            google_api_key=google_api_key,
+        )
     except Exception as e:
-        logger.error(f"Error initializing ChatOpenAI: {str(e)}")
-        if not openai_api_key:
-            logger.error("OpenAI API key is required. Make sure to provide a valid API key.")
+        logger.error(f"Error initializing ChatGoogleGenerativeAI: {str(e)}")
+        if not google_api_key:
+            logger.error("Google API key is required. Make sure to provide a valid API key.")
         raise
 
 def get_search_tool(api_key=None):
@@ -63,29 +67,44 @@ def get_search_tool(api_key=None):
             logger.error("Perplexity API key is required. Make sure to provide a valid API key.")
         raise
 
-def validate_openai_key(api_key):
+def validate_google_key(api_key):
     """
-    Validate if the OpenAI API key is correctly formatted and functional.
+    Validate if the Google API key is functional.
     
     Args:
-        api_key: OpenAI API key to validate
+        api_key: Google API key to validate
         
     Returns:
         Tuple of (is_valid: bool, error_message: str or None)
     """
     if not api_key or not isinstance(api_key, str):
         return False, "API key must be a non-empty string"
-        
-    if not api_key.startswith("sk-") or len(api_key) < 20:
-        return False, "Invalid OpenAI API key format"
-        
+    
     try:
         # Minimal test to validate key functionality
-        llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo", api_key=api_key, max_tokens=5)
+        llm = ChatGoogleGenerativeAI(
+            temperature=0,
+            model="gemini-2.0-pro-exp-02-05",
+            google_api_key=api_key,
+            max_output_tokens=5
+        )
         llm.invoke("test")
         return True, None
     except Exception as e:
-        return False, f"API key validation failed: {str(e)}"
+        error_str = str(e)
+        
+        # Check for specific error cases
+        if "invalid api key" in error_str.lower():
+            return False, "Invalid Google API key format or key not activated"
+        
+        if "permission" in error_str.lower() or "access" in error_str.lower():
+            return False, "API key error: Insufficient permissions or access denied"
+        
+        if "quota" in error_str.lower() or "limit" in error_str.lower():
+            return False, "API key error: Quota exceeded or rate limits reached"
+        
+        # Default error message
+        return False, f"API key validation failed: {error_str}"
         
 def validate_perplexity_key(api_key):
     """

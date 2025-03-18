@@ -25,17 +25,17 @@ import ErrorIcon from '@mui/icons-material/Error';
 const ApiKeySettings = ({
   apiSettingsOpen,
   setApiSettingsOpen,
-  openaiApiKey,
-  setOpenaiApiKey,
+  googleApiKey,
+  setGoogleApiKey,
   pplxApiKey,
   setPplxApiKey,
-  showOpenaiKey,
-  setShowOpenaiKey,
+  showGoogleKey,
+  setShowGoogleKey,
   showPplxKey,
   setShowPplxKey,
   rememberApiKeys,
   setRememberApiKeys,
-  openaiKeyValid,
+  googleKeyValid,
   pplxKeyValid,
   validatingKeys,
   isGenerating,
@@ -68,13 +68,13 @@ const ApiKeySettings = ({
         <Grid container spacing={isMobile ? 2 : 3} direction="column">
           <Grid item>
             <TextField
-              label="OpenAI API Key"
+              label="Google API Key"
               variant="outlined"
               fullWidth
-              value={openaiApiKey}
-              onChange={(e) => setOpenaiApiKey(e.target.value)}
-              type={showOpenaiKey ? 'text' : 'password'}
-              placeholder="sk-..."
+              value={googleApiKey}
+              onChange={(e) => setGoogleApiKey(e.target.value)}
+              type={showGoogleKey ? 'text' : 'password'}
+              placeholder="AIza..."
               disabled={isGenerating}
               margin="dense"
               InputProps={{
@@ -82,25 +82,25 @@ const ApiKeySettings = ({
                   <InputAdornment position="end">
                     <IconButton
                       aria-label="toggle password visibility"
-                      onClick={() => setShowOpenaiKey(!showOpenaiKey)}
+                      onClick={() => setShowGoogleKey(!showGoogleKey)}
                       edge="end"
                       size={isMobile ? "small" : "medium"}
                     >
-                      {showOpenaiKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                      {showGoogleKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
                     </IconButton>
-                    {openaiKeyValid === true && (
+                    {googleKeyValid === true && (
                       <CheckCircleIcon color="success" sx={{ ml: 1 }} />
                     )}
-                    {openaiKeyValid === false && (
+                    {googleKeyValid === false && (
                       <ErrorIcon color="error" sx={{ ml: 1 }} />
                     )}
                   </InputAdornment>
                 ),
               }}
               helperText={
-                openaiKeyValid === false ? "Invalid OpenAI API key" : 
-                openaiKeyValid === true ? "API key validated" : 
-                "Required - Enter your OpenAI API key (starts with sk-)"
+                googleKeyValid === false ? "Invalid Google API key" : 
+                googleKeyValid === true ? "API key validated" : 
+                "Required - Enter your Google API key (starts with AIza...)"
               }
             />
           </Grid>
@@ -172,7 +172,7 @@ const ApiKeySettings = ({
                 variant="contained"
                 color="primary"
                 onClick={handleValidateApiKeys}
-                disabled={isGenerating || validatingKeys || (!openaiApiKey.trim() && !pplxApiKey.trim())}
+                disabled={isGenerating || validatingKeys || (!googleApiKey.trim() && !pplxApiKey.trim())}
                 startIcon={validatingKeys ? <CircularProgress size={20} color="inherit" /> : null}
                 fullWidth={isMobile}
                 size={isMobile ? "small" : "medium"}
@@ -184,7 +184,7 @@ const ApiKeySettings = ({
                 variant="outlined"
                 color="secondary"
                 onClick={handleClearApiKeys}
-                disabled={isGenerating || (!openaiApiKey && !pplxApiKey)}
+                disabled={isGenerating || (!googleApiKey && !pplxApiKey)}
                 fullWidth={isMobile}
                 size={isMobile ? "small" : "medium"}
               >

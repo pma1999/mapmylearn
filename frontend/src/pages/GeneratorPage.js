@@ -93,12 +93,12 @@ function GeneratorPage() {
   const [desiredSubmoduleCount, setDesiredSubmoduleCount] = useState(3);
   
   // API Key states
-  const [openaiApiKey, setOpenaiApiKey] = useState('');
+  const [googleApiKey, setGoogleApiKey] = useState('');
   const [pplxApiKey, setPplxApiKey] = useState('');
-  const [showOpenaiKey, setShowOpenaiKey] = useState(false);
+  const [showGoogleKey, setShowGoogleKey] = useState(false);
   const [showPplxKey, setShowPplxKey] = useState(false);
   const [rememberApiKeys, setRememberApiKeys] = useState(false);
-  const [openaiKeyValid, setOpenaiKeyValid] = useState(null);
+  const [googleKeyValid, setGoogleKeyValid] = useState(null);
   const [pplxKeyValid, setPplxKeyValid] = useState(null);
   const [validatingKeys, setValidatingKeys] = useState(false);
   
@@ -119,8 +119,8 @@ function GeneratorPage() {
 
   // Load saved API keys on component mount
   useEffect(() => {
-    const { openaiKey, pplxKey, remember } = getSavedApiKeys();
-    if (openaiKey) setOpenaiApiKey(openaiKey);
+    const { googleKey, pplxKey, remember } = getSavedApiKeys();
+    if (googleKey) setGoogleApiKey(googleKey);
     if (pplxKey) setPplxApiKey(pplxKey);
     if (remember) setRememberApiKeys(remember);
     
@@ -130,15 +130,15 @@ function GeneratorPage() {
 
   // Handle validation of API keys
   const handleValidateApiKeys = async () => {
-    if (!openaiApiKey.trim() && !pplxApiKey.trim()) {
+    if (!googleApiKey.trim() && !pplxApiKey.trim()) {
       showNotification('Please enter at least one API key to validate', 'warning');
       return;
     }
     
     // Check basic format before sending to backend
-    if (openaiApiKey.trim() && !openaiApiKey.trim().startsWith("sk-")) {
-      showNotification('Invalid OpenAI API key format. The key should start with "sk-".', 'error');
-      setOpenaiKeyValid(false);
+    if (googleApiKey.trim() && !googleApiKey.trim().startsWith("AIza")) {
+      showNotification('Invalid Google API key format. The key should start with "AIza".', 'error');
+      setGoogleKeyValid(false);
       return;
     }
     
@@ -149,56 +149,56 @@ function GeneratorPage() {
     }
     
     setValidatingKeys(true);
-    setOpenaiKeyValid(null);
+    setGoogleKeyValid(null);
     setPplxKeyValid(null);
     
     try {
       showNotification('Validating API keys...', 'info');
       console.log("Sending API keys for validation");
       
-      const trimmedOpenaiKey = openaiApiKey.trim();
+      const trimmedGoogleKey = googleApiKey.trim();
       const trimmedPplxKey = pplxApiKey.trim();
       
-      const result = await validateApiKeys(trimmedOpenaiKey, trimmedPplxKey);
+      const result = await validateApiKeys(trimmedGoogleKey, trimmedPplxKey);
       
       // Update validation status
-      if (trimmedOpenaiKey) {
-        setOpenaiKeyValid(result.openai?.valid || false);
-        if (!result.openai?.valid) {
-          showNotification(`OpenAI API key invalid: ${result.openai?.error || 'Unknown error'}`, 'error');
+      if (trimmedGoogleKey) {
+        setGoogleKeyValid(result.google_key_valid || false);
+        if (!result.google_key_valid) {
+          showNotification(`Google API key invalid: ${result.google_key_error || 'Unknown error'}`, 'error');
         } else {
-          showNotification('OpenAI API key validation successful!', 'success');
+          showNotification('Google API key validation successful!', 'success');
         }
       }
       
       if (trimmedPplxKey) {
-        setPplxKeyValid(result.perplexity?.valid || false);
-        if (!result.perplexity?.valid) {
-          showNotification(`Perplexity API key invalid: ${result.perplexity?.error || 'Unknown error'}`, 'error');
+        setPplxKeyValid(result.pplx_key_valid || false);
+        if (!result.pplx_key_valid) {
+          showNotification(`Perplexity API key invalid: ${result.pplx_key_error || 'Unknown error'}`, 'error');
         } else {
           showNotification('Perplexity API key validation successful!', 'success');
         }
       }
       
       // Show success notification if all provided keys are valid
-      const openaiSuccess = trimmedOpenaiKey ? result.openai?.valid : true;
-      const pplxSuccess = trimmedPplxKey ? result.perplexity?.valid : true;
+      const googleSuccess = trimmedGoogleKey ? result.google_key_valid : true;
+      const pplxSuccess = trimmedPplxKey ? result.pplx_key_valid : true;
       
-      if (openaiSuccess && pplxSuccess) {
-        if (trimmedOpenaiKey && trimmedPplxKey) {
+      if (googleSuccess && pplxSuccess) {
+        if (trimmedGoogleKey && trimmedPplxKey) {
           showNotification('Both API keys validated successfully!', 'success');
         }
         
         // Save keys if remember is checked
         if (rememberApiKeys) {
-          saveApiKeys(trimmedOpenaiKey, trimmedPplxKey, true);
+          saveApiKeys(trimmedGoogleKey, trimmedPplxKey, true);
           showNotification('API keys saved for this session', 'info');
         }
       }
     } catch (error) {
       console.error('Error during API key validation:', error);
       showNotification('Network error validating API keys. Please check your internet connection and try again.', 'error');
-      setOpenaiKeyValid(false);
+      setGoogleKeyValid(false);
       setPplxKeyValid(false);
     } finally {
       setValidatingKeys(false);
@@ -207,9 +207,9 @@ function GeneratorPage() {
 
   // Clear API keys
   const handleClearApiKeys = () => {
-    setOpenaiApiKey('');
+    setGoogleApiKey('');
     setPplxApiKey('');
-    setOpenaiKeyValid(null);
+    setGoogleKeyValid(null);
     setPplxKeyValid(null);
     clearSavedApiKeys();
     setRememberApiKeys(false);
@@ -329,14 +329,14 @@ function GeneratorPage() {
     }
 
     // Check if API keys are provided
-    if (!openaiApiKey.trim() || !pplxApiKey.trim()) {
-      setError('Both OpenAI and Perplexity API keys are required. Please enter them in the API Key Settings section.');
+    if (!googleApiKey.trim() || !pplxApiKey.trim()) {
+      setError('Both Google and Perplexity API keys are required. Please enter them in the API Key Settings section.');
       setApiSettingsOpen(true); // Open the API settings accordion
       return;
     }
     
     // Validate API keys before proceeding
-    if (openaiKeyValid !== true || pplxKeyValid !== true) {
+    if (googleKeyValid !== true || pplxKeyValid !== true) {
       setError('Please validate your API keys before generating a learning path.');
       setApiSettingsOpen(true);
       showNotification('API keys must be validated before proceeding.', 'warning');
@@ -344,8 +344,8 @@ function GeneratorPage() {
     }
 
     // Additional API key format validation
-    if (!openaiApiKey.startsWith("sk-")) {
-      setError('Invalid OpenAI API key format. The key should start with "sk-".');
+    if (!googleApiKey.startsWith("AIza")) {
+      setError('Invalid Google API key format. The key should start with "AIza".');
       setApiSettingsOpen(true);
       return;
     }
@@ -357,8 +357,8 @@ function GeneratorPage() {
     }
     
     // Save API keys if remember option is checked
-    if (rememberApiKeys && (openaiApiKey || pplxApiKey)) {
-      saveApiKeys(openaiApiKey, pplxApiKey, true);
+    if (rememberApiKeys && (googleApiKey || pplxApiKey)) {
+      saveApiKeys(googleApiKey, pplxApiKey, true);
     }
     
     setError('');
@@ -372,7 +372,7 @@ function GeneratorPage() {
         parallelCount,
         searchParallelCount,
         submoduleParallelCount,
-        openaiApiKey: openaiApiKey.trim(),
+        googleApiKey: googleApiKey.trim(),
         pplxApiKey: pplxApiKey.trim()
       };
       
@@ -419,14 +419,14 @@ function GeneratorPage() {
       
       // Check if this is an API key validation error
       if (err.response && err.response.status === 400 && err.response.data.detail) {
-        if (err.response.data.detail.includes('OpenAI API key') || 
+        if (err.response.data.detail.includes('Google API key') || 
             err.response.data.detail.includes('Perplexity API key')) {
           setError(err.response.data.detail);
           setApiSettingsOpen(true);
           
           // Reset validation status as the keys were rejected by the backend
-          if (err.response.data.detail.includes('OpenAI API key')) {
-            setOpenaiKeyValid(false);
+          if (err.response.data.detail.includes('Google API key')) {
+            setGoogleKeyValid(false);
           }
           if (err.response.data.detail.includes('Perplexity API key')) {
             setPplxKeyValid(false);
@@ -524,20 +524,18 @@ function GeneratorPage() {
           <ApiKeySettings 
             apiSettingsOpen={apiSettingsOpen}
             setApiSettingsOpen={setApiSettingsOpen}
-            openaiApiKey={openaiApiKey}
-            setOpenaiApiKey={setOpenaiApiKey}
+            googleApiKey={googleApiKey}
+            setGoogleApiKey={setGoogleApiKey}
             pplxApiKey={pplxApiKey}
             setPplxApiKey={setPplxApiKey}
-            showOpenaiKey={showOpenaiKey}
-            setShowOpenaiKey={setShowOpenaiKey}
+            showGoogleKey={showGoogleKey}
+            setShowGoogleKey={setShowGoogleKey}
             showPplxKey={showPplxKey}
             setShowPplxKey={setShowPplxKey}
             rememberApiKeys={rememberApiKeys}
             setRememberApiKeys={setRememberApiKeys}
-            openaiKeyValid={openaiKeyValid}
-            setOpenaiKeyValid={setOpenaiKeyValid}
+            googleKeyValid={googleKeyValid}
             pplxKeyValid={pplxKeyValid}
-            setPplxKeyValid={setPplxKeyValid}
             validatingKeys={validatingKeys}
             isGenerating={isGenerating}
             handleValidateApiKeys={handleValidateApiKeys}
@@ -574,7 +572,7 @@ function GeneratorPage() {
               variant="contained"
               color="primary"
               size={isMobile ? "medium" : "large"}
-              disabled={isGenerating || !topic.trim() || !openaiApiKey.trim() || !pplxApiKey.trim() || openaiKeyValid !== true || pplxKeyValid !== true}
+              disabled={isGenerating || !topic.trim() || !googleApiKey.trim() || !pplxApiKey.trim() || googleKeyValid !== true || pplxKeyValid !== true}
               startIcon={isGenerating ? <CircularProgress size={20} color="inherit" /> : <BoltIcon />}
               sx={{ 
                 py: { xs: 1, sm: 1.5 }, 
@@ -589,17 +587,17 @@ function GeneratorPage() {
             </Button>
           </Box>
           
-          {(!openaiApiKey.trim() || !pplxApiKey.trim()) && !isGenerating && (
+          {(!googleApiKey.trim() || !pplxApiKey.trim()) && !isGenerating && (
             <Typography color="error" variant="body2" sx={{ 
               mt: 2, 
               textAlign: 'center',
               fontSize: { xs: '0.75rem', sm: '0.875rem' }
             }}>
-              Please provide both OpenAI and Perplexity API keys in the API Key Settings section to generate a learning path.
+              Please provide both Google and Perplexity API keys in the API Key Settings section to generate a learning path.
             </Typography>
           )}
           
-          {(openaiApiKey.trim() && pplxApiKey.trim() && (openaiKeyValid !== true || pplxKeyValid !== true)) && !isGenerating && (
+          {(googleApiKey.trim() && pplxApiKey.trim() && (googleKeyValid !== true || pplxKeyValid !== true)) && !isGenerating && (
             <Typography color="error" variant="body2" sx={{ 
               mt: 2, 
               textAlign: 'center',

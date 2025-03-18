@@ -108,7 +108,7 @@ class LearningPathState(TypedDict):
     current_submodule_batch_index: Optional[int]
     submodules_in_process: Optional[Dict[tuple, Dict[str, Any]]]
     developed_submodules: Optional[List[SubmoduleContent]]
-    openai_api_key: Optional[str]
+    google_api_key: Optional[str]
     pplx_api_key: Optional[str]
     desired_module_count: Optional[int]
     desired_submodule_count: Optional[int]

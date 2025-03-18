@@ -16,17 +16,17 @@ const api = axios.create({
 });
 
 // Session storage keys
-const OPENAI_KEY_STORAGE = 'learning_path_openai_key';
+const GOOGLE_KEY_STORAGE = 'learning_path_google_key';
 const PPLX_KEY_STORAGE = 'learning_path_pplx_key';
 const REMEMBER_KEYS_STORAGE = 'learning_path_remember_keys';
 
 // API key management functions
-export const saveApiKeys = (openaiKey, pplxKey, remember = false) => {
+export const saveApiKeys = (googleKey, pplxKey, remember = false) => {
   // Only save if remember is true
   if (remember) {
     try {
       // Use sessionStorage for temporary storage during the browser session
-      sessionStorage.setItem(OPENAI_KEY_STORAGE, openaiKey || '');
+      sessionStorage.setItem(GOOGLE_KEY_STORAGE, googleKey || '');
       sessionStorage.setItem(PPLX_KEY_STORAGE, pplxKey || '');
       sessionStorage.setItem(REMEMBER_KEYS_STORAGE, 'true');
     } catch (error) {
@@ -36,7 +36,7 @@ export const saveApiKeys = (openaiKey, pplxKey, remember = false) => {
     clearSavedApiKeys();
   }
   
-  return { openaiKey, pplxKey, remember };
+  return { googleKey, pplxKey, remember };
 };
 
 export const getSavedApiKeys = () => {
@@ -44,7 +44,7 @@ export const getSavedApiKeys = () => {
     const remember = sessionStorage.getItem(REMEMBER_KEYS_STORAGE) === 'true';
     if (remember) {
       return {
-        openaiKey: sessionStorage.getItem(OPENAI_KEY_STORAGE) || null,
+        googleKey: sessionStorage.getItem(GOOGLE_KEY_STORAGE) || null,
         pplxKey: sessionStorage.getItem(PPLX_KEY_STORAGE) || null,
         remember,
       };
@@ -53,12 +53,12 @@ export const getSavedApiKeys = () => {
     console.error('Error retrieving API keys from session storage:', error);
   }
   
-  return { openaiKey: null, pplxKey: null, remember: false };
+  return { googleKey: null, pplxKey: null, remember: false };
 };
 
 export const clearSavedApiKeys = () => {
   try {
-    sessionStorage.removeItem(OPENAI_KEY_STORAGE);
+    sessionStorage.removeItem(GOOGLE_KEY_STORAGE);
     sessionStorage.removeItem(PPLX_KEY_STORAGE);
     sessionStorage.removeItem(REMEMBER_KEYS_STORAGE);
   } catch (error) {
@@ -67,10 +67,10 @@ export const clearSavedApiKeys = () => {
 };
 
 // Validate API keys
-export const validateApiKeys = async (openaiKey, pplxKey) => {
+export const validateApiKeys = async (googleKey, pplxKey) => {
   try {
     const response = await api.post('/validate-api-keys', {
-      openai_api_key: openaiKey,
+      google_api_key: googleKey,
       pplx_api_key: pplxKey,
     });
     return response.data;
@@ -88,20 +88,20 @@ export const generateLearningPath = async (topic, options = {}) => {
     submoduleParallelCount = 2,
     desiredModuleCount = null,
     desiredSubmoduleCount = null,
-    openaiApiKey = null,
+    googleApiKey = null,
     pplxApiKey = null
   } = options;
   
   // Get stored API keys if not provided
-  let finalOpenaiKey = openaiApiKey;
+  let finalGoogleKey = googleApiKey;
   let finalPplxKey = pplxApiKey;
   
   // If keys not explicitly provided, try to get from session storage
-  if (!finalOpenaiKey || !finalPplxKey) {
+  if (!finalGoogleKey || !finalPplxKey) {
     const savedKeys = getSavedApiKeys();
     
-    if (!finalOpenaiKey && savedKeys.openaiKey) {
-      finalOpenaiKey = savedKeys.openaiKey;
+    if (!finalGoogleKey && savedKeys.googleKey) {
+      finalGoogleKey = savedKeys.googleKey;
     }
     
     if (!finalPplxKey && savedKeys.pplxKey) {
@@ -110,16 +110,16 @@ export const generateLearningPath = async (topic, options = {}) => {
   }
   
   // Validate that both API keys are present
-  if (!finalOpenaiKey || !finalPplxKey) {
-    throw new Error("Both OpenAI and Perplexity API keys are required");
+  if (!finalGoogleKey || !finalPplxKey) {
+    throw new Error("Both Google and Perplexity API keys are required");
   }
   
   // Trim API keys to remove any whitespace
-  finalOpenaiKey = finalOpenaiKey.trim();
+  finalGoogleKey = finalGoogleKey.trim();
   finalPplxKey = finalPplxKey.trim();
   
   // Final validation check
-  if (!finalOpenaiKey || !finalPplxKey) {
+  if (!finalGoogleKey || !finalPplxKey) {
     throw new Error("API keys cannot be empty");
   }
   
@@ -132,7 +132,7 @@ export const generateLearningPath = async (topic, options = {}) => {
       parallel_count: parallelCount,
       search_parallel_count: searchParallelCount,
       submodule_parallel_count: submoduleParallelCount,
-      openai_api_key: finalOpenaiKey,
+      google_api_key: finalGoogleKey,
       pplx_api_key: finalPplxKey
     };
     

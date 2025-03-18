@@ -68,7 +68,7 @@ async def generate_learning_path(
     search_parallel_count: int = 3,
     submodule_parallel_count: int = 2,
     progress_callback = None,
-    openai_api_key: Optional[str] = None,
+    google_api_key: Optional[str] = None,
     pplx_api_key: Optional[str] = None,
     desired_module_count: Optional[int] = None,
     desired_submodule_count: Optional[int] = None
@@ -80,17 +80,17 @@ async def generate_learning_path(
                 f"{submodule_parallel_count} parallel submodules, and {search_parallel_count} parallel searches")
     
     # Check API key validity
-    if openai_api_key:
-        logger.info("Using provided OpenAI API key")
+    if google_api_key:
+        logger.info("Using provided Google API key")
     else:
-        logger.info("No OpenAI API key provided, using environment variable")
+        logger.info("No Google API key provided, using environment variable")
         
     if not pplx_api_key:
         logger.info("No Perplexity API key provided, using environment variable")
     
     initial_state: LearningPathState = {
         "user_topic": topic,
-        "openai_api_key": openai_api_key,
+        "google_api_key": google_api_key,
         "pplx_api_key": pplx_api_key,
         "search_parallel_count": search_parallel_count,
         "parallel_count": parallel_count,
@@ -116,7 +116,7 @@ def build_learning_path(
     search_parallel_count: int = 3,
     submodule_parallel_count: int = 2,
     progress_callback = None,
-    openai_api_key: Optional[str] = None,
+    google_api_key: Optional[str] = None,
     pplx_api_key: Optional[str] = None,
     desired_module_count: Optional[int] = None,
     desired_submodule_count: Optional[int] = None
@@ -130,7 +130,7 @@ def build_learning_path(
         search_parallel_count: Number of search queries to execute in parallel
         submodule_parallel_count: Number of submodules to process in parallel
         progress_callback: Optional callback for reporting progress
-        openai_api_key: Optional OpenAI API key
+        google_api_key: Optional Google API key
         pplx_api_key: Optional Perplexity API key
         desired_module_count: Optional desired number of modules
         desired_submodule_count: Optional desired number of submodules per module
@@ -142,17 +142,17 @@ def build_learning_path(
                 f"{submodule_parallel_count} parallel submodules, and {search_parallel_count} parallel searches")
     
     # Check API key validity
-    if openai_api_key:
-        logger.info("Using provided OpenAI API key")
+    if google_api_key:
+        logger.info("Using provided Google API key")
     else:
-        logger.info("No OpenAI API key provided, using environment variable")
+        logger.info("No Google API key provided, using environment variable")
         
     if not pplx_api_key:
         logger.info("No Perplexity API key provided, using environment variable")
     
     initial_state: LearningPathState = {
         "user_topic": topic,
-        "openai_api_key": openai_api_key,
+        "google_api_key": google_api_key,
         "pplx_api_key": pplx_api_key,
         "search_parallel_count": search_parallel_count,
         "parallel_count": parallel_count,
@@ -181,7 +181,7 @@ if __name__ == "__main__":
     parser.add_argument("--parallel", type=int, default=2, help="Number of modules to process in parallel")
     parser.add_argument("--search-parallel", type=int, default=3, help="Number of search queries to execute in parallel")
     parser.add_argument("--submodule-parallel", type=int, default=2, help="Number of submodules to process in parallel")
-    parser.add_argument("--openai-api-key", type=str, help="OpenAI API key (or use OPENAI_API_KEY env var)")
+    parser.add_argument("--google-api-key", type=str, help="Google API key (or use GOOGLE_API_KEY env var)")
     parser.add_argument("--pplx-api-key", type=str, help="Perplexity API key (or use PPLX_API_KEY env var)")
     parser.add_argument("--modules", type=int, help="Desired number of modules")
     parser.add_argument("--submodules", type=int, help="Desired number of submodules per module")
@@ -192,7 +192,7 @@ if __name__ == "__main__":
         parallel_count=args.parallel,
         search_parallel_count=args.search_parallel,
         submodule_parallel_count=args.submodule_parallel,
-        openai_api_key=args.openai_api_key,
+        google_api_key=args.google_api_key,
         pplx_api_key=args.pplx_api_key,
         desired_module_count=args.modules,
         desired_submodule_count=args.submodules

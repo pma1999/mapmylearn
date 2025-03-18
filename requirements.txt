@@ -1,6 +1,6 @@
 langchain>=0.3.0
 langchain-core>=0.3.0
-langchain-openai>=0.3.0
+langchain-google-genai>=0.1.0
 langchain-community>=0.3.0
 langgraph>=0.3.0
 pydantic>=2.0.0
@@ -20,4 +20,4 @@ fastapi>=0.95.0
 uvicorn>=0.21.0
 starlette>=0.26.0 
 langsmith>=0.1.10
-openai>=1.1.0
+# openai>=1.1.0

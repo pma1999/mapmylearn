@@ -116,14 +116,14 @@ Your response should be exactly 5 search queries, each with its detailed rationa
 """
     prompt = ChatPromptTemplate.from_template(prompt_text)
     try:
-        # Access the OpenAI API key from state with logging
-        openai_api_key = state.get("openai_api_key")
-        if not openai_api_key:
-            logging.warning("OpenAI API key not found in state, this may cause errors")
+        # Access the Google API key from state with logging
+        google_api_key = state.get("google_api_key")
+        if not google_api_key:
+            logging.warning("Google API key not found in state, this may cause errors")
         else:
-            logging.debug("Found OpenAI API key in state, using for search query generation")
+            logging.debug("Found Google API key in state, using for search query generation")
             
-        result = await run_chain(prompt, lambda: get_llm(api_key=openai_api_key), search_queries_parser, {
+        result = await run_chain(prompt, lambda: get_llm(api_key=google_api_key), search_queries_parser, {
             "user_topic": state["user_topic"],
             "format_instructions": search_queries_parser.get_format_instructions()
         })
@@ -213,12 +213,12 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
             "steps": state.get("steps", []) + ["No search results available"]
         }
     
-    # Obtener la API key de OpenAI desde el estado
-    openai_api_key = state.get("openai_api_key")
-    if not openai_api_key:
-        logging.warning("OpenAI API key not found in state, this may cause errors")
+    # Get the Google API key from state
+    google_api_key = state.get("google_api_key")
+    if not google_api_key:
+        logging.warning("Google API key not found in state, this may cause errors")
     else:
-        logging.debug("Found OpenAI API key in state, using for learning path creation")
+        logging.debug("Found Google API key in state, using for learning path creation")
     
     try:
         # Procesar los resultados de búsqueda para generar módulos
@@ -281,7 +281,7 @@ Format your response as a structured curriculum. Each module should build on pre
         # Llamar a la cadena LLM proporcionando el valor para 'format_instructions'
         result = await run_chain(
             prompt,
-            lambda: get_llm(api_key=openai_api_key),
+            lambda: get_llm(api_key=google_api_key),
             enhanced_modules_parser,
             { "format_instructions": format_instructions_value }
         )
