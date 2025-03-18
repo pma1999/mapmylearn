@@ -274,7 +274,7 @@ async def generate_submodule_specific_queries(
     submodule: Submodule
 ) -> List[SearchQuery]:
     """
-    Generates 5 specific search queries for a submodule using contextual information.
+    Generates search queries for a specific submodule.
     
     Args:
         state: The current LearningPathState.
@@ -286,40 +286,60 @@ async def generate_submodule_specific_queries(
     Returns:
         A list of SearchQuery objects.
     """
-    logging.info(f"Generating queries for submodule {sub_id+1} of module {module_id+1}: {submodule.title}")
-    learning_path_context = ""
-    for i, mod in enumerate(state.get("enhanced_modules") or []):
-        learning_path_context += f"Module {i+1}: {mod.title}\n{mod.description}\n"
-        for j, s in enumerate(mod.submodules):
-            learning_path_context += f"  Submodule {j+1}: {s.title}\n  {s.description}\n"
-    module_context = f"Current Module: {module.title}\nDescription: {module.description}\nSubmodules:\n"
-    for i, s in enumerate(module.submodules):
-        indicator = " (CURRENT)" if i == sub_id else ""
-        module_context += f"  {i+1}. {s.title}{indicator}\n  {s.description}\n"
+    # Get the OpenAI API key from state
+    openai_api_key = state.get("openai_api_key")
     
-    # Using the extracted prompt template
-    prompt = ChatPromptTemplate.from_template(SUBMODULE_QUERY_GENERATION_PROMPT)
+    # Prepare context about the module and submodule
+    module_context = f"Module: {module.title}\nDescription: {module.description}"
+    submodule_context = f"Submodule: {submodule.title}\nDescription: {submodule.description}"
+    
+    # Prepare the prompt template
+    prompt_text = """
+# EXPERT RESEARCH ASSISTANT INSTRUCTIONS
+
+You need to generate targeted search queries to gather information for a specific submodule in a learning path.
+
+## CONTEXT
+{module_context}
+
+{submodule_context}
+
+## TASK
+Create 1 highly targeted search query to gather comprehensive information for the submodule.
+
+Your search query should:
+1. Be specific and focused on the submodule topic
+2. Target high-quality educational content
+3. Be formulated to retrieve detailed information that helps explain this specific concept
+4. Cover what a learner needs to understand about this specific topic
+
+Provide exactly 1 search query with a clear rationale for why it will be valuable.
+
+{format_instructions}
+"""
+    
+    # Create the prompt from the template
+    prompt = ChatPromptTemplate.from_template(prompt_text)
+    
     try:
-        result = await run_chain(prompt, lambda: get_llm(api_key=state.get("openai_api_key")), module_queries_parser, {
-            "user_topic": state["user_topic"],
-            "module_title": module.title,
-            "module_description": module.description,
-            "module_order": module_id + 1,
-            "module_count": len(state.get("enhanced_modules") or []),
-            "submodule_title": submodule.title,
-            "submodule_description": submodule.description,
-            "submodule_order": sub_id + 1,
-            "submodule_count": len(module.submodules),
+        # Run the query generation chain
+        result = await run_chain(prompt, lambda: get_llm(api_key=openai_api_key), search_queries_parser, {
             "module_context": module_context,
-            "learning_path_context": learning_path_context,
-            "format_instructions": module_queries_parser.get_format_instructions()
+            "submodule_context": submodule_context,
+            "format_instructions": search_queries_parser.get_format_instructions()
         })
-        queries = result.queries
-        logging.info(f"Generated {len(queries)} queries for submodule: {submodule.title}")
+        
+        queries = result.queries if hasattr(result, 'queries') else []
+        logging.info(f"Generated {len(queries)} search queries for submodule {sub_id+1}")
         return queries
     except Exception as e:
-        logging.error(f"Error generating queries for submodule: {str(e)}")
-        return []
+        logging.error(f"Error generating submodule search queries: {str(e)}")
+        # Create a fallback query
+        fallback_query = SearchQuery(
+            keywords=f"{module.title} {submodule.title}",
+            rationale="Fallback query due to error in query generation"
+        )
+        return [fallback_query]
 
 async def execute_submodule_specific_searches(
     state: LearningPathState, 
@@ -330,7 +350,7 @@ async def execute_submodule_specific_searches(
     sub_queries: List[SearchQuery]
 ) -> List[Dict[str, Any]]:
     """
-    Executes search queries for a submodule in parallel batches.
+    Execute web searches for submodule-specific queries.
     
     Args:
         state: The current LearningPathState.
@@ -352,7 +372,7 @@ async def execute_submodule_specific_searches(
     search_results = []
     try:
         for idx, batch in enumerate(batches):
-            tasks = [execute_single_search(query, tavily_api_key=state.get("tavily_api_key")) for query in batch]
+            tasks = [execute_single_search(query, perplexity_api_key=state.get("pplx_api_key")) for query in batch]
             results = await asyncio.gather(*tasks)
             search_results.extend(results)
             if idx < len(batches) - 1:

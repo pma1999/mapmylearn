@@ -27,16 +27,16 @@ const ApiKeySettings = ({
   setApiSettingsOpen,
   openaiApiKey,
   setOpenaiApiKey,
-  tavilyApiKey,
-  setTavilyApiKey,
+  pplxApiKey,
+  setPplxApiKey,
   showOpenaiKey,
   setShowOpenaiKey,
-  showTavilyKey,
-  setShowTavilyKey,
+  showPplxKey,
+  setShowPplxKey,
   rememberApiKeys,
   setRememberApiKeys,
   openaiKeyValid,
-  tavilyKeyValid,
+  pplxKeyValid,
   validatingKeys,
   isGenerating,
   handleValidateApiKeys,
@@ -107,13 +107,13 @@ const ApiKeySettings = ({
           
           <Grid item>
             <TextField
-              label="Tavily API Key"
+              label="Perplexity API Key"
               variant="outlined"
               fullWidth
-              value={tavilyApiKey}
-              onChange={(e) => setTavilyApiKey(e.target.value)}
-              type={showTavilyKey ? 'text' : 'password'}
-              placeholder="tvly-..."
+              value={pplxApiKey}
+              onChange={(e) => setPplxApiKey(e.target.value)}
+              type={showPplxKey ? 'text' : 'password'}
+              placeholder="pplx-..."
               disabled={isGenerating}
               margin="dense"
               InputProps={{
@@ -121,25 +121,25 @@ const ApiKeySettings = ({
                   <InputAdornment position="end">
                     <IconButton
                       aria-label="toggle password visibility"
-                      onClick={() => setShowTavilyKey(!showTavilyKey)}
+                      onClick={() => setShowPplxKey(!showPplxKey)}
                       edge="end"
                       size={isMobile ? "small" : "medium"}
                     >
-                      {showTavilyKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                      {showPplxKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
                     </IconButton>
-                    {tavilyKeyValid === true && (
+                    {pplxKeyValid === true && (
                       <CheckCircleIcon color="success" sx={{ ml: 1 }} />
                     )}
-                    {tavilyKeyValid === false && (
+                    {pplxKeyValid === false && (
                       <ErrorIcon color="error" sx={{ ml: 1 }} />
                     )}
                   </InputAdornment>
                 ),
               }}
               helperText={
-                tavilyKeyValid === false ? "Invalid Tavily API key" : 
-                tavilyKeyValid === true ? "API key validated" : 
-                "Required - Enter your Tavily API key (starts with tvly-)"
+                pplxKeyValid === false ? "Invalid Perplexity API key" : 
+                pplxKeyValid === true ? "API key validated" : 
+                "Required - Enter your Perplexity API key (starts with pplx-)"
               }
             />
           </Grid>
@@ -172,7 +172,7 @@ const ApiKeySettings = ({
                 variant="contained"
                 color="primary"
                 onClick={handleValidateApiKeys}
-                disabled={isGenerating || validatingKeys || (!openaiApiKey.trim() && !tavilyApiKey.trim())}
+                disabled={isGenerating || validatingKeys || (!openaiApiKey.trim() && !pplxApiKey.trim())}
                 startIcon={validatingKeys ? <CircularProgress size={20} color="inherit" /> : null}
                 fullWidth={isMobile}
                 size={isMobile ? "small" : "medium"}
@@ -184,7 +184,7 @@ const ApiKeySettings = ({
                 variant="outlined"
                 color="secondary"
                 onClick={handleClearApiKeys}
-                disabled={isGenerating || (!openaiApiKey && !tavilyApiKey)}
+                disabled={isGenerating || (!openaiApiKey && !pplxApiKey)}
                 fullWidth={isMobile}
                 size={isMobile ? "small" : "medium"}
               >

@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import json
 from typing import Optional, Callable, Dict, Any
 from core.graph_builder import build_graph
 from models.models import LearningPathState
@@ -21,147 +22,177 @@ setup_logging(
     data_logging=DATA_LOGGING
 )
 
-async def generate_learning_path(
-    topic: str, 
-    parallel_count: int = 1, 
-    search_parallel_count: int = 3,
-    submodule_parallel_count: int = 2,
-    progress_callback: Optional[Callable] = None,
-    openai_api_key: Optional[str] = None,
-    tavily_api_key: Optional[str] = None,
-    desired_module_count: Optional[int] = None,
-    desired_submodule_count: Optional[int] = None
-) -> dict:
-    logger = logging.getLogger("learning_path_generator")
-    logger.info(f"Generating learning path for topic: {topic} with {parallel_count} parallel modules, " +
-                f"{submodule_parallel_count} parallel submodules, and {search_parallel_count} parallel searches")
+logger = logging.getLogger("learning_path_generator")
+
+# Define a function to run the graph
+async def run_graph(initial_state):
+    """
+    Run the workflow graph with the provided initial state.
     
-    # Validar que se proporcionen las API keys (sin fallback a variables de entorno)
-    if not openai_api_key:
-        error_msg = "OpenAI API key is required but not provided. Please provide an API key."
-        logger.error(error_msg)
-        raise ValueError(error_msg)
+    Args:
+        initial_state: The initial state for the graph
         
-    if not tavily_api_key:
-        error_msg = "Tavily API key is required but not provided. Please provide an API key."
-        logger.error(error_msg)
-        raise ValueError(error_msg)
-    
-    # Construir el estado inicial (incluyendo las API keys)
-    initial_state: LearningPathState = {
-        "user_topic": topic,
-        "search_queries": None,
-        "search_results": None,
-        "modules": None,
-        "steps": [],
-        "current_module_index": None,
-        "module_search_queries": None,
-        "module_search_results": None,
-        "developed_modules": None,
-        "final_learning_path": None,
-        "parallel_count": parallel_count,
-        "module_batches": None,
-        "current_batch_index": None,
-        "modules_in_process": None,
-        "progress_callback": progress_callback,
-        "search_parallel_count": search_parallel_count,
-        "enhanced_modules": None,
-        "submodule_parallel_count": submodule_parallel_count,
-        "submodule_batches": None,
-        "current_submodule_batch_index": None,
-        "submodules_in_process": None,
-        "developed_submodules": None,
-        "openai_api_key": openai_api_key,
-        "tavily_api_key": tavily_api_key,
-        "desired_module_count": desired_module_count,
-        "desired_submodule_count": desired_submodule_count
-    }
-    logger.debug("Initialized learning path state")
-    log_debug_data(logger, "Initial state", initial_state)
+    Returns:
+        The final result after graph execution
+    """
     try:
-        result = await build_graph().ainvoke(initial_state)
-        logger.info(f"Graph execution completed successfully for topic: {topic}")
-        log_info_data(logger, "Raw graph result", result)
-        formatted_output = result["final_learning_path"] if result.get("final_learning_path") else {
-            "topic": topic,
-            "modules": result.get("modules", []),
-            "execution_steps": result["steps"]
-        }
-        logger.info(f"Successfully generated learning path for {topic}")
-        log_info_data(logger, "Final formatted output", formatted_output)
+        graph = build_graph()
+        result = await graph.ainvoke(initial_state)
+        logger.info(f"Graph execution completed successfully")
+        
+        # Format the output
+        formatted_output = result.get("final_learning_path", {})
+        if not formatted_output:
+            formatted_output = {
+                "topic": initial_state["user_topic"],
+                "modules": result.get("modules", []),
+                "execution_steps": result.get("steps", [])
+            }
+        
         return formatted_output
     except Exception as e:
         logger.exception(f"Error in graph execution: {str(e)}")
         return {
-            "topic": topic,
+            "topic": initial_state["user_topic"],
             "modules": [],
             "execution_steps": [f"Error: {str(e)}"]
         }
 
+async def generate_learning_path(
+    topic: str,
+    parallel_count: int = 2,
+    search_parallel_count: int = 3,
+    submodule_parallel_count: int = 2,
+    progress_callback = None,
+    openai_api_key: Optional[str] = None,
+    pplx_api_key: Optional[str] = None,
+    desired_module_count: Optional[int] = None,
+    desired_submodule_count: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Asynchronous interface for learning path generation.
+    """
+    logger.info(f"Generating learning path for topic: {topic} with {parallel_count} parallel modules, " +
+                f"{submodule_parallel_count} parallel submodules, and {search_parallel_count} parallel searches")
+    
+    # Check API key validity
+    if openai_api_key:
+        logger.info("Using provided OpenAI API key")
+    else:
+        logger.info("No OpenAI API key provided, using environment variable")
+        
+    if not pplx_api_key:
+        logger.info("No Perplexity API key provided, using environment variable")
+    
+    initial_state: LearningPathState = {
+        "user_topic": topic,
+        "openai_api_key": openai_api_key,
+        "pplx_api_key": pplx_api_key,
+        "search_parallel_count": search_parallel_count,
+        "parallel_count": parallel_count,
+        "submodule_parallel_count": submodule_parallel_count,
+        "steps": [],
+        "progress_callback": progress_callback
+    }
+    
+    # Add desired module count if specified
+    if desired_module_count:
+        initial_state["desired_module_count"] = desired_module_count
+        
+    # Add desired submodule count if specified
+    if desired_submodule_count:
+        initial_state["desired_submodule_count"] = desired_submodule_count
+    
+    # Configure and run the graph
+    return await run_graph(initial_state)
+
+def build_learning_path(
+    topic: str,
+    parallel_count: int = 2,
+    search_parallel_count: int = 3,
+    submodule_parallel_count: int = 2,
+    progress_callback = None,
+    openai_api_key: Optional[str] = None,
+    pplx_api_key: Optional[str] = None,
+    desired_module_count: Optional[int] = None,
+    desired_submodule_count: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Build a learning path for the given topic using a submodule-enhanced approach.
+    
+    Args:
+        topic: The user's learning topic
+        parallel_count: Number of modules to process in parallel
+        search_parallel_count: Number of search queries to execute in parallel
+        submodule_parallel_count: Number of submodules to process in parallel
+        progress_callback: Optional callback for reporting progress
+        openai_api_key: Optional OpenAI API key
+        pplx_api_key: Optional Perplexity API key
+        desired_module_count: Optional desired number of modules
+        desired_submodule_count: Optional desired number of submodules per module
+        
+    Returns:
+        Dictionary with the learning path data
+    """
+    logger.info(f"Generating learning path for topic: {topic} with {parallel_count} parallel modules, " +
+                f"{submodule_parallel_count} parallel submodules, and {search_parallel_count} parallel searches")
+    
+    # Check API key validity
+    if openai_api_key:
+        logger.info("Using provided OpenAI API key")
+    else:
+        logger.info("No OpenAI API key provided, using environment variable")
+        
+    if not pplx_api_key:
+        logger.info("No Perplexity API key provided, using environment variable")
+    
+    initial_state: LearningPathState = {
+        "user_topic": topic,
+        "openai_api_key": openai_api_key,
+        "pplx_api_key": pplx_api_key,
+        "search_parallel_count": search_parallel_count,
+        "parallel_count": parallel_count,
+        "submodule_parallel_count": submodule_parallel_count,
+        "steps": [],
+        "progress_callback": progress_callback
+    }
+    
+    # Add desired module count if specified
+    if desired_module_count:
+        initial_state["desired_module_count"] = desired_module_count
+        
+    # Add desired submodule count if specified
+    if desired_submodule_count:
+        initial_state["desired_submodule_count"] = desired_submodule_count
+    
+    # Configure and run the graph
+    result = asyncio.run(run_graph(initial_state))
+    return result
+
 # For testing purposes when run as a script
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Learning Path Generator")
-    parser.add_argument("topic", nargs="?", default="Quantum computing for beginners", help="Topic to generate learning path for")
+    parser = argparse.ArgumentParser(description="Generate a learning path for a given topic")
+    parser.add_argument("topic", type=str, help="The topic to create a learning path for")
     parser.add_argument("--parallel", type=int, default=2, help="Number of modules to process in parallel")
-    parser.add_argument("--search-parallel", type=int, default=3, help="Number of searches to execute in parallel")
+    parser.add_argument("--search-parallel", type=int, default=3, help="Number of search queries to execute in parallel")
     parser.add_argument("--submodule-parallel", type=int, default=2, help="Number of submodules to process in parallel")
-    parser.add_argument("--module-count", type=int, help="Desired number of modules (leave empty for automatic)")
-    parser.add_argument("--submodule-count", type=int, help="Desired number of submodules per module (leave empty for automatic)")
-    parser.add_argument("--log-level", choices=["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"], default="INFO", help="Set logging level")
-    parser.add_argument("--log-file", default="learning_path.log", help="Log file path")
-    parser.add_argument("--disable-json", action="store_true", help="Disable JSON formatting in logs")
-    parser.add_argument("--disable-data-logging", action="store_true", help="Disable detailed data logging")
-    parser.add_argument("--openai-api-key", help="OpenAI API key for LLM operations")
-    parser.add_argument("--tavily-api-key", help="Tavily API key for search operations")
+    parser.add_argument("--openai-api-key", type=str, help="OpenAI API key (or use OPENAI_API_KEY env var)")
+    parser.add_argument("--pplx-api-key", type=str, help="Perplexity API key (or use PPLX_API_KEY env var)")
+    parser.add_argument("--modules", type=int, help="Desired number of modules")
+    parser.add_argument("--submodules", type=int, help="Desired number of submodules per module")
     args = parser.parse_args()
     
-    setup_logging(
-        log_file=args.log_file,
-        console_level=get_log_level(args.log_level),
-        file_level=logging.DEBUG,
-        enable_json_logs=not args.disable_json,
-        data_logging=not args.disable_data_logging
-    )
-    
-    logger = logging.getLogger("main")
-    logger.info(f"Starting Learning Path Generator with topic: {args.topic}")
-    result = asyncio.run(generate_learning_path(
+    result = build_learning_path(
         topic=args.topic,
         parallel_count=args.parallel,
         search_parallel_count=args.search_parallel,
         submodule_parallel_count=args.submodule_parallel,
         openai_api_key=args.openai_api_key,
-        tavily_api_key=args.tavily_api_key,
-        desired_module_count=args.module_count,
-        desired_submodule_count=args.submodule_count
-    ))
+        pplx_api_key=args.pplx_api_key,
+        desired_module_count=args.modules,
+        desired_submodule_count=args.submodules
+    )
     
-    logger.info("Learning path generation completed")
-    print(f"Learning Path for: {result['topic']}")
-    print("\nExecution Steps:")
-    for step in result.get("execution_steps", []):
-        print(f"- {step}")
-    print("\nModules:")
-    for i, module in enumerate(result.get("modules", []), 1):
-        print(f"\nModule {i}: {module.get('title')}")
-        print(f"Description: {module.get('description')}")
-        submodules = module.get("submodules", [])
-        if submodules:
-            print(f"Number of submodules: {len(submodules)}")
-            for j, submodule in enumerate(submodules, 1):
-                print(f"  Submodule {j}: {submodule.get('title')}")
-                print(f"    Description: {submodule.get('description')}")
-                content = submodule.get("content", "")
-                if content:
-                    print(f"    Content length: {len(content)} characters")
-                    print(f"    Preview: {content[:100]}..." if len(content) > 100 else content)
-                else:
-                    print("    WARNING: No content available!")
-        elif "content" in module:
-            content = module["content"]
-            print("\nContent:")
-            print(content[:500] + "..." if len(content) > 500 else content)
-    print(f"\nLog file: {args.log_file}")
-    print("To analyze logs, run:")
-    print(f"python diagnostic.py {args.log_file} --summary")
+    # Print the learning path
+    print(json.dumps(result, indent=2))

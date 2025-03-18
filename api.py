@@ -14,7 +14,7 @@ import uuid
 # Import the backend functionality
 from main import generate_learning_path
 from history.history_models import LearningPathHistory, LearningPathHistoryEntry
-from services.services import validate_openai_key, validate_tavily_key
+from services.services import validate_openai_key, validate_perplexity_key
 
 # Import the database configuration
 from history.db_config import get_history_file_path
@@ -67,11 +67,11 @@ class LearningPathRequest(BaseModel):
     desired_module_count: Optional[int] = None
     desired_submodule_count: Optional[int] = None
     openai_api_key: Optional[str] = Field(None, description="OpenAI API key for LLM operations")
-    tavily_api_key: Optional[str] = Field(None, description="Tavily API key for search operations")
+    pplx_api_key: Optional[str] = Field(None, description="Perplexity API key for search operations")
 
 class ApiKeyValidationRequest(BaseModel):
     openai_api_key: Optional[str] = None
-    tavily_api_key: Optional[str] = None
+    pplx_api_key: Optional[str] = None
 
 class ProgressUpdate(BaseModel):
     message: str
@@ -135,10 +135,10 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
     The task ID can be used to retrieve the result or track progress.
     """
     # Validate required API keys
-    if not request.openai_api_key or not request.tavily_api_key:
+    if not request.openai_api_key or not request.pplx_api_key:
         raise HTTPException(
             status_code=400,
-            detail="Both OpenAI API key and Tavily API key are required. Please provide both keys."
+            detail="Both OpenAI API key and Perplexity API key are required. Please provide both keys."
         )
     
     # Validate the API keys format
@@ -148,10 +148,10 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
             detail="Invalid OpenAI API key format. API key should start with 'sk-'."
         )
     
-    if not request.tavily_api_key.startswith("tvly-"):
+    if not request.pplx_api_key.startswith("pplx-"):
         raise HTTPException(
             status_code=400,
-            detail="Invalid Tavily API key format. API key should start with 'tvly-'."
+            detail="Invalid Perplexity API key format. API key should start with 'pplx-'."
         )
     
     # Create a unique task ID
@@ -161,6 +161,10 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
     progress_queue = asyncio.Queue()
     async with progress_queues_lock:
         progress_queues[task_id] = progress_queue
+        
+    # Initialize the task in active_generations dictionary
+    async with active_generations_lock:
+        active_generations[task_id] = {"status": "running", "result": None}
 
     # Define a progress callback that puts messages into the queue
     async def progress_callback(message: str):
@@ -180,7 +184,7 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
         submodule_parallel_count=request.submodule_parallel_count,
         progress_callback=progress_callback,
         openai_api_key=request.openai_api_key,
-        tavily_api_key=request.tavily_api_key,
+        pplx_api_key=request.pplx_api_key,
         desired_module_count=request.desired_module_count,
         desired_submodule_count=request.desired_submodule_count
     )
@@ -196,59 +200,76 @@ async def generate_learning_path_task(
     submodule_parallel_count: int = 2,
     progress_callback = None,
     openai_api_key: Optional[str] = None,
-    tavily_api_key: Optional[str] = None,
+    pplx_api_key: Optional[str] = None,
     desired_module_count: Optional[int] = None,
     desired_submodule_count: Optional[int] = None
 ):
-    """Background task to generate learning path."""
+    """
+    Execute the learning path generation task.
+    """
     try:
-        # Safely update active_generations
-        async with active_generations_lock:
-            active_generations[task_id] = {"status": "running", "result": None}
+        logging.info(f"Starting learning path generation for: {topic}")
         
-        # Generate the learning path
+        # Check if API keys are provided
+        if not openai_api_key:
+            logging.warning("No OpenAI API key provided, will use environment variable")
+        else:
+            logging.debug("Using provided OpenAI API key")
+            
+        if not pplx_api_key:
+            logging.warning("No Perplexity API key provided, will use environment variable")
+        else:
+            logging.debug("Using provided Perplexity API key")
+        
+        # Pass callback to update front-end with progress
         result = await generate_learning_path(
-            topic=topic,
+            topic,
             parallel_count=parallel_count,
-            search_parallel_count=search_parallel_count,
+            search_parallel_count=search_parallel_count, 
             submodule_parallel_count=submodule_parallel_count,
             progress_callback=progress_callback,
             openai_api_key=openai_api_key,
-            tavily_api_key=tavily_api_key,
+            pplx_api_key=pplx_api_key,
             desired_module_count=desired_module_count,
             desired_submodule_count=desired_submodule_count
         )
         
-        # Safely update active_generations with result
+        # Store result in active_generations
         async with active_generations_lock:
-            active_generations[task_id] = {"status": "completed", "result": result}
+            active_generations[task_id]["result"] = result
+            active_generations[task_id]["status"] = "completed"
+            
+        # Add to history
+        add_to_history(learning_path=result, source="generated")
         
-        logger.info(f"Learning path generation completed for task_id: {task_id}")
+        logging.info(f"Learning path generation completed for: {topic}")
         
     except Exception as e:
-        logger.exception(f"Error generating learning path for task_id {task_id}: {str(e)}")
+        logging.exception(f"Error generating learning path: {str(e)}")
+        # Update status to failed
         async with active_generations_lock:
-            active_generations[task_id] = {"status": "error", "error": str(e)}
-    finally:
-        # Close the progress queue with proper locking
-        async with progress_queues_lock:
-            if task_id in progress_queues:
-                await progress_queues[task_id].put(None)  # Sentinel to indicate completion
+            active_generations[task_id]["status"] = "failed"
+            active_generations[task_id]["error"] = str(e)
 
 @app.post("/api/validate-api-keys")
 async def validate_api_keys(request: ApiKeyValidationRequest):
     """
-    Validate the provided API keys
+    Validate API keys for OpenAI and Perplexity.
     """
-    response = {"openai": None, "tavily": None}
+    response = {"openai": {"valid": False, "error": None}, 
+                "perplexity": {"valid": False, "error": None}}
     
+    # Validate OpenAI key if provided
     if request.openai_api_key:
         valid, error_msg = validate_openai_key(request.openai_api_key)
-        response["openai"] = {"valid": valid, "error": error_msg if not valid else None}
+        response["openai"]["valid"] = valid
+        response["openai"]["error"] = error_msg
     
-    if request.tavily_api_key:
-        valid, error_msg = validate_tavily_key(request.tavily_api_key)
-        response["tavily"] = {"valid": valid, "error": error_msg if not valid else None}
+    # Validate Perplexity key if provided
+    if request.pplx_api_key:
+        valid, error_msg = validate_perplexity_key(request.pplx_api_key)
+        response["perplexity"]["valid"] = valid
+        response["perplexity"]["error"] = error_msg
     
     return response
 

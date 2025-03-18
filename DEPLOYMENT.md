@@ -25,7 +25,7 @@ This guide explains how to deploy the Learny application using Vercel for the fr
 
    ```
    OPENAI_API_KEY=your_openai_api_key_here
-   TAVILY_API_KEY=your_tavily_api_key_here
+   PPLX_API_KEY=your_perplexity_api_key_here
    ```
 
 4. **Run the backend:**
@@ -58,7 +58,7 @@ This guide explains how to deploy the Learny application using Vercel for the fr
 - [Railway Account](https://railway.app)
 - [GitHub Account](https://github.com)
 - OpenAI API Key
-- Tavily API Key
+- Perplexity API Key
 
 ## Deploying the Backend to Railway
 
@@ -80,7 +80,7 @@ This guide explains how to deploy the Learny application using Vercel for the fr
    In the Railway dashboard, add the following environment variables:
    
    - `OPENAI_API_KEY`: Your OpenAI API key
-   - `TAVILY_API_KEY`: Your Tavily API key
+   - `PPLX_API_KEY`: Your Perplexity API key
    - `FRONTEND_URL`: Your Vercel frontend URL (once deployed)
    - Any other environment variables needed by your application
 
@@ -122,7 +122,7 @@ This guide explains how to deploy the Learny application using Vercel for the fr
 
    ```bash
    railway variables set OPENAI_API_KEY=your_openai_api_key
-   railway variables set TAVILY_API_KEY=your_tavily_api_key
+   railway variables set PPLX_API_KEY=your_perplexity_api_key
    railway variables set FRONTEND_URL=your_vercel_frontend_url
    ```
 

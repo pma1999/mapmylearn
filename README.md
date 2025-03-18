@@ -37,7 +37,7 @@ Learny follows a modern web application architecture:
 - **Backend**: Python-based FastAPI application with LangChain for AI integration
 - **Frontend**: React application with Material UI components
 - **AI Integration**: OpenAI models via LangChain
-- **Search Integration**: Tavily API for web research
+- **Search Integration**: Perplexity API for web research
 - **Processing**: Graph-based workflow for parallelized content generation
 
 
@@ -46,7 +46,7 @@ Learny follows a modern web application architecture:
 - Python 3.8+
 - Node.js 14+
 - OpenAI API key
-- Tavily API key
+- Perplexity API key
 - Git
 
 ## 🚀 Installation
@@ -103,7 +103,7 @@ Edit your `.env` file with the following required API keys:
 ```
 # Required API Keys
 OPENAI_API_KEY=your_openai_api_key_here
-TAVILY_API_KEY=your_tavily_api_key_here
+PPLX_API_KEY=your_perplexity_api_key_here
 
 # Optional Settings
 # LANGCHAIN_TRACING=true

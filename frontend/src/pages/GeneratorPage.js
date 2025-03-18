@@ -94,12 +94,12 @@ function GeneratorPage() {
   
   // API Key states
   const [openaiApiKey, setOpenaiApiKey] = useState('');
-  const [tavilyApiKey, setTavilyApiKey] = useState('');
+  const [pplxApiKey, setPplxApiKey] = useState('');
   const [showOpenaiKey, setShowOpenaiKey] = useState(false);
-  const [showTavilyKey, setShowTavilyKey] = useState(false);
+  const [showPplxKey, setShowPplxKey] = useState(false);
   const [rememberApiKeys, setRememberApiKeys] = useState(false);
   const [openaiKeyValid, setOpenaiKeyValid] = useState(null);
-  const [tavilyKeyValid, setTavilyKeyValid] = useState(null);
+  const [pplxKeyValid, setPplxKeyValid] = useState(null);
   const [validatingKeys, setValidatingKeys] = useState(false);
   
   // History states
@@ -119,9 +119,9 @@ function GeneratorPage() {
 
   // Load saved API keys on component mount
   useEffect(() => {
-    const { openaiKey, tavilyKey, remember } = getSavedApiKeys();
+    const { openaiKey, pplxKey, remember } = getSavedApiKeys();
     if (openaiKey) setOpenaiApiKey(openaiKey);
-    if (tavilyKey) setTavilyApiKey(tavilyKey);
+    if (pplxKey) setPplxApiKey(pplxKey);
     if (remember) setRememberApiKeys(remember);
     
     // Auto-expand API settings section to make it more obvious to users
@@ -130,7 +130,7 @@ function GeneratorPage() {
 
   // Handle validation of API keys
   const handleValidateApiKeys = async () => {
-    if (!openaiApiKey.trim() && !tavilyApiKey.trim()) {
+    if (!openaiApiKey.trim() && !pplxApiKey.trim()) {
       showNotification('Please enter at least one API key to validate', 'warning');
       return;
     }
@@ -142,24 +142,24 @@ function GeneratorPage() {
       return;
     }
     
-    if (tavilyApiKey.trim() && !tavilyApiKey.trim().startsWith("tvly-")) {
-      showNotification('Invalid Tavily API key format. The key should start with "tvly-".', 'error');
-      setTavilyKeyValid(false);
+    if (pplxApiKey.trim() && !pplxApiKey.trim().startsWith("pplx-")) {
+      showNotification('Invalid Perplexity API key format. The key should start with "pplx-".', 'error');
+      setPplxKeyValid(false);
       return;
     }
     
     setValidatingKeys(true);
     setOpenaiKeyValid(null);
-    setTavilyKeyValid(null);
+    setPplxKeyValid(null);
     
     try {
       showNotification('Validating API keys...', 'info');
       console.log("Sending API keys for validation");
       
       const trimmedOpenaiKey = openaiApiKey.trim();
-      const trimmedTavilyKey = tavilyApiKey.trim();
+      const trimmedPplxKey = pplxApiKey.trim();
       
-      const result = await validateApiKeys(trimmedOpenaiKey, trimmedTavilyKey);
+      const result = await validateApiKeys(trimmedOpenaiKey, trimmedPplxKey);
       
       // Update validation status
       if (trimmedOpenaiKey) {
@@ -171,27 +171,27 @@ function GeneratorPage() {
         }
       }
       
-      if (trimmedTavilyKey) {
-        setTavilyKeyValid(result.tavily?.valid || false);
-        if (!result.tavily?.valid) {
-          showNotification(`Tavily API key invalid: ${result.tavily?.error || 'Unknown error'}`, 'error');
+      if (trimmedPplxKey) {
+        setPplxKeyValid(result.perplexity?.valid || false);
+        if (!result.perplexity?.valid) {
+          showNotification(`Perplexity API key invalid: ${result.perplexity?.error || 'Unknown error'}`, 'error');
         } else {
-          showNotification('Tavily API key validation successful!', 'success');
+          showNotification('Perplexity API key validation successful!', 'success');
         }
       }
       
       // Show success notification if all provided keys are valid
       const openaiSuccess = trimmedOpenaiKey ? result.openai?.valid : true;
-      const tavilySuccess = trimmedTavilyKey ? result.tavily?.valid : true;
+      const pplxSuccess = trimmedPplxKey ? result.perplexity?.valid : true;
       
-      if (openaiSuccess && tavilySuccess) {
-        if (trimmedOpenaiKey && trimmedTavilyKey) {
+      if (openaiSuccess && pplxSuccess) {
+        if (trimmedOpenaiKey && trimmedPplxKey) {
           showNotification('Both API keys validated successfully!', 'success');
         }
         
         // Save keys if remember is checked
         if (rememberApiKeys) {
-          saveApiKeys(trimmedOpenaiKey, trimmedTavilyKey, true);
+          saveApiKeys(trimmedOpenaiKey, trimmedPplxKey, true);
           showNotification('API keys saved for this session', 'info');
         }
       }
@@ -199,7 +199,7 @@ function GeneratorPage() {
       console.error('Error during API key validation:', error);
       showNotification('Network error validating API keys. Please check your internet connection and try again.', 'error');
       setOpenaiKeyValid(false);
-      setTavilyKeyValid(false);
+      setPplxKeyValid(false);
     } finally {
       setValidatingKeys(false);
     }
@@ -208,9 +208,9 @@ function GeneratorPage() {
   // Clear API keys
   const handleClearApiKeys = () => {
     setOpenaiApiKey('');
-    setTavilyApiKey('');
+    setPplxApiKey('');
     setOpenaiKeyValid(null);
-    setTavilyKeyValid(null);
+    setPplxKeyValid(null);
     clearSavedApiKeys();
     setRememberApiKeys(false);
     showNotification('API keys cleared', 'success');
@@ -265,7 +265,7 @@ function GeneratorPage() {
     
     // Format error messages for better readability
     let formattedMessage = message;
-    if (severity === 'error' && (message.includes('API key') || message.includes('Tavily'))) {
+    if (severity === 'error' && (message.includes('API key') || message.includes('Perplexity'))) {
       formattedMessage = message.replace('. ', '.\n\n');
     }
     
@@ -329,14 +329,14 @@ function GeneratorPage() {
     }
 
     // Check if API keys are provided
-    if (!openaiApiKey.trim() || !tavilyApiKey.trim()) {
-      setError('Both OpenAI and Tavily API keys are required. Please enter them in the API Key Settings section.');
+    if (!openaiApiKey.trim() || !pplxApiKey.trim()) {
+      setError('Both OpenAI and Perplexity API keys are required. Please enter them in the API Key Settings section.');
       setApiSettingsOpen(true); // Open the API settings accordion
       return;
     }
     
     // Validate API keys before proceeding
-    if (openaiKeyValid !== true || tavilyKeyValid !== true) {
+    if (openaiKeyValid !== true || pplxKeyValid !== true) {
       setError('Please validate your API keys before generating a learning path.');
       setApiSettingsOpen(true);
       showNotification('API keys must be validated before proceeding.', 'warning');
@@ -350,15 +350,15 @@ function GeneratorPage() {
       return;
     }
 
-    if (!tavilyApiKey.startsWith("tvly-")) {
-      setError('Invalid Tavily API key format. The key should start with "tvly-".');
+    if (!pplxApiKey.startsWith("pplx-")) {
+      setError('Invalid Perplexity API key format. The key should start with "pplx-".');
       setApiSettingsOpen(true);
       return;
     }
     
     // Save API keys if remember option is checked
-    if (rememberApiKeys && (openaiApiKey || tavilyApiKey)) {
-      saveApiKeys(openaiApiKey, tavilyApiKey, true);
+    if (rememberApiKeys && (openaiApiKey || pplxApiKey)) {
+      saveApiKeys(openaiApiKey, pplxApiKey, true);
     }
     
     setError('');
@@ -373,7 +373,7 @@ function GeneratorPage() {
         searchParallelCount,
         submoduleParallelCount,
         openaiApiKey: openaiApiKey.trim(),
-        tavilyApiKey: tavilyApiKey.trim()
+        pplxApiKey: pplxApiKey.trim()
       };
       
       // Only include module count if automatic mode is disabled
@@ -420,7 +420,7 @@ function GeneratorPage() {
       // Check if this is an API key validation error
       if (err.response && err.response.status === 400 && err.response.data.detail) {
         if (err.response.data.detail.includes('OpenAI API key') || 
-            err.response.data.detail.includes('Tavily API key')) {
+            err.response.data.detail.includes('Perplexity API key')) {
           setError(err.response.data.detail);
           setApiSettingsOpen(true);
           
@@ -428,8 +428,8 @@ function GeneratorPage() {
           if (err.response.data.detail.includes('OpenAI API key')) {
             setOpenaiKeyValid(false);
           }
-          if (err.response.data.detail.includes('Tavily API key')) {
-            setTavilyKeyValid(false);
+          if (err.response.data.detail.includes('Perplexity API key')) {
+            setPplxKeyValid(false);
           }
         } else {
           setError(err.response.data.detail);
@@ -526,18 +526,18 @@ function GeneratorPage() {
             setApiSettingsOpen={setApiSettingsOpen}
             openaiApiKey={openaiApiKey}
             setOpenaiApiKey={setOpenaiApiKey}
-            tavilyApiKey={tavilyApiKey}
-            setTavilyApiKey={setTavilyApiKey}
+            pplxApiKey={pplxApiKey}
+            setPplxApiKey={setPplxApiKey}
             showOpenaiKey={showOpenaiKey}
             setShowOpenaiKey={setShowOpenaiKey}
-            showTavilyKey={showTavilyKey}
-            setShowTavilyKey={setShowTavilyKey}
+            showPplxKey={showPplxKey}
+            setShowPplxKey={setShowPplxKey}
             rememberApiKeys={rememberApiKeys}
             setRememberApiKeys={setRememberApiKeys}
             openaiKeyValid={openaiKeyValid}
             setOpenaiKeyValid={setOpenaiKeyValid}
-            tavilyKeyValid={tavilyKeyValid}
-            setTavilyKeyValid={setTavilyKeyValid}
+            pplxKeyValid={pplxKeyValid}
+            setPplxKeyValid={setPplxKeyValid}
             validatingKeys={validatingKeys}
             isGenerating={isGenerating}
             handleValidateApiKeys={handleValidateApiKeys}
@@ -574,7 +574,7 @@ function GeneratorPage() {
               variant="contained"
               color="primary"
               size={isMobile ? "medium" : "large"}
-              disabled={isGenerating || !topic.trim() || !openaiApiKey.trim() || !tavilyApiKey.trim() || openaiKeyValid !== true || tavilyKeyValid !== true}
+              disabled={isGenerating || !topic.trim() || !openaiApiKey.trim() || !pplxApiKey.trim() || openaiKeyValid !== true || pplxKeyValid !== true}
               startIcon={isGenerating ? <CircularProgress size={20} color="inherit" /> : <BoltIcon />}
               sx={{ 
                 py: { xs: 1, sm: 1.5 }, 
@@ -589,17 +589,17 @@ function GeneratorPage() {
             </Button>
           </Box>
           
-          {(!openaiApiKey.trim() || !tavilyApiKey.trim()) && !isGenerating && (
+          {(!openaiApiKey.trim() || !pplxApiKey.trim()) && !isGenerating && (
             <Typography color="error" variant="body2" sx={{ 
               mt: 2, 
               textAlign: 'center',
               fontSize: { xs: '0.75rem', sm: '0.875rem' }
             }}>
-              Please provide both OpenAI and Tavily API keys in the API Key Settings section to generate a learning path.
+              Please provide both OpenAI and Perplexity API keys in the API Key Settings section to generate a learning path.
             </Typography>
           )}
           
-          {(openaiApiKey.trim() && tavilyApiKey.trim() && (openaiKeyValid !== true || tavilyKeyValid !== true)) && !isGenerating && (
+          {(openaiApiKey.trim() && pplxApiKey.trim() && (openaiKeyValid !== true || pplxKeyValid !== true)) && !isGenerating && (
             <Typography color="error" variant="body2" sx={{ 
               mt: 2, 
               textAlign: 'center',

@@ -2,6 +2,7 @@ import asyncio
 import logging
 from typing import Dict, Any
 from datetime import datetime
+from langchain_core.messages import HumanMessage
 
 from models.models import SearchQuery, LearningPathState
 from parsers.parsers import search_queries_parser, enhanced_modules_parser
@@ -10,32 +11,47 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from core.graph_nodes.helpers import run_chain, batch_items, format_search_results
 
-async def execute_single_search(query: SearchQuery, tavily_api_key: str = None) -> Dict[str, Any]:
+async def execute_single_search(query: SearchQuery, perplexity_api_key: str = None) -> Dict[str, Any]:
     """
-    Executes a single web search using the search tool.
+    Executes a single web search using the Perplexity LLM.
     
     Args:
         query: A SearchQuery instance with keywords and rationale.
-        tavily_api_key: Optional Tavily API key for search.
+        perplexity_api_key: Optional Perplexity API key for search.
         
     Returns:
         A dictionary with the query, rationale, and search results.
     """
     try:
-        search_tool = get_search_tool(api_key=tavily_api_key)
+        search_model = get_search_tool(api_key=perplexity_api_key)
         logging.info(f"Searching for: {query.keywords}")
-        result = await search_tool.ainvoke({"query": query.keywords})
+        
+        # Create a prompt that asks for web search results
+        search_prompt = f"Please search the web and provide information about: {query.keywords}. Format the results as a list of sources with their content."
+        
+        # Invoke the Perplexity model with the search prompt as a string
+        # ChatPerplexity returns an AIMessage directly, not an awaitable
+        result = search_model.invoke(search_prompt)
+        
+        # Process the response into the expected format
+        formatted_result = [
+            {
+                "source": f"Perplexity Search Result for '{query.keywords}'",
+                "content": result.content
+            }
+        ]
+        
         return {
             "query": query.keywords,
             "rationale": query.rationale,
-            "results": result
+            "results": formatted_result
         }
     except Exception as e:
         logging.error(f"Error searching for '{query.keywords}': {str(e)}")
         return {
             "query": query.keywords,
             "rationale": query.rationale,
-            "results": f"Error performing search: {str(e)}"
+            "results": [{"source": "Error", "content": f"Error performing search: {str(e)}"}]
         }
 
 async def generate_search_queries(state: LearningPathState) -> Dict[str, Any]:
@@ -134,12 +150,12 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
     
     search_queries = state["search_queries"]
     
-    # Get the tavily API key from state with logging
-    tavily_api_key = state.get("tavily_api_key")
-    if not tavily_api_key:
-        logging.warning("Tavily API key not found in state, this may cause errors")
+    # Get the Perplexity API key from state with logging
+    perplexity_api_key = state.get("pplx_api_key")
+    if not perplexity_api_key:
+        logging.warning("Perplexity API key not found in state, this may cause errors")
     else:
-        logging.debug("Found Tavily API key in state, using for web searches")
+        logging.debug("Found Perplexity API key in state, using for web searches")
     
     # Set up parallel processing
     batch_size = min(len(search_queries), state.get("search_parallel_count", 3))
@@ -153,7 +169,7 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
             logging.info(f"Processing batch of {len(batch)} searches")
             
             # Create tasks for parallel execution
-            tasks = [execute_single_search(query, tavily_api_key=tavily_api_key) for query in batch]
+            tasks = [execute_single_search(query, perplexity_api_key=perplexity_api_key) for query in batch]
             batch_results = await asyncio.gather(*tasks, return_exceptions=True)
             
             # Process results and handle any exceptions
@@ -162,8 +178,8 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
                     logging.error(f"Error executing search: {str(result)}")
                     # Add a placeholder for failed searches
                     all_results.append({
-                        "query": batch[j].query,
-                        "results": [],
+                        "query": batch[j].keywords,
+                        "results": [{"source": "Error", "content": f"Error executing search: {str(result)}"}],
                         "error": str(result)
                     })
                 else:

@@ -17,17 +17,17 @@ const api = axios.create({
 
 // Session storage keys
 const OPENAI_KEY_STORAGE = 'learning_path_openai_key';
-const TAVILY_KEY_STORAGE = 'learning_path_tavily_key';
+const PPLX_KEY_STORAGE = 'learning_path_pplx_key';
 const REMEMBER_KEYS_STORAGE = 'learning_path_remember_keys';
 
 // API key management functions
-export const saveApiKeys = (openaiKey, tavilyKey, remember = false) => {
+export const saveApiKeys = (openaiKey, pplxKey, remember = false) => {
   // Only save if remember is true
   if (remember) {
     try {
       // Use sessionStorage for temporary storage during the browser session
       sessionStorage.setItem(OPENAI_KEY_STORAGE, openaiKey || '');
-      sessionStorage.setItem(TAVILY_KEY_STORAGE, tavilyKey || '');
+      sessionStorage.setItem(PPLX_KEY_STORAGE, pplxKey || '');
       sessionStorage.setItem(REMEMBER_KEYS_STORAGE, 'true');
     } catch (error) {
       console.error('Error saving API keys to session storage:', error);
@@ -36,7 +36,7 @@ export const saveApiKeys = (openaiKey, tavilyKey, remember = false) => {
     clearSavedApiKeys();
   }
   
-  return { openaiKey, tavilyKey, remember };
+  return { openaiKey, pplxKey, remember };
 };
 
 export const getSavedApiKeys = () => {
@@ -45,7 +45,7 @@ export const getSavedApiKeys = () => {
     if (remember) {
       return {
         openaiKey: sessionStorage.getItem(OPENAI_KEY_STORAGE) || null,
-        tavilyKey: sessionStorage.getItem(TAVILY_KEY_STORAGE) || null,
+        pplxKey: sessionStorage.getItem(PPLX_KEY_STORAGE) || null,
         remember,
       };
     }
@@ -53,13 +53,13 @@ export const getSavedApiKeys = () => {
     console.error('Error retrieving API keys from session storage:', error);
   }
   
-  return { openaiKey: null, tavilyKey: null, remember: false };
+  return { openaiKey: null, pplxKey: null, remember: false };
 };
 
 export const clearSavedApiKeys = () => {
   try {
     sessionStorage.removeItem(OPENAI_KEY_STORAGE);
-    sessionStorage.removeItem(TAVILY_KEY_STORAGE);
+    sessionStorage.removeItem(PPLX_KEY_STORAGE);
     sessionStorage.removeItem(REMEMBER_KEYS_STORAGE);
   } catch (error) {
     console.error('Error clearing API keys from session storage:', error);
@@ -67,11 +67,11 @@ export const clearSavedApiKeys = () => {
 };
 
 // Validate API keys
-export const validateApiKeys = async (openaiKey, tavilyKey) => {
+export const validateApiKeys = async (openaiKey, pplxKey) => {
   try {
     const response = await api.post('/validate-api-keys', {
       openai_api_key: openaiKey,
-      tavily_api_key: tavilyKey,
+      pplx_api_key: pplxKey,
     });
     return response.data;
   } catch (error) {
@@ -89,37 +89,37 @@ export const generateLearningPath = async (topic, options = {}) => {
     desiredModuleCount = null,
     desiredSubmoduleCount = null,
     openaiApiKey = null,
-    tavilyApiKey = null
+    pplxApiKey = null
   } = options;
   
   // Get stored API keys if not provided
   let finalOpenaiKey = openaiApiKey;
-  let finalTavilyKey = tavilyApiKey;
+  let finalPplxKey = pplxApiKey;
   
   // If keys not explicitly provided, try to get from session storage
-  if (!finalOpenaiKey || !finalTavilyKey) {
+  if (!finalOpenaiKey || !finalPplxKey) {
     const savedKeys = getSavedApiKeys();
     
     if (!finalOpenaiKey && savedKeys.openaiKey) {
       finalOpenaiKey = savedKeys.openaiKey;
     }
     
-    if (!finalTavilyKey && savedKeys.tavilyKey) {
-      finalTavilyKey = savedKeys.tavilyKey;
+    if (!finalPplxKey && savedKeys.pplxKey) {
+      finalPplxKey = savedKeys.pplxKey;
     }
   }
   
   // Validate that both API keys are present
-  if (!finalOpenaiKey || !finalTavilyKey) {
-    throw new Error("Both OpenAI and Tavily API keys are required");
+  if (!finalOpenaiKey || !finalPplxKey) {
+    throw new Error("Both OpenAI and Perplexity API keys are required");
   }
   
   // Trim API keys to remove any whitespace
   finalOpenaiKey = finalOpenaiKey.trim();
-  finalTavilyKey = finalTavilyKey.trim();
+  finalPplxKey = finalPplxKey.trim();
   
   // Final validation check
-  if (!finalOpenaiKey || !finalTavilyKey) {
+  if (!finalOpenaiKey || !finalPplxKey) {
     throw new Error("API keys cannot be empty");
   }
   
@@ -133,7 +133,7 @@ export const generateLearningPath = async (topic, options = {}) => {
       search_parallel_count: searchParallelCount,
       submodule_parallel_count: submoduleParallelCount,
       openai_api_key: finalOpenaiKey,
-      tavily_api_key: finalTavilyKey
+      pplx_api_key: finalPplxKey
     };
     
     // Add desired module count if specified
