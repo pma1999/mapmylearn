@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Typography,
@@ -51,6 +51,7 @@ import AdvancedSettings from '../components/organisms/AdvancedSettings';
 import HistorySettings from '../components/organisms/HistorySettings';
 import SaveDialog from '../components/molecules/SaveDialog';
 import NotificationSystem from '../components/molecules/NotificationSystem';
+import ProgressBar from '../components/ProgressBar';
 
 // Import API service
 import { 
@@ -122,6 +123,11 @@ function GeneratorPage() {
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'success' });
   const [taskId, setTaskId] = useState(null);
 
+  // Progress tracking state
+  const [progressUpdates, setProgressUpdates] = useState([]);
+  const [progressPercentage, setProgressPercentage] = useState(null);
+  const eventSourceRef = useRef(null);
+
   // Load saved API tokens on component mount
   useEffect(() => {
     const { googleKeyToken, pplxKeyToken, remember } = getSavedApiTokens();
@@ -139,6 +145,90 @@ function GeneratorPage() {
     
     // Auto-expand API settings section to make it more obvious to users
     setApiSettingsOpen(true);
+  }, []);
+
+  // Function to connect to the progress updates stream
+  const connectToProgressUpdates = (taskId) => {
+    // Close any existing connection
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+    
+    // Create a new EventSource connection
+    const eventSource = new EventSource(`/api/progress/${taskId}`);
+    eventSourceRef.current = eventSource;
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        setProgressUpdates(prevUpdates => {
+          // Only add if it's not a duplicate message
+          if (prevUpdates.length === 0 || prevUpdates[prevUpdates.length-1].message !== data.message) {
+            return [...prevUpdates, data];
+          }
+          return prevUpdates;
+        });
+        
+        // Calculate an approximate percentage based on typical flow steps
+        const calculateProgress = (updates) => {
+          if (updates.length === 0) return 10;
+          
+          const lastMessage = updates[updates.length - 1].message;
+          
+          if (lastMessage.includes("Generated") && lastMessage.includes("search queries")) {
+            return 20;
+          } else if (lastMessage.includes("Executed") && lastMessage.includes("web searches")) {
+            return 30;
+          } else if (lastMessage.includes("Created learning path with")) {
+            return 40;
+          } else if (lastMessage.includes("Planned") && lastMessage.includes("submodules")) {
+            return 50;
+          } else if (lastMessage.includes("Organized") && lastMessage.includes("submodules into")) {
+            return 60;
+          } else if (lastMessage.includes("Processing submodule batch")) {
+            // Extract batch numbers to calculate progress
+            const batchMatch = lastMessage.match(/batch (\d+) with/);
+            if (batchMatch && batchMatch[1]) {
+              const currentBatch = parseInt(batchMatch[1]);
+              // Assuming typical path has about 10 batches (adjust based on your data)
+              return 60 + Math.min(30 * (currentBatch / 10), 30);
+            }
+            return 70;
+          } else if (lastMessage.includes("Completed batch")) {
+            return 80;
+          } else if (lastMessage.includes("Finalized")) {
+            return 95;
+          }
+          
+          // Default increment for any progress
+          const baseProgress = Math.min(5 + updates.length * 2, 90);
+          return baseProgress;
+        };
+        
+        setProgressPercentage(calculateProgress(progressUpdates));
+      } catch (error) {
+        console.error('Error parsing progress update:', error);
+      }
+    };
+    
+    eventSource.onerror = (error) => {
+      console.error('EventSource error:', error);
+      // Don't close on error - let the browser retry
+    };
+    
+    // Clean up function
+    return () => {
+      eventSource.close();
+    };
+  };
+  
+  // Clean up the EventSource when component unmounts
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
   }, []);
 
   // Handle validation of API keys
@@ -352,6 +442,9 @@ function GeneratorPage() {
     
     setError('');
     setIsGenerating(true);
+    // Reset progress tracking when starting a new generation
+    setProgressUpdates([]);
+    setProgressPercentage(10); // Start at 10%
     
     try {
       console.log("Using secure token-based API access for learning path generation");
@@ -379,6 +472,9 @@ function GeneratorPage() {
       const response = await generateLearningPath(topic, requestData);
       
       setTaskId(response.task_id);
+      
+      // Connect to progress updates
+      connectToProgressUpdates(response.task_id);
       
       // Fetch the generated learning path (in a production app, we'd fetch the result)
       // For demo purposes, we'll create a mock learning path
@@ -596,12 +692,53 @@ function GeneratorPage() {
                 spacing={isMobile ? 1 : 2} 
                 alignItems="center" 
                 justifyContent="center"
+                sx={{ mb: 2 }}
               >
                 <AutorenewIcon sx={{ animation: 'spin 2s linear infinite' }} />
                 <Typography>
                   Researching your topic and creating your personalized learning path...
                 </Typography>
               </Stack>
+              
+              {/* Progress Bar */}
+              <ProgressBar 
+                label="Generation Progress" 
+                value={progressPercentage} 
+                color="primary" 
+              />
+              
+              {/* Progress Updates */}
+              <Paper 
+                elevation={1}
+                sx={{ 
+                  p: 2, 
+                  mt: 2, 
+                  maxHeight: '200px', 
+                  overflow: 'auto',
+                  bgcolor: 'background.paper'
+                }}
+              >
+                <Typography variant="subtitle2" gutterBottom>
+                  Progress Updates:
+                </Typography>
+                {progressUpdates.length > 0 ? (
+                  progressUpdates.map((update, index) => (
+                    <Typography 
+                      key={index} 
+                      variant="body2" 
+                      color="text.secondary"
+                      sx={{ mb: 0.5, fontSize: '0.8rem' }}
+                    >
+                      {update.message}
+                    </Typography>
+                  ))
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    Waiting for updates...
+                  </Typography>
+                )}
+              </Paper>
+              
               <Typography variant="body2" color="text.secondary" sx={{ 
                 mt: 2,
                 fontSize: { xs: '0.75rem', sm: '0.875rem' }
