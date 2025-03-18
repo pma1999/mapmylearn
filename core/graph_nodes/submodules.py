@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Tuple
 from core.graph_nodes.initial_flow import execute_single_search
 from models.models import SearchQuery, EnhancedModule, Submodule, SubmoduleContent, LearningPathState
 from parsers.parsers import submodule_parser, module_queries_parser
-from services.services import get_llm
+from services.services import get_llm, get_search_tool
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
@@ -312,7 +312,7 @@ async def generate_submodule_specific_queries(
         })
     
     # Compile the context with a description of other modules
-    context_str = f"""
+    learning_path_context = f"""
 Topic: {learning_context['topic']}
 
 Current Module: {learning_context['module_title']} 
@@ -325,12 +325,26 @@ Depth Level: {learning_context['depth_level']}
 Other Modules in Learning Path:
 """
     for m in other_modules:
-        context_str += f"- {'[Current] ' if m['is_current'] else ''}{m['title']}: {m['description']}\n"
+        learning_path_context += f"- {'[Current] ' if m['is_current'] else ''}{m['title']}: {m['description']}\n"
+    
+    # Set up module context and counts
+    module_context = f"Current Module: {module.title}\nDescription: {module.description}"
+    module_count = len(state.get("enhanced_modules", []))
+    submodule_count = len(module.submodules)
     
     prompt = ChatPromptTemplate.from_template(SUBMODULE_QUERY_GENERATION_PROMPT)
     try:
         result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), module_queries_parser, {
-            "context": context_str,
+            "user_topic": state["user_topic"],
+            "module_title": module.title,
+            "submodule_title": submodule.title,
+            "submodule_description": submodule.description,
+            "module_order": module_id + 1,
+            "module_count": module_count,
+            "submodule_order": sub_id + 1,
+            "submodule_count": submodule_count,
+            "module_context": module_context,
+            "learning_path_context": learning_path_context,
             "format_instructions": module_queries_parser.get_format_instructions()
         })
         
@@ -345,6 +359,49 @@ Other Modules in Learning Path:
             rationale="Fallback query due to error in query generation"
         )
         return [fallback_query]
+
+async def execute_single_search_for_submodule(query: SearchQuery, key_provider=None) -> Dict[str, Any]:
+    """
+    Executes a single web search for a submodule using the Perplexity LLM.
+    
+    Args:
+        query: A SearchQuery instance with keywords and rationale.
+        key_provider: Optional key provider for Perplexity search.
+        
+    Returns:
+        A dictionary with the query, rationale, and search results.
+    """
+    try:
+        # Properly await the search_model coroutine
+        search_model = await get_search_tool(key_provider=key_provider)
+        logging.info(f"Searching for: {query.keywords}")
+        
+        # Create a prompt that asks for web search results
+        search_prompt = f"{query.keywords}"
+        
+        # Invoke the Perplexity model with the search prompt as a string
+        result = search_model.invoke(search_prompt)
+        
+        # Process the response into the expected format
+        formatted_result = [
+            {
+                "source": f"Perplexity Search Result for '{query.keywords}'",
+                "content": result.content
+            }
+        ]
+        
+        return {
+            "query": query.keywords,
+            "rationale": query.rationale,
+            "results": formatted_result
+        }
+    except Exception as e:
+        logging.error(f"Error searching for '{query.keywords}': {str(e)}")
+        return {
+            "query": query.keywords,
+            "rationale": query.rationale,
+            "results": [{"source": "Error", "content": f"Error performing search: {str(e)}"}]
+        }
 
 async def execute_submodule_specific_searches(
     state: LearningPathState, 
@@ -377,7 +434,7 @@ async def execute_submodule_specific_searches(
     search_results = []
     try:
         for idx, batch in enumerate(batches):
-            tasks = [execute_single_search(query, key_provider=state.get("pplx_key_provider")) for query in batch]
+            tasks = [execute_single_search_for_submodule(query, key_provider=state.get("pplx_key_provider")) for query in batch]
             results = await asyncio.gather(*tasks)
             search_results.extend(results)
             if idx < len(batches) - 1:
@@ -453,7 +510,8 @@ async def develop_submodule_specific_content(
     # Using the extracted prompt template
     prompt = ChatPromptTemplate.from_template(SUBMODULE_CONTENT_DEVELOPMENT_PROMPT)
     try:
-        llm = get_llm(key_provider=state.get("google_key_provider"))
+        # Properly await the LLM coroutine
+        llm = await get_llm(key_provider=state.get("google_key_provider"))
         output_parser = StrOutputParser()
         chain = prompt | llm | output_parser
         sub_content = await chain.ainvoke({

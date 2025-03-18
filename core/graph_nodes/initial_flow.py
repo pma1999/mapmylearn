@@ -23,7 +23,8 @@ async def execute_single_search(query: SearchQuery, key_provider = None) -> Dict
         A dictionary with the query, rationale, and search results.
     """
     try:
-        search_model = get_search_tool(key_provider=key_provider)
+        # Properly await the async function
+        search_model = await get_search_tool(key_provider=key_provider)
         logging.info(f"Searching for: {query.keywords}")
         
         # Create a prompt that asks for web search results
