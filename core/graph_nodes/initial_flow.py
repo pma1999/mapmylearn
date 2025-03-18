@@ -27,7 +27,7 @@ async def execute_single_search(query: SearchQuery, perplexity_api_key: str = No
         logging.info(f"Searching for: {query.keywords}")
         
         # Create a prompt that asks for web search results
-        search_prompt = f"Please search the web and provide information about: {query.keywords}. Format the results as a list of sources with their content."
+        search_prompt = f"{query.keywords}"
         
         # Invoke the Perplexity model with the search prompt as a string
         # ChatPerplexity returns an AIMessage directly, not an awaitable

@@ -6,6 +6,8 @@ from typing import Optional, Callable, Dict, Any
 from core.graph_builder import build_graph
 from models.models import LearningPathState
 from config.log_config import setup_logging, log_debug_data, log_info_data, get_log_level
+# Importa el decorador traceable de LangSmith
+from langsmith import traceable
 
 # Configuration from environment variables
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
@@ -58,6 +60,8 @@ async def run_graph(initial_state):
             "execution_steps": [f"Error: {str(e)}"]
         }
 
+# Decora la función de generación con @traceable para trazar el flujo completo
+@traceable
 async def generate_learning_path(
     topic: str,
     parallel_count: int = 2,
