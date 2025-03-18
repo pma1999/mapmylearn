@@ -25,31 +25,38 @@ logger = logging.getLogger("api")
 
 # Create FastAPI app
 app = FastAPI(title="Learning Path Generator API")
-# Define allowed origins for both local development and production
-allowed_origins = [
-    "http://localhost:3000",  # Local development
-    "https://learny-peach.vercel.app",  # Vercel production domain
-    "https://learny-*.vercel.app",      # Any Vercel deployment with learny- prefix
-    "https://web-production-62f88.up.railway.app"  # Railway production domain
-]
 
-# Add any custom domain from environment variable (used in production)
-if os.getenv("FRONTEND_URL"):
-    allowed_origins.append(os.getenv("FRONTEND_URL"))
+# --------------------------------------------------------------------------------
+# Configuración automática de CORS y seguridad de endpoints (Mejora 1)
+# --------------------------------------------------------------------------------
+# Se configuran los orígenes permitidos de forma automática según el entorno:
+# - En producción (cuando existe la variable "RAILWAY_STATIC_URL") se permiten
+#   los dominios de los despliegues de Vercel y Railway.
+# - En desarrollo, se permite únicamente el origen local.
+if os.getenv("RAILWAY_STATIC_URL"):
+    # Entorno de producción
+    allowed_origins = [
+        "https://learny-peach.vercel.app",
+        "https://learny-pablos-projects-d80d0b2f.vercel.app",
+        "https://learny-git-main-pablos-projects-d80d0b2f.vercel.app",
+        "https://web-production-62f88.up.railway.app"
+    ]
+    if os.getenv("FRONTEND_URL"):
+        allowed_origins.append(os.getenv("FRONTEND_URL"))
+else:
+    # Entorno de desarrollo local
+    allowed_origins = ["http://localhost:3000"]
 
-# For development with Railway
-railway_url = os.getenv("RAILWAY_STATIC_URL")
-if railway_url:
-    allowed_origins.append(railway_url)
-
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Temporarily allow all origins for debugging
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# --------------------------------------------------------------------------------
+# Fin de configuración automática de CORS
+# --------------------------------------------------------------------------------
 
 # Request and response models
 class LearningPathRequest(BaseModel):
@@ -463,4 +470,4 @@ async def health_check():
     return {"status": "ok", "version": "1.0.0"}
 
 if __name__ == "__main__":
-    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True) 
+    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)

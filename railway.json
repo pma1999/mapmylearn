@@ -5,10 +5,18 @@
     "buildCommand": "pip install -r requirements.txt"
   },
   "deploy": {
-    "startCommand": "uvicorn api:app --host=0.0.0.0 --port=${PORT:-8000}",
+    "startCommand": "uvicorn api:app --host 0.0.0.0 --port $PORT --no-reload",
     "healthcheckPath": "/api/health",
-    "healthcheckTimeout": 100,
-    "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 5
+    "healthcheckTimeout": 10,
+    "restartPolicyType": "ON_FAILURE"
+  },
+  "variables": {
+    "ENVIRONMENT": "production",
+    "ENABLE_HTTPS": "true",
+    "RATE_LIMIT_PER_MINUTE": "60",
+    "RATE_LIMIT_BURST": "20",
+    "LOG_LEVEL": "INFO",
+    "TRUSTED_HOSTS": "web-production-62f88.up.railway.app",
+    "ALLOWED_ORIGINS": "https://learny-peach.vercel.app,https://learny-pablos-projects-d80d0b2f.vercel.app,https://learny-git-main-pablos-projects-d80d0b2f.vercel.app"
   }
 } 
