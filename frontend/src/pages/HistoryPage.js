@@ -33,7 +33,8 @@ import {
   Stack,
   InputAdornment,
   useMediaQuery,
-  Slide
+  Slide,
+  useTheme
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import HistoryIcon from '@mui/icons-material/History';
@@ -153,7 +154,8 @@ const TagsInput = ({ tags = [], onAddTag, onDeleteTag }) => {
 
 // Confirmation dialog component
 const ConfirmationDialog = ({ open, title, message, onConfirm, onCancel }) => {
-  const isMobile = useMediaQuery(theme => theme.breakpoints.down('sm'));
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
   return (
     <Dialog 
@@ -216,7 +218,8 @@ const ImportDialog = ({ open, onClose, onImport }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef(null);
-  const isMobile = useMediaQuery(theme => theme.breakpoints.down('sm'));
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const handleImport = async () => {
     if (!jsonInput.trim()) {
@@ -411,7 +414,8 @@ const ImportDialog = ({ open, onClose, onImport }) => {
 // History entry card component
 const HistoryEntryCard = ({ entry, onView, onDelete, onToggleFavorite, onUpdateTags, onExport }) => {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const isMobile = useMediaQuery(theme => theme.breakpoints.down('sm'));
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const handleAddTag = async (newTag) => {
     const updatedTags = [...entry.tags, newTag];
@@ -522,7 +526,8 @@ const HistoryEntryCard = ({ entry, onView, onDelete, onToggleFavorite, onUpdateT
 
 // Learning path viewer component
 const LearningPathViewer = ({ learningPath, onBack, onExport }) => {
-  const isMobile = useMediaQuery(theme => theme.breakpoints.down('sm'));
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
   return (
     <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, borderRadius: 2 }}>
@@ -705,19 +710,20 @@ const HistoryFilters = ({ sortBy, onSortChange, filterSource, onFilterChange, se
 
 // Skeleton loader for history entries
 const HistoryEntrySkeleton = () => (
-  <Grid item xs={12} md={4}>
+  <Grid item xs={12} sm={6} md={4}>
     <Card variant="outlined" sx={{ height: '100%' }}>
-      <CardContent>
+      <CardContent sx={{ p: { xs: 2, md: 3 } }}>
         <Skeleton variant="text" width="70%" height={40} />
         <Skeleton variant="text" width="40%" />
         <Skeleton variant="text" width="60%" />
-        <Box sx={{ mt: 1, mb: 2 }}>
-          <Skeleton variant="rectangular" width={120} height={24} sx={{ borderRadius: 4 }} />
+        <Box sx={{ mt: 1, mb: 2, display: 'flex', flexWrap: 'wrap' }}>
+          <Skeleton variant="rectangular" width={120} height={24} sx={{ borderRadius: 4, mr: 1 }} />
+          <Skeleton variant="rectangular" width={100} height={24} sx={{ borderRadius: 4 }} />
         </Box>
         <Skeleton variant="rectangular" height={80} />
         <Divider sx={{ my: 2 }} />
         <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-          <Skeleton variant="rectangular" width={100} height={30} />
+          <Skeleton variant="rectangular" width={100} height={30} sx={{ borderRadius: 1 }} />
           <Box>
             <Skeleton variant="circular" width={24} height={24} sx={{ display: 'inline-block', mr: 1 }} />
             <Skeleton variant="circular" width={24} height={24} sx={{ display: 'inline-block' }} />
@@ -731,6 +737,8 @@ const HistoryEntrySkeleton = () => (
 // Main HistoryPage component
 function HistoryPage() {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
   // States
   const [entries, setEntries] = useState([]);
@@ -947,7 +955,7 @@ function HistoryPage() {
                 variant="outlined"
                 startIcon={<UploadIcon />}
                 onClick={() => setImportDialogOpen(true)}
-                fullWidth={useMediaQuery(theme => theme.breakpoints.down('sm'))}
+                fullWidth={isMobile}
                 size="small"
               >
                 Import
@@ -957,7 +965,7 @@ function HistoryPage() {
                 startIcon={<DownloadIcon />}
                 onClick={handleExportAllHistory}
                 disabled={entries.length === 0}
-                fullWidth={useMediaQuery(theme => theme.breakpoints.down('sm'))}
+                fullWidth={isMobile}
                 size="small"
               >
                 Export All
@@ -968,7 +976,7 @@ function HistoryPage() {
                 startIcon={<ClearAllIcon />}
                 onClick={() => setClearHistoryDialog(true)}
                 disabled={entries.length === 0}
-                fullWidth={useMediaQuery(theme => theme.breakpoints.down('sm'))}
+                fullWidth={isMobile}
                 size="small"
               >
                 Clear All
@@ -979,7 +987,7 @@ function HistoryPage() {
                 startIcon={<AddIcon />}
                 component={RouterLink}
                 to="/generator"
-                fullWidth={useMediaQuery(theme => theme.breakpoints.down('sm'))}
+                fullWidth={isMobile}
                 size="small"
               >
                 Create New Path
