@@ -190,7 +190,7 @@ const ApiKeySettings = ({
                           variant="outlined" 
                           size="small" 
                           startIcon={<LaunchIcon />}
-                          href="https://docs.perplexity.ai/docs/getting-started"
+                          href="https://www.perplexity.ai/settings/api"
                           target="_blank"
                           rel="noopener noreferrer"
                           sx={{ mr: 1, mt: 1 }}
@@ -573,12 +573,12 @@ const ApiKeySettings = ({
                 </StepLabel>
                 <Box sx={{ ml: 4, my: 2 }}>
                   <Typography variant="body2" paragraph>
-                    Visit <Link href="https://www.perplexity.ai/" target="_blank" rel="noopener">Perplexity.ai</Link> and create an account if you don't have one already.
+                    Visit <Link href="https://www.perplexity.ai/settings/api" target="_blank" rel="noopener">Perplexity.ai</Link> and create an account if you don't have one already.
                   </Typography>
                   <Button 
                     variant="outlined" 
                     startIcon={<LaunchIcon />} 
-                    href="https://www.perplexity.ai/" 
+                    href="https://www.perplexity.ai/settings/api" 
                     target="_blank"
                     rel="noopener"
                     sx={{ mb: 1 }}
@@ -728,7 +728,7 @@ const ApiKeySettings = ({
             <Button 
               variant="contained" 
               color="primary"
-              href="https://docs.perplexity.ai/docs/getting-started"
+              href="https://www.perplexity.ai/settings/api"
               target="_blank"
               rel="noopener noreferrer"
             >
