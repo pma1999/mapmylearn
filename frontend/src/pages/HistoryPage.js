@@ -524,135 +524,6 @@ const HistoryEntryCard = ({ entry, onView, onDelete, onToggleFavorite, onUpdateT
   );
 };
 
-// Learning path viewer component
-const LearningPathViewer = ({ learningPath, onBack, onExport }) => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  
-  return (
-    <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, borderRadius: 2 }}>
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        mb: 4,
-        flexDirection: isMobile ? 'column' : 'row',
-        gap: isMobile ? 2 : 0
-      }}>
-        <Button
-          variant="outlined"
-          startIcon={<ArrowBackIcon />}
-          onClick={onBack}
-          fullWidth={isMobile}
-          size={isMobile ? "small" : "medium"}
-        >
-          Back to History
-        </Button>
-        <Button
-          variant="outlined"
-          startIcon={<DownloadIcon />}
-          onClick={onExport}
-          fullWidth={isMobile}
-          size={isMobile ? "small" : "medium"}
-        >
-          Export as JSON
-        </Button>
-      </Box>
-      
-      <Typography 
-        variant="h4" 
-        component="h1" 
-        sx={{ 
-          mb: 3,
-          fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' },
-          wordBreak: 'break-word'
-        }}
-      >
-        {learningPath.topic}
-      </Typography>
-      
-      {learningPath.execution_steps && (
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="h6" sx={{ mb: 2 }}>Execution Steps</Typography>
-          <Paper variant="outlined" sx={{ p: { xs: 1, sm: 2 }, bgcolor: 'background.default' }}>
-            {learningPath.execution_steps.map((step, index) => (
-              <Typography key={index} variant="body2" sx={{ mb: 1, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
-                {step}
-              </Typography>
-            ))}
-          </Paper>
-        </Box>
-      )}
-      
-      <Typography variant="h5" sx={{ mb: 3, fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
-        Modules
-      </Typography>
-      
-      {learningPath.modules.length > 0 ? (
-        learningPath.modules.map((module, moduleIndex) => (
-          <Paper
-            key={moduleIndex}
-            variant="outlined"
-            sx={{ p: { xs: 2, sm: 3 }, mb: 3, bgcolor: 'background.default' }}
-          >
-            <Typography variant="h6" sx={{ mb: 1, fontSize: { xs: '1rem', sm: '1.25rem' } }}>
-              {module.title}
-            </Typography>
-            
-            <Typography variant="body1" paragraph fontSize={{ xs: '0.875rem', sm: '1rem' }}>
-              {module.description}
-            </Typography>
-            
-            {module.submodules && module.submodules.length > 0 ? (
-              <Box sx={{ mt: 3 }}>
-                <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold' }}>
-                  Submodules:
-                </Typography>
-                
-                {module.submodules.map((submodule, subIndex) => (
-                  <Box key={subIndex} sx={{ ml: { xs: 1, sm: 2 }, mb: 3 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
-                      <SubdirectoryArrowRightIcon
-                        sx={{ mr: 1, color: 'text.secondary', fontSize: { xs: 16, sm: 20 } }}
-                      />
-                      <Typography variant="subtitle2" sx={{ fontWeight: 'bold', fontSize: { xs: '0.875rem', sm: '1rem' } }}>
-                        {submodule.title}
-                      </Typography>
-                    </Box>
-                    
-                    <Typography variant="body2" paragraph sx={{ ml: { xs: 3, sm: 4 }, mt: 1, fontSize: { xs: '0.8rem', sm: '0.875rem' } }}>
-                      {submodule.description}
-                    </Typography>
-                    
-                    {submodule.content && (
-                      <Box sx={{ ml: { xs: 3, sm: 4 } }}>
-                        <MarkdownRenderer>{submodule.content}</MarkdownRenderer>
-                      </Box>
-                    )}
-                  </Box>
-                ))}
-              </Box>
-            ) : (
-              module.content && (
-                <Box sx={{ mt: 2 }}>
-                  <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
-                    Content:
-                  </Typography>
-                  <MarkdownRenderer>{module.content}</MarkdownRenderer>
-                </Box>
-              )
-            )}
-          </Paper>
-        ))
-      ) : (
-        <Alert severity="warning">
-          No modules found in this learning path.
-        </Alert>
-      )}
-    </Paper>
-  );
-};
-
 // History filters component
 const HistoryFilters = ({ sortBy, onSortChange, filterSource, onFilterChange, search, onSearchChange }) => {
   return (
@@ -743,8 +614,6 @@ function HistoryPage() {
   // States
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedEntry, setSelectedEntry] = useState(null);
-  const [selectedLearningPath, setSelectedLearningPath] = useState(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [clearHistoryDialog, setClearHistoryDialog] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'info' });
@@ -908,144 +777,130 @@ function HistoryPage() {
     setNotification({ ...notification, open: false });
   };
   
-  // Reset view to list
-  const handleBackToList = () => {
-    setSelectedEntry(null);
-    setSelectedLearningPath(null);
-  };
-  
   return (
     <Container maxWidth="lg">
-      {selectedLearningPath ? (
-        <LearningPathViewer
-          learningPath={selectedLearningPath}
-          onBack={handleBackToList}
-          onExport={() => handleExportLearningPath(selectedEntry)}
-        />
-      ) : (
-        <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, borderRadius: 2, mb: 4 }}>
-          <PageHeaderWrapper>
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <HistoryIcon sx={{ mr: 1, fontSize: { xs: 24, sm: 32 }, color: 'primary.main' }} />
-                <Typography variant="h4" component="h1" sx={{ 
-                  fontWeight: 'bold',
-                  fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' }
-                }}>
-                  Learning Path History
-                </Typography>
-              </Box>
-              <Chip
-                icon={<StorageIcon />}
-                label="Stored locally in your browser"
-                size="small"
-                color="secondary"
-                variant="outlined"
-                sx={{ mt: 1, mb: 1 }}
-              />
+      <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, borderRadius: 2, mb: 4 }}>
+        <PageHeaderWrapper>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <HistoryIcon sx={{ mr: 1, fontSize: { xs: 24, sm: 32 }, color: 'primary.main' }} />
+              <Typography variant="h4" component="h1" sx={{ 
+                fontWeight: 'bold',
+                fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' }
+              }}>
+                Learning Path History
+              </Typography>
             </Box>
-            
-            <ActionButtonsWrapper 
-              direction={{ xs: 'column', sm: 'row' }} 
-              spacing={{ xs: 1, sm: 2 }}
+            <Chip
+              icon={<StorageIcon />}
+              label="Stored locally in your browser"
+              size="small"
+              color="secondary"
+              variant="outlined"
+              sx={{ mt: 1, mb: 1 }}
+            />
+          </Box>
+          
+          <ActionButtonsWrapper 
+            direction={{ xs: 'column', sm: 'row' }} 
+            spacing={{ xs: 1, sm: 2 }}
+          >
+            <Button
+              variant="outlined"
+              startIcon={<UploadIcon />}
+              onClick={() => setImportDialogOpen(true)}
+              fullWidth={isMobile}
+              size="small"
             >
-              <Button
-                variant="outlined"
-                startIcon={<UploadIcon />}
-                onClick={() => setImportDialogOpen(true)}
-                fullWidth={isMobile}
-                size="small"
-              >
-                Import
-              </Button>
-              <Button
-                variant="outlined"
-                startIcon={<DownloadIcon />}
-                onClick={handleExportAllHistory}
-                disabled={entries.length === 0}
-                fullWidth={isMobile}
-                size="small"
-              >
-                Export All
-              </Button>
-              <Button
-                variant="outlined"
-                color="error"
-                startIcon={<ClearAllIcon />}
-                onClick={() => setClearHistoryDialog(true)}
-                disabled={entries.length === 0}
-                fullWidth={isMobile}
-                size="small"
-              >
-                Clear All
-              </Button>
-              <Button
-                variant="contained"
-                color="primary"
-                startIcon={<AddIcon />}
-                component={RouterLink}
-                to="/generator"
-                fullWidth={isMobile}
-                size="small"
-              >
-                Create New Path
-              </Button>
-            </ActionButtonsWrapper>
-          </PageHeaderWrapper>
-          
-          <Divider sx={{ mb: 3 }} />
-          
-          <HistoryFilters
-            sortBy={sortBy}
-            onSortChange={setSortBy}
-            filterSource={filterSource}
-            onFilterChange={setFilterSource}
-            search={searchTerm}
-            onSearchChange={setSearchTerm}
-          />
-          
-          {loading ? (
-            <Grid container spacing={2}>
-              {[...Array(6)].map((_, index) => (
-                <HistoryEntrySkeleton key={index} />
-              ))}
-            </Grid>
-          ) : entries.length > 0 ? (
-            <Grid container spacing={2}>
-              {entries.map((entry) => (
-                <HistoryEntryCard
-                  key={entry.id}
-                  entry={entry}
-                  onView={handleViewLearningPath}
-                  onDelete={handleDeleteLearningPath}
-                  onToggleFavorite={handleToggleFavorite}
-                  onUpdateTags={handleUpdateTags}
-                  onExport={handleExportLearningPath}
-                />
-              ))}
-            </Grid>
-          ) : (
-            <Box sx={{ textAlign: 'center', py: { xs: 3, sm: 5 } }}>
-              <Typography variant="h6" color="text.secondary" gutterBottom>
-                No learning paths found
-              </Typography>
-              <Typography variant="body1" color="text.secondary" paragraph>
-                Create your first learning path or import one to get started.
-              </Typography>
-              <Button
-                variant="contained"
-                color="primary"
-                startIcon={<AddIcon />}
-                component={RouterLink}
-                to="/generator"
-                sx={{ mt: 2 }}
-              >
-                Create Learning Path
-              </Button>
-            </Box>
-          )}
-        </Paper>
-      )}
+              Import
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<DownloadIcon />}
+              onClick={handleExportAllHistory}
+              disabled={entries.length === 0}
+              fullWidth={isMobile}
+              size="small"
+            >
+              Export All
+            </Button>
+            <Button
+              variant="outlined"
+              color="error"
+              startIcon={<ClearAllIcon />}
+              onClick={() => setClearHistoryDialog(true)}
+              disabled={entries.length === 0}
+              fullWidth={isMobile}
+              size="small"
+            >
+              Clear All
+            </Button>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              component={RouterLink}
+              to="/generator"
+              fullWidth={isMobile}
+              size="small"
+            >
+              Create New Path
+            </Button>
+          </ActionButtonsWrapper>
+        </PageHeaderWrapper>
+        
+        <Divider sx={{ mb: 3 }} />
+        
+        <HistoryFilters
+          sortBy={sortBy}
+          onSortChange={setSortBy}
+          filterSource={filterSource}
+          onFilterChange={setFilterSource}
+          search={searchTerm}
+          onSearchChange={setSearchTerm}
+        />
+        
+        {loading ? (
+          <Grid container spacing={2}>
+            {[...Array(6)].map((_, index) => (
+              <HistoryEntrySkeleton key={index} />
+            ))}
+          </Grid>
+        ) : entries.length > 0 ? (
+          <Grid container spacing={2}>
+            {entries.map((entry) => (
+              <HistoryEntryCard
+                key={entry.id}
+                entry={entry}
+                onView={handleViewLearningPath}
+                onDelete={handleDeleteLearningPath}
+                onToggleFavorite={handleToggleFavorite}
+                onUpdateTags={handleUpdateTags}
+                onExport={handleExportLearningPath}
+              />
+            ))}
+          </Grid>
+        ) : (
+          <Box sx={{ textAlign: 'center', py: { xs: 3, sm: 5 } }}>
+            <Typography variant="h6" color="text.secondary" gutterBottom>
+              No learning paths found
+            </Typography>
+            <Typography variant="body1" color="text.secondary" paragraph>
+              Create your first learning path or import one to get started.
+            </Typography>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              component={RouterLink}
+              to="/generator"
+              sx={{ mt: 2 }}
+            >
+              Create Learning Path
+            </Button>
+          </Box>
+        )}
+      </Paper>
       
       {/* Import Dialog */}
       <ImportDialog
