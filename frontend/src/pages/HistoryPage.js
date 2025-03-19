@@ -459,7 +459,7 @@ const HistoryEntryCard = ({ entry, onView, onDelete, onToggleFavorite, onUpdateT
           
           <Box sx={{ mt: 1, mb: 2, display: 'flex', flexWrap: 'wrap' }}>
             <Chip
-              label={`${entry.modules_count} modules`}
+              label={`${entry.modules_count || (entry.path_data && entry.path_data.modules ? entry.path_data.modules.length : 0)} modules`}
               size="small"
               sx={{ mr: 1, mb: { xs: 1, sm: 0 } }}
             />
