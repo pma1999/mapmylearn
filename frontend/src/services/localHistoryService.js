@@ -3,9 +3,36 @@
  * 
  * This service manages learning path history in the browser's localStorage,
  * ensuring each user's history is kept private to their browser without needing authentication.
+ * Uses a unique identifier for each browser to isolate histories.
  */
 
-const LOCAL_STORAGE_KEY = 'learny_history';
+const BASE_STORAGE_KEY = 'learny_history';
+const USER_ID_KEY = 'learny_user_id';
+
+/**
+ * Gets or creates a unique user ID for the current browser
+ * @returns {string} The unique user ID
+ */
+const getUserId = () => {
+  let userId = localStorage.getItem(USER_ID_KEY);
+  
+  // If no user ID exists, create one
+  if (!userId) {
+    userId = generateUUID();
+    localStorage.setItem(USER_ID_KEY, userId);
+  }
+  
+  return userId;
+};
+
+/**
+ * Gets the storage key specific to the current user
+ * @returns {string} The user-specific storage key
+ */
+const getStorageKey = () => {
+  const userId = getUserId();
+  return `${BASE_STORAGE_KEY}_${userId}`;
+};
 
 /**
  * Get the complete history from localStorage
@@ -13,7 +40,8 @@ const LOCAL_STORAGE_KEY = 'learny_history';
  */
 export const getLocalHistory = () => {
   try {
-    const historyData = localStorage.getItem(LOCAL_STORAGE_KEY);
+    const storageKey = getStorageKey();
+    const historyData = localStorage.getItem(storageKey);
     if (!historyData) {
       return { entries: [], last_updated: new Date().toISOString() };
     }
@@ -31,11 +59,12 @@ export const getLocalHistory = () => {
  */
 export const saveLocalHistory = (history) => {
   try {
+    const storageKey = getStorageKey();
     const historyString = JSON.stringify({
       ...history,
       last_updated: new Date().toISOString()
     });
-    localStorage.setItem(LOCAL_STORAGE_KEY, historyString);
+    localStorage.setItem(storageKey, historyString);
     return true;
   } catch (error) {
     console.error('Error saving history to localStorage:', error);
@@ -232,7 +261,7 @@ export const exportHistory = () => {
  */
 export const clearHistory = () => {
   try {
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
+    localStorage.removeItem(getStorageKey());
     return { success: true };
   } catch (error) {
     console.error('Error clearing history:', error);

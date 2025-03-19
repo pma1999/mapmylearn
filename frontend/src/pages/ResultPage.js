@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Typography,
   Box,
@@ -44,7 +44,7 @@ import StarBorderIcon from '@mui/icons-material/StarBorder';
 import MarkdownRenderer from '../components/MarkdownRenderer';
 
 // Import API service
-import { getLearningPath, getProgressUpdates, saveToHistory, updateHistoryEntry } from '../services/api';
+import { getLearningPath, getProgressUpdates, saveToHistory, updateHistoryEntry, getHistoryEntry } from '../services/api';
 
 // Styled chip component for tags
 const StyledChip = ({ label, onDelete }) => (
@@ -56,14 +56,17 @@ const StyledChip = ({ label, onDelete }) => (
   />
 );
 
-function ResultPage() {
-  const { taskId } = useParams();
+function ResultPage(props) {
+  const { taskId, entryId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isFromHistory = location.pathname.startsWith('/history/') || props.source === 'history';
   const [learningPath, setLearningPath] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [progressMessages, setProgressMessages] = useState([]);
   const progressEventSourceRef = useRef(null);
+  const [savedToHistory, setSavedToHistory] = useState(false);
   
   // Save to history dialog state
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -75,46 +78,62 @@ function ResultPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const data = await getLearningPath(taskId);
-        
-        if (data.status === 'completed') {
-          setLearningPath(data.result);
-          setLoading(false);
-        } else if (data.status === 'error') {
-          setError(data.error || 'An error occurred while generating your learning path.');
-          setLoading(false);
-        } else if (data.status === 'running') {
-          // If still running, set up event source for progress updates
-          setupProgressUpdates();
+        if (isFromHistory) {
+          // Load from history
+          const historyEntryId = entryId || location.pathname.split('/history/')[1];
+          const data = await getHistoryEntry(historyEntryId);
           
-          // Poll for completion every 5 seconds
-          const interval = setInterval(async () => {
-            try {
-              const updatedData = await getLearningPath(taskId);
-              if (updatedData.status !== 'running') {
-                clearInterval(interval);
-                if (progressEventSourceRef.current) {
-                  progressEventSourceRef.current.close();
+          if (data && data.entry) {
+            setLearningPath(data.entry.path_data);
+            setSavedToHistory(true); // It's already in history
+            setLoading(false);
+          } else {
+            setError('Learning path not found in history.');
+            setLoading(false);
+          }
+        } else {
+          // Load from API (existing code)
+          const data = await getLearningPath(taskId);
+          
+          if (data.status === 'completed') {
+            setLearningPath(data.result);
+            setLoading(false);
+          } else if (data.status === 'error') {
+            setError(data.error || 'An error occurred while generating your learning path.');
+            setLoading(false);
+          } else if (data.status === 'running') {
+            // If still running, set up event source for progress updates
+            setupProgressUpdates();
+            
+            // Poll for completion every 5 seconds
+            const interval = setInterval(async () => {
+              try {
+                const updatedData = await getLearningPath(taskId);
+                if (updatedData.status !== 'running') {
+                  clearInterval(interval);
+                  if (progressEventSourceRef.current) {
+                    progressEventSourceRef.current.close();
+                  }
+                  
+                  if (updatedData.status === 'completed') {
+                    setLearningPath(updatedData.result);
+                  } else if (updatedData.status === 'error') {
+                    setError(updatedData.error || 'An error occurred while generating your learning path.');
+                  }
+                  setLoading(false);
                 }
-                
-                if (updatedData.status === 'completed') {
-                  setLearningPath(updatedData.result);
-                } else if (updatedData.status === 'error') {
-                  setError(updatedData.error || 'An error occurred while generating your learning path.');
-                }
-                setLoading(false);
+              } catch (err) {
+                console.error('Error polling for learning path:', err);
               }
-            } catch (err) {
-              console.error('Error polling for learning path:', err);
-            }
-          }, 5000);
-          
-          return () => {
-            clearInterval(interval);
-            if (progressEventSourceRef.current) {
-              progressEventSourceRef.current.close();
-            }
-          };
+            }, 5000);
+            
+            return () => {
+              clearInterval(interval);
+              if (progressEventSourceRef.current) {
+                progressEventSourceRef.current.close();
+              }
+            };
+          }
         }
       } catch (err) {
         console.error('Error fetching learning path:', err);
@@ -124,7 +143,7 @@ function ResultPage() {
     };
     
     fetchData();
-  }, [taskId]);
+  }, [taskId, entryId, isFromHistory, location.pathname]);
 
   const setupProgressUpdates = () => {
     try {
@@ -181,6 +200,10 @@ function ResultPage() {
   };
   
   const handleSaveToHistory = () => {
+    if (savedToHistory) {
+      showNotification('This learning path is already saved to history', 'info');
+      return;
+    }
     setSaveDialogOpen(true);
   };
   
@@ -195,6 +218,7 @@ function ResultPage() {
       const result = await saveToHistory(learningPath, 'generated');
       
       if (result.success) {
+        setSavedToHistory(true);
         showNotification('Learning path saved to history successfully', 'success');
         
         // If tags or favorite are set, update the entry
@@ -347,8 +371,9 @@ function ResultPage() {
               color="secondary"
               startIcon={<SaveIcon />}
               onClick={handleSaveToHistory}
+              disabled={savedToHistory}
             >
-              Save to History
+              {savedToHistory ? 'Saved' : 'Save to History'}
             </Button>
             <Button
               variant="contained"

@@ -49,6 +49,7 @@ function App() {
             <Route path="/generator" element={<GeneratorPage />} />
             <Route path="/result/:taskId" element={<ResultPage />} />
             <Route path="/history" element={<HistoryPage />} />
+            <Route path="/history/:entryId" element={<ResultPage source="history" />} />
           </Routes>
         </Container>
         <Footer />

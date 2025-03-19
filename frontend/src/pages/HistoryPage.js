@@ -773,14 +773,12 @@ function HistoryPage() {
   
   // View a learning path
   const handleViewLearningPath = async (entryId) => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const response = await api.getHistoryEntry(entryId);
-      setSelectedEntry(entryId);
-      setSelectedLearningPath(response.entry.path_data);
+      navigate(`/history/${entryId}`);
     } catch (error) {
+      console.error('Error loading learning path:', error);
       showNotification('Error loading learning path: ' + (error.message || 'Unknown error'), 'error');
-    } finally {
       setLoading(false);
     }
   };
