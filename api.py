@@ -249,6 +249,10 @@ async def generate_learning_path_task(
     try:
         logging.info(f"Starting learning path generation for: {topic}")
         
+        # Send initial progress message
+        if progress_callback:
+            await progress_callback(f"Starting learning path generation for: {topic}")
+        
         # Get keys directly from key manager - similar to how validation works
         google_api_key = None
         pplx_api_key = None
@@ -258,29 +262,50 @@ async def generate_learning_path_task(
             try:
                 google_api_key = key_manager.get_key(google_key_token, key_manager.KEY_TYPE_GOOGLE, ip_address=client_ip)
                 logging.info("Successfully retrieved Google API key from token")
+                if progress_callback:
+                    await progress_callback("Successfully retrieved Google API key")
             except Exception as e:
                 logging.warning(f"Failed to retrieve Google API key from token: {str(e)}")
+                if progress_callback:
+                    await progress_callback("Using default Google API key from environment")
                 # Try fallback to environment variable
                 google_api_key = key_manager.get_env_key(key_manager.KEY_TYPE_GOOGLE)
         else:
             # Try environment variable
             google_api_key = key_manager.get_env_key(key_manager.KEY_TYPE_GOOGLE)
+            if progress_callback:
+                await progress_callback("Using default Google API key from environment")
             
         if pplx_key_token:
             try:
                 pplx_api_key = key_manager.get_key(pplx_key_token, key_manager.KEY_TYPE_PERPLEXITY, ip_address=client_ip)
                 logging.info("Successfully retrieved Perplexity API key from token")
+                if progress_callback:
+                    await progress_callback("Successfully retrieved Perplexity API key")
             except Exception as e:
                 logging.warning(f"Failed to retrieve Perplexity API key from token: {str(e)}")
+                if progress_callback:
+                    await progress_callback("Using default Perplexity API key from environment")
                 # Try fallback to environment variable
                 pplx_api_key = key_manager.get_env_key(key_manager.KEY_TYPE_PERPLEXITY)
         else:
             # Try environment variable
             pplx_api_key = key_manager.get_env_key(key_manager.KEY_TYPE_PERPLEXITY)
+            if progress_callback:
+                await progress_callback("Using default Perplexity API key from environment")
         
         # Create key providers with direct keys instead of tokens
         google_provider = GoogleKeyProvider(google_api_key)
         pplx_provider = PerplexityKeyProvider(pplx_api_key)
+        
+        if progress_callback:
+            await progress_callback(f"Preparing to generate learning path for '{topic}' with {parallel_count} modules in parallel")
+        
+        # Define a wrapper progress callback to ensure messages are logged
+        async def enhanced_progress_callback(message: str):
+            logging.info(f"Progress update for task {task_id}: {message}")
+            if progress_callback:
+                await progress_callback(message)
         
         # Pass callback to update front-end with progress
         result = await generate_learning_path(
@@ -288,12 +313,16 @@ async def generate_learning_path_task(
             parallel_count=parallel_count,
             search_parallel_count=search_parallel_count, 
             submodule_parallel_count=submodule_parallel_count,
-            progress_callback=progress_callback,
+            progress_callback=enhanced_progress_callback,
             google_key_provider=google_provider,
             pplx_key_provider=pplx_provider,
             desired_module_count=desired_module_count,
             desired_submodule_count=desired_submodule_count
         )
+        
+        # Send completion message
+        if progress_callback:
+            await progress_callback("Learning path generation completed successfully!")
         
         # Store result in active_generations
         async with active_generations_lock:
@@ -304,6 +333,9 @@ async def generate_learning_path_task(
         
     except Exception as e:
         logging.exception(f"Error generating learning path: {str(e)}")
+        # Send error message to frontend
+        if progress_callback:
+            await progress_callback(f"Error generating learning path: {str(e)}")
         # Update status to failed
         async with active_generations_lock:
             active_generations[task_id]["status"] = "failed"
@@ -363,18 +395,38 @@ async def get_progress(task_id: str):
         queue = progress_queues[task_id]
     
     async def event_generator():
-        while True:
-            update = await queue.get()
-            if update is None:  # Sentinel to indicate completion
-                yield f"data: {JSONResponse(content={'complete': True}).body.decode()}\n\n"
-                break
-            # Convert ProgressUpdate model to dict before sending
-            update_dict = update.dict() if hasattr(update, 'dict') else update
-            yield f"data: {JSONResponse(content=update_dict).body.decode()}\n\n"
+        try:
+            # Send initial message to establish connection
+            yield "data: {\"message\": \"Connection established\", \"timestamp\": \"" + datetime.now().isoformat() + "\"}\n\n"
+            
+            while True:
+                update = await queue.get()
+                if update is None:  # Sentinel to indicate completion
+                    yield "data: {\"complete\": true}\n\n"
+                    break
+                
+                # Convert ProgressUpdate model to dict before sending
+                if hasattr(update, 'dict'):
+                    update_dict = update.dict()
+                else:
+                    update_dict = update
+                
+                # Format as SSE data line with proper line endings
+                yield f"data: {json.dumps(update_dict)}\n\n"
+        except asyncio.CancelledError:
+            logger.info(f"SSE connection for task {task_id} was cancelled")
+            raise
+        except Exception as e:
+            logger.error(f"Error in SSE stream for task {task_id}: {str(e)}")
+            yield f"data: {{\"error\": \"{str(e)}\"}}\n\n"
     
     return StreamingResponse(
         event_generator(),
-        media_type="text/event-stream"
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive"
+        }
     )
 
 @app.delete("/api/learning-path/{task_id}")

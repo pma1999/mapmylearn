@@ -66,6 +66,12 @@ async def generate_search_queries(state: LearningPathState) -> Dict[str, Any]:
         A dictionary containing the generated search queries and a list of execution steps.
     """
     logging.info(f"Generating search queries for topic: {state['user_topic']}")
+    
+    # Send progress update if callback is available
+    progress_callback = state.get('progress_callback')
+    if progress_callback:
+        await progress_callback(f"Analyzing topic '{state['user_topic']}' to generate optimal search queries...")
+    
     prompt_text = """
 # EXPERT TEACHING ASSISTANT INSTRUCTIONS
 
@@ -130,6 +136,11 @@ Your response should be exactly 5 search queries, each with its detailed rationa
         })
         search_queries = result.queries
         logging.info(f"Generated {len(search_queries)} search queries")
+        
+        # Send progress update about completion
+        if progress_callback:
+            await progress_callback(f"Generated {len(search_queries)} search queries for topic '{state['user_topic']}'")
+        
         return {
             "search_queries": search_queries,
             "steps": [f"Generated {len(search_queries)} search queries for topic: {state['user_topic']}"]
@@ -162,6 +173,11 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
     batch_size = min(len(search_queries), state.get("search_parallel_count", 3))
     logging.info(f"Executing web searches in parallel with batch size {batch_size}")
     
+    # Send progress update if callback is available
+    progress_callback = state.get('progress_callback')
+    if progress_callback:
+        await progress_callback(f"Executing {len(search_queries)} web searches to gather information...")
+    
     all_results = []
     
     try:
@@ -187,6 +203,10 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
                     all_results.append(result)
         
         logging.info(f"Completed {len(all_results)} web searches")
+        
+        # Send progress update
+        if progress_callback:
+            await progress_callback(f"Completed all web searches, processing {len(all_results)} results")
         
         return {
             "search_results": all_results,
@@ -220,6 +240,11 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
         logging.warning("Google key provider not found in state, this may cause errors")
     else:
         logging.debug("Found Google key provider in state, using for learning path creation")
+    
+    # Send progress update if callback is available
+    progress_callback = state.get('progress_callback')
+    if progress_callback:
+        await progress_callback(f"Creating initial learning path structure for '{state['user_topic']}'...")
     
     try:
         # Procesar los resultados de búsqueda para generar módulos
@@ -304,6 +329,11 @@ Format your response as a structured curriculum. Each module should build on pre
         }
         
         logging.info(f"Created learning path with {len(modules)} modules")
+        
+        # Send progress update with information about the created modules
+        if progress_callback and 'modules' in final_learning_path:
+            module_count = len(final_learning_path['modules'])
+            await progress_callback(f"Created initial learning path with {module_count} modules")
         
         return {
             "modules": modules,

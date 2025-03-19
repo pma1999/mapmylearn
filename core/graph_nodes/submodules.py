@@ -101,15 +101,20 @@ async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
 
 async def initialize_submodule_processing(state: LearningPathState) -> Dict[str, Any]:
     """
-    Initializes parallel processing for submodules by organizing them into batches.
+    Initializes the batch processing of submodules by setting up tracking variables.
     
     Args:
-        state: The current LearningPathState with enhanced modules.
+        state: The current state with enhanced modules.
         
     Returns:
-        A dictionary containing submodule batches, current batch index, and related tracking data.
+        Updated state with batch processing tracking variables.
     """
-    logging.info("Initializing submodule parallel processing")
+    logging.info("Initializing submodule batch processing")
+    
+    progress_callback = state.get("progress_callback")
+    if progress_callback:
+        await progress_callback("Preparing to enhance modules with detailed content...")
+    
     enhanced_modules = state.get("enhanced_modules")
     if not enhanced_modules:
         logging.warning("No enhanced modules available")
@@ -137,8 +142,8 @@ async def initialize_submodule_processing(state: LearningPathState) -> Dict[str,
         }
     submodule_batches = batch_items(all_pairs, submodule_parallel_count)
     logging.info(f"Organized {len(all_pairs)} submodules into {len(submodule_batches)} batches")
-    if state.get("progress_callback"):
-        await state["progress_callback"](f"Organized {len(all_pairs)} submodules into {len(submodule_batches)} batches")
+    if progress_callback:
+        await progress_callback(f"Preparing to process {len(all_pairs)} submodules into {len(submodule_batches)} batches")
     return {
         "submodule_batches": submodule_batches,
         "current_submodule_batch_index": 0,
@@ -149,20 +154,27 @@ async def initialize_submodule_processing(state: LearningPathState) -> Dict[str,
 
 async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
     """
-    Processes the current batch of submodules concurrently.
+    Processes a batch of submodules in parallel.
     
     Args:
-        state: The current LearningPathState containing submodule batches.
+        state: The current state with enhanced modules and batch tracking.
         
     Returns:
-        A dictionary with updated submodule processing information and a list of steps.
+        Updated state with processed submodules.
     """
-    logging.info("Processing a batch of submodules in parallel")
+    logging.info(f"Processing submodule batch with parallel count: {state['submodule_parallel_count']}")
+    
+    progress_callback = state.get("progress_callback")
     sub_batches = state.get("submodule_batches") or []
     current_index = state.get("current_submodule_batch_index", 0)
+    
+    if progress_callback:
+        await progress_callback(f"Processing submodule batch {current_index+1}/{len(sub_batches)}...")
+    
     if current_index >= len(sub_batches):
         logging.info("All submodule batches processed")
         return {"steps": ["All submodule batches processed"]}
+    
     current_batch = sub_batches[current_index]
     enhanced_modules = state.get("enhanced_modules", [])
     submodules_in_process = state.get("submodules_in_process", {})
@@ -180,8 +192,10 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
                 task_to_submodule_map.append(key)  # Record which submodule this task is for
             else:
                 logging.warning(f"Invalid submodule indices: module {module_id}, submodule {sub_id}")
-    if state.get("progress_callback"):
-        await state["progress_callback"](f"Processing submodule batch {current_index+1} with {len(tasks)} tasks")
+    
+    if progress_callback:
+        await progress_callback(f"Processing submodule batch {current_index+1} with {len(tasks)} tasks")
+    
     if tasks:
         try:
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -198,6 +212,7 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
             logging.info(f"Completed submodule batch {current_index+1}")
         except Exception as e:
             logging.error(f"Error in processing submodule batch: {str(e)}")
+    
     next_index = current_index + 1
     developed_submodules = state.get("developed_submodules", [])
     for module_id, sub_id in current_batch:
@@ -215,8 +230,13 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
                     search_results=data.get("search_results", []),
                     content=data.get("content", "")
                 ))
-    if state.get("progress_callback"):
-        await state["progress_callback"](f"Completed batch {current_index+1} of submodules")
+    
+    if progress_callback:
+        processed_count = current_index + 1
+        total_count = len(sub_batches)
+        percentage = min(100, int((processed_count / total_count) * 100))
+        await progress_callback(f"Completed batch {current_index+1}/{len(sub_batches)} ({percentage}% of submodules processed)")
+    
     return {
         "submodules_in_process": submodules_in_process,
         "current_submodule_batch_index": next_index,
@@ -232,39 +252,45 @@ async def process_single_submodule(
     submodule: Submodule
 ) -> Dict[str, Any]:
     """
-    Processes a single submodule from generating queries to developing content.
+    Processes a single submodule by generating queries, searching, and developing content.
     
     Args:
-        state: The current LearningPathState.
-        module_id: Index of the parent module.
-        sub_id: Index of the submodule.
-        module: The EnhancedModule instance.
-        submodule: The Submodule instance.
+        state: The current state.
+        module_id: The index of the module.
+        sub_id: The index of the submodule.
+        module: The module object.
+        submodule: The submodule object.
         
     Returns:
-        A dictionary with the submodule processing result.
+        Updated submodule with content.
     """
+    logging.info(f"Processing submodule {sub_id+1} in module {module_id+1}: {submodule.title}")
+    
+    progress_callback = state.get("progress_callback")
+    if progress_callback:
+        await progress_callback(f"Enhancing submodule: {module.title} > {submodule.title}")
+    
     logger = logging.getLogger("learning_path.submodule_processor")
     logger.info(f"Processing submodule {sub_id+1} of module {module_id+1}: {submodule.title}")
     try:
         from config.log_config import log_debug_data
         submodule_search_queries = await generate_submodule_specific_queries(state, module_id, sub_id, module, submodule)
         logger.debug(f"Generated {len(submodule_search_queries)} queries for submodule")
-        if state.get("progress_callback"):
-            await state["progress_callback"](f"Generated queries for submodule {sub_id+1} of module {module_id+1}")
+        if progress_callback:
+            await progress_callback(f"Generated queries for submodule {sub_id+1} of module {module_id+1}")
         submodule_search_results = await execute_submodule_specific_searches(state, module_id, sub_id, module, submodule, submodule_search_queries)
         logger.debug(f"Obtained {len(submodule_search_results)} search results for submodule")
-        if state.get("progress_callback"):
-            await state["progress_callback"](f"Completed research for submodule {sub_id+1} of module {module_id+1}")
+        if progress_callback:
+            await progress_callback(f"Completed research for submodule {sub_id+1} of module {module_id+1}")
         submodule_content = await develop_submodule_specific_content(state, module_id, sub_id, module, submodule, submodule_search_queries, submodule_search_results)
         logger.info(f"Developed content for submodule {sub_id+1} (length: {len(submodule_content)})")
-        if state.get("progress_callback"):
-            await state["progress_callback"](f"Completed development for submodule {sub_id+1} of module {module_id+1}")
+        if progress_callback:
+            await progress_callback(f"Completed development for submodule {sub_id+1} of module {module_id+1}")
         return {"status": "completed", "search_queries": submodule_search_queries, "search_results": submodule_search_results, "content": submodule_content}
     except Exception as e:
         logger.exception(f"Error processing submodule {sub_id+1} of module {module_id+1}: {str(e)}")
-        if state.get("progress_callback"):
-            await state["progress_callback"](f"Error in submodule {sub_id+1} of module {module_id+1}: {str(e)}")
+        if progress_callback:
+            await progress_callback(f"Error in submodule {sub_id+1} of module {module_id+1}: {str(e)}")
         return {"status": "error", "error": str(e)}
 
 async def generate_submodule_specific_queries(
@@ -644,14 +670,20 @@ Format your response using Markdown, with clear section headings, code examples 
 
 async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str, Any]:
     """
-    Assembles all developed submodules into a final learning path structure.
+    Finalizes the enhanced learning path with all processed submodules.
     
     Args:
-        state: The current LearningPathState.
+        state: The current state with all processed submodules.
         
     Returns:
-        A dictionary with the final learning path structure and execution steps.
+        Final state with the complete enhanced learning path.
     """
+    logging.info("Finalizing enhanced learning path")
+    
+    progress_callback = state.get("progress_callback")
+    if progress_callback:
+        await progress_callback("Finalizing your learning path with all enhanced content...")
+    
     logger = logging.getLogger("learning_path.finalizer")
     logger.info("Finalizing enhanced learning path with submodules")
     try:
@@ -692,6 +724,9 @@ async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str,
             final_modules.append(module_data)
         final_learning_path = {"topic": state["user_topic"], "modules": final_modules, "execution_steps": state["steps"]}
         logger.info(f"Finalized learning path with {len(final_modules)} modules")
+        if progress_callback:
+            total_submodules = sum(len(m.submodules) for m in state.get("enhanced_modules", []))
+            await progress_callback(f"Learning path complete with {len(final_modules)} modules and {total_submodules} detailed submodules")
         return {"final_learning_path": final_learning_path, "steps": ["Finalized enhanced learning path"]}
     except Exception as e:
         logger.exception(f"Error finalizing learning path: {str(e)}")
