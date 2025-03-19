@@ -48,6 +48,14 @@ import MarkdownRenderer from '../components/MarkdownRenderer';
 // Import API service
 import { getLearningPath, getProgressUpdates, saveToHistory, updateHistoryEntry, getHistoryEntry } from '../services/api';
 
+// Import new components
+import LearningPathHeader from '../components/organisms/LearningPathHeader';
+import ModuleGrid from '../components/organisms/ModuleGrid';
+import RelatedResourcesSection from '../components/organisms/RelatedResourcesSection';
+import LearningPathSkeleton from '../components/molecules/LearningPathSkeleton';
+import ErrorState from '../components/molecules/ErrorState';
+import ProgressUpdates from '../components/molecules/ProgressUpdates';
+
 // Styled chip component for tags
 const StyledChip = ({ label, onDelete }) => (
   <Chip
@@ -81,6 +89,9 @@ function ResultPage(props) {
   const [newTag, setNewTag] = useState('');
   const [favorite, setFavorite] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'success' });
+
+  // Feature flag for future extensions
+  const [showRelatedResources, setShowRelatedResources] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -284,40 +295,12 @@ function ResultPage(props) {
   // Loading state
   if (loading) {
     return (
-      <Container maxWidth="md" sx={{ px: { xs: 2, sm: 3 } }}>
-        <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, borderRadius: 2, mb: 4 }}>
-          <Box sx={{ textAlign: 'center', my: 3 }}>
-            <CircularProgress color="primary" />
-            <Typography variant="h5" sx={{ mt: 2, fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>
-              Generating Your Learning Path
-            </Typography>
-            <Typography color="text.secondary" sx={{ mt: 1, fontSize: { xs: '0.875rem', sm: '1rem' } }}>
-              This may take a few minutes depending on the complexity of the topic.
-            </Typography>
-            <LinearProgress sx={{ mt: 4, mb: 2 }} />
-          </Box>
-          
-          <Box sx={{ mt: 4 }}>
-            <Typography variant="h6" gutterBottom sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
-              Progress Updates:
-            </Typography>
-            {progressMessages.length === 0 ? (
-              <Typography color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                Waiting for updates...
-              </Typography>
-            ) : (
-              <Box sx={{ maxHeight: '300px', overflow: 'auto', p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
-                {progressMessages.map((msg, index) => (
-                  <Typography key={index} sx={{ mb: 1, fontSize: { xs: '0.875rem', sm: '1rem' } }}>
-                    <span style={{ color: '#555', fontWeight: 'bold' }}>
-                      {new Date(msg.timestamp).toLocaleTimeString()}: 
-                    </span> {msg.message}
-                  </Typography>
-                ))}
-              </Box>
-            )}
-          </Box>
-        </Paper>
+      <Container maxWidth="lg" sx={{ py: { xs: 3, md: 4 } }}>
+        {progressMessages.length > 0 ? (
+          <ProgressUpdates progressMessages={progressMessages} />
+        ) : (
+          <LearningPathSkeleton />
+        )}
       </Container>
     );
   }
@@ -325,266 +308,33 @@ function ResultPage(props) {
   // Error state
   if (error) {
     return (
-      <Container maxWidth="md" sx={{ px: { xs: 2, sm: 3 } }}>
-        <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, borderRadius: 2, mb: 4 }}>
-          <Box sx={{ textAlign: 'center', my: 3 }}>
-            <ErrorIcon color="error" sx={{ fontSize: { xs: 48, sm: 64 } }} />
-            <Typography variant="h5" color="error" sx={{ mt: 2, fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>
-              Error Generating Learning Path
-            </Typography>
-            <Alert severity="error" sx={{ mt: 3, mb: 3 }}>
-              {error}
-            </Alert>
-            <Stack direction="row" spacing={2} justifyContent="center" sx={{ mt: 4 }}>
-              <Button
-                variant="outlined"
-                startIcon={<HomeIcon />}
-                onClick={handleHomeClick}
-                size={isMobile ? "small" : "medium"}
-              >
-                Go to Homepage
-              </Button>
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={handleNewLearningPathClick}
-                size={isMobile ? "small" : "medium"}
-              >
-                Try Again
-              </Button>
-            </Stack>
-          </Box>
-        </Paper>
+      <Container maxWidth="lg" sx={{ py: { xs: 3, md: 4 } }}>
+        <ErrorState 
+          error={error} 
+          onHomeClick={handleHomeClick} 
+          onTryAgainClick={handleNewLearningPathClick} 
+        />
       </Container>
     );
   }
 
   // Success state - show learning path
   return (
-    <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 } }}>
-      <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, borderRadius: 2, mb: 4 }}>
-        {/* Header - Learning Path title and action buttons */}
-        <Box sx={{ mb: 3 }}>
-          <Typography 
-            variant="h4" 
-            component="h1" 
-            sx={{ 
-              fontWeight: 'bold', 
-              mb: { xs: 2, md: 1 },
-              fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' }
-            }}
-          >
-            Learning Path
-          </Typography>
-          
-          {/* Mobile view - Stack buttons vertically */}
-          {isMedium ? (
-            <Stack direction="column" spacing={1.5} sx={{ width: '100%' }}>
-              <Button
-                variant="outlined"
-                fullWidth
-                startIcon={<DownloadIcon />}
-                onClick={handleDownloadJSON}
-                size={isMobile ? "small" : "medium"}
-              >
-                Download JSON
-              </Button>
-              <Button
-                variant="outlined"
-                fullWidth
-                color="secondary"
-                startIcon={<SaveIcon />}
-                onClick={handleSaveToHistory}
-                disabled={savedToHistory}
-                size={isMobile ? "small" : "medium"}
-              >
-                {savedToHistory ? 'Saved' : 'Save to History'}
-              </Button>
-              <Button
-                variant="contained"
-                fullWidth
-                color="primary"
-                startIcon={<BookmarkIcon />}
-                onClick={handleNewLearningPathClick}
-                size={isMobile ? "small" : "medium"}
-              >
-                Create New Path
-              </Button>
-            </Stack>
-          ) : (
-            /* Desktop view - Horizontal button layout */
-            <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
-              <Button
-                variant="outlined"
-                startIcon={<DownloadIcon />}
-                onClick={handleDownloadJSON}
-              >
-                Download JSON
-              </Button>
-              <Button
-                variant="outlined"
-                color="secondary"
-                startIcon={<SaveIcon />}
-                onClick={handleSaveToHistory}
-                disabled={savedToHistory}
-              >
-                {savedToHistory ? 'Saved' : 'Save to History'}
-              </Button>
-              <Button
-                variant="contained"
-                color="primary"
-                startIcon={<BookmarkIcon />}
-                onClick={handleNewLearningPathClick}
-              >
-                Create New Path
-              </Button>
-            </Stack>
-          )}
-        </Box>
-        
-        <Typography 
-          variant="h5" 
-          sx={{ 
-            mb: 3,
-            fontSize: { xs: '1.25rem', sm: '1.5rem' },
-            wordBreak: 'break-word'
-          }}
-        >
-          {learningPath.topic}
-        </Typography>
-        
-        <Divider sx={{ mb: 4 }} />
-        
-        {learningPath.modules?.length > 0 ? (
-          <Box>
-            {learningPath.modules.map((module, moduleIndex) => (
-              <Accordion key={moduleIndex} defaultExpanded={moduleIndex === 0} sx={{ mb: 2 }}>
-                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Typography 
-                    variant="h6" 
-                    sx={{ 
-                      fontSize: { xs: '1rem', sm: '1.25rem' },
-                      lineHeight: 1.4,
-                      pr: { xs: 2, sm: 0 } // Add padding-right on mobile to prevent text overlap with icon
-                    }}
-                  >
-                    Module {moduleIndex + 1}: {module.title}
-                  </Typography>
-                </AccordionSummary>
-                <AccordionDetails sx={{ px: { xs: 2, sm: 3 } }}>
-                  <Box sx={{ mb: 3 }}>
-                    <Typography 
-                      variant="body1" 
-                      paragraph 
-                      sx={{ 
-                        fontSize: { xs: '0.875rem', sm: '1rem' },
-                        lineHeight: 1.6 
-                      }}
-                    >
-                      {module.description}
-                    </Typography>
-                    
-                    {module.prerequisites && module.prerequisites.length > 0 && (
-                      <Box sx={{ mb: 2 }}>
-                        <Typography 
-                          variant="subtitle1" 
-                          sx={{ 
-                            fontWeight: 'bold',
-                            fontSize: { xs: '0.875rem', sm: '1rem' }
-                          }}
-                        >
-                          Prerequisites:
-                        </Typography>
-                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                          {module.prerequisites.map((prereq, idx) => (
-                            <Chip key={idx} label={prereq} size="small" color="primary" variant="outlined" />
-                          ))}
-                        </Box>
-                      </Box>
-                    )}
-                    
-                    {module.submodules && module.submodules.length > 0 ? (
-                      <Box sx={{ mt: 3 }}>
-                        <Typography 
-                          variant="subtitle1" 
-                          sx={{ 
-                            fontWeight: 'bold', 
-                            mb: 2,
-                            fontSize: { xs: '0.875rem', sm: '1rem' }
-                          }}
-                        >
-                          Submodules:
-                        </Typography>
-                        
-                        {module.submodules.map((submodule, subIndex) => (
-                          <Card key={subIndex} variant="outlined" sx={{ mb: 2 }}>
-                            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-                              <Typography 
-                                variant="h6" 
-                                sx={{ 
-                                  mb: 1,
-                                  fontSize: { xs: '1rem', sm: '1.25rem' } 
-                                }}
-                              >
-                                {submodule.title}
-                              </Typography>
-                              <Typography 
-                                variant="body2" 
-                                color="text.secondary" 
-                                sx={{ 
-                                  mb: 2,
-                                  fontSize: { xs: '0.8125rem', sm: '0.875rem' },
-                                  lineHeight: 1.5
-                                }}
-                              >
-                                {submodule.description}
-                              </Typography>
-                              
-                              {submodule.content && (
-                                <Box sx={{ mt: 2 }}>
-                                  <Divider sx={{ mb: 2 }} />
-                                  <Box 
-                                    sx={{ 
-                                      fontSize: { xs: '0.875rem', sm: '1rem' },
-                                      '& img': { maxWidth: '100%', height: 'auto' } // Ensure images are responsive
-                                    }}
-                                  >
-                                    <MarkdownRenderer>
-                                      {submodule.content}
-                                    </MarkdownRenderer>
-                                  </Box>
-                                </Box>
-                              )}
-                            </CardContent>
-                          </Card>
-                        ))}
-                      </Box>
-                    ) : (
-                      module.content && (
-                        <Box 
-                          sx={{ 
-                            mt: 3,
-                            fontSize: { xs: '0.875rem', sm: '1rem' },
-                            '& img': { maxWidth: '100%', height: 'auto' } // Ensure images are responsive
-                          }}
-                        >
-                          <MarkdownRenderer>
-                            {module.content}
-                          </MarkdownRenderer>
-                        </Box>
-                      )
-                    )}
-                  </Box>
-                </AccordionDetails>
-              </Accordion>
-            ))}
-          </Box>
-        ) : (
-          <Alert severity="warning">
-            No modules found in the learning path.
-          </Alert>
-        )}
-      </Paper>
+    <Container maxWidth="lg" sx={{ py: { xs: 3, md: 4 } }}>
+      {/* Header Section */}
+      <LearningPathHeader 
+        topic={learningPath.topic}
+        savedToHistory={savedToHistory}
+        onDownload={handleDownloadJSON}
+        onSaveToHistory={handleSaveToHistory}
+        onNewLearningPath={handleNewLearningPathClick}
+      />
+      
+      {/* Modules Section */}
+      <ModuleGrid modules={learningPath.modules} />
+      
+      {/* Related Resources Section - placeholder for future features */}
+      <RelatedResourcesSection enabled={showRelatedResources} />
       
       {/* Save to History Dialog */}
       <Dialog 
@@ -595,13 +345,14 @@ function ResultPage(props) {
         PaperProps={{
           sx: { 
             m: { xs: 2, sm: 3 },
-            width: { xs: 'calc(100% - 16px)', sm: 'auto' }
+            width: { xs: 'calc(100% - 16px)', sm: 'auto' },
+            borderRadius: 2
           }
         }}
       >
         <DialogTitle>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <StorageIcon sx={{ mr: 1 }} />
+            <StorageIcon sx={{ mr: 1, color: theme.palette.primary.main }} />
             <Typography variant="h6" sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}>
               Save to Local History
             </Typography>
@@ -619,6 +370,7 @@ function ResultPage(props) {
                 checkedIcon={<StarIcon />}
                 checked={favorite}
                 onChange={(e) => setFavorite(e.target.checked)}
+                color="primary"
               />
             }
             label={
