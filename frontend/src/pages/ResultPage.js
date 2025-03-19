@@ -90,8 +90,43 @@ function ResultPage(props) {
   const [favorite, setFavorite] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'success' });
 
+  // Auto-save preference from session storage
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
+  const [initialTags, setInitialTags] = useState([]);
+  const [initialFavorite, setInitialFavorite] = useState(false);
+
   // Feature flag for future extensions
   const [showRelatedResources, setShowRelatedResources] = useState(false);
+
+  // Load auto-save preferences from session storage when component mounts
+  useEffect(() => {
+    try {
+      const autoSavePreference = sessionStorage.getItem('autoSaveToHistory');
+      const savedTags = sessionStorage.getItem('initialTags');
+      const savedFavorite = sessionStorage.getItem('initialFavorite');
+      
+      setAutoSaveEnabled(autoSavePreference === 'true');
+      
+      if (savedTags) {
+        try {
+          setInitialTags(JSON.parse(savedTags));
+        } catch (e) {
+          console.error('Failed to parse saved tags:', e);
+          setInitialTags([]);
+        }
+      }
+      
+      setInitialFavorite(savedFavorite === 'true');
+      
+      // Clear the preferences from session storage after retrieving them
+      // to avoid affecting future learning path generations
+      sessionStorage.removeItem('autoSaveToHistory');
+      sessionStorage.removeItem('initialTags');
+      sessionStorage.removeItem('initialFavorite');
+    } catch (e) {
+      console.error('Error loading auto-save preferences:', e);
+    }
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -115,6 +150,34 @@ function ResultPage(props) {
           
           if (data.status === 'completed') {
             setLearningPath(data.result);
+            
+            // Auto-save the completed learning path if auto-save is enabled
+            if (autoSaveEnabled && !savedToHistory && data.result) {
+              try {
+                const result = await saveToHistory(data.result, 'generated');
+                
+                if (result.success) {
+                  setSavedToHistory(true);
+                  showNotification('Learning path saved to history automatically', 'success');
+                  
+                  // If tags or favorite are set, update the entry
+                  if (initialTags.length > 0 || initialFavorite) {
+                    try {
+                      await updateHistoryEntry(result.entry_id, { 
+                        tags: initialTags, 
+                        favorite: initialFavorite 
+                      });
+                    } catch (error) {
+                      console.error('Error updating history entry:', error);
+                    }
+                  }
+                }
+              } catch (error) {
+                console.error('Error auto-saving to history:', error);
+                showNotification('Failed to auto-save learning path', 'error');
+              }
+            }
+            
             setLoading(false);
           } else if (data.status === 'error') {
             setError(data.error || 'An error occurred while generating your learning path.');
@@ -135,6 +198,33 @@ function ResultPage(props) {
                   
                   if (updatedData.status === 'completed') {
                     setLearningPath(updatedData.result);
+                    
+                    // Auto-save the completed learning path if auto-save is enabled
+                    if (autoSaveEnabled && !savedToHistory && updatedData.result) {
+                      try {
+                        const result = await saveToHistory(updatedData.result, 'generated');
+                        
+                        if (result.success) {
+                          setSavedToHistory(true);
+                          showNotification('Learning path saved to history automatically', 'success');
+                          
+                          // If tags or favorite are set, update the entry
+                          if (initialTags.length > 0 || initialFavorite) {
+                            try {
+                              await updateHistoryEntry(result.entry_id, { 
+                                tags: initialTags, 
+                                favorite: initialFavorite 
+                              });
+                            } catch (error) {
+                              console.error('Error updating history entry:', error);
+                            }
+                          }
+                        }
+                      } catch (error) {
+                        console.error('Error auto-saving to history:', error);
+                        showNotification('Failed to auto-save learning path', 'error');
+                      }
+                    }
                   } else if (updatedData.status === 'error') {
                     setError(updatedData.error || 'An error occurred while generating your learning path.');
                   }
@@ -161,7 +251,7 @@ function ResultPage(props) {
     };
     
     fetchData();
-  }, [taskId, entryId, isFromHistory, location.pathname]);
+  }, [taskId, entryId, isFromHistory, location.pathname, autoSaveEnabled, savedToHistory, initialTags, initialFavorite]);
 
   const setupProgressUpdates = () => {
     try {

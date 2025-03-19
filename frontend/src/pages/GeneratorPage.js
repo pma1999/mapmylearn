@@ -463,30 +463,13 @@ function GeneratorPage() {
       // Connect to progress updates
       connectToProgressUpdates(response.task_id);
       
-      // Fetch the generated learning path (in a production app, we'd fetch the result)
-      // For demo purposes, we'll create a mock learning path
-      const mockLearningPath = {
-        topic: topic,
-        modules: [],
-        metadata: {
-          generatedAt: new Date().toISOString()
-        }
-      };
+      // Save auto-save preferences to session storage for the ResultPage to use
+      sessionStorage.setItem('autoSaveToHistory', autoSaveToHistory);
+      sessionStorage.setItem('initialTags', JSON.stringify(initialTags));
+      sessionStorage.setItem('initialFavorite', initialFavorite);
       
-      setGeneratedPath(mockLearningPath);
-      
-      // Handle auto-save logic
-      if (autoSaveToHistory) {
-        const saved = await saveToHistoryHandler(mockLearningPath, initialTags, initialFavorite);
-        
-        // Proceed to result page
-        navigate(`/result/${response.task_id}`);
-      } else {
-        // Open save dialog if auto-save is disabled
-        setSaveDialogTags(initialTags);
-        setSaveDialogFavorite(initialFavorite);
-        setSaveDialogOpen(true);
-      }
+      // Navigate to result page
+      navigate(`/result/${response.task_id}`);
     } catch (err) {
       console.error('Error generating learning path:', err);
       
