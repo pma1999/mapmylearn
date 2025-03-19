@@ -12,8 +12,9 @@ from langchain_core.output_parsers import StrOutputParser
 # Import the extracted prompts
 from prompts.learning_path_prompts import (
     SUBMODULE_PLANNING_PROMPT,
-    SUBMODULE_QUERY_GENERATION_PROMPT,
-    SUBMODULE_CONTENT_DEVELOPMENT_PROMPT
+    # Removed imports for prompts now defined inline
+    # SUBMODULE_QUERY_GENERATION_PROMPT,
+    # SUBMODULE_CONTENT_DEVELOPMENT_PROMPT
 )
 # Optional: Import the prompt registry for more advanced prompt management
 # from prompts.prompt_registry import registry
@@ -274,7 +275,7 @@ async def generate_submodule_specific_queries(
     submodule: Submodule
 ) -> List[SearchQuery]:
     """
-    Generates search queries specific to a submodule.
+    Generates a single high-quality search query specific to a submodule.
     
     Args:
         state: The current LearningPathState.
@@ -284,10 +285,10 @@ async def generate_submodule_specific_queries(
         submodule: The Submodule instance.
         
     Returns:
-        A list of SearchQuery instances.
+        A list containing a single SearchQuery instance.
     """
     logger = logging.getLogger("learning_path.query_generator")
-    logger.info(f"Generating search queries for submodule {module_id}.{sub_id}: {submodule.title}")
+    logger.info(f"Generating search query for submodule {module_id}.{sub_id}: {submodule.title}")
     
     # Get the Google key provider from state
     google_key_provider = state.get("google_key_provider")
@@ -332,9 +333,59 @@ Other Modules in Learning Path:
     module_count = len(state.get("enhanced_modules", []))
     submodule_count = len(module.submodules)
     
-    prompt = ChatPromptTemplate.from_template(SUBMODULE_QUERY_GENERATION_PROMPT)
+    # Modified prompt template for single optimal query
+    single_query_prompt = """
+# EXPERT RESEARCHER INSTRUCTIONS
+
+You are tasked with creating a SINGLE OPTIMAL search query for in-depth research on a specific educational submodule.
+
+## SUBMODULE CONTEXT
+- Topic: {user_topic}
+- Module: {module_title} (Module {module_order} of {module_count})
+- Submodule: {submodule_title} (Submodule {submodule_order} of {submodule_count})
+- Description: {submodule_description}
+
+## MODULE CONTEXT
+{module_context}
+
+## LEARNING PATH CONTEXT
+{learning_path_context}
+
+## YOUR TASK
+
+Create ONE exceptionally well-crafted search query that will:
+1. Target the most critical information needed for this specific submodule
+2. Be comprehensive enough to gather essential educational content
+3. Retrieve detailed, accurate, and authoritative information
+4. Focus precisely on the unique aspects of this submodule
+5. Balance breadth and depth to maximize learning value
+
+Your query should be:
+- Specific and targeted toward educational/tutorial content
+- Formulated to return high-quality information
+- Structured to capture the most current and relevant resources
+- Phrased to avoid redundancy with other parts of the learning path
+
+Provide:
+1. The optimal search query
+2. A brief but comprehensive rationale explaining why this is the ideal query for this submodule
+
+{format_instructions}
+"""
+    
+    prompt = ChatPromptTemplate.from_template(single_query_prompt)
+    
+    from pydantic.v1 import BaseModel, Field
+    
+    class SingleSearchQueryOutput(BaseModel):
+        query: str = Field(description="The optimal search query to use")
+        rationale: str = Field(description="Explanation of why this query is optimal for this submodule")
+    
+    from langchain.output_parsers import PydanticOutputParser
+    single_query_parser = PydanticOutputParser(pydantic_object=SingleSearchQueryOutput)
+    
     try:
-        result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), module_queries_parser, {
+        result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), single_query_parser, {
             "user_topic": state["user_topic"],
             "module_title": module.title,
             "submodule_title": submodule.title,
@@ -345,17 +396,22 @@ Other Modules in Learning Path:
             "submodule_count": submodule_count,
             "module_context": module_context,
             "learning_path_context": learning_path_context,
-            "format_instructions": module_queries_parser.get_format_instructions()
+            "format_instructions": single_query_parser.get_format_instructions()
         })
         
-        queries = result.queries if hasattr(result, 'queries') else []
-        logging.info(f"Generated {len(queries)} search queries for submodule {sub_id+1}")
-        return queries
+        # Create a single high-quality SearchQuery
+        query = SearchQuery(
+            keywords=result.query,
+            rationale=result.rationale
+        )
+        
+        logging.info(f"Generated optimal search query for submodule {sub_id+1}: {query.keywords}")
+        return [query]  # Return as list for compatibility with existing code
     except Exception as e:
-        logging.error(f"Error generating submodule search queries: {str(e)}")
+        logging.error(f"Error generating submodule search query: {str(e)}")
         # Create a fallback query
         fallback_query = SearchQuery(
-            keywords=f"{module.title} {submodule.title}",
+            keywords=f"{module.title} {submodule.title} tutorial comprehensive guide",
             rationale="Fallback query due to error in query generation"
         )
         return [fallback_query]
@@ -412,7 +468,7 @@ async def execute_submodule_specific_searches(
     sub_queries: List[SearchQuery]
 ) -> List[Dict[str, Any]]:
     """
-    Execute web searches for submodule-specific queries.
+    Execute a single web search for a submodule.
     
     Args:
         state: The current LearningPathState.
@@ -420,29 +476,26 @@ async def execute_submodule_specific_searches(
         sub_id: Index of the submodule.
         module: The EnhancedModule instance.
         submodule: The Submodule instance.
-        sub_queries: List of search queries for the submodule.
+        sub_queries: List containing the single search query for the submodule.
         
     Returns:
-        A list of search result dictionaries.
+        A list containing a single search result dictionary.
     """
-    logging.info(f"Executing searches for submodule {sub_id+1} of module {module_id+1}: {submodule.title}")
-    if not sub_queries:
-        logging.warning("No search queries available for submodule")
+    logging.info(f"Executing search for submodule {sub_id+1} of module {module_id+1}: {submodule.title}")
+    if not sub_queries or len(sub_queries) == 0:
+        logging.warning("No search query available for submodule")
         return []
-    search_parallel_count = state.get("search_parallel_count", 3)
-    batches = batch_items(sub_queries, search_parallel_count)
-    search_results = []
+    
+    # Take only the first query even if multiple are provided (for robustness)
+    query = sub_queries[0]
+    
     try:
-        for idx, batch in enumerate(batches):
-            tasks = [execute_single_search_for_submodule(query, key_provider=state.get("pplx_key_provider")) for query in batch]
-            results = await asyncio.gather(*tasks)
-            search_results.extend(results)
-            if idx < len(batches) - 1:
-                await asyncio.sleep(0.5)
-        logging.info(f"Completed {len(search_results)} searches for submodule {sub_id+1}")
-        return search_results
+        # Execute a single search
+        result = await execute_single_search_for_submodule(query, key_provider=state.get("pplx_key_provider"))
+        logging.info(f"Completed search for submodule {sub_id+1} with query: {query.keywords}")
+        return [result]
     except Exception as e:
-        logging.error(f"Error executing submodule searches: {str(e)}")
+        logging.error(f"Error executing submodule search: {str(e)}")
         return []
 
 async def develop_submodule_specific_content(
@@ -455,7 +508,7 @@ async def develop_submodule_specific_content(
     sub_search_results: List[Dict[str, Any]]
 ) -> str:
     """
-    Develops comprehensive content for a submodule using research data.
+    Develops comprehensive content for a submodule using a single search result.
     
     Args:
         state: The current LearningPathState.
@@ -463,8 +516,8 @@ async def develop_submodule_specific_content(
         sub_id: Index of the submodule.
         module: The EnhancedModule instance.
         submodule: The Submodule instance.
-        sub_queries: List of search queries used.
-        sub_search_results: List of search results obtained.
+        sub_queries: List containing the single search query used.
+        sub_search_results: List containing the single search result obtained.
         
     Returns:
         A string containing the developed submodule content.
@@ -475,18 +528,20 @@ async def develop_submodule_specific_content(
         logger.warning("No search results available for content development")
         return "No content generated due to missing search results."
     
+    # Process the single search result
     formatted_results = ""
-    for result in sub_search_results:
-        formatted_results += f"Query: {result.get('query', '')}\n"
-        formatted_results += f"Rationale: {result.get('rationale', '')}\nResults:\n"
-        results = result.get("results", "")
-        if isinstance(results, str):
-            formatted_results += f"  {results}\n\n"
-        else:
-            for item in results:
-                formatted_results += f"  - {item.get('title', 'No title')}: {item.get('content', 'No content')}\n    URL: {item.get('url', 'No URL')}\n"
-            formatted_results += "\n"
+    result = sub_search_results[0]  # We expect only one result
+    formatted_results += f"Query: {result.get('query', '')}\n"
+    formatted_results += f"Rationale: {result.get('rationale', '')}\nResults:\n"
+    results = result.get("results", "")
+    if isinstance(results, str):
+        formatted_results += f"  {results}\n\n"
+    else:
+        for item in results:
+            formatted_results += f"  - {item.get('title', 'No title')}: {item.get('content', 'No content')}\n    URL: {item.get('url', 'No URL')}\n"
+        formatted_results += "\n"
     
+    # Continue with context building and content generation as before
     learning_path_context = ""
     for i, mod in enumerate(state.get("enhanced_modules") or []):
         indicator = " (CURRENT)" if i == module_id else ""
@@ -507,8 +562,54 @@ async def develop_submodule_specific_content(
     else:
         adjacent_context += "No next submodule.\n"
     
-    # Using the extracted prompt template
-    prompt = ChatPromptTemplate.from_template(SUBMODULE_CONTENT_DEVELOPMENT_PROMPT)
+    # Modify the prompt to emphasize working with a single search result
+    single_result_prompt = """
+# EXPERT EDUCATIONAL CONTENT DEVELOPER INSTRUCTIONS
+
+You are tasked with developing comprehensive educational content for a specific submodule based on a focused search result.
+
+## SUBMODULE CONTEXT
+- Learning Topic: {user_topic}
+- Module: {module_title} (Module {module_order} of {module_count})
+- Submodule: {submodule_title} (Submodule {submodule_order} of {submodule_count})
+- Description: {submodule_description}
+
+## MODULE CONTEXT
+{module_context}
+
+## ADJACENT CONTEXT
+{adjacent_context}
+
+## LEARNING PATH CONTEXT
+{learning_path_context}
+
+## RESEARCH MATERIAL
+The following is your research material from a single focused search:
+
+{search_results}
+
+## YOUR TASK
+
+Based on this research material, develop comprehensive educational content for this submodule that:
+
+1. Thoroughly covers the specific topic of the submodule
+2. Aligns with the overall learning objectives of the module
+3. Builds logically on previous submodules and prepares for subsequent ones
+4. Includes relevant examples, explanations, and educational activities
+5. Provides practical applications and theoretical foundations
+6. Organizes information in a clear, structured learning progression
+
+Your content should be:
+- Comprehensive (1500-2000 words)
+- Well-organized with clear headings and subheadings
+- Rich in examples and explanations
+- Written in an educational and engaging style
+- Suitable for the specified depth level of the submodule
+
+Format your response using Markdown, with clear section headings, code examples if relevant, and proper formatting for educational content.
+"""
+    
+    prompt = ChatPromptTemplate.from_template(single_result_prompt)
     try:
         # Properly await the LLM coroutine
         llm = await get_llm(key_provider=state.get("google_key_provider"))

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Typography,
   Box,
@@ -54,15 +54,7 @@ import NotificationSystem from '../components/molecules/NotificationSystem';
 import ProgressBar from '../components/ProgressBar';
 
 // Import API service
-import { 
-  generateLearningPath, 
-  saveToHistory,
-  validateApiKeys,
-  authenticateApiKeys,
-  saveApiTokens,
-  getSavedApiTokens,
-  clearSavedApiTokens
-} from '../services/api';
+import * as apiService from '../services/api';
 
 const StyledChip = styled(Chip)(({ theme }) => ({
   margin: theme.spacing(0.5),
@@ -130,7 +122,7 @@ function GeneratorPage() {
 
   // Load saved API tokens on component mount
   useEffect(() => {
-    const { googleKeyToken, pplxKeyToken, remember } = getSavedApiTokens();
+    const { googleKeyToken, pplxKeyToken, remember } = apiService.getSavedApiTokens();
     if (googleKeyToken) {
       setGoogleKeyToken(googleKeyToken);
       setGoogleKeyValid(true); // Assume token is valid if it exists
@@ -154,13 +146,10 @@ function GeneratorPage() {
       eventSourceRef.current.close();
     }
     
-    // Create a new EventSource connection
-    const eventSource = new EventSource(`/api/progress/${taskId}`);
-    eventSourceRef.current = eventSource;
-    
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
+    // Use the API service instead of direct EventSource creation
+    const progressUpdatesService = apiService.getProgressUpdates(
+      taskId,
+      (data) => {
         setProgressUpdates(prevUpdates => {
           // Only add if it's not a duplicate message
           if (prevUpdates.length === 0 || prevUpdates[prevUpdates.length-1].message !== data.message) {
@@ -206,19 +195,17 @@ function GeneratorPage() {
         };
         
         setProgressPercentage(calculateProgress(progressUpdates));
-      } catch (error) {
-        console.error('Error parsing progress update:', error);
+      },
+      (error) => {
+        console.error('EventSource error:', error);
       }
-    };
+    );
     
-    eventSource.onerror = (error) => {
-      console.error('EventSource error:', error);
-      // Don't close on error - let the browser retry
-    };
+    eventSourceRef.current = progressUpdatesService;
     
     // Clean up function
     return () => {
-      eventSource.close();
+      eventSourceRef.current.close();
     };
   };
   
@@ -262,7 +249,7 @@ function GeneratorPage() {
       const trimmedGoogleKey = googleApiKey.trim();
       const trimmedPplxKey = pplxApiKey.trim();
       
-      const result = await authenticateApiKeys(trimmedGoogleKey, trimmedPplxKey, rememberApiKeys);
+      const result = await apiService.authenticateApiKeys(trimmedGoogleKey, trimmedPplxKey, rememberApiKeys);
       
       // Update validation status and tokens
       if (trimmedGoogleKey) {
@@ -316,7 +303,7 @@ function GeneratorPage() {
     setPplxKeyValid(null);
     setGoogleKeyToken(null);
     setPplxKeyToken(null);
-    clearSavedApiTokens();
+    apiService.clearSavedApiTokens();
     setRememberApiKeys(false);
     showNotification('API keys cleared', 'success');
   };
@@ -385,7 +372,7 @@ function GeneratorPage() {
   // Save to history
   const saveToHistoryHandler = async (learningPath, tags = [], favorite = false) => {
     try {
-      await saveToHistory(learningPath, 'generated');
+      await apiService.saveToHistory(learningPath, 'generated');
       
       // If tags or favorite are set, update the entry
       if (tags.length > 0 || favorite) {
@@ -469,7 +456,7 @@ function GeneratorPage() {
         requestData.desiredSubmoduleCount = desiredSubmoduleCount;
       }
       
-      const response = await generateLearningPath(topic, requestData);
+      const response = await apiService.generateLearningPath(topic, requestData);
       
       setTaskId(response.task_id);
       

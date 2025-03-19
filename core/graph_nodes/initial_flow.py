@@ -276,15 +276,12 @@ Format your response as a structured curriculum. Each module should build on pre
         # Crear la plantilla de prompt
         prompt = ChatPromptTemplate.from_template(prompt_text)
         
-        # Escapar las llaves del contenido de format_instructions para que no se interpreten como variables
-        format_instructions_value = enhanced_modules_parser.get_format_instructions().replace("{", "{{").replace("}", "}}")
-        
         # Llamar a la cadena LLM proporcionando el valor para 'format_instructions'
         result = await run_chain(
             prompt,
             lambda: get_llm(key_provider=google_key_provider),
             enhanced_modules_parser,
-            { "format_instructions": format_instructions_value }
+            { "format_instructions": enhanced_modules_parser.get_format_instructions() }
         )
         modules = result.modules
         
