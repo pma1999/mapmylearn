@@ -375,7 +375,7 @@ Provide:
     
     prompt = ChatPromptTemplate.from_template(single_query_prompt)
     
-    from pydantic.v1 import BaseModel, Field
+    from pydantic import BaseModel, Field
     
     class SingleSearchQueryOutput(BaseModel):
         query: str = Field(description="The optimal search query to use")
