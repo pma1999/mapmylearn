@@ -16,6 +16,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import base64
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +125,7 @@ class ApiKeyManager:
     
     def validate_key_format(self, key_type: str, key_value: str) -> bool:
         """
-        Validate the format of an API key.
+        Validate the format of an API key using regex patterns.
         
         Args:
             key_type: Type of key ('google' or 'perplexity')
@@ -137,12 +138,14 @@ class ApiKeyManager:
             return False
             
         if key_type == self.KEY_TYPE_GOOGLE:
-            # Google API keys typically start with 'AIza'
-            return key_value.startswith("AIza")
+            # Google API keys start with 'AIza' followed by 35 alphanumeric characters
+            pattern = r'^AIza[0-9A-Za-z_-]{35}$'
+            return bool(re.match(pattern, key_value))
         
         elif key_type == self.KEY_TYPE_PERPLEXITY:
-            # Perplexity API keys start with 'pplx-'
-            return key_value.startswith("pplx-")
+            # Perplexity API keys start with 'pplx-' followed by alphanumeric characters
+            pattern = r'^pplx-[0-9A-Za-z]{32,}$'
+            return bool(re.match(pattern, key_value))
             
         return False
     

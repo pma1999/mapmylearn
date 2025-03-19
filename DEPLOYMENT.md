@@ -250,6 +250,36 @@ The application implements a comprehensive error handling strategy to ensure tha
 3. **Consistently Formatted**: All error responses follow a standard JSON format that the frontend can easily process.
 4. **Progress-Tracked**: For background tasks, errors are reported via progress updates in real-time.
 
+## API Key Validation
+
+Learny implements strict validation for API keys to ensure security and proper functionality:
+
+### Format Validation
+
+API keys must follow specific formats:
+
+- **Google API Keys**: Must start with `AIza` followed by exactly 35 alphanumeric characters, underscores, or hyphens (pattern: `^AIza[0-9A-Za-z_-]{35}$`)
+- **Perplexity API Keys**: Must start with `pplx-` followed by at least 32 alphanumeric characters (pattern: `^pplx-[0-9A-Za-z]{32,}$`)
+
+### Functional Validation
+
+Even if an API key has the correct format, the system performs a minimal "ping" test to verify that the key is functional:
+
+- A small test request is made to the respective service
+- The system catches and categorizes common errors (unauthorized, quota exceeded, etc.)
+- User-friendly error messages are returned without exposing sensitive details
+
+### Security Measures
+
+To protect API keys and sensitive data:
+
+1. Keys are never stored in plain text
+2. All stored keys are encrypted using a symmetric encryption algorithm (Fernet)
+3. The encryption key is derived from `SERVER_SECRET_KEY`, which is mandatory in production
+4. Users interact with the system using temporary tokens that reference their stored keys
+5. Tokens expire after 24 hours by default
+6. API keys are never included in logs or error messages
+
 ## Error Response Format
 
 All API error responses follow this consistent format:

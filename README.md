@@ -203,10 +203,21 @@ For a complete step-by-step guide, please refer to the [Deployment Guide](DEPLOY
 
 The backend exposes a RESTful API with the following main endpoints:
 
+### API Key Management
+
+- `POST /api/auth/api-keys`: Validate and store API keys securely
+  - Body: `{ "google_api_key": "string", "pplx_api_key": "string" }`
+  - Returns: `{ "google_key_token": "string", "pplx_key_token": "string", "google_key_valid": bool, "pplx_key_valid": bool, "google_key_error": "string", "pplx_key_error": "string" }`
+  - Notes: Performs strict validation on key format and functionality. Google keys must start with "AIza" followed by 35 characters. Perplexity keys must start with "pplx-" followed by at least 32 characters. Keys are encrypted and referenced by secure tokens.
+
+- `POST /api/validate-api-keys`: Validate API keys without storing them
+  - Body: `{ "google_api_key": "string", "pplx_api_key": "string" }`
+  - Returns: `{ "google_key_valid": bool, "pplx_key_valid": bool, "google_key_error": "string", "pplx_key_error": "string" }`
+
 ### Learning Path Generation
 
 - `POST /api/generate-learning-path`: Start generating a new learning path
-  - Body: `{ "topic": "string", "parallel_count": int, "search_parallel_count": int, "submodule_parallel_count": int }`
+  - Body: `{ "topic": "string", "parallel_count": int, "search_parallel_count": int, "submodule_parallel_count": int, "google_key_token": "string", "pplx_key_token": "string" }`
   - Returns: `{ "task_id": "string", "status": "string" }`
 
 - `GET /api/learning-path/{task_id}`: Get generation status and results

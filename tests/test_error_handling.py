@@ -1,6 +1,7 @@
 import unittest
 import asyncio
 import json
+import re
 from unittest.mock import Mock, patch, AsyncMock
 import sys
 import os
@@ -192,6 +193,29 @@ class TestErrorHandling(unittest.TestCase):
         asyncio.set_event_loop(loop)
         loop.run_until_complete(run_test())
         loop.close()
+
+    @patch('api.validate_google_key')
+    def test_api_key_format_validation(self, mock_validate_google):
+        """Test that API key format validation returns appropriate error messages."""
+        # Set up mock to simulate format validation error
+        mock_validate_google.return_value = (False, "Invalid Google API key format - must start with 'AIza' followed by 35 characters")
+        
+        # Send a request with an invalid format Google API key
+        response = self.client.post("/api/auth/api-keys", json={
+            "google_api_key": "InvalidFormatKey123"
+        })
+        
+        # Verify response status is 200 but with error details
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        
+        # Check validation results
+        self.assertFalse(data["google_key_valid"])
+        self.assertIsNone(data["google_key_token"])
+        self.assertIn("Invalid Google API key format", data["google_key_error"])
+        
+        # Check that validate_google_key was called with our key
+        mock_validate_google.assert_called_once_with("InvalidFormatKey123")
 
 if __name__ == '__main__':
     unittest.main() 

@@ -1,6 +1,7 @@
 import os
 import unittest
 import pytest
+import re
 from unittest.mock import patch
 
 from services.key_management import ApiKeyManager
@@ -62,6 +63,90 @@ class TestApiKeyManager(unittest.TestCase):
         # This tests explicit secret in production environment
         manager = ApiKeyManager(server_secret="explicit_secret")
         self.assertEqual(manager.server_secret, "explicit_secret")
+        
+    def test_google_key_format_validation(self):
+        """Test the enhanced Google API key format validation."""
+        manager = ApiKeyManager()
+        
+        # Valid formats
+        self.assertTrue(manager.validate_key_format(
+            manager.KEY_TYPE_GOOGLE, 
+            "AIza" + "a" * 35
+        ))
+        self.assertTrue(manager.validate_key_format(
+            manager.KEY_TYPE_GOOGLE, 
+            "AIza" + "1" * 35
+        ))
+        self.assertTrue(manager.validate_key_format(
+            manager.KEY_TYPE_GOOGLE, 
+            "AIza" + "A" * 35
+        ))
+        self.assertTrue(manager.validate_key_format(
+            manager.KEY_TYPE_GOOGLE, 
+            "AIza" + "a1_-" * 8 + "a1_"
+        ))
+        
+        # Invalid formats
+        self.assertFalse(manager.validate_key_format(
+            manager.KEY_TYPE_GOOGLE, 
+            "NotAIza" + "x" * 35
+        ))
+        self.assertFalse(manager.validate_key_format(
+            manager.KEY_TYPE_GOOGLE, 
+            "AIza" + "a" * 34  # Too short
+        ))
+        self.assertFalse(manager.validate_key_format(
+            manager.KEY_TYPE_GOOGLE, 
+            "AIza" + "a" * 36  # Too long
+        ))
+        self.assertFalse(manager.validate_key_format(
+            manager.KEY_TYPE_GOOGLE, 
+            ""  # Empty string
+        ))
+        self.assertFalse(manager.validate_key_format(
+            manager.KEY_TYPE_GOOGLE, 
+            None  # None
+        ))
+        
+    def test_perplexity_key_format_validation(self):
+        """Test the enhanced Perplexity API key format validation."""
+        manager = ApiKeyManager()
+        
+        # Valid formats
+        self.assertTrue(manager.validate_key_format(
+            manager.KEY_TYPE_PERPLEXITY, 
+            "pplx-" + "a" * 32
+        ))
+        self.assertTrue(manager.validate_key_format(
+            manager.KEY_TYPE_PERPLEXITY, 
+            "pplx-" + "1" * 32
+        ))
+        self.assertTrue(manager.validate_key_format(
+            manager.KEY_TYPE_PERPLEXITY, 
+            "pplx-" + "A" * 32
+        ))
+        self.assertTrue(manager.validate_key_format(
+            manager.KEY_TYPE_PERPLEXITY, 
+            "pplx-" + "a" * 40  # Longer is OK
+        ))
+        
+        # Invalid formats
+        self.assertFalse(manager.validate_key_format(
+            manager.KEY_TYPE_PERPLEXITY, 
+            "notpplx-" + "a" * 32
+        ))
+        self.assertFalse(manager.validate_key_format(
+            manager.KEY_TYPE_PERPLEXITY, 
+            "pplx-" + "a" * 31  # Too short
+        ))
+        self.assertFalse(manager.validate_key_format(
+            manager.KEY_TYPE_PERPLEXITY, 
+            ""  # Empty string
+        ))
+        self.assertFalse(manager.validate_key_format(
+            manager.KEY_TYPE_PERPLEXITY, 
+            None  # None
+        ))
 
 
 if __name__ == "__main__":

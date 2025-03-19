@@ -249,20 +249,21 @@ async def authenticate_api_keys(request: ApiKeyAuthRequest, req: Request):
         response.google_key_valid = is_valid
         if is_valid:
             try:
-                # Store key securely and get token
-                google_token = key_manager.store_key(
+                # Only store the key if validation passed
+                response.google_key_token = key_manager.store_key(
                     key_manager.KEY_TYPE_GOOGLE, 
                     request.google_api_key,
                     ip_address=client_ip
                 )
-                response.google_key_token = google_token
                 logger.info(f"Generated token for Google API key from {client_ip}")
             except Exception as e:
-                logger.exception(f"Error storing Google API key: {str(e)}")
+                # In case of storage error
                 response.google_key_valid = False
-                response.google_key_error = f"Error storing API key: {str(e)}"
+                response.google_key_error = "Error generating token: " + str(e)
+                logger.error(f"Error storing Google API key: {str(e)}")
         else:
             response.google_key_error = error_message
+            logger.info(f"Invalid Google API key from {client_ip}: {error_message}")
     
     # Validate and store Perplexity API key if provided
     if request.pplx_api_key:
@@ -270,20 +271,21 @@ async def authenticate_api_keys(request: ApiKeyAuthRequest, req: Request):
         response.pplx_key_valid = is_valid
         if is_valid:
             try:
-                # Store key securely and get token
-                pplx_token = key_manager.store_key(
+                # Only store the key if validation passed
+                response.pplx_key_token = key_manager.store_key(
                     key_manager.KEY_TYPE_PERPLEXITY, 
                     request.pplx_api_key,
                     ip_address=client_ip
                 )
-                response.pplx_key_token = pplx_token
                 logger.info(f"Generated token for Perplexity API key from {client_ip}")
             except Exception as e:
-                logger.exception(f"Error storing Perplexity API key: {str(e)}")
+                # In case of storage error
                 response.pplx_key_valid = False
-                response.pplx_key_error = f"Error storing API key: {str(e)}"
+                response.pplx_key_error = "Error generating token: " + str(e)
+                logger.error(f"Error storing Perplexity API key: {str(e)}")
         else:
             response.pplx_key_error = error_message
+            logger.info(f"Invalid Perplexity API key from {client_ip}: {error_message}")
     
     return response
 
@@ -547,32 +549,33 @@ async def generate_learning_path_task(
 @app.post("/api/validate-api-keys")
 async def validate_api_keys(request: ApiKeyValidationRequest):
     """
-    Validate the format and functionality of API keys.
+    Validate API keys without storing them.
+    This endpoint is used to check if keys are valid before submitting a full request.
     """
-    try:
-        response = {}
-        
-        # Validate Google API key if provided
-        if request.google_api_key:
-            is_valid, error_message = validate_google_key(request.google_api_key)
-            response["google_key_valid"] = is_valid
-            if not is_valid:
-                response["google_key_error"] = error_message
-        
-        # Validate Perplexity API key if provided
-        if request.pplx_api_key:
-            is_valid, error_message = validate_perplexity_key(request.pplx_api_key)
-            response["pplx_key_valid"] = is_valid
-            if not is_valid:
-                response["pplx_key_error"] = error_message
-        
-        return response
-    except Exception as e:
-        logger.exception(f"Error validating API keys: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to validate API keys. Please try again later."
-        )
+    response = {
+        "google_key_valid": False, 
+        "pplx_key_valid": False,
+        "google_key_error": None,
+        "pplx_key_error": None
+    }
+    
+    # Validate Google API key if provided
+    if request.google_api_key:
+        is_valid, error_message = validate_google_key(request.google_api_key)
+        response["google_key_valid"] = is_valid
+        if not is_valid:
+            response["google_key_error"] = error_message
+            logger.info(f"Google API key validation failed: {error_message}")
+    
+    # Validate Perplexity API key if provided
+    if request.pplx_api_key:
+        is_valid, error_message = validate_perplexity_key(request.pplx_api_key)
+        response["pplx_key_valid"] = is_valid
+        if not is_valid:
+            response["pplx_key_error"] = error_message
+            logger.info(f"Perplexity API key validation failed: {error_message}")
+    
+    return response
 
 @app.get("/api/learning-path/{task_id}")
 async def get_learning_path(task_id: str):

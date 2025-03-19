@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.chat_models import ChatPerplexity
@@ -117,8 +118,14 @@ def validate_google_key(api_key):
     Returns:
         Tuple of (is_valid: bool, error_message: str or None)
     """
+    # Initial format validation
     if not api_key or not isinstance(api_key, str):
         return False, "API key must be a non-empty string"
+    
+    # Google API key format validation
+    pattern = r'^AIza[0-9A-Za-z_-]{35}$'
+    if not re.match(pattern, api_key):
+        return False, "Invalid Google API key format - must start with 'AIza' followed by 35 characters"
     
     try:
         # Minimal test to validate key functionality
@@ -156,12 +163,15 @@ def validate_perplexity_key(api_key):
     Returns:
         Tuple of (is_valid: bool, error_message: str or None)
     """
+    # Initial format validation
     if not api_key or not isinstance(api_key, str):
         return False, "API key must be a non-empty string"
-        
-    if len(api_key) < 20:
-        return False, "Invalid Perplexity API key format"
-        
+    
+    # Perplexity API key format validation
+    pattern = r'^pplx-[0-9A-Za-z]{32,}$'
+    if not re.match(pattern, api_key):
+        return False, "Invalid Perplexity API key format - must start with 'pplx-' followed by at least 32 characters"
+    
     try:
         # Minimal test to validate key functionality
         model = ChatPerplexity(temperature=0, model="sonar", pplx_api_key=api_key)

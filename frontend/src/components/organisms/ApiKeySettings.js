@@ -130,7 +130,7 @@ const ApiKeySettings = ({
                 <Grid container spacing={2}>
                   <Grid item xs={12}>
                     <Alert severity="info" sx={{ mb: 2 }}>
-                      You'll need keys from <strong>either</strong> Google AI (Gemini API) <strong>or</strong> Perplexity, or both for best results.
+                      You need keys from <strong>both</strong> Google AI (Gemini API) <strong>and</strong> Perplexity for full functionality. Both are required.
                     </Alert>
                   </Grid>
                   
