@@ -52,7 +52,7 @@ async def get_llm(key_provider=None):
     
     try:
         return ChatGoogleGenerativeAI(
-            model="gemini-2.0-pro-exp-02-05",
+            model="gemini-2.0-flash",
             temperature=0.2,
             google_api_key=google_api_key,
         )
@@ -124,7 +124,7 @@ def validate_google_key(api_key):
         # Minimal test to validate key functionality
         llm = ChatGoogleGenerativeAI(
             temperature=0,
-            model="gemini-2.0-pro-exp-02-05",
+            model="gemini-2.0-flash",
             google_api_key=api_key,
             max_output_tokens=5
         )
