@@ -42,9 +42,23 @@ class ApiKeyManager:
         Args:
             server_secret: Secret used for encryption (defaults to env var or generates one)
             token_expiry: Time in seconds until tokens expire (default 24 hours)
+            
+        Raises:
+            ValueError: In production environment, if SERVER_SECRET_KEY is not provided
         """
+        # Check if running in production environment
+        is_production = self._is_production_environment()
+        
         # Set up encryption
         self.server_secret = server_secret or os.environ.get("SERVER_SECRET_KEY")
+        
+        # In production, require SERVER_SECRET_KEY to be set
+        if is_production and not self.server_secret:
+            error_msg = ("In production, SERVER_SECRET_KEY must be set. "
+                         "Aborting startup to prevent insecure operation.")
+            logger.critical(error_msg)
+            raise ValueError(error_msg)
+            
         if not self.server_secret:
             # Generate a secret if none provided (note: will cause tokens to invalidate on restart)
             self.server_secret = secrets.token_hex(32)
@@ -74,6 +88,23 @@ class ApiKeyManager:
         self.KEY_TYPE_PERPLEXITY = "perplexity"
         
         logger.info("API Key Manager initialized")
+
+    def _is_production_environment(self) -> bool:
+        """
+        Determine if the application is running in a production environment.
+        
+        Returns:
+            bool: True if in production, False otherwise
+        """
+        # Check for Railway-specific environment variables
+        if os.environ.get("RAILWAY_STATIC_URL"):
+            return True
+            
+        # Check for explicit ENVIRONMENT variable
+        if os.environ.get("ENVIRONMENT", "").lower() == "production":
+            return True
+            
+        return False
 
     def _encrypt(self, value: str) -> str:
         """Encrypt a value using the cipher."""

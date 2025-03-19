@@ -26,6 +26,8 @@ This guide explains how to deploy the Learny application using Vercel for the fr
    ```
    OPENAI_API_KEY=your_openai_api_key_here
    PPLX_API_KEY=your_perplexity_api_key_here
+   # In development, SERVER_SECRET_KEY is optional
+   # SERVER_SECRET_KEY=your_secure_random_key_here
    ```
 
 4. **Run the backend:**
@@ -81,8 +83,22 @@ This guide explains how to deploy the Learny application using Vercel for the fr
    
    - `OPENAI_API_KEY`: Your OpenAI API key
    - `PPLX_API_KEY`: Your Perplexity API key
+   - `SERVER_SECRET_KEY`: A secure secret key for encrypting API keys (REQUIRED in production)
    - `FRONTEND_URL`: Your Vercel frontend URL (once deployed)
    - Any other environment variables needed by your application
+   
+   **IMPORTANT: About SERVER_SECRET_KEY**
+   
+   The `SERVER_SECRET_KEY` is used to encrypt sensitive data, including API keys provided by users. 
+   This variable is **mandatory** in production environments - the application will refuse to start 
+   without it. You can generate a secure random key with this command:
+   
+   ```bash
+   openssl rand -hex 32
+   ```
+   
+   Once set, do not change this key as it will invalidate all existing encrypted tokens.
+   Ensure this key is kept secure and not exposed in public repositories.
 
 4. **Deploy the backend**
 
@@ -123,6 +139,7 @@ This guide explains how to deploy the Learny application using Vercel for the fr
    ```bash
    railway variables set OPENAI_API_KEY=your_openai_api_key
    railway variables set PPLX_API_KEY=your_perplexity_api_key
+   railway variables set SERVER_SECRET_KEY=your_secure_random_key
    railway variables set FRONTEND_URL=your_vercel_frontend_url
    ```
 
@@ -206,6 +223,9 @@ This guide explains how to deploy the Learny application using Vercel for the fr
 
 - **CORS Issues**: Ensure the `allowed_origins` in `api.py` includes your Vercel domain
 - **API Connection Failures**: Check that environment variables are set correctly on both platforms
+- **Application Fails to Start**: 
+  - Verify that `SERVER_SECRET_KEY` is set in production environments
+  - If you see an error about missing SERVER_SECRET_KEY, generate one as described in the "Configure environment variables" section
 - **Deployment Failures**: 
   - On Railway: Check logs in the Railway dashboard
   - On Vercel: Check build logs in the Vercel dashboard
