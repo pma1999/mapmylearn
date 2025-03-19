@@ -27,7 +27,9 @@ import {
   FormControlLabel,
   Checkbox,
   InputAdornment,
-  IconButton
+  IconButton,
+  useTheme,
+  useMediaQuery
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -57,6 +59,11 @@ const StyledChip = ({ label, onDelete }) => (
 );
 
 function ResultPage(props) {
+  // Add theme and media query hooks for responsive design
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isMedium = useMediaQuery(theme.breakpoints.down('md'));
+  
   const { taskId, entryId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -277,21 +284,21 @@ function ResultPage(props) {
   // Loading state
   if (loading) {
     return (
-      <Container maxWidth="md">
-        <Paper elevation={3} sx={{ p: 4, borderRadius: 2, mb: 4 }}>
+      <Container maxWidth="md" sx={{ px: { xs: 2, sm: 3 } }}>
+        <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, borderRadius: 2, mb: 4 }}>
           <Box sx={{ textAlign: 'center', my: 3 }}>
             <CircularProgress color="primary" />
-            <Typography variant="h5" sx={{ mt: 2 }}>
+            <Typography variant="h5" sx={{ mt: 2, fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>
               Generating Your Learning Path
             </Typography>
-            <Typography color="text.secondary" sx={{ mt: 1 }}>
+            <Typography color="text.secondary" sx={{ mt: 1, fontSize: { xs: '0.875rem', sm: '1rem' } }}>
               This may take a few minutes depending on the complexity of the topic.
             </Typography>
             <LinearProgress sx={{ mt: 4, mb: 2 }} />
           </Box>
           
           <Box sx={{ mt: 4 }}>
-            <Typography variant="h6" gutterBottom>
+            <Typography variant="h6" gutterBottom sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
               Progress Updates:
             </Typography>
             {progressMessages.length === 0 ? (
@@ -301,7 +308,7 @@ function ResultPage(props) {
             ) : (
               <Box sx={{ maxHeight: '300px', overflow: 'auto', p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
                 {progressMessages.map((msg, index) => (
-                  <Typography key={index} sx={{ mb: 1 }}>
+                  <Typography key={index} sx={{ mb: 1, fontSize: { xs: '0.875rem', sm: '1rem' } }}>
                     <span style={{ color: '#555', fontWeight: 'bold' }}>
                       {new Date(msg.timestamp).toLocaleTimeString()}: 
                     </span> {msg.message}
@@ -318,11 +325,11 @@ function ResultPage(props) {
   // Error state
   if (error) {
     return (
-      <Container maxWidth="md">
-        <Paper elevation={3} sx={{ p: 4, borderRadius: 2, mb: 4 }}>
+      <Container maxWidth="md" sx={{ px: { xs: 2, sm: 3 } }}>
+        <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, borderRadius: 2, mb: 4 }}>
           <Box sx={{ textAlign: 'center', my: 3 }}>
-            <ErrorIcon color="error" sx={{ fontSize: 64 }} />
-            <Typography variant="h5" color="error" sx={{ mt: 2 }}>
+            <ErrorIcon color="error" sx={{ fontSize: { xs: 48, sm: 64 } }} />
+            <Typography variant="h5" color="error" sx={{ mt: 2, fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>
               Error Generating Learning Path
             </Typography>
             <Alert severity="error" sx={{ mt: 3, mb: 3 }}>
@@ -333,6 +340,7 @@ function ResultPage(props) {
                 variant="outlined"
                 startIcon={<HomeIcon />}
                 onClick={handleHomeClick}
+                size={isMobile ? "small" : "medium"}
               >
                 Go to Homepage
               </Button>
@@ -340,6 +348,7 @@ function ResultPage(props) {
                 variant="contained"
                 color="primary"
                 onClick={handleNewLearningPathClick}
+                size={isMobile ? "small" : "medium"}
               >
                 Try Again
               </Button>
@@ -352,41 +361,95 @@ function ResultPage(props) {
 
   // Success state - show learning path
   return (
-    <Container maxWidth="lg">
-      <Paper elevation={3} sx={{ p: 4, borderRadius: 2, mb: 4 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap' }}>
-          <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
+    <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 } }}>
+      <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, borderRadius: 2, mb: 4 }}>
+        {/* Header - Learning Path title and action buttons */}
+        <Box sx={{ mb: 3 }}>
+          <Typography 
+            variant="h4" 
+            component="h1" 
+            sx={{ 
+              fontWeight: 'bold', 
+              mb: { xs: 2, md: 1 },
+              fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' }
+            }}
+          >
             Learning Path
           </Typography>
-          <Stack direction="row" spacing={2}>
-            <Button
-              variant="outlined"
-              startIcon={<DownloadIcon />}
-              onClick={handleDownloadJSON}
-            >
-              Download JSON
-            </Button>
-            <Button
-              variant="outlined"
-              color="secondary"
-              startIcon={<SaveIcon />}
-              onClick={handleSaveToHistory}
-              disabled={savedToHistory}
-            >
-              {savedToHistory ? 'Saved' : 'Save to History'}
-            </Button>
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<BookmarkIcon />}
-              onClick={handleNewLearningPathClick}
-            >
-              Create New Path
-            </Button>
-          </Stack>
+          
+          {/* Mobile view - Stack buttons vertically */}
+          {isMedium ? (
+            <Stack direction="column" spacing={1.5} sx={{ width: '100%' }}>
+              <Button
+                variant="outlined"
+                fullWidth
+                startIcon={<DownloadIcon />}
+                onClick={handleDownloadJSON}
+                size={isMobile ? "small" : "medium"}
+              >
+                Download JSON
+              </Button>
+              <Button
+                variant="outlined"
+                fullWidth
+                color="secondary"
+                startIcon={<SaveIcon />}
+                onClick={handleSaveToHistory}
+                disabled={savedToHistory}
+                size={isMobile ? "small" : "medium"}
+              >
+                {savedToHistory ? 'Saved' : 'Save to History'}
+              </Button>
+              <Button
+                variant="contained"
+                fullWidth
+                color="primary"
+                startIcon={<BookmarkIcon />}
+                onClick={handleNewLearningPathClick}
+                size={isMobile ? "small" : "medium"}
+              >
+                Create New Path
+              </Button>
+            </Stack>
+          ) : (
+            /* Desktop view - Horizontal button layout */
+            <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+              <Button
+                variant="outlined"
+                startIcon={<DownloadIcon />}
+                onClick={handleDownloadJSON}
+              >
+                Download JSON
+              </Button>
+              <Button
+                variant="outlined"
+                color="secondary"
+                startIcon={<SaveIcon />}
+                onClick={handleSaveToHistory}
+                disabled={savedToHistory}
+              >
+                {savedToHistory ? 'Saved' : 'Save to History'}
+              </Button>
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<BookmarkIcon />}
+                onClick={handleNewLearningPathClick}
+              >
+                Create New Path
+              </Button>
+            </Stack>
+          )}
         </Box>
         
-        <Typography variant="h5" sx={{ mb: 3 }}>
+        <Typography 
+          variant="h5" 
+          sx={{ 
+            mb: 3,
+            fontSize: { xs: '1.25rem', sm: '1.5rem' },
+            wordBreak: 'break-word'
+          }}
+        >
           {learningPath.topic}
         </Typography>
         
@@ -397,19 +460,39 @@ function ResultPage(props) {
             {learningPath.modules.map((module, moduleIndex) => (
               <Accordion key={moduleIndex} defaultExpanded={moduleIndex === 0} sx={{ mb: 2 }}>
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Typography variant="h6">
+                  <Typography 
+                    variant="h6" 
+                    sx={{ 
+                      fontSize: { xs: '1rem', sm: '1.25rem' },
+                      lineHeight: 1.4,
+                      pr: { xs: 2, sm: 0 } // Add padding-right on mobile to prevent text overlap with icon
+                    }}
+                  >
                     Module {moduleIndex + 1}: {module.title}
                   </Typography>
                 </AccordionSummary>
-                <AccordionDetails>
+                <AccordionDetails sx={{ px: { xs: 2, sm: 3 } }}>
                   <Box sx={{ mb: 3 }}>
-                    <Typography variant="body1" paragraph>
+                    <Typography 
+                      variant="body1" 
+                      paragraph 
+                      sx={{ 
+                        fontSize: { xs: '0.875rem', sm: '1rem' },
+                        lineHeight: 1.6 
+                      }}
+                    >
                       {module.description}
                     </Typography>
                     
                     {module.prerequisites && module.prerequisites.length > 0 && (
                       <Box sx={{ mb: 2 }}>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                        <Typography 
+                          variant="subtitle1" 
+                          sx={{ 
+                            fontWeight: 'bold',
+                            fontSize: { xs: '0.875rem', sm: '1rem' }
+                          }}
+                        >
                           Prerequisites:
                         </Typography>
                         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
@@ -422,26 +505,54 @@ function ResultPage(props) {
                     
                     {module.submodules && module.submodules.length > 0 ? (
                       <Box sx={{ mt: 3 }}>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 2 }}>
+                        <Typography 
+                          variant="subtitle1" 
+                          sx={{ 
+                            fontWeight: 'bold', 
+                            mb: 2,
+                            fontSize: { xs: '0.875rem', sm: '1rem' }
+                          }}
+                        >
                           Submodules:
                         </Typography>
                         
                         {module.submodules.map((submodule, subIndex) => (
                           <Card key={subIndex} variant="outlined" sx={{ mb: 2 }}>
-                            <CardContent>
-                              <Typography variant="h6" sx={{ mb: 1 }}>
+                            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+                              <Typography 
+                                variant="h6" 
+                                sx={{ 
+                                  mb: 1,
+                                  fontSize: { xs: '1rem', sm: '1.25rem' } 
+                                }}
+                              >
                                 {submodule.title}
                               </Typography>
-                              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                              <Typography 
+                                variant="body2" 
+                                color="text.secondary" 
+                                sx={{ 
+                                  mb: 2,
+                                  fontSize: { xs: '0.8125rem', sm: '0.875rem' },
+                                  lineHeight: 1.5
+                                }}
+                              >
                                 {submodule.description}
                               </Typography>
                               
                               {submodule.content && (
                                 <Box sx={{ mt: 2 }}>
                                   <Divider sx={{ mb: 2 }} />
-                                  <MarkdownRenderer>
-                                    {submodule.content}
-                                  </MarkdownRenderer>
+                                  <Box 
+                                    sx={{ 
+                                      fontSize: { xs: '0.875rem', sm: '1rem' },
+                                      '& img': { maxWidth: '100%', height: 'auto' } // Ensure images are responsive
+                                    }}
+                                  >
+                                    <MarkdownRenderer>
+                                      {submodule.content}
+                                    </MarkdownRenderer>
+                                  </Box>
                                 </Box>
                               )}
                             </CardContent>
@@ -450,7 +561,13 @@ function ResultPage(props) {
                       </Box>
                     ) : (
                       module.content && (
-                        <Box sx={{ mt: 3 }}>
+                        <Box 
+                          sx={{ 
+                            mt: 3,
+                            fontSize: { xs: '0.875rem', sm: '1rem' },
+                            '& img': { maxWidth: '100%', height: 'auto' } // Ensure images are responsive
+                          }}
+                        >
                           <MarkdownRenderer>
                             {module.content}
                           </MarkdownRenderer>
@@ -470,15 +587,28 @@ function ResultPage(props) {
       </Paper>
       
       {/* Save to History Dialog */}
-      <Dialog open={saveDialogOpen} onClose={handleSaveDialogClose} maxWidth="sm" fullWidth>
+      <Dialog 
+        open={saveDialogOpen}
+        onClose={handleSaveDialogClose}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: { 
+            m: { xs: 2, sm: 3 },
+            width: { xs: 'calc(100% - 16px)', sm: 'auto' }
+          }
+        }}
+      >
         <DialogTitle>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <StorageIcon sx={{ mr: 1 }} />
-            Save to Local History
+            <Typography variant="h6" sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}>
+              Save to Local History
+            </Typography>
           </Box>
         </DialogTitle>
         <DialogContent>
-          <DialogContentText sx={{ mb: 2 }}>
+          <DialogContentText sx={{ mb: 2, fontSize: { xs: '0.875rem', sm: '1rem' } }}>
             This learning path will be saved to your browser's local storage. It will be available only on this device and browser.
           </DialogContentText>
           
@@ -491,11 +621,15 @@ function ResultPage(props) {
                 onChange={(e) => setFavorite(e.target.checked)}
               />
             }
-            label="Mark as favorite"
+            label={
+              <Typography sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>
+                Mark as favorite
+              </Typography>
+            }
             sx={{ mb: 2 }}
           />
           
-          <Typography variant="subtitle2" gutterBottom>
+          <Typography variant="subtitle2" gutterBottom sx={{ fontSize: { xs: '0.8125rem', sm: '0.875rem' } }}>
             Tags:
           </Typography>
           
@@ -535,11 +669,17 @@ function ResultPage(props) {
             />
           </Box>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleSaveDialogClose}>
+        <DialogActions sx={{ px: { xs: 2, sm: 3 }, pb: { xs: 2, sm: 2 } }}>
+          <Button onClick={handleSaveDialogClose} size={isMobile ? "small" : "medium"}>
             Cancel
           </Button>
-          <Button onClick={handleSaveConfirm} color="primary" variant="contained" startIcon={<SaveIcon />}>
+          <Button 
+            onClick={handleSaveConfirm}
+            color="primary"
+            variant="contained"
+            startIcon={<SaveIcon />}
+            size={isMobile ? "small" : "medium"}
+          >
             Save
           </Button>
         </DialogActions>
@@ -550,9 +690,19 @@ function ResultPage(props) {
         open={notification.open}
         autoHideDuration={6000}
         onClose={handleNotificationClose}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        anchorOrigin={{ 
+          vertical: 'bottom', 
+          horizontal: isMobile ? 'center' : 'right' 
+        }}
+        sx={{
+          bottom: { xs: 16, sm: 24 }
+        }}
       >
-        <Alert onClose={handleNotificationClose} severity={notification.severity}>
+        <Alert 
+          onClose={handleNotificationClose} 
+          severity={notification.severity}
+          sx={{ width: { xs: '100%', sm: 'auto' } }}
+        >
           {notification.message}
         </Alert>
       </Snackbar>
