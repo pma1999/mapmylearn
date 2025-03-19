@@ -15,6 +15,53 @@ const api = axios.create({
   },
 });
 
+// Add response interceptor to handle standardized error format
+api.interceptors.response.use(
+  response => response, // Return successful responses as-is
+  error => {
+    // Format error consistently based on our new API error format
+    if (error.response && error.response.data) {
+      // Extract the error details from the standardized format
+      const errorData = error.response.data;
+      let errorMessage = "An unexpected error occurred";
+      
+      // Check if the error follows our new format with the error object
+      if (errorData.error && errorData.error.message) {
+        errorMessage = errorData.error.message;
+        
+        // Attach additional error details if available
+        if (errorData.error.details) {
+          error.details = errorData.error.details;
+        }
+        
+        if (errorData.error.type) {
+          error.type = errorData.error.type;
+        }
+        
+        if (errorData.error.error_id) {
+          error.errorId = errorData.error.error_id;
+          errorMessage += ` (Error ID: ${error.errorId})`;
+        }
+      } else if (typeof errorData === 'string') {
+        errorMessage = errorData;
+      }
+      
+      // Create a new error with the formatted message
+      const formattedError = new Error(errorMessage);
+      formattedError.response = error.response;
+      formattedError.status = error.response.status;
+      formattedError.details = error.details;
+      formattedError.type = error.type;
+      formattedError.errorId = error.errorId;
+      
+      return Promise.reject(formattedError);
+    }
+    
+    // If error doesn't match our format, return it as-is
+    return Promise.reject(error);
+  }
+);
+
 // Session storage keys
 const GOOGLE_KEY_TOKEN_STORAGE = 'learning_path_google_key_token';
 const PPLX_KEY_TOKEN_STORAGE = 'learning_path_pplx_key_token';
@@ -99,11 +146,12 @@ export const authenticateApiKeys = async (googleKey, pplxKey, remember = false) 
     };
   } catch (error) {
     console.error('Error authenticating API keys:', error);
-    throw error;
+    // Use the error message from our interceptor
+    throw new Error(error.message || 'Failed to authenticate API keys. Please try again.');
   }
 };
 
-// Validate API keys (legacy method, uses the same validation endpoint but doesn't store tokens)
+// Validate API keys
 export const validateApiKeys = async (googleKey, pplxKey) => {
   try {
     const response = await api.post('/validate-api-keys', {
@@ -113,7 +161,8 @@ export const validateApiKeys = async (googleKey, pplxKey) => {
     return response.data;
   } catch (error) {
     console.error('Error validating API keys:', error);
-    throw error;
+    // Use the error message from our interceptor
+    throw new Error(error.message || 'Failed to validate API keys. Please try again.');
   }
 };
 
@@ -179,7 +228,7 @@ export const generateLearningPath = async (topic, options = {}) => {
     return response.data;
   } catch (error) {
     console.error('Error generating learning path:', error);
-    throw error;
+    throw new Error(error.message || 'Failed to start learning path generation. Please try again.');
   }
 };
 
@@ -187,10 +236,30 @@ export const generateLearningPath = async (topic, options = {}) => {
 export const getLearningPath = async (taskId) => {
   try {
     const response = await api.get(`/learning-path/${taskId}`);
+    
+    // Check for error field in completed tasks
+    if (response.data.status === 'failed' && response.data.error) {
+      const error = new Error(
+        response.data.error.message || 
+        'The learning path generation failed. Please try again.'
+      );
+      
+      // Add additional details if available
+      if (response.data.error.details) {
+        error.details = response.data.error.details;
+      }
+      
+      if (response.data.error.type) {
+        error.type = response.data.error.type;
+      }
+      
+      throw error;
+    }
+    
     return response.data;
   } catch (error) {
     console.error('Error fetching learning path:', error);
-    throw error;
+    throw new Error(error.message || 'Failed to retrieve learning path. Please try again.');
   }
 };
 
@@ -212,6 +281,15 @@ export const getProgressUpdates = (taskId, onMessage, onError, onComplete) => {
           return;
         }
         
+        // Check for error message format
+        if (data.message && data.message.startsWith("Error:")) {
+          // This is an error message from the server
+          if (onError) {
+            onError(new Error(data.message.replace("Error: ", "")));
+          }
+          return;
+        }
+        
         if (onMessage) onMessage(data);
       } catch (err) {
         console.error('Error parsing SSE message:', err);
@@ -222,7 +300,7 @@ export const getProgressUpdates = (taskId, onMessage, onError, onComplete) => {
     eventSource.onerror = (error) => {
       console.error('SSE Error:', error);
       eventSource.close();
-      if (onError) onError(error);
+      if (onError) onError(new Error('Connection to progress updates was lost. Please check your network connection.'));
     };
     
     return {
@@ -230,7 +308,7 @@ export const getProgressUpdates = (taskId, onMessage, onError, onComplete) => {
     };
   } catch (initError) {
     console.error('Error initializing SSE connection:', initError);
-    if (onError) onError(initError);
+    if (onError) onError(new Error('Failed to connect to progress updates. Please try refreshing the page.'));
     return {
       close: () => {}, // Dummy close function for consistent API
     };
@@ -244,7 +322,7 @@ export const deleteLearningPath = async (taskId) => {
     return response.data;
   } catch (error) {
     console.error('Error deleting learning path:', error);
-    throw error;
+    throw new Error(error.message || 'Failed to delete learning path. Please try again.');
   }
 };
 

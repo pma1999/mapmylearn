@@ -237,4 +237,78 @@ Both Vercel and Railway support custom domains:
 - **Vercel**: Go to your project settings > Domains to add a custom domain
 - **Railway**: Go to your project settings > Domains to add a custom domain
 
-If you add custom domains, remember to update the corresponding environment variables and CORS settings. 
+If you add custom domains, remember to update the corresponding environment variables and CORS settings.
+
+# Error Handling
+
+## Overview
+
+The application implements a comprehensive error handling strategy to ensure that all errors are:
+
+1. **Captured and Logged**: All exceptions are caught, logged with appropriate context, and include stack traces for easier debugging.
+2. **Properly Reported**: User-facing error messages are sanitized to avoid exposing sensitive information.
+3. **Consistently Formatted**: All error responses follow a standard JSON format that the frontend can easily process.
+4. **Progress-Tracked**: For background tasks, errors are reported via progress updates in real-time.
+
+## Error Response Format
+
+All API error responses follow this consistent format:
+
+```json
+{
+  "status": "failed",
+  "error": {
+    "message": "User-friendly error message",
+    "type": "error_type",
+    "details": {},  // Optional additional details
+    "error_id": "unique-reference-id"  // For server errors
+  }
+}
+```
+
+## Error Types
+
+The system handles several types of errors:
+
+1. **HTTP Errors**: Regular HTTP exceptions like 404 (Not Found), 400 (Bad Request), etc.
+2. **Validation Errors**: Input validation failures from Pydantic models.
+3. **Learning Path Generation Errors**: Specific errors that occur during learning path generation.
+4. **Unexpected Errors**: Any unhandled exceptions caught by the middleware.
+
+## Background Task Error Handling
+
+Background tasks (like learning path generation) implement these error handling practices:
+
+1. Each critical operation is wrapped in try/except blocks.
+2. When an error occurs, it's logged with full details.
+3. A user-friendly error message is sent via the progress callback.
+4. The task status is updated to "failed" with error details.
+
+## Frontend Error Handling
+
+The frontend uses axios interceptors to process error responses and display user-friendly messages. It:
+
+1. Extracts structured error information from the response.
+2. Presents appropriate error messages to users.
+3. Includes error reference IDs for easier support troubleshooting.
+
+## Testing Error Handling
+
+Unit tests verify the error handling behavior, including:
+
+1. Testing that HTTP exceptions return the standardized format.
+2. Verifying validation errors are properly formatted.
+3. Confirming that task-specific errors are reported via progress updates.
+4. Testing that the global middleware catches unhandled exceptions.
+
+## Logging
+
+All errors are logged using structured JSON logging with these details:
+
+1. Timestamp
+2. Log level
+3. Module, function, and line number
+4. Full exception details and stack trace (in development mode)
+5. Sanitized exception details (in production mode)
+
+This comprehensive approach ensures that no errors go unnoticed or unreported, improving overall application reliability and user experience. 
