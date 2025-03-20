@@ -195,6 +195,7 @@ class LearningPathRequest(BaseModel):
     desired_submodule_count: Optional[int] = None
     google_key_token: Optional[str] = Field(None, description="Token for Google API key")
     pplx_key_token: Optional[str] = Field(None, description="Token for Perplexity API key")
+    language: Optional[str] = Field("en", description="ISO language code for content generation (e.g., 'en', 'es')")
 
 class ApiKeyAuthRequest(BaseModel):
     google_api_key: Optional[str] = Field(None, description="Google API key for LLM operations")
@@ -339,10 +340,11 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
             pplx_key_token=request.pplx_key_token,
             client_ip=client_ip,
             desired_module_count=request.desired_module_count,
-            desired_submodule_count=request.desired_submodule_count
+            desired_submodule_count=request.desired_submodule_count,
+            language=request.language
         )
         
-        logger.info(f"Started learning path generation for topic '{request.topic}' with task_id: {task_id}")
+        logger.info(f"Started learning path generation for topic '{request.topic}' with task_id: {task_id} in language: {request.language}")
         return {"task_id": task_id, "status": "started"}
     except Exception as e:
         # Clean up the queue and task entry if background task setup fails
@@ -371,7 +373,8 @@ async def generate_learning_path_task(
     pplx_key_token: Optional[str] = None,
     client_ip: Optional[str] = None,
     desired_module_count: Optional[int] = None,
-    desired_submodule_count: Optional[int] = None
+    desired_submodule_count: Optional[int] = None,
+    language: str = "en"
 ):
     """
     Execute the learning path generation task with comprehensive error handling.
@@ -387,10 +390,10 @@ async def generate_learning_path_task(
     pplx_api_key = None
     
     try:
-        logging.info(f"Starting learning path generation for: {topic}")
+        logging.info(f"Starting learning path generation for: {topic} in language: {language}")
         
         # Send initial progress message
-        await enhanced_progress_callback(f"Starting learning path generation for: {topic}")
+        await enhanced_progress_callback(f"Starting learning path generation for: {topic} in language: {language}")
         
         # Retrieve Google API key with proper error handling
         try:
@@ -485,7 +488,8 @@ async def generate_learning_path_task(
                 google_key_provider=google_provider,
                 pplx_key_provider=pplx_provider,
                 desired_module_count=desired_module_count,
-                desired_submodule_count=desired_submodule_count
+                desired_submodule_count=desired_submodule_count,
+                language=language
             )
         except Exception as e:
             # This is an unexpected error in the learning path generation process

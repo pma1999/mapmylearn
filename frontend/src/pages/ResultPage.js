@@ -432,6 +432,8 @@ function ResultPage(props) {
         onClose={handleSaveDialogClose}
         maxWidth="sm"
         fullWidth
+        aria-modal="true"
+        disablePortal={false}
         PaperProps={{
           sx: { 
             m: { xs: 2, sm: 3 },
@@ -439,8 +441,15 @@ function ResultPage(props) {
             borderRadius: 2
           }
         }}
+        aria-labelledby="save-dialog-title"
+        BackdropProps={{
+          "aria-hidden": "true"
+        }}
+        slots={{
+          backdrop: 'div'
+        }}
       >
-        <DialogTitle>
+        <DialogTitle id="save-dialog-title">
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <StorageIcon sx={{ mr: 1, color: theme.palette.primary.main }} />
             <Typography variant="h6" sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}>
@@ -448,7 +457,7 @@ function ResultPage(props) {
             </Typography>
           </Box>
         </DialogTitle>
-        <DialogContent>
+        <DialogContent dividers>
           <DialogContentText sx={{ mb: 2, fontSize: { xs: '0.875rem', sm: '1rem' } }}>
             This learning path will be saved to your browser's local storage. It will be available only on this device and browser.
           </DialogContentText>
@@ -502,6 +511,7 @@ function ResultPage(props) {
                       onClick={handleAddTag} 
                       disabled={!newTag.trim()}
                       size="small"
+                      aria-label="add tag"
                     >
                       <AddIcon />
                     </IconButton>

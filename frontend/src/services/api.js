@@ -176,7 +176,8 @@ export const generateLearningPath = async (topic, options = {}) => {
     desiredSubmoduleCount = null,
     googleKeyToken = null,
     pplxKeyToken = null,
-    rememberTokens = false
+    rememberTokens = false,
+    language = 'en'  // New language parameter with English as default
   } = options;
   
   // Get stored API tokens if not provided
@@ -211,7 +212,8 @@ export const generateLearningPath = async (topic, options = {}) => {
       search_parallel_count: searchParallelCount,
       submodule_parallel_count: submoduleParallelCount,
       google_key_token: finalGoogleKeyToken,
-      pplx_key_token: finalPplxKeyToken
+      pplx_key_token: finalPplxKeyToken,
+      language // Include the language parameter
     };
     
     // Add desired module count if specified

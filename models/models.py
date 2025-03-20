@@ -118,6 +118,9 @@ class LearningPathState(TypedDict):
     # Optional token fields for reference
     google_key_token: Optional[str]
     pplx_key_token: Optional[str]
+    # Language settings
+    language: Optional[str]  # ISO language code for content generation
+    search_language: Optional[str]  # ISO language code for search queries
     # Other optional settings
     desired_module_count: Optional[int]
     desired_submodule_count: Optional[int]

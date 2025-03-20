@@ -52,9 +52,11 @@ import HistorySettings from '../components/organisms/HistorySettings';
 import SaveDialog from '../components/molecules/SaveDialog';
 import NotificationSystem from '../components/molecules/NotificationSystem';
 import ProgressBar from '../components/ProgressBar';
+import LanguageSelector from '../components/LanguageSelector';
 
 // Import API service
 import * as apiService from '../services/api';
+import * as languageService from '../services/languageService';
 
 const StyledChip = styled(Chip)(({ theme }) => ({
   margin: theme.spacing(0.5),
@@ -85,6 +87,9 @@ function GeneratorPage() {
   const [desiredModuleCount, setDesiredModuleCount] = useState(5);
   const [autoSubmoduleCount, setAutoSubmoduleCount] = useState(true);
   const [desiredSubmoduleCount, setDesiredSubmoduleCount] = useState(3);
+  
+  // Language state
+  const [language, setLanguage] = useState(languageService.getLanguagePreference());
   
   // API Key states
   const [googleApiKey, setGoogleApiKey] = useState('');
@@ -138,6 +143,11 @@ function GeneratorPage() {
     // Auto-expand API settings section to make it more obvious to users
     setApiSettingsOpen(true);
   }, []);
+
+  // Save language preference whenever it changes
+  useEffect(() => {
+    languageService.saveLanguagePreference(language);
+  }, [language]);
 
   // Function to connect to the progress updates stream
   const connectToProgressUpdates = (taskId) => {
@@ -443,7 +453,8 @@ function GeneratorPage() {
         submoduleParallelCount,
         googleKeyToken,
         pplxKeyToken,
-        rememberTokens: rememberApiKeys
+        rememberTokens: rememberApiKeys,
+        language
       };
       
       // Only include module count if automatic mode is disabled
@@ -545,6 +556,17 @@ function GeneratorPage() {
           />
           
           <Divider sx={{ my: 3 }} />
+          
+          {/* Language Selector */}
+          <Box sx={{ mt: 2, mb: 2 }}>
+            <Typography variant="subtitle2" gutterBottom>
+              Content Language
+            </Typography>
+            <LanguageSelector 
+              language={language}
+              setLanguage={setLanguage}
+            />
+          </Box>
           
           {/* Advanced Settings */}
           <AdvancedSettings 

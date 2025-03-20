@@ -72,7 +72,8 @@ async def generate_learning_path(
     google_key_provider: Optional[GoogleKeyProvider] = None,
     pplx_key_provider: Optional[PerplexityKeyProvider] = None,
     desired_module_count: Optional[int] = None,
-    desired_submodule_count: Optional[int] = None
+    desired_submodule_count: Optional[int] = None,
+    language: str = "en"
 ) -> Dict[str, Any]:
     """
     Asynchronous interface for learning path generation.
@@ -87,12 +88,14 @@ async def generate_learning_path(
         pplx_key_provider: Provider for Perplexity API key
         desired_module_count: Desired number of modules
         desired_submodule_count: Desired number of submodules per module
+        language: ISO language code for content generation (e.g., 'en', 'es')
         
     Returns:
         Dictionary with the learning path data
     """
     logger.info(f"Generating learning path for topic: {topic} with {parallel_count} parallel modules, " +
-                f"{submodule_parallel_count} parallel submodules, and {search_parallel_count} parallel searches")
+                f"{submodule_parallel_count} parallel submodules, {search_parallel_count} parallel searches, " +
+                f"and language: {language}")
     
     # Create default key providers if none provided
     if not google_key_provider:
@@ -107,6 +110,17 @@ async def generate_learning_path(
     else:
         logger.info("Using provided Perplexity key provider")
     
+    # Initialize with English as the search language by default
+    search_language = "en"
+    
+    # For now, use a simple heuristic: if the topic contains words specific to a region/language,
+    # we could use that language for search as well
+    # This can be expanded with more sophisticated detection
+    spanish_indicators = ["españa", "español", "latinoamerica", "méxico", "méxico", "argentina", "colombia", "chile"]
+    if any(indicator in topic.lower() for indicator in spanish_indicators) and language == "es":
+        search_language = "es"
+        logger.info(f"Detected topic may have more resources in Spanish. Setting search language to Spanish.")
+    
     initial_state: LearningPathState = {
         "user_topic": topic,
         "google_key_provider": google_key_provider,
@@ -115,7 +129,9 @@ async def generate_learning_path(
         "parallel_count": parallel_count,
         "submodule_parallel_count": submodule_parallel_count,
         "steps": [],
-        "progress_callback": progress_callback
+        "progress_callback": progress_callback,
+        "language": language,
+        "search_language": search_language
     }
     
     # Add desired module count if specified
@@ -138,7 +154,8 @@ def build_learning_path(
     google_key_token: Optional[str] = None,
     pplx_key_token: Optional[str] = None,
     desired_module_count: Optional[int] = None,
-    desired_submodule_count: Optional[int] = None
+    desired_submodule_count: Optional[int] = None,
+    language: str = "en"
 ) -> Dict[str, Any]:
     """
     Build a learning path for the given topic using a submodule-enhanced approach.
@@ -153,12 +170,14 @@ def build_learning_path(
         pplx_key_token: Optional token for Perplexity API key 
         desired_module_count: Optional desired number of modules
         desired_submodule_count: Optional desired number of submodules per module
+        language: ISO language code for content generation (e.g., 'en', 'es')
         
     Returns:
         Dictionary with the learning path data
     """
     logger.info(f"Generating learning path for topic: {topic} with {parallel_count} parallel modules, " +
-                f"{submodule_parallel_count} parallel submodules, and {search_parallel_count} parallel searches")
+                f"{submodule_parallel_count} parallel submodules, {search_parallel_count} parallel searches, " +
+                f"and language: {language}")
     
     # Create key providers
     google_provider = GoogleKeyProvider(google_key_token)
@@ -174,7 +193,8 @@ def build_learning_path(
         google_key_provider=google_provider,
         pplx_key_provider=pplx_provider,
         desired_module_count=desired_module_count,
-        desired_submodule_count=desired_submodule_count
+        desired_submodule_count=desired_submodule_count,
+        language=language
     ))
     return result
 
@@ -190,6 +210,7 @@ if __name__ == "__main__":
     parser.add_argument("--pplx-key-token", type=str, help="Perplexity API key token")
     parser.add_argument("--modules", type=int, help="Desired number of modules")
     parser.add_argument("--submodules", type=int, help="Desired number of submodules per module")
+    parser.add_argument("--language", type=str, default="en", help="ISO language code for content generation (e.g., 'en', 'es')")
     args = parser.parse_args()
     
     result = build_learning_path(
@@ -200,7 +221,8 @@ if __name__ == "__main__":
         google_key_token=args.google_key_token,
         pplx_key_token=args.pplx_key_token,
         desired_module_count=args.modules,
-        desired_submodule_count=args.submodules
+        desired_submodule_count=args.submodules,
+        language=args.language
     )
     
     # Print the learning path

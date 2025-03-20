@@ -19,7 +19,7 @@ from prompts.learning_path_prompts import (
 # Optional: Import the prompt registry for more advanced prompt management
 # from prompts.prompt_registry import registry
 
-from core.graph_nodes.helpers import run_chain, batch_items
+from core.graph_nodes.helpers import run_chain, batch_items, escape_curly_braces
 
 async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
     """
@@ -35,6 +35,9 @@ async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
     if not state.get("modules"):
         logging.warning("No modules available")
         return {"enhanced_modules": [], "steps": ["No modules available"]}
+    
+    # Get language from state
+    output_language = state.get('language', 'en')
     
     enhanced_modules = []
     for idx, module in enumerate(state["modules"]):
@@ -60,6 +63,7 @@ async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
                 "module_title": module.title,
                 "module_description": module.description,
                 "learning_path_context": learning_path_context,
+                "language": output_language,
                 "format_instructions": submodule_parser.get_format_instructions()
             })
             submodules = result.submodules
@@ -319,22 +323,37 @@ async def generate_submodule_specific_queries(
     # Get the Google key provider from state
     google_key_provider = state.get("google_key_provider")
     
-    # Prepare context about the module and submodule
+    # Get language information from state
+    output_language = state.get('language', 'en')
+    search_language = state.get('search_language', 'en')
+    
+    # Import función para escapar llaves
+    from core.graph_nodes.helpers import escape_curly_braces
+    
+    # Preparar contexto sobre el módulo y el submódulo
+    # Escapar las llaves en todos los campos de texto
+    user_topic = escape_curly_braces(state["user_topic"])
+    module_title = escape_curly_braces(module.title)
+    module_description = escape_curly_braces(module.description)
+    submodule_title = escape_curly_braces(submodule.title)
+    submodule_description = escape_curly_braces(submodule.description)
+    submodule_depth = escape_curly_braces(submodule.depth_level)
+    
     learning_context = {
-        "topic": state["user_topic"],
-        "module_title": module.title,
-        "module_description": module.description,
-        "submodule_title": submodule.title,
-        "submodule_description": submodule.description,
-        "depth_level": submodule.depth_level
+        "topic": user_topic,
+        "module_title": module_title,
+        "module_description": module_description,
+        "submodule_title": submodule_title,
+        "submodule_description": submodule_description,
+        "depth_level": submodule_depth
     }
     
     # Create context about other modules and submodules
     other_modules = []
     for i, m in enumerate(state.get("enhanced_modules", [])):
         other_modules.append({
-            "title": m.title,
-            "description": m.description[:200] + "..." if len(m.description) > 200 else m.description,
+            "title": escape_curly_braces(m.title),
+            "description": escape_curly_braces(m.description[:200] + "..." if len(m.description) > 200 else m.description),
             "is_current": i == module_id
         })
     
@@ -355,7 +374,7 @@ Other Modules in Learning Path:
         learning_path_context += f"- {'[Current] ' if m['is_current'] else ''}{m['title']}: {m['description']}\n"
     
     # Set up module context and counts
-    module_context = f"Current Module: {module.title}\nDescription: {module.description}"
+    module_context = f"Current Module: {module_title}\nDescription: {module_description}"
     module_count = len(state.get("enhanced_modules", []))
     submodule_count = len(module.submodules)
     
@@ -376,6 +395,11 @@ You are tasked with creating a SINGLE OPTIMAL search query for in-depth research
 
 ## LEARNING PATH CONTEXT
 {learning_path_context}
+
+## LANGUAGE STRATEGY
+- Final content will be presented to the user in {output_language}.
+- For search queries, use {search_language} to maximize information quality and quantity.
+- If the topic is highly specialized or regional/cultural, consider whether the search language should be adjusted for optimal results.
 
 ## YOUR TASK
 
@@ -412,16 +436,19 @@ Provide:
     
     try:
         result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), single_query_parser, {
-            "user_topic": state["user_topic"],
-            "module_title": module.title,
-            "submodule_title": submodule.title,
-            "submodule_description": submodule.description,
+            "user_topic": user_topic,
+            "module_title": module_title,
+            "module_description": module_description,
+            "submodule_title": submodule_title,
+            "submodule_description": submodule_description,
             "module_order": module_id + 1,
             "module_count": module_count,
             "submodule_order": sub_id + 1,
             "submodule_count": submodule_count,
             "module_context": module_context,
             "learning_path_context": learning_path_context,
+            "output_language": output_language,
+            "search_language": search_language,
             "format_instructions": single_query_parser.get_format_instructions()
         })
         
@@ -437,7 +464,7 @@ Provide:
         logging.error(f"Error generating submodule search query: {str(e)}")
         # Create a fallback query
         fallback_query = SearchQuery(
-            keywords=f"{module.title} {submodule.title} tutorial comprehensive guide",
+            keywords=f"{module_title} {submodule_title} tutorial comprehensive guide",
             rationale="Fallback query due to error in query generation"
         )
         return [fallback_query]
@@ -554,41 +581,79 @@ async def develop_submodule_specific_content(
         logger.warning("No search results available for content development")
         return "No content generated due to missing search results."
     
+    # Get language information from state
+    output_language = state.get('language', 'en')
+    
+    # Import escape function from helpers
+    from core.graph_nodes.helpers import escape_curly_braces
+    
     # Process the single search result
     formatted_results = ""
     result = sub_search_results[0]  # We expect only one result
-    formatted_results += f"Query: {result.get('query', '')}\n"
-    formatted_results += f"Rationale: {result.get('rationale', '')}\nResults:\n"
+    
+    # Escapar las llaves en query y rationale
+    query = escape_curly_braces(result.get('query', ''))
+    rationale = escape_curly_braces(result.get('rationale', ''))
+    
+    formatted_results += f"Query: {query}\n"
+    formatted_results += f"Rationale: {rationale}\nResults:\n"
+    
     results = result.get("results", "")
     if isinstance(results, str):
-        formatted_results += f"  {results}\n\n"
+        # Escapar las llaves en el contenido del resultado
+        escaped_content = escape_curly_braces(results)
+        formatted_results += f"  {escaped_content}\n\n"
     else:
         for item in results:
-            formatted_results += f"  - {item.get('title', 'No title')}: {item.get('content', 'No content')}\n    URL: {item.get('url', 'No URL')}\n"
+            # Escapar las llaves en cada campo del resultado
+            title = escape_curly_braces(item.get("title", "No title"))
+            content = escape_curly_braces(item.get("content", "No content"))
+            url = escape_curly_braces(item.get("url", "No URL"))
+            
+            formatted_results += f"  - {title}: {content}\n    URL: {url}\n"
         formatted_results += "\n"
     
     # Continue with context building and content generation as before
     learning_path_context = ""
     for i, mod in enumerate(state.get("enhanced_modules") or []):
         indicator = " (CURRENT)" if i == module_id else ""
-        learning_path_context += f"Module {i+1}: {mod.title}{indicator}\n{mod.description}\n"
-    module_context = f"Current Module: {module.title}\nDescription: {module.description}\nAll Submodules:\n"
+        # Escapar las llaves en la descripción
+        mod_title = escape_curly_braces(mod.title)
+        mod_desc = escape_curly_braces(mod.description)
+        learning_path_context += f"Module {i+1}: {mod_title}{indicator}\n{mod_desc}\n"
+    
+    # Escapar las llaves en la información del módulo
+    module_title = escape_curly_braces(module.title)
+    module_desc = escape_curly_braces(module.description)
+    module_context = f"Current Module: {module_title}\nDescription: {module_desc}\nAll Submodules:\n"
+    
     for i, s in enumerate(module.submodules):
         indicator = " (CURRENT)" if i == sub_id else ""
-        module_context += f"  {i+1}. {s.title}{indicator}\n  {s.description}\n"
+        # Escapar las llaves en la información del submódulo
+        sub_title = escape_curly_braces(s.title)
+        sub_desc = escape_curly_braces(s.description)
+        module_context += f"  {i+1}. {sub_title}{indicator}\n  {sub_desc}\n"
+    
     adjacent_context = "Adjacent Submodules:\n"
     if sub_id > 0:
         prev = module.submodules[sub_id-1]
-        adjacent_context += f"Previous: {prev.title}\n{prev.description}\n"
+        # Escapar las llaves en la información del submódulo previo
+        prev_title = escape_curly_braces(prev.title)
+        prev_desc = escape_curly_braces(prev.description)
+        adjacent_context += f"Previous: {prev_title}\n{prev_desc}\n"
     else:
         adjacent_context += "No previous submodule.\n"
+    
     if sub_id < len(module.submodules) - 1:
         nxt = module.submodules[sub_id+1]
-        adjacent_context += f"Next: {nxt.title}\n{nxt.description}\n"
+        # Escapar las llaves en la información del submódulo siguiente
+        nxt_title = escape_curly_braces(nxt.title)
+        nxt_desc = escape_curly_braces(nxt.description)
+        adjacent_context += f"Next: {nxt_title}\n{nxt_desc}\n"
     else:
         adjacent_context += "No next submodule.\n"
     
-    # Modify the prompt to emphasize working with a single search result
+    # Modificar el prompt para enfatizar trabajar con un solo resultado de búsqueda
     single_result_prompt = """
 # EXPERT EDUCATIONAL CONTENT DEVELOPER INSTRUCTIONS
 
@@ -608,6 +673,9 @@ You are tasked with developing comprehensive educational content for a specific 
 
 ## LEARNING PATH CONTEXT
 {learning_path_context}
+
+## LANGUAGE INSTRUCTIONS
+Generate all content in {language}. This is the language selected by the user for learning the material.
 
 ## RESEARCH MATERIAL
 The following is your research material from a single focused search:
@@ -641,12 +709,18 @@ Format your response using Markdown, with clear section headings, code examples 
         llm = await get_llm(key_provider=state.get("google_key_provider"))
         output_parser = StrOutputParser()
         chain = prompt | llm | output_parser
+        
+        # Escapar las llaves en los campos de texto
+        user_topic = escape_curly_braces(state["user_topic"])
+        submodule_title = escape_curly_braces(submodule.title)
+        submodule_description = escape_curly_braces(submodule.description)
+        
         sub_content = await chain.ainvoke({
-            "user_topic": state["user_topic"],
-            "module_title": module.title,
-            "module_description": module.description,
-            "submodule_title": submodule.title,
-            "submodule_description": submodule.description,
+            "user_topic": user_topic,
+            "module_title": module_title,
+            "module_description": module_desc,
+            "submodule_title": submodule_title,
+            "submodule_description": submodule_description,
             "module_order": module_id + 1,
             "module_count": len(state.get("enhanced_modules") or []),
             "submodule_order": sub_id + 1,
@@ -655,8 +729,10 @@ Format your response using Markdown, with clear section headings, code examples 
             "adjacent_context": adjacent_context,
             "learning_path_context": learning_path_context,
             "search_results": formatted_results,
-            "format_instructions": ""
+            "format_instructions": "",
+            "language": output_language
         })
+        
         if not sub_content:
             logger.error("LLM returned empty content")
             sub_content = f"Error: No content generated for {submodule.title}"

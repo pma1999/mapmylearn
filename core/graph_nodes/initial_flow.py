@@ -9,7 +9,7 @@ from parsers.parsers import search_queries_parser, enhanced_modules_parser
 from services.services import get_llm, get_search_tool
 from langchain_core.prompts import ChatPromptTemplate
 
-from core.graph_nodes.helpers import run_chain, batch_items, format_search_results
+from core.graph_nodes.helpers import run_chain, batch_items, format_search_results, escape_curly_braces
 
 async def execute_single_search(query: SearchQuery, key_provider = None) -> Dict[str, Any]:
     """
@@ -72,6 +72,10 @@ async def generate_search_queries(state: LearningPathState) -> Dict[str, Any]:
     if progress_callback:
         await progress_callback(f"Analyzing topic '{state['user_topic']}' to generate optimal search queries...")
     
+    # Get language information from state
+    output_language = state.get('language', 'en')
+    search_language = state.get('search_language', 'en')
+    
     prompt_text = """
 # EXPERT TEACHING ASSISTANT INSTRUCTIONS
 
@@ -101,6 +105,10 @@ Please analyze the topic "{user_topic}" thoroughly:
 - Advanced theories and implementations
 - Expert-level considerations
 - Cross-domain connections
+
+## LANGUAGE INSTRUCTIONS
+- Generate all of your analysis and responses in {output_language}.
+- For search queries, use {search_language} to maximize the quality and quantity of information retrieved.
 
 ## SEARCH STRATEGY
 
@@ -132,6 +140,8 @@ Your response should be exactly 5 search queries, each with its detailed rationa
             
         result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), search_queries_parser, {
             "user_topic": state["user_topic"],
+            "output_language": output_language,
+            "search_language": search_language,
             "format_instructions": search_queries_parser.get_format_instructions()
         })
         search_queries = result.queries
@@ -241,6 +251,9 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
     else:
         logging.debug("Found Google key provider in state, using for learning path creation")
     
+    # Get language information from state
+    output_language = state.get('language', 'en')
+    
     # Send progress update if callback is available
     progress_callback = state.get('progress_callback')
     if progress_callback:
@@ -250,7 +263,8 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
         # Procesar los resultados de búsqueda para generar módulos
         processed_results = []
         for result in state["search_results"]:
-            query = result.get("query", "Unknown query")
+            # Escapar las llaves en la consulta
+            query = escape_curly_braces(result.get("query", "Unknown query"))
             raw_results = result.get("results", [])
             # Comprobar que raw_results es una lista
             if not isinstance(raw_results, list):
@@ -258,12 +272,17 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
                 continue
             if not raw_results:
                 continue
+                
+            relevant_info = []
+            for item in raw_results[:3]:  # Limitar a los 3 mejores resultados por búsqueda
+                # Escapar las llaves en la fuente y el contenido
+                source = escape_curly_braces(item.get('source', 'Unknown'))
+                content = escape_curly_braces(item.get('content', 'No content'))
+                relevant_info.append(f"Source: {source}\n{content}")
+            
             processed_results.append({
                 "query": query,
-                "relevant_information": "\n\n".join([
-                    f"Source: {item.get('source', 'Unknown')}\n{item.get('content', 'No content')}"
-                    for item in raw_results[:3]  # Limitar a los 3 mejores resultados por búsqueda
-                ])
+                "relevant_information": "\n\n".join(relevant_info)
             })
         
         # Convertir los resultados procesados a texto para incluir en el prompt
@@ -281,14 +300,20 @@ Search {i}: "{result['query']}"
         else:
             module_count_instruction = "\nCreate a structured learning path with 3-7 modules."
         
+        # Add language instruction
+        language_instruction = f"\nIMPORTANT: Create all content in {output_language}. All titles, descriptions, and content must be written in {output_language}."
+        
+        # Escapar las llaves en el tema del usuario
+        escaped_topic = escape_curly_braces(state["user_topic"])
+        
         # Preparar el prompt con un placeholder para format_instructions
         prompt_text = f"""
-You are an expert curriculum designer. Create a comprehensive learning path for the topic: {state['user_topic']}.
+You are an expert curriculum designer. Create a comprehensive learning path for the topic: {escaped_topic}.
 
 Based on the following search results, organize the learning into logical modules:
 
 {results_text}
-{module_count_instruction} For each module:
+{module_count_instruction}{language_instruction} For each module:
 1. Give it a clear, descriptive title
 2. Write a comprehensive overview (100-200 words)
 3. Identify 3-5 key learning objectives

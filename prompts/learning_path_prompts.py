@@ -26,6 +26,9 @@ This module is part of a learning path about "{user_topic}".
 ## CONTEXT
 {learning_path_context}
 
+## LANGUAGE INSTRUCTIONS
+Generate all content (titles, descriptions, explanations) in {language}.
+
 ## SUBMODULE PLANNING PRINCIPLES
 
 ### A) Progressive Depth Development
@@ -87,6 +90,9 @@ Learning Path Topic: "{user_topic}"
 Module context: {module_context}
 Learning path context: {learning_path_context}
 
+## SEARCH LANGUAGE STRATEGY
+Important: While the content will be presented in {language}, you should generate search queries in the language most likely to yield comprehensive information. For universal topics, this is typically English, but for regionally specific topics (e.g., history of Spain), consider using the appropriate regional language.
+
 ## SEARCH STRATEGY
 
 Based on thorough analysis of this submodule's requirements, generate 5 search queries that will:
@@ -125,6 +131,9 @@ Position: Submodule {submodule_order} of {submodule_count} in Module {module_ord
 Module context: {module_context}
 Adjacent submodules: {adjacent_context}
 Learning path context: {learning_path_context}
+
+## LANGUAGE INSTRUCTIONS
+Generate all content in {language}. This is the language selected by the user for learning the material.
 
 ## RESEARCH INFORMATION
 {search_results}
