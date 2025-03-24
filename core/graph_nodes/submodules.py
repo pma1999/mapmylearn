@@ -489,7 +489,8 @@ async def execute_single_search_for_submodule(query: SearchQuery, key_provider=N
         search_prompt = f"{query.keywords}"
         
         # Invoke the Perplexity model with the search prompt as a string
-        result = search_model.invoke(search_prompt)
+        # Use ainvoke instead of invoke to properly leverage async execution
+        result = await search_model.ainvoke(search_prompt)
         
         # Process the response into the expected format
         formatted_result = [

@@ -31,8 +31,8 @@ async def execute_single_search(query: SearchQuery, key_provider = None) -> Dict
         search_prompt = f"{query.keywords}"
         
         # Invoke the Perplexity model with the search prompt as a string
-        # ChatPerplexity returns an AIMessage directly, not an awaitable
-        result = search_model.invoke(search_prompt)
+        # Use ainvoke instead of invoke to properly leverage async execution
+        result = await search_model.ainvoke(search_prompt)
         
         # Process the response into the expected format
         formatted_result = [
@@ -179,48 +179,52 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
     else:
         logging.debug("Found Perplexity key provider in state, using for web searches")
     
-    # Set up parallel processing
-    batch_size = min(len(search_queries), state.get("search_parallel_count", 3))
-    logging.info(f"Executing web searches in parallel with batch size {batch_size}")
+    # Set up parallel processing based on user configuration
+    search_parallel_count = state.get("search_parallel_count", 3)
+    logging.info(f"Executing {len(search_queries)} web searches with parallelism of {search_parallel_count}")
     
     # Send progress update if callback is available
     progress_callback = state.get('progress_callback')
     if progress_callback:
-        await progress_callback(f"Executing {len(search_queries)} web searches to gather information...")
+        await progress_callback(f"Executing {len(search_queries)} web searches in parallel (max {search_parallel_count} at a time)...")
     
     all_results = []
     
     try:
-        for i in range(0, len(search_queries), batch_size):
-            batch = search_queries[i:i+batch_size]
-            logging.info(f"Processing batch of {len(batch)} searches")
-            
-            # Create tasks for parallel execution
-            tasks = [execute_single_search(query, key_provider=pplx_key_provider) for query in batch]
-            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # Process results and handle any exceptions
-            for j, result in enumerate(batch_results):
-                if isinstance(result, Exception):
-                    logging.error(f"Error executing search: {str(result)}")
-                    # Add a placeholder for failed searches
-                    all_results.append({
-                        "query": batch[j].keywords,
-                        "results": [{"source": "Error", "content": f"Error executing search: {str(result)}"}],
-                        "error": str(result)
-                    })
-                else:
-                    all_results.append(result)
+        # Create a semaphore to limit concurrency based on search_parallel_count
+        sem = asyncio.Semaphore(search_parallel_count)
         
-        logging.info(f"Completed {len(all_results)} web searches")
+        async def bounded_search(query):
+            async with sem:  # This ensures we only run search_parallel_count queries at a time
+                return await execute_single_search(query, key_provider=pplx_key_provider)
+        
+        # Create tasks for all searches but bounded by the semaphore
+        tasks = [bounded_search(query) for query in search_queries]
+        
+        # Run all the searches in parallel with bounded concurrency
+        all_results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Process results and handle any exceptions
+        for i, result in enumerate(all_results):
+            if isinstance(result, Exception):
+                logging.error(f"Error executing search: {str(result)}")
+                # Add a placeholder for failed searches
+                all_results[i] = {
+                    "query": search_queries[i].keywords,
+                    "rationale": search_queries[i].rationale,
+                    "results": [{"source": "Error", "content": f"Error executing search: {str(result)}"}],
+                    "error": str(result)
+                }
+        
+        logging.info(f"Completed {len(all_results)} web searches in parallel")
         
         # Send progress update
         if progress_callback:
-            await progress_callback(f"Completed all web searches, processing {len(all_results)} results")
+            await progress_callback(f"Completed all {len(all_results)} web searches in parallel")
         
         return {
             "search_results": all_results,
-            "steps": state.get("steps", []) + [f"Executed {len(all_results)} web searches"]
+            "steps": state.get("steps", []) + [f"Executed {len(all_results)} web searches in parallel"]
         }
     except Exception as e:
         logging.exception(f"Error executing web searches: {str(e)}")
