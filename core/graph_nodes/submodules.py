@@ -24,6 +24,7 @@ from core.graph_nodes.helpers import run_chain, batch_items, escape_curly_braces
 async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
     """
     Breaks down each module into 3-5 detailed submodules using an LLM chain.
+    Processes modules in parallel based on the parallel_count configuration.
     
     Args:
         state: The current LearningPathState containing basic modules.
@@ -31,77 +32,131 @@ async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
     Returns:
         A dictionary with enhanced modules (each including planned submodules) and a list of steps.
     """
-    logging.info("Planning submodules for each module")
+    logging.info("Planning submodules for each module in parallel")
     if not state.get("modules"):
         logging.warning("No modules available")
         return {"enhanced_modules": [], "steps": ["No modules available"]}
     
+    # Get parallelism configuration - use the parallel_count from the user settings
+    parallel_count = state.get("parallel_count", 2)
+    logging.info(f"Planning submodules with parallelism of {parallel_count}")
+    
+    progress_callback = state.get("progress_callback")
+    if progress_callback:
+        await progress_callback(f"Planning submodules for {len(state['modules'])} modules with parallelism of {parallel_count}...")
+    
+    # Create semaphore to control concurrency based on parallel_count
+    sem = asyncio.Semaphore(parallel_count)
+    
+    # Helper function to plan submodules for a module with semaphore
+    async def plan_module_submodules_bounded(idx, module):
+        async with sem:  # Limits concurrency based on parallel_count
+            return await plan_module_submodules(state, idx, module)
+    
+    # Create tasks to process each module in parallel
+    tasks = [plan_module_submodules_bounded(idx, module) 
+             for idx, module in enumerate(state.get("modules", []))]
+    
+    # Execute tasks in parallel and collect results
+    enhanced_modules = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    # Process results and handle any exceptions
+    processed_modules = []
+    for idx, result in enumerate(enhanced_modules):
+        if isinstance(result, Exception):
+            logging.error(f"Error processing module {idx+1}: {str(result)}")
+            # Create a fallback module with no submodules
+            from models.models import EnhancedModule
+            processed_modules.append(EnhancedModule(
+                title=state["modules"][idx].title,
+                description=state["modules"][idx].description,
+                submodules=[]
+            ))
+        else:
+            processed_modules.append(result)
+    
+    if progress_callback:
+        total_submodules = sum(len(m.submodules) for m in processed_modules)
+        await progress_callback(f"Planned {total_submodules} submodules across {len(processed_modules)} modules in parallel")
+    
+    return {
+        "enhanced_modules": processed_modules, 
+        "steps": [f"Planned submodules for {len(processed_modules)} modules in parallel using {parallel_count} parallel processes"]
+    }
+
+async def plan_module_submodules(state: LearningPathState, idx: int, module) -> Any:
+    """
+    Plans submodules for a specific module.
+    
+    Args:
+        state: The current state.
+        idx: Index of the module.
+        module: The module to process.
+        
+    Returns:
+        Enhanced module with planned submodules.
+    """
+    logging.info(f"Planning submodules for module {idx+1}: {module.title}")
+    
     # Get language from state
     output_language = state.get('language', 'en')
     
-    enhanced_modules = []
-    for idx, module in enumerate(state["modules"]):
-        logging.info(f"Planning submodules for module {idx+1}: {module.title}")
-        learning_path_context = "\n".join([f"Module {i+1}: {mod.title}\n{mod.description}" for i, mod in enumerate(state["modules"])])
+    learning_path_context = "\n".join([f"Module {i+1}: {mod.title}\n{mod.description}" 
+                                       for i, mod in enumerate(state["modules"])])
+    
+    # Check if a specific number of submodules was requested
+    submodule_count_instruction = ""
+    if state.get("desired_submodule_count"):
+        submodule_count_instruction = f"IMPORTANT: Create EXACTLY {state['desired_submodule_count']} submodules for this module. Not more, not less."
+    
+    # Modify the prompt to include the submodule count instruction if specified
+    base_prompt = SUBMODULE_PLANNING_PROMPT
+    if submodule_count_instruction:
+        # Insert the instruction before the format_instructions placeholder
+        base_prompt = base_prompt.replace("{format_instructions}", f"{submodule_count_instruction}\n\n{{format_instructions}}")
+    
+    # Using the extracted prompt template
+    prompt = ChatPromptTemplate.from_template(base_prompt)
+    try:
+        result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider")), submodule_parser, {
+            "user_topic": state["user_topic"],
+            "module_title": module.title,
+            "module_description": module.description,
+            "learning_path_context": learning_path_context,
+            "language": output_language,
+            "format_instructions": submodule_parser.get_format_instructions()
+        })
+        submodules = result.submodules
         
-        # Check if a specific number of submodules was requested
-        submodule_count_instruction = ""
-        if state.get("desired_submodule_count"):
-            submodule_count_instruction = f"IMPORTANT: Create EXACTLY {state['desired_submodule_count']} submodules for this module. Not more, not less."
+        # If a specific number of submodules was requested but not achieved, adjust the list
+        if state.get("desired_submodule_count") and len(submodules) != state["desired_submodule_count"]:
+            logging.warning(f"Requested {state['desired_submodule_count']} submodules but got {len(submodules)} for module {idx+1}")
+            if len(submodules) > state["desired_submodule_count"]:
+                # Trim excess submodules if we got too many
+                submodules = submodules[:state["desired_submodule_count"]]
+                logging.info(f"Trimmed submodules to match requested count of {state['desired_submodule_count']}")
         
-        # Modify the prompt to include the submodule count instruction if specified
-        base_prompt = SUBMODULE_PLANNING_PROMPT
-        if submodule_count_instruction:
-            # Insert the instruction before the format_instructions placeholder
-            base_prompt = base_prompt.replace("{format_instructions}", f"{submodule_count_instruction}\n\n{{format_instructions}}")
-        
-        # Using the extracted prompt template instead of an inline string
-        prompt = ChatPromptTemplate.from_template(base_prompt)
+        # Set order for each submodule
+        for i, sub in enumerate(submodules):
+            sub.order = i + 1
+            
+        # Create the enhanced module
         try:
-            result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider")), submodule_parser, {
-                "user_topic": state["user_topic"],
-                "module_title": module.title,
-                "module_description": module.description,
-                "learning_path_context": learning_path_context,
-                "language": output_language,
-                "format_instructions": submodule_parser.get_format_instructions()
-            })
-            submodules = result.submodules
-            
-            # If a specific number of submodules was requested but not achieved, adjust the list
-            if state.get("desired_submodule_count") and len(submodules) != state["desired_submodule_count"]:
-                logging.warning(f"Requested {state['desired_submodule_count']} submodules but got {len(submodules)} for module {idx+1}")
-                if len(submodules) > state["desired_submodule_count"]:
-                    # Trim excess submodules if we got too many
-                    submodules = submodules[:state["desired_submodule_count"]]
-                    logging.info(f"Trimmed submodules to match requested count of {state['desired_submodule_count']}")
-            
-            for i, sub in enumerate(submodules):
-                sub.order = i + 1
-            try:
-                enhanced_module = module.model_copy(update={"submodules": submodules})
-            except Exception:
-                from models.models import EnhancedModule
-                enhanced_module = EnhancedModule(
-                    title=module.title,
-                    description=module.description,
-                    submodules=submodules
-                )
-            enhanced_modules.append(enhanced_module)
-            logging.info(f"Planned {len(submodules)} submodules for module {idx+1}")
-        except Exception as e:
-            logging.error(f"Error planning submodules for module {idx+1}: {str(e)}")
+            enhanced_module = module.model_copy(update={"submodules": submodules})
+        except Exception:
             from models.models import EnhancedModule
             enhanced_module = EnhancedModule(
                 title=module.title,
                 description=module.description,
-                submodules=[]
+                submodules=submodules
             )
-            enhanced_modules.append(enhanced_module)
-    if state.get("progress_callback"):
-        total_submodules = sum(len(m.submodules) for m in enhanced_modules)
-        await state["progress_callback"](f"Planned {total_submodules} submodules across {len(enhanced_modules)} modules")
-    return {"enhanced_modules": enhanced_modules, "steps": [f"Planned submodules for {len(enhanced_modules)} modules"]}
+            
+        logging.info(f"Planned {len(submodules)} submodules for module {idx+1}")
+        return enhanced_module
+        
+    except Exception as e:
+        logging.error(f"Error planning submodules for module {idx+1}: {str(e)}")
+        raise  # Propagate the exception to be handled in the parent function
 
 async def initialize_submodule_processing(state: LearningPathState) -> Dict[str, Any]:
     """
