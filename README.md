@@ -6,7 +6,7 @@
 ![React](https://img.shields.io/badge/React-18.x-61DAFB)
 ![Deployment](https://img.shields.io/badge/deployment-Local%20%7C%20Vercel%20%7C%20Railway-success)
 
-Learny is an innovative web application that creates personalized learning paths for any topic using artificial intelligence. The system leverages large language models (LLMs) to research, organize, and generate comprehensive educational content, saving you hours of curriculum planning.
+Learny is an innovative web application that creates personalized learning paths for any topic using artificial intelligence (AI). The system leverages large language models (LLMs) to research, organize, and generate comprehensive educational content, saving you hours of curriculum planning.
 
 ## ✨ Features
 
