@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Box, 
   Typography, 
@@ -38,63 +38,72 @@ const PHASES = {
     title: 'Initializing',
     description: 'Setting up the learning path pipeline',
     weight: 0.05,
-    color: '#607D8B' // blue grey
+    color: '#607D8B', // blue grey
+    typicalDuration: 10 // seconds
   },
   search_queries: {
     icon: <SearchIcon />,
     title: 'Search Query Generation',
     description: 'Analyzing your topic to generate optimal search queries',
     weight: 0.10,
-    color: '#5C6BC0' // indigo
+    color: '#5C6BC0', // indigo
+    typicalDuration: 20 // seconds
   },
   web_searches: {
     icon: <PublicIcon />,
     title: 'Web Research',
     description: 'Searching the web for high-quality learning materials',
     weight: 0.15,
-    color: '#26A69A' // teal
+    color: '#26A69A', // teal
+    typicalDuration: 40 // seconds
   },
   modules: {
     icon: <MenuBookIcon />,
     title: 'Module Creation',
     description: 'Organizing research into a logical learning path structure',
     weight: 0.15,
-    color: '#66BB6A' // green
+    color: '#66BB6A', // green
+    typicalDuration: 45 // seconds
   },
   submodule_planning: {
     icon: <ExtensionIcon />,
     title: 'Submodule Planning',
     description: 'Breaking down modules into detailed learning components',
     weight: 0.15,
-    color: '#FFA726' // orange
+    color: '#FFA726', // orange
+    typicalDuration: 45 // seconds
   },
   content_development: {
     icon: <CreateIcon />,
     title: 'Content Development',
     description: 'Creating comprehensive content for each learning component',
     weight: 0.35,
-    color: '#EF5350' // red
+    color: '#EF5350', // red
+    typicalDuration: 120 // seconds
   },
   final_assembly: {
     icon: <AutoAwesomeMotionIcon />,
     title: 'Final Assembly',
     description: 'Assembling all components into your complete learning path',
     weight: 0.05,
-    color: '#8E24AA' // purple
+    color: '#8E24AA', // purple
+    typicalDuration: 20 // seconds
   },
   completion: {
     icon: <AutoAwesomeIcon />,
     title: 'Completed',
     description: 'Your learning path is ready',
     weight: 0,
-    color: '#2E7D32' // dark green
+    color: '#2E7D32', // dark green
+    typicalDuration: 0 // seconds
   },
   unknown: {
     icon: <AutoAwesomeIcon />,
     title: 'Processing',
     description: 'Creating your learning path',
     weight: 1,
-    color: '#757575' // grey
+    color: '#757575', // grey
+    typicalDuration: 300 // seconds
   }
 };
 
@@ -106,10 +115,18 @@ function formatTimeRemaining(seconds) {
   return `${minutes}m ${remainingSeconds}s remaining`;
 }
 
+// Calculate the typical total duration based on phase weights and their typical durations
+const calculateTypicalTotalDuration = () => {
+  return Object.values(PHASES).reduce((total, phase) => total + phase.typicalDuration, 0);
+};
+
 const ProgressTracker = ({ progressMessages, estimatedTotalTime = 300 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isMedium = useMediaQuery(theme.breakpoints.down('md'));
+  
+  // Get the topic from session storage
+  const storedTopic = sessionStorage.getItem('currentTopic') || 'your topic';
   
   // State for current phase and progress
   const [currentPhase, setCurrentPhase] = useState('initialization');
@@ -120,6 +137,14 @@ const ProgressTracker = ({ progressMessages, estimatedTotalTime = 300 }) => {
   const [previewData, setPreviewData] = useState(null);
   const [completedPhases, setCompletedPhases] = useState([]);
   const [activePhases, setActivePhases] = useState(['initialization']);
+  
+  // Advanced time estimation refs and state
+  const phasesStartTimeRef = useRef({});
+  const phasesDurationRef = useRef({});
+  const lastEstimateRef = useRef(estimatedTotalTime);
+  const estimateHistoryRef = useRef([]);
+  const smoothingFactorRef = useRef(0.3);
+  const [phaseTimingData, setPhaseTimingData] = useState({});
   
   // Process progress updates
   useEffect(() => {
@@ -142,8 +167,25 @@ const ProgressTracker = ({ progressMessages, estimatedTotalTime = 300 }) => {
       setPreviewData(preview);
     }
     
-    // Update phase if it has changed
+    // Track phase start times and transitions
     if (phase && phase !== currentPhase) {
+      // Record the start time of this new phase
+      const now = Date.now();
+      phasesStartTimeRef.current[phase] = now;
+      
+      // If we're transitioning from a previous phase, record its duration
+      if (currentPhase && phasesStartTimeRef.current[currentPhase]) {
+        const phaseDuration = (now - phasesStartTimeRef.current[currentPhase]) / 1000;
+        phasesDurationRef.current[currentPhase] = phaseDuration;
+        
+        setPhaseTimingData(prev => ({
+          ...prev,
+          [currentPhase]: phaseDuration
+        }));
+        
+        // console.log(`Phase ${currentPhase} completed in ${phaseDuration}s`);
+      }
+      
       // Add previous phase to completed phases if not already there
       if (currentPhase && !completedPhases.includes(currentPhase)) {
         setCompletedPhases(prev => [...prev, currentPhase]);
@@ -165,12 +207,8 @@ const ProgressTracker = ({ progressMessages, estimatedTotalTime = 300 }) => {
     if (overall !== null) {
       setOverallProgress(overall);
       
-      // Calculate time remaining based on progress and elapsed time
-      const elapsedMs = Date.now() - startTime;
-      const elapsedSeconds = elapsedMs / 1000;
-      const estimatedTotalSeconds = elapsedSeconds / Math.max(0.01, overall);
-      const remainingSeconds = Math.max(0, estimatedTotalSeconds - elapsedSeconds);
-      setTimeRemaining(remainingSeconds);
+      // Advanced time remaining calculation that combines multiple approaches
+      calculateTimeRemaining(overall, phase, phaseProgress);
     }
     
     // Handle completion of a phase
@@ -180,6 +218,132 @@ const ProgressTracker = ({ progressMessages, estimatedTotalTime = 300 }) => {
       }
     }
   }, [progressMessages, currentPhase, completedPhases, activePhases, startTime]);
+  
+  const calculateTimeRemaining = (overallProgress, currentPhase, phaseProgress) => {
+    const elapsedMs = Date.now() - startTime;
+    const elapsedSeconds = elapsedMs / 1000;
+    
+    // Get typical durations and phase weights
+    const phaseInfo = PHASES[currentPhase] || PHASES.unknown;
+    // Add a safeguard to check if a phase exists in the PHASES object
+    const completedPhasesWeight = completedPhases.reduce((sum, phase) => 
+      sum + (PHASES[phase]?.weight || 0), 0);
+    
+    // Calculate remaining time using multiple approaches and then apply smoothing
+
+    // Approach 1: Simple linear projection (the original method)
+    const linearEstimate = (elapsedSeconds / Math.max(0.01, overallProgress)) - elapsedSeconds;
+    
+    // Approach 2: Phase-weighted estimation
+    let phaseWeightedEstimate;
+    if (phaseInfo && phaseProgress !== null) {
+      // Calculate how much progress we've made within current phase
+      const currentPhaseContribution = phaseInfo.weight * phaseProgress;
+      
+      // Calculate effective progress considering phase weights
+      const effectiveProgress = completedPhasesWeight + currentPhaseContribution;
+      const remainingProgressWeighted = 1 - effectiveProgress;
+      
+      // Use a combination of observed timings and typical durations
+      let remainingTime = 0;
+      
+      // For the current phase:
+      if (phaseProgress > 0) {
+        const phaseTimeElapsed = (elapsedSeconds - (phasesDurationRef.current[currentPhase] || 0));
+        const phaseEstimatedTotal = phaseTimeElapsed / phaseProgress;
+        const phaseTimeRemaining = phaseEstimatedTotal - phaseTimeElapsed;
+        remainingTime += Math.max(0, phaseTimeRemaining);
+      } else {
+        remainingTime += phaseInfo.typicalDuration;
+      }
+      
+      // For upcoming phases - use a mix of observed phase durations and typical durations
+      const upcomingPhases = Object.keys(PHASES).filter(p => 
+        !completedPhases.includes(p) && p !== currentPhase && p !== 'unknown' && p !== 'completion'
+      );
+      
+      upcomingPhases.forEach(phase => {
+        // Ensure we're accessing a valid phase
+        if (PHASES[phase]) {
+          // If we have observed timing data for this phase from previous similar generations,
+          // we could use that here
+          remainingTime += PHASES[phase].typicalDuration;
+        }
+      });
+      
+      phaseWeightedEstimate = remainingTime;
+    } else {
+      // Fallback if we don't have phase info
+      phaseWeightedEstimate = linearEstimate;
+    }
+    
+    // Approach 3: Adaptive estimation based on observed progress rate
+    const adaptiveEstimate = elapsedSeconds * (1 - overallProgress) / overallProgress;
+    
+    // Combine the estimates, with different weights at different stages
+    let combinedEstimate;
+    
+    // Handle early estimate differently to avoid unrealistic values
+    if (overallProgress < 0.05) {
+      // Very early in the process, use mainly the typical durations
+      const typicalTotal = calculateTypicalTotalDuration();
+      combinedEstimate = typicalTotal * 0.9; // Small discount to typical time
+    } else if (overallProgress < 0.2) {
+      // Early phase - weight more towards phase-based and typical durations
+      combinedEstimate = (phaseWeightedEstimate * 0.7) + (adaptiveEstimate * 0.3);
+    } else {
+      // Later phases - weight more towards observed progress
+      combinedEstimate = (phaseWeightedEstimate * 0.4) + (adaptiveEstimate * 0.6);
+    }
+    
+    // Apply guardrails to prevent extreme estimates
+    const minEstimate = 5; // Minimum 5 seconds
+    const maxEstimate = estimatedTotalTime * 3; // Maximum 3x the initial estimate
+    combinedEstimate = Math.max(minEstimate, Math.min(maxEstimate, combinedEstimate));
+    
+    // Apply exponential smoothing to avoid jumpy estimates
+    // Adjust smoothing factor based on progress - more smoothing early, less smoothing later
+    const adaptiveSmoothingFactor = 0.2 + (overallProgress * 0.5);
+    const lastEstimate = lastEstimateRef.current;
+    
+    let smoothedEstimate;
+    if (lastEstimate) {
+      smoothedEstimate = (adaptiveSmoothingFactor * combinedEstimate) + 
+                           ((1 - adaptiveSmoothingFactor) * lastEstimate);
+    } else {
+      smoothedEstimate = combinedEstimate;
+    }
+    
+    // Special case for almost complete
+    if (overallProgress > 0.95) {
+      smoothedEstimate = Math.min(smoothedEstimate, 30); // Cap at 30 seconds when almost done
+    }
+    
+    // Special case for early phases to prevent wild fluctuations
+    if (elapsedSeconds < 10 && estimateHistoryRef.current.length < 3) {
+      // For the very first few estimates, use a more conservative approach
+      smoothedEstimate = estimatedTotalTime * (1 - overallProgress);
+    }
+    
+    // Update refs for next calculation
+    lastEstimateRef.current = smoothedEstimate;
+    
+    // Keep history of estimates for potential future use
+    estimateHistoryRef.current.push({
+      time: Date.now(),
+      estimate: smoothedEstimate,
+      progress: overallProgress,
+      phase: currentPhase
+    });
+    
+    // Cap the history length to avoid memory issues
+    if (estimateHistoryRef.current.length > 20) {
+      estimateHistoryRef.current.shift();
+    }
+    
+    // Round to nearest second and set the state
+    setTimeRemaining(Math.max(0, Math.round(smoothedEstimate)));
+  };
   
   // Determine the ordered list of phases that should be shown
   const renderPhases = Object.keys(PHASES).filter(phase => 
@@ -266,7 +430,7 @@ const ProgressTracker = ({ progressMessages, estimatedTotalTime = 300 }) => {
           <Typography variant={isMobile ? "h6" : "h5"} fontWeight="500" color="primary">
             {overallProgress >= 0.99 
               ? 'Learning Path Complete!' 
-              : 'Generating Your Learning Path'}
+              : `Generating Learning Path: ${storedTopic}`}
           </Typography>
           <Chip
             label={timeRemaining > 0 ? formatTimeRemaining(timeRemaining) : "Almost done..."}

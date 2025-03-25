@@ -384,6 +384,9 @@ function ResultPage(props) {
 
   // Loading state
   if (loading) {
+    // Retrieve the topic from sessionStorage
+    const storedTopic = sessionStorage.getItem('currentTopic');
+    
     return (
       <Container maxWidth="lg" sx={{ py: { xs: 3, md: 4 } }}>
         {progressMessages.length > 0 ? (
@@ -401,11 +404,7 @@ function ResultPage(props) {
                 Generating Learning Path
               </Typography>
               <Typography variant="body1" color="text.secondary" paragraph>
-                We're creating a comprehensive learning path for "{progressMessages && progressMessages.length > 0 
-                  ? progressMessages[0].message.includes('Starting learning path generation for:') 
-                    ? progressMessages[0].message.split('Starting learning path generation for:')[1].split('in language:')[0].trim()
-                    : taskId 
-                  : taskId}". 
+                We're creating a comprehensive learning path for "{storedTopic || 'your topic'}". 
                 The AI is analyzing the topic, researching content, and structuring the perfect learning journey for you.
               </Typography>
             </Paper>

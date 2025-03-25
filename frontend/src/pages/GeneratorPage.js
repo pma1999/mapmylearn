@@ -478,6 +478,8 @@ function GeneratorPage() {
       sessionStorage.setItem('autoSaveToHistory', autoSaveToHistory);
       sessionStorage.setItem('initialTags', JSON.stringify(initialTags));
       sessionStorage.setItem('initialFavorite', initialFavorite);
+      // Store the current topic for use in the result page
+      sessionStorage.setItem('currentTopic', topic);
       
       // Navigate to result page
       navigate(`/result/${response.task_id}`);
