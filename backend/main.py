@@ -3,6 +3,13 @@ import logging
 import os
 import json
 from typing import Optional, Callable, Dict, Any
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+env_path = Path(__file__).parent / '.env'
+load_dotenv(dotenv_path=env_path)
+
 from backend.core.graph_builder import build_graph
 from backend.models.models import LearningPathState
 from backend.config.log_config import setup_logging, log_debug_data, log_info_data, get_log_level

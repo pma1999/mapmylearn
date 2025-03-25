@@ -472,7 +472,8 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
                 if sub_id < len(module.submodules):
                     submodule = module.submodules[sub_id]
                     # Only process if not already processed
-                    key = (module_id, sub_id)
+                    # Convert tuple key to string
+                    key = f"{module_id}:{sub_id}"
                     if key not in submodules_in_process or submodules_in_process[key].get("status") not in ["completed", "processing"]:
                         # Mark as processing
                         submodules_in_process[key] = {"status": "processing"}
@@ -502,7 +503,8 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
                         status = result.get("status")
                         
                         if module_id is not None and sub_id is not None:
-                            key = (module_id, sub_id)
+                            # Convert tuple key to string
+                            key = f"{module_id}:{sub_id}"
                             submodules_in_process[key] = result
                             
                             if status == "completed":
@@ -565,7 +567,8 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
     
     # Process all submodules from the current batch
     for module_id, sub_id in current_batch:
-        key = (module_id, sub_id)
+        # Convert tuple key to string
+        key = f"{module_id}:{sub_id}"
         data = submodules_in_process.get(key, {})
         
         if data.get("status") == "completed" and module_id < len(enhanced_modules):
@@ -1448,7 +1451,7 @@ def check_submodule_batch_processing(state: LearningPathState) -> str:
         for batch in batches[:current_index]:
             for module_id, sub_id in batch:
                 total_count += 1
-                key = (module_id, sub_id)
+                key = f"{module_id}:{sub_id}"
                 if key in submodules_in_process:
                     if submodules_in_process[key].get("status") in ["completed", "error"]:
                         processed_count += 1
