@@ -807,8 +807,24 @@ async def get_progress(task_id: str):
                 logger.info(f"SSE connection for task {task_id} was cancelled")
                 raise
             except Exception as e:
-                logger.error(f"Error in SSE stream for task {task_id}: {str(e)}")
-                yield f"data: {{\"error\": \"{str(e)}\"}}\n\n"
+                # Generate a unique error reference ID
+                error_id = str(uuid.uuid4())
+                
+                # Get detailed exception information for logging
+                exc_info = traceback.format_exc()
+                
+                # Log the detailed error with reference ID
+                logger.error(f"Error in SSE stream for task {task_id} [Error ID: {error_id}]: {str(e)}\n{exc_info}")
+                
+                # Return a sanitized error message to the client with the reference ID
+                sanitized_error = {
+                    "error": {
+                        "message": "An error occurred while streaming progress updates. Please try again later.",
+                        "error_id": error_id,
+                        "type": "stream_error"
+                    }
+                }
+                yield f"data: {json.dumps(sanitized_error)}\n\n"
         
         return StreamingResponse(
             event_generator(),
