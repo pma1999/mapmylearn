@@ -10,6 +10,7 @@ import uvicorn
 import logging
 import json
 import os
+import sys
 from typing import Optional, List, Dict, Any, Callable, Awaitable, Union
 from datetime import datetime
 import uuid
@@ -20,13 +21,28 @@ import traceback
 # Initialize startup time for health check and uptime reporting
 startup_time = time.time()
 
-# Import the backend functionality
-from backend.main import generate_learning_path
-from backend.services.services import validate_google_key, validate_perplexity_key
+# Add proper path handling for imports
+sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
-# Import the new API key management services
-from backend.services.key_management import ApiKeyManager
-from backend.services.key_provider import GoogleKeyProvider, PerplexityKeyProvider
+# First try with relative imports (when run directly)
+try:
+    # Import the backend functionality - try both approaches
+    try:
+        from main import generate_learning_path
+        from services.services import validate_google_key, validate_perplexity_key
+        from services.key_management import ApiKeyManager
+        from services.key_provider import GoogleKeyProvider, PerplexityKeyProvider
+    except ImportError:
+        # If that fails, try with backend prefix (when run as a package)
+        from backend.main import generate_learning_path
+        from backend.services.services import validate_google_key, validate_perplexity_key
+        from backend.services.key_management import ApiKeyManager
+        from backend.services.key_provider import GoogleKeyProvider, PerplexityKeyProvider
+except ImportError as e:
+    # If all import approaches fail, log the error
+    logging.error(f"Import error: {str(e)}")
+    # Re-raise to fail fast with a clear error
+    raise
 
 # Set up logging
 logging.basicConfig(
