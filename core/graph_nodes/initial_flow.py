@@ -70,7 +70,14 @@ async def generate_search_queries(state: LearningPathState) -> Dict[str, Any]:
     # Send progress update if callback is available
     progress_callback = state.get('progress_callback')
     if progress_callback:
-        await progress_callback(f"Analyzing topic '{state['user_topic']}' to generate optimal search queries...")
+        # Use enhanced progress update with phase information
+        await progress_callback(
+            f"Analyzing topic '{state['user_topic']}' to generate optimal search queries...",
+            phase="search_queries",
+            phase_progress=0.1,
+            overall_progress=0.2,
+            action="processing"
+        )
     
     # Get language information from state
     output_language = state.get('language', 'en')
@@ -138,6 +145,16 @@ Your response should be exactly 5 search queries, each with its detailed rationa
         else:
             logging.debug("Found Google key provider in state, using for search query generation")
             
+        # Send progress update with more details
+        if progress_callback:
+            await progress_callback(
+                "Analyzing topic with AI to identify key concepts, knowledge structure, and complexity layers...",
+                phase="search_queries",
+                phase_progress=0.3, 
+                overall_progress=0.22,
+                action="processing"
+            )
+            
         result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), search_queries_parser, {
             "user_topic": state["user_topic"],
             "output_language": output_language,
@@ -147,9 +164,21 @@ Your response should be exactly 5 search queries, each with its detailed rationa
         search_queries = result.queries
         logging.info(f"Generated {len(search_queries)} search queries")
         
-        # Send progress update about completion
+        # Prepare preview data for frontend display
+        preview_data = {
+            "search_queries": [query.keywords for query in search_queries]
+        }
+        
+        # Send progress update about completion with preview data
         if progress_callback:
-            await progress_callback(f"Generated {len(search_queries)} search queries for topic '{state['user_topic']}'")
+            await progress_callback(
+                f"Generated {len(search_queries)} search queries for topic '{state['user_topic']}'",
+                phase="search_queries",
+                phase_progress=1.0,
+                overall_progress=0.25,
+                preview_data=preview_data,
+                action="completed"
+            )
         
         return {
             "search_queries": search_queries,
@@ -157,6 +186,17 @@ Your response should be exactly 5 search queries, each with its detailed rationa
         }
     except Exception as e:
         logging.error(f"Error generating search queries: {str(e)}")
+        
+        # Send error progress update
+        if progress_callback:
+            await progress_callback(
+                f"Error generating search queries: {str(e)}",
+                phase="search_queries",
+                phase_progress=0.5,
+                overall_progress=0.2,
+                action="error"
+            )
+            
         return {"search_queries": [], "steps": [f"Error: {str(e)}"]}
 
 async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
@@ -186,7 +226,15 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
     # Send progress update if callback is available
     progress_callback = state.get('progress_callback')
     if progress_callback:
-        await progress_callback(f"Executing {len(search_queries)} web searches in parallel (max {search_parallel_count} at a time)...")
+        # Enhanced progress update with phase information
+        await progress_callback(
+            f"Executing {len(search_queries)} web searches in parallel (max {search_parallel_count} at a time)...",
+            phase="web_searches",
+            phase_progress=0.0,
+            overall_progress=0.25,
+            preview_data={"search_queries": [query.keywords for query in search_queries]},
+            action="started"
+        )
     
     all_results = []
     
@@ -201,8 +249,57 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
         # Create tasks for all searches but bounded by the semaphore
         tasks = [bounded_search(query) for query in search_queries]
         
+        # Send additional progress update
+        if progress_callback and len(tasks) > 0:
+            await progress_callback(
+                f"Searching for information on '{search_queries[0].keywords}'...",
+                phase="web_searches",
+                phase_progress=0.1,
+                overall_progress=0.27,
+                action="processing"
+            )
+        
         # Run all the searches in parallel with bounded concurrency
-        all_results = await asyncio.gather(*tasks, return_exceptions=True)
+        completed = 0
+        total = len(tasks)
+        
+        for i, future in enumerate(asyncio.as_completed(tasks)):
+            result = await future
+            all_results.append(result)
+            completed += 1
+            
+            # Send incremental progress updates
+            if progress_callback and i < len(search_queries):
+                phase_progress = min(1.0, completed / total)
+                overall_progress = 0.25 + (phase_progress * 0.15)  # web searches are 15% of overall process
+                
+                # Create preview data from the first result
+                preview_data = {}
+                if result and "query" in result:
+                    preview_data = {
+                        "search_queries": [q.keywords for q in search_queries[:i+1]],
+                        "current_search": {
+                            "query": result.get("query", ""),
+                            "completed": completed,
+                            "total": total
+                        }
+                    }
+                
+                # Only send detailed updates for every other completion to avoid flooding
+                if i % 2 == 0 or i == len(search_queries) - 1:
+                    next_idx = min(i + 1, len(search_queries) - 1)
+                    next_message = f"Completed {completed}/{total} searches. "
+                    if next_idx < len(search_queries):
+                        next_message += f"Searching for '{search_queries[next_idx].keywords}'..."
+                    
+                    await progress_callback(
+                        next_message,
+                        phase="web_searches",
+                        phase_progress=phase_progress,
+                        overall_progress=overall_progress,
+                        preview_data=preview_data,
+                        action="processing"
+                    )
         
         # Process results and handle any exceptions
         for i, result in enumerate(all_results):
@@ -218,9 +315,16 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
         
         logging.info(f"Completed {len(all_results)} web searches in parallel")
         
-        # Send progress update
+        # Send progress update with completion information
         if progress_callback:
-            await progress_callback(f"Completed all {len(all_results)} web searches in parallel")
+            await progress_callback(
+                f"Completed all {len(all_results)} web searches in parallel",
+                phase="web_searches",
+                phase_progress=1.0,
+                overall_progress=0.4,
+                preview_data={"search_queries": [q.keywords for q in search_queries]},
+                action="completed"
+            )
         
         return {
             "search_results": all_results,
@@ -228,6 +332,17 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
         }
     except Exception as e:
         logging.exception(f"Error executing web searches: {str(e)}")
+        
+        # Send error progress update
+        if progress_callback:
+            await progress_callback(
+                f"Error executing web searches: {str(e)}",
+                phase="web_searches",
+                phase_progress=0.5,  # partial progress
+                overall_progress=0.3,
+                action="error"
+            )
+            
         return {
             "search_results": all_results,
             "steps": state.get("steps", []) + [f"Error executing web searches: {str(e)}"]
@@ -261,7 +376,14 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
     # Send progress update if callback is available
     progress_callback = state.get('progress_callback')
     if progress_callback:
-        await progress_callback(f"Creating initial learning path structure for '{state['user_topic']}'...")
+        # Enhanced progress update with phase information
+        await progress_callback(
+            f"Creating initial learning path structure for '{state['user_topic']}'...",
+            phase="modules",
+            phase_progress=0.0,
+            overall_progress=0.4,
+            action="started"
+        )
     
     try:
         # Procesar los resultados de búsqueda para generar módulos
@@ -289,6 +411,16 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
                 "relevant_information": "\n\n".join(relevant_info)
             })
         
+        # Update progress after processing search results
+        if progress_callback:
+            await progress_callback(
+                "Analyzing search results to identify key concepts and learning structure...",
+                phase="modules",
+                phase_progress=0.3,
+                overall_progress=0.45,
+                action="processing"
+            )
+            
         # Convertir los resultados procesados a texto para incluir en el prompt
         results_text = ""
         for i, result in enumerate(processed_results, 1):
@@ -306,6 +438,16 @@ Search {i}: "{result['query']}"
         
         # Add language instruction
         language_instruction = f"\nIMPORTANT: Create all content in {output_language}. All titles, descriptions, and content must be written in {output_language}."
+        
+        # Update progress with AI generation status
+        if progress_callback:
+            await progress_callback(
+                "Designing logical learning progression and module structure based on topic analysis...",
+                phase="modules",
+                phase_progress=0.6,
+                overall_progress=0.5,
+                action="processing"
+            )
         
         # Escapar las llaves en el tema del usuario
         escaped_topic = escape_curly_braces(state["user_topic"])
@@ -359,10 +501,29 @@ Format your response as a structured curriculum. Each module should build on pre
         
         logging.info(f"Created learning path with {len(modules)} modules")
         
-        # Send progress update with information about the created modules
+        # Prepare preview data for frontend display
+        preview_modules = []
+        for module in modules:
+            preview_modules.append({
+                "title": module.title,
+                "description": module.description[:150] + "..." if len(module.description) > 150 else module.description
+            })
+            
+        preview_data = {
+            "modules": preview_modules
+        }
+        
+        # Send progress update with information about the created modules and preview data
         if progress_callback and 'modules' in final_learning_path:
             module_count = len(final_learning_path['modules'])
-            await progress_callback(f"Created initial learning path with {module_count} modules")
+            await progress_callback(
+                f"Created initial learning path with {module_count} modules",
+                phase="modules",
+                phase_progress=1.0,
+                overall_progress=0.55,
+                preview_data=preview_data,
+                action="completed"
+            )
         
         return {
             "modules": modules,
@@ -371,6 +532,17 @@ Format your response as a structured curriculum. Each module should build on pre
         }
     except Exception as e:
         logging.exception(f"Error creating learning path: {str(e)}")
+        
+        # Send error progress update
+        if progress_callback:
+            await progress_callback(
+                f"Error creating learning path: {str(e)}",
+                phase="modules",
+                phase_progress=0.5,
+                overall_progress=0.45,
+                action="error"
+            )
+        
         return {
             "modules": [],
             "final_learning_path": {

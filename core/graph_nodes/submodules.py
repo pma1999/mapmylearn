@@ -43,7 +43,14 @@ async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
     
     progress_callback = state.get("progress_callback")
     if progress_callback:
-        await progress_callback(f"Planning submodules for {len(state['modules'])} modules with parallelism of {parallel_count}...")
+        # Enhanced progress update with phase information
+        await progress_callback(
+            f"Planning submodules for {len(state['modules'])} modules with parallelism of {parallel_count}...",
+            phase="submodule_planning",
+            phase_progress=0.0,
+            overall_progress=0.55,
+            action="started"
+        )
     
     # Create semaphore to control concurrency based on parallel_count
     sem = asyncio.Semaphore(parallel_count)
@@ -75,9 +82,33 @@ async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
         else:
             processed_modules.append(result)
     
+    # Create preview data for frontend display
+    preview_modules = []
+    total_submodules = 0
+    
+    for module in processed_modules:
+        submodule_previews = []
+        for submodule in module.submodules:
+            submodule_previews.append({
+                "title": submodule.title,
+                "description": submodule.description[:100] + "..." if len(submodule.description) > 100 else submodule.description
+            })
+            total_submodules += 1
+            
+        preview_modules.append({
+            "title": module.title,
+            "submodules": submodule_previews
+        })
+    
     if progress_callback:
-        total_submodules = sum(len(m.submodules) for m in processed_modules)
-        await progress_callback(f"Planned {total_submodules} submodules across {len(processed_modules)} modules in parallel")
+        await progress_callback(
+            f"Planned {total_submodules} submodules across {len(processed_modules)} modules in parallel",
+            phase="submodule_planning",
+            phase_progress=1.0,
+            overall_progress=0.6,
+            preview_data={"modules": preview_modules},
+            action="completed"
+        )
     
     return {
         "enhanced_modules": processed_modules, 
@@ -97,6 +128,25 @@ async def plan_module_submodules(state: LearningPathState, idx: int, module) -> 
         Enhanced module with planned submodules.
     """
     logging.info(f"Planning submodules for module {idx+1}: {module.title}")
+    
+    # Get progress callback
+    progress_callback = state.get("progress_callback")
+    
+    # Send module-specific progress update
+    if progress_callback:
+        # Calculate overall progress based on module index
+        total_modules = len(state.get("modules", []))
+        module_progress = (idx + 0.2) / max(1, total_modules)  # Add 0.2 to avoid 0 progress
+        overall_progress = 0.55 + (module_progress * 0.05)  # submodule planning is 5% of overall
+        
+        await progress_callback(
+            f"Planning submodules for module {idx+1}: {module.title}",
+            phase="submodule_planning",
+            phase_progress=module_progress,
+            overall_progress=overall_progress,
+            preview_data={"current_module": {"title": module.title, "index": idx}},
+            action="processing"
+        )
     
     # Get language from state
     output_language = state.get('language', 'en')
@@ -152,10 +202,50 @@ async def plan_module_submodules(state: LearningPathState, idx: int, module) -> 
             )
             
         logging.info(f"Planned {len(submodules)} submodules for module {idx+1}")
+        
+        # Send progress update for completed module submodule planning
+        if progress_callback:
+            submodule_previews = []
+            for submodule in submodules:
+                submodule_previews.append({
+                    "title": submodule.title,
+                    "description": submodule.description[:100] + "..." if len(submodule.description) > 100 else submodule.description
+                })
+                
+            # Calculate slightly more progress
+            module_progress = (idx + 1) / max(1, total_modules)
+            overall_progress = 0.55 + (module_progress * 0.05)
+            
+            await progress_callback(
+                f"Planned {len(submodules)} submodules for module {idx+1}: {module.title}",
+                phase="submodule_planning", 
+                phase_progress=module_progress,
+                overall_progress=overall_progress,
+                preview_data={
+                    "current_module": {
+                        "title": module.title, 
+                        "index": idx,
+                        "submodules": submodule_previews
+                    }
+                },
+                action="processing"
+            )
+        
         return enhanced_module
         
     except Exception as e:
         logging.error(f"Error planning submodules for module {idx+1}: {str(e)}")
+        
+        # Send error progress update
+        if progress_callback:
+            await progress_callback(
+                f"Error planning submodules for module {idx+1}: {str(e)}",
+                phase="submodule_planning",
+                phase_progress=(idx + 0.5) / max(1, len(state.get("modules", []))),
+                overall_progress=0.57,
+                action="error"
+            )
+            
         raise  # Propagate the exception to be handled in the parent function
 
 async def initialize_submodule_processing(state: LearningPathState) -> Dict[str, Any]:
@@ -173,7 +263,13 @@ async def initialize_submodule_processing(state: LearningPathState) -> Dict[str,
     
     progress_callback = state.get("progress_callback")
     if progress_callback:
-        await progress_callback("Preparing to enhance modules with detailed content using LangGraph parallel processing...")
+        await progress_callback(
+            "Preparing to enhance modules with detailed content using LangGraph parallel processing...",
+            phase="content_development",
+            phase_progress=0.0,
+            overall_progress=0.6,
+            action="started"
+        )
     
     enhanced_modules = state.get("enhanced_modules")
     if not enhanced_modules:
@@ -255,10 +351,42 @@ async def initialize_submodule_processing(state: LearningPathState) -> Dict[str,
         f"Using LangGraph map-reduce pattern: Organized {total_submodules} submodules into "
         f"{total_batches} batches with parallelism of {submodule_parallel_count}")
     
+    # Create module title to submodule titles mapping for progress display
+    module_to_submodules = {}
+    for item in all_submodules:
+        module_id = item["module_id"]
+        if module_id not in module_to_submodules:
+            module_to_submodules[module_id] = {
+                "title": item["module_title"],
+                "submodules": []
+            }
+        module_to_submodules[module_id]["submodules"].append({
+            "title": item["submodule_title"],
+            "sub_id": item["sub_id"]
+        })
+    
+    # Create a preview of the batch processing plan
+    preview_data = {
+        "modules": [
+            {
+                "title": data["title"],
+                "submodule_count": len(data["submodules"])
+            } for module_id, data in module_to_submodules.items()
+        ],
+        "total_submodules": total_submodules,
+        "total_batches": total_batches,
+        "parallel_processing": submodule_parallel_count
+    }
+    
     if progress_callback:
         await progress_callback(
             f"Preparing to process {total_submodules} submodules in {total_batches} batches "
-            f"with {submodule_parallel_count} submodules in parallel using LangGraph pattern"
+            f"with {submodule_parallel_count} submodules in parallel using LangGraph pattern",
+            phase="content_development",
+            phase_progress=0.1,
+            overall_progress=0.62,
+            preview_data=preview_data,
+            action="processing"
         )
     
     return {
@@ -293,7 +421,19 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
     logging.info(f"Processing submodule batch {current_index+1}/{len(sub_batches)} with parallelism of {submodule_parallel_count}")
     
     if progress_callback:
-        await progress_callback(f"Processing batch {current_index+1} of {len(sub_batches)} with {submodule_parallel_count} parallel tasks...")
+        # Calculate overall progress based on batch index and total batches
+        total_batches = len(sub_batches)
+        batch_progress = current_index / max(1, total_batches)
+        # Content development is from 60% to 95% of overall progress
+        overall_progress = 0.62 + (batch_progress * 0.33)
+        
+        await progress_callback(
+            f"Processing batch {current_index+1} of {len(sub_batches)} with {submodule_parallel_count} parallel tasks...",
+            phase="content_development",
+            phase_progress=batch_progress,
+            overall_progress=overall_progress,
+            action="processing"
+        )
     
     # Check if all batches are already processed
     if current_index >= len(sub_batches):
@@ -336,7 +476,26 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
     # following LangGraph's map-reduce pattern
     if tasks:
         if progress_callback:
-            await progress_callback(f"Processing {len(tasks)} submodules in parallel using LangGraph pattern...")
+            submodules_in_batch = []
+            for module_id, sub_id in current_batch:
+                if module_id < len(enhanced_modules) and sub_id < len(enhanced_modules[module_id].submodules):
+                    module = enhanced_modules[module_id]
+                    submodule = module.submodules[sub_id]
+                    submodules_in_batch.append({
+                        "module_title": module.title,
+                        "submodule_title": submodule.title,
+                        "module_id": module_id,
+                        "sub_id": sub_id
+                    })
+            
+            await progress_callback(
+                f"Processing {len(tasks)} submodules in parallel using LangGraph pattern...",
+                phase="content_development",
+                phase_progress=batch_progress + (0.5/total_batches),  # Small increment
+                overall_progress=overall_progress + 0.01,
+                preview_data={"current_batch": submodules_in_batch},
+                action="processing"
+            )
         
         try:
             # Start time for measuring performance
@@ -357,6 +516,7 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
             error_count = 0
             
             # Update the submodules_in_process dictionary with the results
+            processed_submodules = []
             for result in results:
                 if result.get("status") == "completed":
                     module_id = result.get("module_id")
@@ -364,6 +524,19 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
                     key = (module_id, sub_id)
                     submodules_in_process[key] = result
                     success_count += 1
+                    
+                    # Add to processed submodules for progress display
+                    if module_id < len(enhanced_modules) and sub_id < len(enhanced_modules[module_id].submodules):
+                        module = enhanced_modules[module_id]
+                        submodule = module.submodules[sub_id]
+                        processed_submodules.append({
+                            "module_title": module.title,
+                            "submodule_title": submodule.title,
+                            "content_preview": result.get("content", "")[:150] + "..." if result.get("content") and len(result.get("content")) > 150 else result.get("content", ""),
+                            "module_id": module_id,
+                            "sub_id": sub_id
+                        })
+                        
                 elif result.get("status") == "error":
                     module_id = result.get("module_id")
                     sub_id = result.get("sub_id")
@@ -374,20 +547,41 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
                     error_count += 1
             
             if progress_callback:
+                # Calculate new overall progress
+                batch_progress = (current_index + 1) / max(1, total_batches)
+                overall_progress = 0.62 + (batch_progress * 0.33)
+                
                 await progress_callback(
                     f"Completed batch {current_index+1}/{len(sub_batches)}: "
-                    f"{success_count} successful, {error_count} failed in {elapsed_time:.2f} seconds"
+                    f"{success_count} successful, {error_count} failed in {elapsed_time:.2f} seconds",
+                    phase="content_development",
+                    phase_progress=batch_progress,
+                    overall_progress=overall_progress,
+                    preview_data={"processed_submodules": processed_submodules},
+                    action="processing"
                 )
                 
             logging.info(f"Batch {current_index+1} results: {success_count} successful, {error_count} failed")
         except Exception as e:
             logging.error(f"Error in processing submodule batch: {str(e)}")
             if progress_callback:
-                await progress_callback(f"Error processing batch: {str(e)}")
+                await progress_callback(
+                    f"Error processing batch: {str(e)}",
+                    phase="content_development",
+                    phase_progress=batch_progress,
+                    overall_progress=overall_progress,
+                    action="error"
+                )
     else:
         logging.info(f"No tasks to process in batch {current_index+1}")
         if progress_callback:
-            await progress_callback(f"No tasks to process in batch {current_index+1}")
+            await progress_callback(
+                f"No tasks to process in batch {current_index+1}",
+                phase="content_development",
+                phase_progress=batch_progress,
+                overall_progress=overall_progress,
+                action="processing"
+            )
     
     # Move to the next batch
     next_index = current_index + 1
@@ -420,7 +614,24 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
         processed_count = current_index + 1
         total_count = len(sub_batches)
         percentage = min(100, int((processed_count / total_count) * 100))
-        await progress_callback(f"Completed batch {current_index+1}/{len(sub_batches)} ({percentage}% of submodules processed)")
+        
+        # If this is the last batch, increase the phase progress to 1.0
+        if next_index >= len(sub_batches):
+            await progress_callback(
+                f"Completed all {total_count} batches of submodule processing ({percentage}% complete)",
+                phase="content_development",
+                phase_progress=1.0,
+                overall_progress=0.95,
+                action="completed"
+            )
+        else:
+            await progress_callback(
+                f"Completed batch {current_index+1}/{len(sub_batches)} ({percentage}% of submodules processed)",
+                phase="content_development",
+                phase_progress=batch_progress,
+                overall_progress=overall_progress,
+                action="processing"
+            )
     
     # Return updated state
     return {
@@ -1006,7 +1217,13 @@ async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str,
     
     progress_callback = state.get("progress_callback")
     if progress_callback:
-        await progress_callback("Finalizing your learning path with all enhanced content...")
+        await progress_callback(
+            "Finalizing your learning path with all enhanced content...",
+            phase="final_assembly",
+            phase_progress=0.0,
+            overall_progress=0.95,
+            action="started"
+        )
     
     logger = logging.getLogger("learning_path.finalizer")
     logger.info("Finalizing enhanced learning path with submodules")
@@ -1014,11 +1231,26 @@ async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str,
         if not state.get("developed_submodules"):
             logger.warning("No developed submodules available")
             return {"final_learning_path": {"topic": state["user_topic"], "modules": []}, "steps": ["No submodules developed"]}
+            
+        # Group submodules by module
         module_to_subs = {}
         for sub in state["developed_submodules"]:
             module_to_subs.setdefault(sub.module_id, []).append(sub)
+            
+        # Sort submodules within each module
         for module_id in module_to_subs:
             module_to_subs[module_id].sort(key=lambda s: s.submodule_id)
+            
+        # Send progress update
+        if progress_callback:
+            await progress_callback(
+                "Organizing all developed content into final structure...",
+                phase="final_assembly",
+                phase_progress=0.5,
+                overall_progress=0.97,
+                action="processing"
+            )
+        
         final_modules = []
         for module_id, module in enumerate(state.get("enhanced_modules") or []):
             subs = module_to_subs.get(module_id, [])
@@ -1048,12 +1280,49 @@ async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str,
             final_modules.append(module_data)
         final_learning_path = {"topic": state["user_topic"], "modules": final_modules, "execution_steps": state["steps"]}
         logger.info(f"Finalized learning path with {len(final_modules)} modules")
+        
+        # Build preview data for frontend
+        preview_modules = []
+        total_submodules = 0
+        
+        for module in final_modules:
+            module_preview = {
+                "title": module["title"],
+                "submodule_count": len(module["submodules"]),
+                "description": module["description"][:150] + "..." if len(module["description"]) > 150 else module["description"]
+            }
+            preview_modules.append(module_preview)
+            total_submodules += len(module["submodules"])
+        
+        preview_data = {
+            "modules": preview_modules,
+            "total_modules": len(final_modules),
+            "total_submodules": total_submodules
+        }
+        
         if progress_callback:
-            total_submodules = sum(len(m.submodules) for m in state.get("enhanced_modules", []))
-            await progress_callback(f"Learning path complete with {len(final_modules)} modules and {total_submodules} detailed submodules")
+            await progress_callback(
+                f"Learning path complete with {len(final_modules)} modules and {total_submodules} detailed submodules",
+                phase="final_assembly",
+                phase_progress=1.0,
+                overall_progress=1.0,
+                preview_data=preview_data,
+                action="completed"
+            )
         return {"final_learning_path": final_learning_path, "steps": ["Finalized enhanced learning path"]}
     except Exception as e:
         logger.exception(f"Error finalizing learning path: {str(e)}")
+        
+        # Send error progress update
+        if progress_callback:
+            await progress_callback(
+                f"Error finalizing learning path: {str(e)}",
+                phase="final_assembly",
+                phase_progress=0.5,
+                overall_progress=0.97,
+                action="error"
+            )
+            
         return {"final_learning_path": {"topic": state["user_topic"], "modules": [], "error": str(e)}, "steps": [f"Error: {str(e)}"]}
 
 def check_submodule_batch_processing(state: LearningPathState) -> str:

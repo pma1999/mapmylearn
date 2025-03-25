@@ -213,9 +213,23 @@ class ApiKeyValidationRequest(BaseModel):
     google_api_key: Optional[str] = None
     pplx_api_key: Optional[str] = None
 
+# Enhanced structured progress update model
+class PreviewData(BaseModel):
+    """Preview data for modules and submodules during generation"""
+    modules: Optional[List[Dict[str, Any]]] = None
+    search_queries: Optional[List[str]] = None
+    current_module: Optional[Dict[str, Any]] = None
+    current_submodule: Optional[Dict[str, Any]] = None
+
 class ProgressUpdate(BaseModel):
+    """Enhanced progress update with structured information"""
     message: str
     timestamp: str
+    phase: Optional[str] = None  # e.g., "search_queries", "web_searches", "modules", "submodules", "content"
+    phase_progress: Optional[float] = None  # 0.0 to 1.0 indicating progress within current phase
+    overall_progress: Optional[float] = None  # 0.0 to 1.0 estimated overall progress
+    preview_data: Optional[PreviewData] = None  # Early preview data
+    action: Optional[str] = None  # e.g., "started", "processing", "completed", "error"
 
 class ImportPathRequest(BaseModel):
     json_data: str
@@ -319,9 +333,12 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
         active_generations[task_id] = {"status": "running", "result": None}
 
     # Define a progress callback that puts messages into the queue
-    async def progress_callback(message: str):
-        timestamp = datetime.now().isoformat()
-        update = ProgressUpdate(message=message, timestamp=timestamp)
+    async def progress_callback(update: Union[str, ProgressUpdate]):
+        if isinstance(update, str):
+            # Legacy string format - convert to ProgressUpdate
+            timestamp = datetime.now().isoformat()
+            update = ProgressUpdate(message=update, timestamp=timestamp)
+        
         async with progress_queues_lock:
             if task_id in progress_queues:
                 await progress_queues[task_id].put(update)
@@ -380,11 +397,45 @@ async def generate_learning_path_task(
     Execute the learning path generation task with comprehensive error handling.
     Ensures all exceptions are caught, logged, and reported through progress updates.
     """
-    # Define a wrapper progress callback to ensure messages are logged
-    async def enhanced_progress_callback(message: str):
-        logging.info(f"Progress update for task {task_id}: {message}")
+    # Define a wrapper progress callback to ensure messages are logged and structured
+    async def enhanced_progress_callback(message: str, 
+                                         phase: Optional[str] = None, 
+                                         phase_progress: Optional[float] = None, 
+                                         overall_progress: Optional[float] = None,
+                                         preview_data: Optional[Dict[str, Any]] = None,
+                                         action: Optional[str] = None):
+        """
+        Enhanced progress callback that supports structured progress updates.
+        
+        Args:
+            message: The progress message
+            phase: Current generation phase (search_queries, web_searches, modules, submodules, content)
+            phase_progress: Progress within the current phase (0.0 to 1.0)
+            overall_progress: Estimated overall progress (0.0 to 1.0)
+            preview_data: Preview data for modules and submodules
+            action: Action being performed (started, processing, completed, error)
+        """
+        timestamp = datetime.now().isoformat()
+        
+        # Create the enhanced progress update
+        preview_data_model = None
+        if preview_data:
+            preview_data_model = PreviewData(**preview_data)
+            
+        update = ProgressUpdate(
+            message=message, 
+            timestamp=timestamp,
+            phase=phase,
+            phase_progress=phase_progress,
+            overall_progress=overall_progress,
+            preview_data=preview_data_model,
+            action=action
+        )
+        
+        logging.info(f"Progress update for task {task_id}: {message} (Phase: {phase}, Progress: {phase_progress})")
+        
         if progress_callback:
-            await progress_callback(message)
+            await progress_callback(update)
     
     google_api_key = None
     pplx_api_key = None
@@ -393,7 +444,13 @@ async def generate_learning_path_task(
         logging.info(f"Starting learning path generation for: {topic} in language: {language}")
         
         # Send initial progress message
-        await enhanced_progress_callback(f"Starting learning path generation for: {topic} in language: {language}")
+        await enhanced_progress_callback(
+            f"Starting learning path generation for: {topic} in language: {language}",
+            phase="initialization",
+            phase_progress=0.0,
+            overall_progress=0.0,
+            action="started"
+        )
         
         # Retrieve Google API key with proper error handling
         try:
@@ -401,10 +458,22 @@ async def generate_learning_path_task(
                 try:
                     google_api_key = key_manager.get_key(google_key_token, key_manager.KEY_TYPE_GOOGLE, ip_address=client_ip)
                     logging.info("Successfully retrieved Google API key from token")
-                    await enhanced_progress_callback("Successfully retrieved Google API key")
+                    await enhanced_progress_callback(
+                        "Successfully retrieved Google API key",
+                        phase="initialization",
+                        phase_progress=0.3,
+                        overall_progress=0.05,
+                        action="processing"
+                    )
                 except Exception as e:
                     logging.warning(f"Failed to retrieve Google API key from token: {str(e)}")
-                    await enhanced_progress_callback("Using default Google API key from environment")
+                    await enhanced_progress_callback(
+                        "Using default Google API key from environment",
+                        phase="initialization",
+                        phase_progress=0.3,
+                        overall_progress=0.05,
+                        action="processing"
+                    )
                     # Try fallback to environment variable
                     google_api_key = key_manager.get_env_key(key_manager.KEY_TYPE_GOOGLE)
                     
@@ -417,7 +486,13 @@ async def generate_learning_path_task(
                 # Try environment variable
                 google_api_key = key_manager.get_env_key(key_manager.KEY_TYPE_GOOGLE)
                 if google_api_key:
-                    await enhanced_progress_callback("Using default Google API key from environment")
+                    await enhanced_progress_callback(
+                        "Using default Google API key from environment",
+                        phase="initialization",
+                        phase_progress=0.3,
+                        overall_progress=0.05,
+                        action="processing"
+                    )
                 else:
                     raise LearningPathGenerationError(
                         "No Google API key provided and no fallback key available",
@@ -427,7 +502,13 @@ async def generate_learning_path_task(
             # Log the detailed error but provide a sanitized message to the user
             logging.exception(f"Error retrieving Google API key: {str(e)}")
             error_msg = "Failed to retrieve Google API key. Please provide a valid key."
-            await enhanced_progress_callback(f"Error: {error_msg}")
+            await enhanced_progress_callback(
+                f"Error: {error_msg}",
+                phase="initialization",
+                phase_progress=0.3,
+                overall_progress=0.05,
+                action="error"
+            )
             raise LearningPathGenerationError(error_msg, {"source": "google_key_retrieval"})
             
         # Retrieve Perplexity API key with proper error handling
@@ -436,10 +517,22 @@ async def generate_learning_path_task(
                 try:
                     pplx_api_key = key_manager.get_key(pplx_key_token, key_manager.KEY_TYPE_PERPLEXITY, ip_address=client_ip)
                     logging.info("Successfully retrieved Perplexity API key from token")
-                    await enhanced_progress_callback("Successfully retrieved Perplexity API key")
+                    await enhanced_progress_callback(
+                        "Successfully retrieved Perplexity API key",
+                        phase="initialization",
+                        phase_progress=0.6,
+                        overall_progress=0.1,
+                        action="processing"
+                    )
                 except Exception as e:
                     logging.warning(f"Failed to retrieve Perplexity API key from token: {str(e)}")
-                    await enhanced_progress_callback("Using default Perplexity API key from environment")
+                    await enhanced_progress_callback(
+                        "Using default Perplexity API key from environment",
+                        phase="initialization",
+                        phase_progress=0.6,
+                        overall_progress=0.1,
+                        action="processing"
+                    )
                     # Try fallback to environment variable
                     pplx_api_key = key_manager.get_env_key(key_manager.KEY_TYPE_PERPLEXITY)
                     
@@ -452,7 +545,13 @@ async def generate_learning_path_task(
                 # Try environment variable
                 pplx_api_key = key_manager.get_env_key(key_manager.KEY_TYPE_PERPLEXITY)
                 if pplx_api_key:
-                    await enhanced_progress_callback("Using default Perplexity API key from environment")
+                    await enhanced_progress_callback(
+                        "Using default Perplexity API key from environment",
+                        phase="initialization",
+                        phase_progress=0.6,
+                        overall_progress=0.1,
+                        action="processing"
+                    )
                 else:
                     raise LearningPathGenerationError(
                         "No Perplexity API key provided and no fallback key available",
@@ -462,20 +561,46 @@ async def generate_learning_path_task(
             # Log the detailed error but provide a sanitized message to the user
             logging.exception(f"Error retrieving Perplexity API key: {str(e)}")
             error_msg = "Failed to retrieve Perplexity API key. Please provide a valid key."
-            await enhanced_progress_callback(f"Error: {error_msg}")
+            await enhanced_progress_callback(
+                f"Error: {error_msg}",
+                phase="initialization",
+                phase_progress=0.6,
+                overall_progress=0.1,
+                action="error"
+            )
             raise LearningPathGenerationError(error_msg, {"source": "perplexity_key_retrieval"})
         
         # Create key providers with direct keys instead of tokens
         try:
             google_provider = GoogleKeyProvider(google_api_key)
             pplx_provider = PerplexityKeyProvider(pplx_api_key)
+            
+            await enhanced_progress_callback(
+                "API keys validated and ready. Preparing learning path pipeline...",
+                phase="initialization",
+                phase_progress=1.0,
+                overall_progress=0.15,
+                action="completed"
+            )
         except Exception as e:
             logging.exception(f"Error creating key providers: {str(e)}")
             error_msg = "Failed to initialize API key providers. Please try again with valid keys."
-            await enhanced_progress_callback(f"Error: {error_msg}")
+            await enhanced_progress_callback(
+                f"Error: {error_msg}",
+                phase="initialization",
+                phase_progress=0.6,
+                overall_progress=0.1,
+                action="error"
+            )
             raise LearningPathGenerationError(error_msg, {"source": "key_provider_initialization"})
         
-        await enhanced_progress_callback(f"Preparing to generate learning path for '{topic}' with {parallel_count} modules in parallel")
+        await enhanced_progress_callback(
+            f"Preparing to generate learning path for '{topic}' with {parallel_count} modules in parallel",
+            phase="search_queries",
+            phase_progress=0.0,
+            overall_progress=0.15,
+            action="started"
+        )
         
         # Pass callback to update front-end with progress
         try:
@@ -501,7 +626,11 @@ async def generate_learning_path_task(
             user_error_msg = "An error occurred during learning path generation. Please try again later."
             
             # Send error message to frontend
-            await enhanced_progress_callback(f"Error: {user_error_msg}")
+            await enhanced_progress_callback(
+                f"Error: {user_error_msg}",
+                phase="unknown",
+                action="error"
+            )
             
             # Update task status with sanitized error info - this is an unexpected error
             async with active_generations_lock:
@@ -513,7 +642,13 @@ async def generate_learning_path_task(
             return
         
         # Send completion message
-        await enhanced_progress_callback("Learning path generation completed successfully!")
+        await enhanced_progress_callback(
+            "Learning path generation completed successfully!",
+            phase="completion",
+            phase_progress=1.0,
+            overall_progress=1.0,
+            action="completed"
+        )
         
         # Store result in active_generations
         async with active_generations_lock:
@@ -540,7 +675,11 @@ async def generate_learning_path_task(
         user_error_msg = "An unexpected error occurred while generating your learning path. Please try again later."
         
         # Send error message to frontend
-        await enhanced_progress_callback(f"Error: {user_error_msg}")
+        await enhanced_progress_callback(
+            f"Error: {user_error_msg}",
+            phase="unknown",
+            action="error"
+        )
         
         # Update status to failed with sanitized error info
         async with active_generations_lock:
@@ -616,6 +755,8 @@ async def get_learning_path(task_id: str):
 async def get_progress(task_id: str):
     """
     Get progress updates for a learning path generation task using Server-Sent Events.
+    Returns structured progress data including phase information, completion percentages,
+    and early preview data.
     """
     try:
         # Safely check if task exists
@@ -631,7 +772,15 @@ async def get_progress(task_id: str):
         async def event_generator():
             try:
                 # Send initial message to establish connection
-                yield "data: {\"message\": \"Connection established\", \"timestamp\": \"" + datetime.now().isoformat() + "\"}\n\n"
+                initial_update = ProgressUpdate(
+                    message="Connection established", 
+                    timestamp=datetime.now().isoformat(),
+                    phase="connection",
+                    phase_progress=0.0,
+                    overall_progress=0.0,
+                    action="connected"
+                )
+                yield f"data: {json.dumps(initial_update.dict())}\n\n"
                 
                 while True:
                     update = await queue.get()
@@ -643,7 +792,14 @@ async def get_progress(task_id: str):
                     if hasattr(update, 'dict'):
                         update_dict = update.dict()
                     else:
-                        update_dict = update
+                        # For backward compatibility with simple string messages
+                        if isinstance(update, str):
+                            update_dict = {
+                                "message": update,
+                                "timestamp": datetime.now().isoformat()
+                            }
+                        else:
+                            update_dict = update
                     
                     # Format as SSE data line with proper line endings
                     yield f"data: {json.dumps(update_dict)}\n\n"

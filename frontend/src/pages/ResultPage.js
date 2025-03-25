@@ -387,7 +387,31 @@ function ResultPage(props) {
     return (
       <Container maxWidth="lg" sx={{ py: { xs: 3, md: 4 } }}>
         {progressMessages.length > 0 ? (
-          <ProgressUpdates progressMessages={progressMessages} />
+          <Box>
+            <Paper
+              elevation={0}
+              sx={{
+                p: { xs: 2, md: 3 },
+                borderRadius: 3,
+                bgcolor: 'background.paper',
+                mb: 3
+              }}
+            >
+              <Typography variant="h4" component="h1" gutterBottom color="primary" fontWeight="500">
+                Generating Learning Path
+              </Typography>
+              <Typography variant="body1" color="text.secondary" paragraph>
+                We're creating a comprehensive learning path for "{progressMessages && progressMessages.length > 0 
+                  ? progressMessages[0].message.includes('Starting learning path generation for:') 
+                    ? progressMessages[0].message.split('Starting learning path generation for:')[1].split('in language:')[0].trim()
+                    : taskId 
+                  : taskId}". 
+                The AI is analyzing the topic, researching content, and structuring the perfect learning journey for you.
+              </Typography>
+            </Paper>
+            
+            <ProgressUpdates progressMessages={progressMessages} />
+          </Box>
         ) : (
           <LearningPathSkeleton />
         )}
