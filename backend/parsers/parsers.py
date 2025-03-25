@@ -1,5 +1,5 @@
 from langchain_core.output_parsers import PydanticOutputParser, StrOutputParser
-from models.models import SearchQueryList, ModuleList, SubmoduleList, EnhancedModuleList, TopicAnalysis, ModulePlanning
+from backend.models.models import SearchQueryList, ModuleList, SubmoduleList, EnhancedModuleList, TopicAnalysis, ModulePlanning
 
 search_queries_parser = PydanticOutputParser(pydantic_object=SearchQueryList)
 modules_parser = PydanticOutputParser(pydantic_object=ModuleList)

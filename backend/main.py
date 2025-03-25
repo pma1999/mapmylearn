@@ -3,10 +3,10 @@ import logging
 import os
 import json
 from typing import Optional, Callable, Dict, Any
-from core.graph_builder import build_graph
-from models.models import LearningPathState
-from config.log_config import setup_logging, log_debug_data, log_info_data, get_log_level
-from services.key_provider import KeyProvider, GoogleKeyProvider, PerplexityKeyProvider
+from backend.core.graph_builder import build_graph
+from backend.models.models import LearningPathState
+from backend.config.log_config import setup_logging, log_debug_data, log_info_data, get_log_level
+from backend.services.key_provider import KeyProvider, GoogleKeyProvider, PerplexityKeyProvider
 # Importa el decorador traceable de LangSmith
 from langsmith import traceable
 

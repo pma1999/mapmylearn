@@ -2,15 +2,15 @@ import asyncio
 import logging
 from typing import Dict, Any, List, Tuple
 
-from core.graph_nodes.initial_flow import execute_single_search
-from models.models import SearchQuery, EnhancedModule, Submodule, SubmoduleContent, LearningPathState
-from parsers.parsers import submodule_parser, module_queries_parser
-from services.services import get_llm, get_search_tool
+from backend.core.graph_nodes.initial_flow import execute_single_search
+from backend.models.models import SearchQuery, EnhancedModule, Submodule, SubmoduleContent, LearningPathState
+from backend.parsers.parsers import submodule_parser, module_queries_parser
+from backend.services.services import get_llm, get_search_tool
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
 # Import the extracted prompts
-from prompts.learning_path_prompts import (
+from backend.prompts.learning_path_prompts import (
     SUBMODULE_PLANNING_PROMPT,
     # Removed imports for prompts now defined inline
     # SUBMODULE_QUERY_GENERATION_PROMPT,
@@ -19,7 +19,7 @@ from prompts.learning_path_prompts import (
 # Optional: Import the prompt registry for more advanced prompt management
 # from prompts.prompt_registry import registry
 
-from core.graph_nodes.helpers import run_chain, batch_items, escape_curly_braces
+from backend.core.graph_nodes.helpers import run_chain, batch_items, escape_curly_braces
 
 async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
     """
@@ -73,7 +73,7 @@ async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
         if isinstance(result, Exception):
             logging.error(f"Error processing module {idx+1}: {str(result)}")
             # Create a fallback module with no submodules
-            from models.models import EnhancedModule
+            from backend.models.models import EnhancedModule
             processed_modules.append(EnhancedModule(
                 title=state["modules"][idx].title,
                 description=state["modules"][idx].description,
@@ -194,7 +194,7 @@ async def plan_module_submodules(state: LearningPathState, idx: int, module) -> 
         try:
             enhanced_module = module.model_copy(update={"submodules": submodules})
         except Exception:
-            from models.models import EnhancedModule
+            from backend.models.models import EnhancedModule
             enhanced_module = EnhancedModule(
                 title=module.title,
                 description=module.description,
@@ -805,7 +805,7 @@ async def generate_submodule_specific_queries(
     search_language = state.get('search_language', 'en')
     
     # Import función para escapar llaves
-    from core.graph_nodes.helpers import escape_curly_braces
+    from backend.core.graph_nodes.helpers import escape_curly_braces
     
     # Preparar contexto sobre el módulo y el submódulo
     # Escapar las llaves en todos los campos de texto
@@ -1105,7 +1105,7 @@ async def develop_submodule_specific_content(
     output_language = state.get('language', 'en')
     
     # Import escape function from helpers
-    from core.graph_nodes.helpers import escape_curly_braces
+    from backend.core.graph_nodes.helpers import escape_curly_braces
     
     # Process the single search result
     formatted_results = ""

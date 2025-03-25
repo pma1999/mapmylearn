@@ -9,7 +9,7 @@ from typing import Optional, Union, Tuple, Any
 # Import key provider for type hints but with proper import protection
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from services.key_provider import KeyProvider, GoogleKeyProvider, PerplexityKeyProvider
+    from backend.services.key_provider import KeyProvider, GoogleKeyProvider, PerplexityKeyProvider
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

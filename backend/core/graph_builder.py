@@ -1,7 +1,7 @@
 import logging
 from langgraph.graph import StateGraph, START, END
-from models.models import LearningPathState
-from core.graph_nodes import (
+from backend.models.models import LearningPathState
+from backend.core.graph_nodes import (
     generate_search_queries,
     execute_web_searches,
     create_learning_path,

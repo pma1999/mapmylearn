@@ -1,3 +1,4 @@
+import os
 import json
 import streamlit as st
 import base64
@@ -5,7 +6,7 @@ import zlib
 from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
 import logging
-from history.history_models import LearningPathHistory, LearningPathHistoryEntry
+from backend.history.history_models import LearningPathHistory, LearningPathHistoryEntry
 
 HISTORY_KEY = "learning_path_history"
 HISTORY_META_KEY = "learning_path_history_meta"

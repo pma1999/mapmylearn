@@ -22,11 +22,11 @@ startup_time = time.time()
 
 # Import the backend functionality
 from backend.main import generate_learning_path
-from services.services import validate_google_key, validate_perplexity_key
+from backend.services.services import validate_google_key, validate_perplexity_key
 
 # Import the new API key management services
-from services.key_management import ApiKeyManager
-from services.key_provider import GoogleKeyProvider, PerplexityKeyProvider
+from backend.services.key_management import ApiKeyManager
+from backend.services.key_provider import GoogleKeyProvider, PerplexityKeyProvider
 
 # Set up logging
 logging.basicConfig(

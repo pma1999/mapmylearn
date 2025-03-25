@@ -280,3 +280,46 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ---
 
 Created by [pma1999](https://github.com/pma1999) | [Report an Issue](https://github.com/pma1999/learny/issues)
+
+## Recent Code Refactoring
+
+The codebase has been refactored to organize files into a proper Python package structure. The main changes are:
+
+1. All backend code has been moved into a `backend` directory package
+2. All imports have been updated to use the new package structure (e.g., `from backend.models.models import ...`)
+3. A `setup.py` file has been added to make the package installable
+
+### Running the Application after Refactoring
+
+To run the application after the refactoring:
+
+1. Install the package in development mode:
+```
+pip install -e .
+```
+
+2. Run the server using the new script:
+```
+python run_server.py
+```
+
+Alternatively, you can run it with direct module imports:
+```
+python -m backend.api
+```
+
+## Deployment on Railway
+
+The application is configured for deployment on Railway. With the recent code refactoring that moved all backend code into a `/backend` directory, deployment configuration has been updated accordingly:
+
+- `Procfile` has been updated to run from the backend directory
+- `railway.json` has been configured to install dependencies from the backend directory
+- `requirements.txt` in the root points to the backend requirements file
+- `PYTHONPATH` is set to include the root directory so imports work correctly
+
+These changes ensure that the application will deploy correctly on Railway despite the new directory structure.
+
+When deploying:
+1. Ensure all environment variables are set in Railway's dashboard
+2. The deployment will automatically use the root-level configuration files
+3. No additional steps are needed - Railway will handle the new directory structure

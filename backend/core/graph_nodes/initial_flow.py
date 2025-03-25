@@ -4,12 +4,12 @@ from typing import Dict, Any
 from datetime import datetime
 from langchain_core.messages import HumanMessage
 
-from models.models import SearchQuery, LearningPathState
-from parsers.parsers import search_queries_parser, enhanced_modules_parser
-from services.services import get_llm, get_search_tool
+from backend.models.models import SearchQuery, LearningPathState
+from backend.parsers.parsers import search_queries_parser, enhanced_modules_parser
+from backend.services.services import get_llm, get_search_tool
 from langchain_core.prompts import ChatPromptTemplate
 
-from core.graph_nodes.helpers import run_chain, batch_items, format_search_results, escape_curly_braces
+from backend.core.graph_nodes.helpers import run_chain, batch_items, format_search_results, escape_curly_braces
 
 async def execute_single_search(query: SearchQuery, key_provider = None) -> Dict[str, Any]:
     """

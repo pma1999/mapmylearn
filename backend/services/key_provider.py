@@ -7,7 +7,7 @@ without storing them in permanent state structures.
 
 import logging
 from typing import Optional
-from services.key_management import ApiKeyManager
+from backend.services.key_management import ApiKeyManager
 
 logger = logging.getLogger(__name__)
 

@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 # Add parent directory to path to allow importing the application
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from api import app, generate_learning_path_task, LearningPathGenerationError, active_generations, active_generations_lock
+from backend.api import app, generate_learning_path_task, LearningPathGenerationError, active_generations, active_generations_lock
 
 class TestErrorHandling(unittest.TestCase):
     """Test error handling improvements in the learning path generation API."""
@@ -170,7 +170,7 @@ class TestErrorHandling(unittest.TestCase):
         # Run the handler directly
         async def run_test():
             # Import the handler here to avoid circular imports
-            from api import http_exception_handler
+            from backend.api import http_exception_handler
             
             # Call the handler with our mock objects
             response = await http_exception_handler(mock_request, test_exception)

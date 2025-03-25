@@ -8,14 +8,22 @@ Usage:
 Provides extended diagnostic options to debug the learning path generation process.
 """
 
+import logging
 import os
 import sys
 import json
-import argparse
 import asyncio
+import time
+from typing import Dict, Any, List, Optional, Callable
 from datetime import datetime
-from main import generate_learning_path
-from config.log_config import setup_logging, get_log_level
+import argparse
+import colorama
+from colorama import Fore, Style
+from dotenv import load_dotenv
+
+# Project imports
+from backend.main import generate_learning_path
+from backend.config.log_config import setup_logging, get_log_level
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Debug Learning Path Generator")
@@ -51,7 +59,7 @@ def run_diagnostic(log_file):
     print(f"\n=== RUNNING LOG DIAGNOSTIC ===")
     print(f"Analyzing file: {log_file}")
     try:
-        import diagnostic
+        import backend.diagnostic as diagnostic
         diagnostic.print_log_summary(diagnostic.load_log_file(log_file))
     except ImportError:
         print("Diagnostic module not found.")
