@@ -272,15 +272,26 @@ export const clearHistory = () => {
 // Helper functions
 
 /**
- * Generate a UUID v4
+ * Generate a UUID v4 using cryptographically secure random values
  * @returns {string} A UUID string
  */
 function generateUUID() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
+  const randomBytes = new Uint8Array(16);
+  window.crypto.getRandomValues(randomBytes);
+  
+  // Set version (4) and variant bits according to RFC 4122
+  randomBytes[6] = (randomBytes[6] & 0x0f) | 0x40;  // version 4
+  randomBytes[8] = (randomBytes[8] & 0x3f) | 0x80;  // variant 1
+  
+  // Convert to hex string with proper formatting
+  const hexValues = Array.from(randomBytes).map(b => b.toString(16).padStart(2, '0'));
+  return [
+    hexValues.slice(0, 4).join(''),
+    hexValues.slice(4, 6).join(''),
+    hexValues.slice(6, 8).join(''),
+    hexValues.slice(8, 10).join(''),
+    hexValues.slice(10, 16).join('')
+  ].join('-');
 }
 
 /**
