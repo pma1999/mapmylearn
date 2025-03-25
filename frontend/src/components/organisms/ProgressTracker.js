@@ -53,7 +53,7 @@ const PHASES = {
     icon: <PublicIcon />,
     title: 'Web Research',
     description: 'Searching the web for high-quality learning materials',
-    weight: 0.15,
+    weight: 0.10,
     color: '#26A69A', // teal
     typicalDuration: 40 // seconds
   },
@@ -61,7 +61,7 @@ const PHASES = {
     icon: <MenuBookIcon />,
     title: 'Module Creation',
     description: 'Organizing research into a logical learning path structure',
-    weight: 0.15,
+    weight: 0.10,
     color: '#66BB6A', // green
     typicalDuration: 45 // seconds
   },
@@ -69,23 +69,31 @@ const PHASES = {
     icon: <ExtensionIcon />,
     title: 'Submodule Planning',
     description: 'Breaking down modules into detailed learning components',
-    weight: 0.15,
+    weight: 0.10,
     color: '#FFA726', // orange
     typicalDuration: 45 // seconds
+  },
+  submodule_research: {
+    icon: <SearchIcon />,
+    title: 'Targeted Research',
+    description: 'Researching specific content for each submodule',
+    weight: 0.15,
+    color: '#42A5F5', // blue
+    typicalDuration: 60 // seconds
   },
   content_development: {
     icon: <CreateIcon />,
     title: 'Content Development',
     description: 'Creating comprehensive content for each learning component',
-    weight: 0.35,
+    weight: 0.30,
     color: '#EF5350', // red
-    typicalDuration: 120 // seconds
+    typicalDuration: 90 // seconds
   },
   final_assembly: {
     icon: <AutoAwesomeMotionIcon />,
     title: 'Final Assembly',
     description: 'Assembling all components into your complete learning path',
-    weight: 0.05,
+    weight: 0.10,
     color: '#8E24AA', // purple
     typicalDuration: 20 // seconds
   },

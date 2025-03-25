@@ -264,8 +264,8 @@ async def initialize_submodule_processing(state: LearningPathState) -> Dict[str,
     progress_callback = state.get("progress_callback")
     if progress_callback:
         await progress_callback(
-            "Preparing to enhance modules with detailed content using LangGraph parallel processing...",
-            phase="content_development",
+            "Preparing to enhance modules with targeted research and content development...",
+            phase="submodule_research",
             phase_progress=0.0,
             overall_progress=0.6,
             action="started"
@@ -381,10 +381,10 @@ async def initialize_submodule_processing(state: LearningPathState) -> Dict[str,
     if progress_callback:
         await progress_callback(
             f"Preparing to process {total_submodules} submodules in {total_batches} batches "
-            f"with {submodule_parallel_count} submodules in parallel using LangGraph pattern",
-            phase="content_development",
+            f"with {submodule_parallel_count} submodules in parallel",
+            phase="submodule_research",
             phase_progress=0.1,
-            overall_progress=0.62,
+            overall_progress=0.6,
             preview_data=preview_data,
             action="processing"
         )
@@ -417,6 +417,8 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
     progress_callback = state.get("progress_callback")
     sub_batches = state.get("submodule_batches") or []
     current_index = state.get("current_submodule_batch_index", 0)
+    batch_progress = 0
+    overall_progress = 0.6
     
     logging.info(f"Processing submodule batch {current_index+1}/{len(sub_batches)} with parallelism of {submodule_parallel_count}")
     
@@ -424,12 +426,12 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
         # Calculate overall progress based on batch index and total batches
         total_batches = len(sub_batches)
         batch_progress = current_index / max(1, total_batches)
-        # Content development is from 60% to 95% of overall progress
-        overall_progress = 0.62 + (batch_progress * 0.33)
+        # Research phase is from 60% to 70% of overall progress
+        overall_progress = 0.6 + (batch_progress * 0.1)
         
         await progress_callback(
             f"Processing batch {current_index+1} of {len(sub_batches)} with {submodule_parallel_count} parallel tasks...",
-            phase="content_development",
+            phase="submodule_research",
             phase_progress=batch_progress,
             overall_progress=overall_progress,
             action="processing"
@@ -442,149 +444,120 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
     
     # Get the current batch to process
     current_batch = sub_batches[current_index]
+    
+    # Get the enhanced modules
     enhanced_modules = state.get("enhanced_modules", [])
+    if not enhanced_modules:
+        logging.error("No enhanced modules found in state")
+        return {"steps": ["Error: No enhanced modules found"]}
+    
+    # Get submodules tracking dictionary
     submodules_in_process = state.get("submodules_in_process", {})
+    if submodules_in_process is None:
+        submodules_in_process = {}
     
-    # Create tasks for parallel processing
+    # Prepare tasks for batch processing if we have items in the current batch
     tasks = []
-    task_to_submodule_map = []  # Track which task corresponds to which submodule
+    success_count = 0
+    error_count = 0
+    processed_submodules = []
+    next_index = current_index + 1
     
-    # Setup tasks for all submodules in the current batch
-    for module_id, sub_id in current_batch:
-        key = (module_id, sub_id)
-        
-        # Skip already processed submodules
-        if key in submodules_in_process and submodules_in_process[key].get("status") == "completed":
-            continue
-            
-        # Get the module and submodule
-        if module_id < len(enhanced_modules) and sub_id < len(enhanced_modules[module_id].submodules):
-            module = enhanced_modules[module_id]
-            submodule = module.submodules[sub_id]
-            
-            # Create a task for processing this submodule
-            task = process_single_submodule(state, module_id, sub_id, module, submodule)
-            tasks.append(task)
-            task_to_submodule_map.append(key)
-            
-            # Log for debugging
-            logging.debug(f"Created task for submodule {module_id}.{sub_id}: {submodule.title}")
-        else:
-            logging.warning(f"Invalid submodule indices: module {module_id}, submodule {sub_id}")
-    
-    # Process all submodules in this batch using gather for true parallelism
-    # following LangGraph's map-reduce pattern
-    if tasks:
-        if progress_callback:
-            submodules_in_batch = []
-            for module_id, sub_id in current_batch:
-                if module_id < len(enhanced_modules) and sub_id < len(enhanced_modules[module_id].submodules):
-                    module = enhanced_modules[module_id]
+    if current_batch:
+        # Create tasks for parallel processing
+        for module_id, sub_id in current_batch:
+            # Validate indices
+            if module_id < len(enhanced_modules):
+                module = enhanced_modules[module_id]
+                if sub_id < len(module.submodules):
                     submodule = module.submodules[sub_id]
-                    submodules_in_batch.append({
-                        "module_title": module.title,
-                        "submodule_title": submodule.title,
-                        "module_id": module_id,
-                        "sub_id": sub_id
-                    })
-            
-            await progress_callback(
-                f"Processing {len(tasks)} submodules in parallel using LangGraph pattern...",
-                phase="content_development",
-                phase_progress=batch_progress + (0.5/total_batches),  # Small increment
-                overall_progress=overall_progress + 0.01,
-                preview_data={"current_batch": submodules_in_batch},
-                action="processing"
-            )
+                    # Only process if not already processed
+                    key = (module_id, sub_id)
+                    if key not in submodules_in_process or submodules_in_process[key].get("status") not in ["completed", "processing"]:
+                        # Mark as processing
+                        submodules_in_process[key] = {"status": "processing"}
+                        # Add to tasks
+                        tasks.append(process_single_submodule(state, module_id, sub_id, module, submodule))
         
-        try:
-            # Start time for measuring performance
-            import time
-            start_time = time.time()
-            
-            # Execute all tasks using gather for true parallelism (the "map" phase)
-            results = await asyncio.gather(*tasks, return_exceptions=False)
-            
-            # Calculate processing time
-            elapsed_time = time.time() - start_time
-            per_submodule_time = elapsed_time / len(tasks) if tasks else 0
-            logging.info(f"Completed batch in {elapsed_time:.2f} seconds ({per_submodule_time:.2f}s per submodule with {len(tasks)} in parallel)")
-            
-            # Process results (the "reduce" phase)
-            # This combines the results from parallel execution back into the main state
-            success_count = 0
-            error_count = 0
-            
-            # Update the submodules_in_process dictionary with the results
-            processed_submodules = []
-            for result in results:
-                if result.get("status") == "completed":
-                    module_id = result.get("module_id")
-                    sub_id = result.get("sub_id")
-                    key = (module_id, sub_id)
-                    submodules_in_process[key] = result
-                    success_count += 1
-                    
-                    # Add to processed submodules for progress display
-                    if module_id < len(enhanced_modules) and sub_id < len(enhanced_modules[module_id].submodules):
-                        module = enhanced_modules[module_id]
-                        submodule = module.submodules[sub_id]
-                        processed_submodules.append({
-                            "module_title": module.title,
-                            "submodule_title": submodule.title,
-                            "content_preview": result.get("content", "")[:150] + "..." if result.get("content") and len(result.get("content")) > 150 else result.get("content", ""),
-                            "module_id": module_id,
-                            "sub_id": sub_id
-                        })
-                        
-                elif result.get("status") == "error":
-                    module_id = result.get("module_id")
-                    sub_id = result.get("sub_id")
-                    key = (module_id, sub_id)
-                    submodules_in_process[key] = result
-                    error_message = f"Error in submodule {module_id}.{sub_id}: {result.get('error', 'Unknown error')}"
-                    logging.error(error_message)
-                    error_count += 1
-            
-            if progress_callback:
-                # Calculate new overall progress
-                batch_progress = (current_index + 1) / max(1, total_batches)
-                overall_progress = 0.62 + (batch_progress * 0.33)
+        # If we have tasks, process them with asyncio.gather
+        if tasks:
+            try:
+                # Start time for performance tracking
+                import time
+                start_time = time.time()
                 
+                # Process all tasks concurrently with gather
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                # Update the tracking dictionary with results
+                for result in results:
+                    if isinstance(result, Exception):
+                        error_count += 1
+                        logging.error(f"Task error: {str(result)}")
+                        continue
+                    
+                    if isinstance(result, dict):
+                        module_id = result.get("module_id")
+                        sub_id = result.get("sub_id")
+                        status = result.get("status")
+                        
+                        if module_id is not None and sub_id is not None:
+                            key = (module_id, sub_id)
+                            submodules_in_process[key] = result
+                            
+                            if status == "completed":
+                                success_count += 1
+                                # Add to processed preview for frontend
+                                if module_id < len(enhanced_modules):
+                                    processed_submodules.append({
+                                        "module_title": enhanced_modules[module_id].title,
+                                        "submodule_title": enhanced_modules[module_id].submodules[sub_id].title,
+                                        "status": "completed"
+                                    })
+                            elif status == "error":
+                                error_count += 1
+                
+                # Calculate elapsed time
+                elapsed_time = time.time() - start_time
+                
+                # Update batch progress for next phase
+                batch_progress = (current_index + 1) / max(1, total_batches)
+                # Content development is from 70% to 95% of overall progress
+                overall_progress = 0.7 + (batch_progress * 0.25)
+                
+                if progress_callback:
+                    # Calculate new overall progress
+                    await progress_callback(
+                        f"Completed batch {current_index+1}/{len(sub_batches)}: "
+                        f"{success_count} successful, {error_count} failed in {elapsed_time:.2f} seconds",
+                        phase="content_development",
+                        phase_progress=batch_progress,
+                        overall_progress=overall_progress,
+                        preview_data={"processed_submodules": processed_submodules},
+                        action="processing"
+                    )
+                    
+                logging.info(f"Batch {current_index+1} results: {success_count} successful, {error_count} failed")
+            except Exception as e:
+                logging.error(f"Error in processing submodule batch: {str(e)}")
+                if progress_callback:
+                    await progress_callback(
+                        f"Error processing batch: {str(e)}",
+                        phase="content_development",
+                        phase_progress=batch_progress,
+                        overall_progress=overall_progress,
+                        action="error"
+                    )
+        else:
+            logging.info(f"No tasks to process in batch {current_index+1}")
+            if progress_callback:
                 await progress_callback(
-                    f"Completed batch {current_index+1}/{len(sub_batches)}: "
-                    f"{success_count} successful, {error_count} failed in {elapsed_time:.2f} seconds",
+                    f"No tasks to process in batch {current_index+1}",
                     phase="content_development",
                     phase_progress=batch_progress,
                     overall_progress=overall_progress,
-                    preview_data={"processed_submodules": processed_submodules},
                     action="processing"
                 )
-                
-            logging.info(f"Batch {current_index+1} results: {success_count} successful, {error_count} failed")
-        except Exception as e:
-            logging.error(f"Error in processing submodule batch: {str(e)}")
-            if progress_callback:
-                await progress_callback(
-                    f"Error processing batch: {str(e)}",
-                    phase="content_development",
-                    phase_progress=batch_progress,
-                    overall_progress=overall_progress,
-                    action="error"
-                )
-    else:
-        logging.info(f"No tasks to process in batch {current_index+1}")
-        if progress_callback:
-            await progress_callback(
-                f"No tasks to process in batch {current_index+1}",
-                phase="content_development",
-                phase_progress=batch_progress,
-                overall_progress=overall_progress,
-                action="processing"
-            )
-    
-    # Move to the next batch
-    next_index = current_index + 1
     
     # Update the list of developed submodules based on completed tasks
     # This is part of the "reduce" phase from the map-reduce pattern
@@ -633,10 +606,10 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
                 action="processing"
             )
     
-    # Return updated state
+    # Return the updated state with next batch index
     return {
-        "submodules_in_process": submodules_in_process,
         "current_submodule_batch_index": next_index,
+        "submodules_in_process": submodules_in_process,
         "developed_submodules": developed_submodules,
         "steps": [f"Processed submodule batch {current_index+1} with {len(tasks)} parallel tasks using LangGraph pattern"]
     }
@@ -679,7 +652,13 @@ async def process_single_submodule(
         
         # Update progress if callback is available
         if progress_callback:
-            await progress_callback(f"Processing: Module {module_id+1} > Submodule {sub_id+1}: {submodule.title}")
+            await progress_callback(
+                f"Processing: Module {module_id+1} > Submodule {sub_id+1}: {submodule.title}",
+                phase="submodule_research",
+                phase_progress=0.1,
+                overall_progress=0.6,
+                action="processing"
+            )
         
         # STEP 1: Generate submodule-specific queries
         step_start = time.time()
@@ -691,7 +670,11 @@ async def process_single_submodule(
         
         if progress_callback:
             await progress_callback(
-                f"Generated search query for {module.title} > {submodule.title}"
+                f"Generated search query for {module.title} > {submodule.title}",
+                phase="submodule_research",
+                phase_progress=0.3,
+                overall_progress=0.62,
+                action="processing"
             )
         
         # STEP 2: Execute search for each query in parallel
@@ -704,11 +687,26 @@ async def process_single_submodule(
         
         if progress_callback:
             await progress_callback(
-                f"Completed research for {module.title} > {submodule.title}"
+                f"Completed research for {module.title} > {submodule.title}",
+                phase="submodule_research",
+                phase_progress=0.8,
+                overall_progress=0.65,
+                action="completed"
             )
         
         # STEP 3: Develop submodule content based on search results
         step_start = time.time()
+        
+        # Transition to content development phase
+        if progress_callback:
+            await progress_callback(
+                f"Developing content for {module.title} > {submodule.title}",
+                phase="content_development",
+                phase_progress=0.2,
+                overall_progress=0.67,
+                action="processing"
+            )
+            
         submodule_content = await develop_submodule_specific_content(
             state, module_id, sub_id, module, submodule, submodule_search_queries, submodule_search_results
         )
@@ -724,7 +722,11 @@ async def process_single_submodule(
         
         if progress_callback:
             await progress_callback(
-                f"Completed development for {module.title} > {submodule.title} in {total_time:.2f}s"
+                f"Completed development for {module.title} > {submodule.title} in {total_time:.2f}s",
+                phase="content_development",
+                phase_progress=0.5,
+                overall_progress=0.7,
+                action="completed"
             )
         
         # Return the completed submodule data with module/submodule identifiers for proper "reduce" phase
@@ -745,7 +747,13 @@ async def process_single_submodule(
     except Exception as e:
         logger.exception(f"Error processing submodule {sub_id+1} of module {module_id+1}: {str(e)}")
         if progress_callback:
-            await progress_callback(f"Error in {module.title} > {submodule.title}: {str(e)}")
+            await progress_callback(
+                f"Error in {module.title} > {submodule.title}: {str(e)}",
+                phase="content_development",
+                phase_progress=0.3,
+                overall_progress=0.65,
+                action="error"
+            )
         
         # Return error status with identifiers to maintain batch processing integrity
         return {
@@ -780,6 +788,17 @@ async def generate_submodule_specific_queries(
     
     # Get the Google key provider from state
     google_key_provider = state.get("google_key_provider")
+    
+    # Get progress callback
+    progress_callback = state.get("progress_callback")
+    if progress_callback:
+        await progress_callback(
+            f"Generating targeted search query for {module.title} > {submodule.title}",
+            phase="submodule_research",
+            phase_progress=0.2,
+            overall_progress=0.61,
+            action="processing"
+        )
     
     # Get language information from state
     output_language = state.get('language', 'en')
@@ -994,6 +1013,17 @@ async def execute_submodule_specific_searches(
         A list containing a single search result dictionary.
     """
     logging.info(f"Executing search for submodule {sub_id+1} of module {module_id+1}: {submodule.title}")
+    
+    progress_callback = state.get("progress_callback")
+    if progress_callback:
+        await progress_callback(
+            f"Searching for information on {module.title} > {submodule.title}",
+            phase="submodule_research",
+            phase_progress=0.5,
+            overall_progress=0.63,
+            action="processing"
+        )
+    
     if not sub_queries or len(sub_queries) == 0:
         logging.warning("No search query available for submodule")
         return []
@@ -1005,9 +1035,29 @@ async def execute_submodule_specific_searches(
         # Execute a single search
         result = await execute_single_search_for_submodule(query, key_provider=state.get("pplx_key_provider"))
         logging.info(f"Completed search for submodule {sub_id+1} with query: {query.keywords}")
+        
+        if progress_callback:
+            await progress_callback(
+                f"Retrieved search results for {module.title} > {submodule.title}",
+                phase="submodule_research",
+                phase_progress=0.7,
+                overall_progress=0.64,
+                action="processing"
+            )
+        
         return [result]
     except Exception as e:
         logging.error(f"Error executing submodule search: {str(e)}")
+        
+        if progress_callback:
+            await progress_callback(
+                f"Error searching for {module.title} > {submodule.title}: {str(e)}",
+                phase="submodule_research",
+                phase_progress=0.5,
+                overall_progress=0.63,
+                action="error"
+            )
+        
         return []
 
 async def develop_submodule_specific_content(
@@ -1036,6 +1086,17 @@ async def develop_submodule_specific_content(
     """
     logger = logging.getLogger("learning_path.content_developer")
     logger.info(f"Developing content for submodule {sub_id+1} of module {module_id+1}: {submodule.title}")
+    
+    progress_callback = state.get("progress_callback")
+    if progress_callback:
+        await progress_callback(
+            f"Creating educational content for {module.title} > {submodule.title}",
+            phase="content_development",
+            phase_progress=0.4,
+            overall_progress=0.75,
+            action="processing"
+        )
+        
     if not sub_search_results:
         logger.warning("No search results available for content development")
         return "No content generated due to missing search results."
