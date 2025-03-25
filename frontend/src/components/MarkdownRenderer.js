@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
+import { sanitizeContent } from '../utils/sanitizer';
 
 /**
  * StyledMarkdown component for rendering markdown content with proper styling
@@ -11,16 +12,21 @@ import remarkGfm from 'remark-gfm';
  */
 const MarkdownRenderer = ({ children }) => {
   // Process the content to handle "```markdown\n" at the beginning
+  // and sanitize the content to prevent XSS attacks
   const processedContent = useMemo(() => {
     if (!children) return '';
     
     // Check if content starts with ```markdown\n and remove it if it does
     // This pattern specifically targets only the beginning of the content
     const content = String(children);
-    if (content.startsWith('```markdown\n')) {
-      return content.replace(/^```markdown\n/, '');
+    let processed = content;
+    
+    if (processed.startsWith('```markdown\n')) {
+      processed = processed.replace(/^```markdown\n/, '');
     }
-    return content;
+    
+    // Sanitize the content with our custom sanitizer
+    return sanitizeContent(processed);
   }, [children]);
 
   return (
@@ -141,6 +147,10 @@ const MarkdownRenderer = ({ children }) => {
     }}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        // Disable raw HTML in markdown
+        rehypePlugins={[]}
+        disallowedElements={['script', 'style', 'iframe']}
+        skipHtml={true}
         components={{
           code({ node, inline, className, children, ...props }) {
             const match = /language-(\w+)/.exec(className || '');

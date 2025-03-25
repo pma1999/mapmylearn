@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
+import { sanitizeContent } from '../utils/sanitizer';
 import {
   Typography,
   Box,
@@ -54,6 +55,8 @@ import StorageIcon from '@mui/icons-material/Storage';
 
 import MarkdownRenderer from '../components/MarkdownRenderer';
 import * as api from '../services/api';
+
+// Helper function to sanitize content is now imported from sanitizer.js
 
 // Helper functions
 const formatDate = (dateString) => {

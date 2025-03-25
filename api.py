@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
+from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel, Field
 import asyncio
 import uvicorn
@@ -45,6 +46,42 @@ app = FastAPI(
     description="API for Learny Learning Path Generator",
     version="0.1.0"
 )
+
+# --------------------------------------------------------------------------------
+# Security middleware to add Content Security Policy headers
+# --------------------------------------------------------------------------------
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        
+        # Content Security Policy to prevent XSS
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.goin.cloud; "
+            "img-src 'self' data: https: http:; "
+            "font-src 'self' https://fonts.gstatic.com https://cdn.goin.cloud; "
+            "connect-src 'self'; "
+            "object-src 'none'; "
+            "frame-src 'none'; "
+            "frame-ancestors 'none'; "
+            "form-action 'self'; "
+            "base-uri 'self'; "
+            "block-all-mixed-content; "
+            "upgrade-insecure-requests; "
+            "script-src-attr 'none';"
+        )
+        
+        # Additional security headers
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        
+        return response
+
+# Add the security headers middleware
+app.add_middleware(SecurityHeadersMiddleware)
 
 # --------------------------------------------------------------------------------
 # Global exception handler middleware
