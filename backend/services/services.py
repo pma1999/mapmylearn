@@ -56,6 +56,7 @@ async def get_llm(key_provider=None):
             model="gemini-2.0-flash",
             temperature=0.2,
             google_api_key=google_api_key,
+            max_output_tokens=8192,
         )
     except Exception as e:
         logger.error(f"Error initializing ChatGoogleGenerativeAI: {str(e)}")
@@ -102,6 +103,7 @@ async def get_search_tool(key_provider=None):
         return ChatPerplexity(
             temperature=0.2,
             model="sonar",
+            max_tokens=8000,  # Set to 8000 for normal operation
             pplx_api_key=perplexity_api_key
         )
     except Exception as e:
@@ -174,7 +176,7 @@ def validate_perplexity_key(api_key):
     
     try:
         # Minimal test to validate key functionality
-        model = ChatPerplexity(temperature=0, model="sonar", pplx_api_key=api_key)
+        model = ChatPerplexity(temperature=0, model="sonar", max_tokens=1, pplx_api_key=api_key)  # Minimum tokens for validation
         model.invoke("test")
         return True, None
     except Exception as e:

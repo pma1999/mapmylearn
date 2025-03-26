@@ -84,55 +84,59 @@ async def generate_search_queries(state: LearningPathState) -> Dict[str, Any]:
     search_language = state.get('search_language', 'en')
     
     prompt_text = """
-# EXPERT TEACHING ASSISTANT INSTRUCTIONS
+# EXPERT LEARNING PATH ARCHITECT INSTRUCTIONS
 
-Your task is to analyze a learning topic and generate optimal search queries to gather comprehensive information.
+Your task is to design optimal search queries that will retrieve information specifically for structuring a comprehensive learning path on "{user_topic}".
+
+## LEARNING PATH DESIGN FOCUS
+
+These searches are NOT for content development, but specifically for determining the optimal STRUCTURE and ORGANIZATION of the learning path.
 
 ## TOPIC ANALYSIS
 
-Please analyze the topic "{user_topic}" thoroughly:
+Analyze the topic "{user_topic}" to identify key structural components:
 
-### CORE CONCEPT IDENTIFICATION
-- Primary concepts that form the foundation
-- Supporting concepts necessary for understanding
-- Advanced concepts that build on the basics
-- Practical applications and implications
-- Tools, methodologies, or frameworks involved
+### STRUCTURAL ELEMENTS
+- Essential knowledge domains and sub-domains
+- Natural progression and prerequisites 
+- Critical learning milestones
+- Logical teaching sequence
+- Different skill/proficiency levels (beginner to expert)
 
-### KNOWLEDGE STRUCTURE MAPPING
-- Fundamental principles and theories
-- Key relationships and dependencies
-- Historical or contextual elements
-- Current state and developments
-- Future implications or trends
+### EDUCATIONAL FRAMEWORK
+- Pedagogical approaches specific to this topic
+- Standard curriculum structures in this field
+- Expert-recommended learning sequences
+- Typical module organization in courses/tutorials
+- Academic vs practical learning progressions
 
-### COMPLEXITY LAYERS
-- Basic principles and definitions
-- Intermediate concepts and applications
-- Advanced theories and implementations
-- Expert-level considerations
-- Cross-domain connections
+### SCOPE AND BOUNDARIES
+- Core vs peripheral concepts
+- Essential vs optional topics
+- Foundational prerequisites
+- Advanced specializations
+- Interdisciplinary connections
 
 ## LANGUAGE INSTRUCTIONS
 - Generate all of your analysis and responses in {output_language}.
-- For search queries, use {search_language} to maximize the quality and quantity of information retrieved.
+- For search queries, use {search_language} to maximize retrieving high-quality curriculum design information.
 
 ## SEARCH STRATEGY
 
-Based on this analysis, generate 5 search queries that will:
-1. Cover different critical aspects of the topic
-2. Address various complexity levels
-3. Explore diverse perspectives and applications
-4. Ensure comprehensive understanding
-5. Target high-quality educational content
+Design EXACTLY 5 search queries that will:
+1. Retrieve information about optimal learning path structures for this topic
+2. Discover how experts organize curriculum on this subject
+3. Identify standard modules and their sequencing
+4. Find information about pedagogical progressions specific to this topic
+5. Uncover recommended learning sequences and prerequisites
 
 For each search query:
-- Make it specific and targeted
-- Explain why this search is essential for understanding the topic
-- Ensure it addresses a different aspect of the topic
-- Design it to return high-quality educational content
+- Make it specific to retrieving STRUCTURAL and ORGANIZATIONAL information
+- Focus on curriculum design, learning path structure, and module organization
+- Target educational resources that reveal how knowledge in this domain is best structured
+- Explain precisely how this query will help determine the optimal modules and their sequence
 
-Your response should be exactly 5 search queries, each with its detailed rationale.
+Your response should be exactly 5 search queries, each with a detailed rationale explaining how it contributes to creating the perfect learning path STRUCTURE.
 
 {format_instructions}
 """
