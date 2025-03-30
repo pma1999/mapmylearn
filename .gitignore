@@ -15,7 +15,6 @@ venv/
 ENV/
 env/
 
-*.db
 
 # Streamlit
 .streamlit/
@@ -57,4 +56,4 @@ yarn-error.log*
 
 # Application data
 learning_path_history.json
-*.db
+learni.db
