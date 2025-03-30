@@ -24,7 +24,7 @@ from backend.routes.auth import router as auth_router
 from backend.routes.learning_paths import router as learning_paths_router
 
 # Import rate limiter
-from utils.rate_limiter import rate_limiting_middleware
+from backend.utils.rate_limiter import rate_limiting_middleware
 
 # Initialize startup time for health check and uptime reporting
 startup_time = time.time()
