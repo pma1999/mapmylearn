@@ -10,6 +10,7 @@ from backend.config.database import get_db
 from backend.models.auth_models import User, Session as UserSession
 from backend.schemas.auth_schemas import UserCreate, UserLogin, UserResponse, Token
 from backend.utils.auth import get_password_hash, verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
+from backend.utils.auth_middleware import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -211,4 +212,13 @@ async def logout(response: Response, request: Request, db: Session = Depends(get
         # Clear refresh token cookie
         response.delete_cookie(key="refresh_token", path="/")
     
-    return {"detail": "Successfully logged out"} 
+    return {"detail": "Successfully logged out"}
+
+
+@router.get("/status")
+async def auth_status(current_user: User = Depends(get_current_user)):
+    """
+    Check if the current user's authentication token is valid.
+    Returns the user's information if authenticated.
+    """
+    return current_user 
