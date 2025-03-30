@@ -148,9 +148,10 @@ function ResultPage(props) {
           // Load from task API
           const response = await getLearningPath(taskId);
           
-          if (response.status === 'completed' && response.learning_path) {
-            setLearningPath(response.learning_path);
-            setSavedToHistory(true);
+          if (response.status === 'completed' && response.result) {
+            // Fix: Use response.result instead of response.learning_path
+            setLearningPath(response.result);
+            setSavedToHistory(false);
             setLoading(false);
             
             // Close event source if it's open
@@ -162,9 +163,11 @@ function ResultPage(props) {
             // Task failed
             setError(response.error?.message || 'Learning path generation failed');
             setLoading(false);
-          } else if (response.status === 'pending' || response.status === 'in_progress') {
+          } else if (response.status === 'running' || response.status === 'pending' || response.status === 'in_progress') {
             // Start listening for updates since task is still in progress
             setupProgressUpdates();
+            // Start polling for completion
+            startPollingForResult();
           }
         }
       } catch (err) {
@@ -185,8 +188,58 @@ function ResultPage(props) {
         progressEventSourceRef.current.close();
         progressEventSourceRef.current = null;
       }
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
     };
-  }, [taskId, entryId, isFromHistory, getLearningPath, getHistoryEntry]);
+  }, [taskId, entryId, isFromHistory]);
+
+  // Add a polling reference
+  const pollingIntervalRef = useRef(null);
+
+  // Add polling function to check for completed results
+  const startPollingForResult = () => {
+    // Clear any existing polling
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+    
+    // Poll every 3 seconds
+    pollingIntervalRef.current = setInterval(async () => {
+      try {
+        const response = await getLearningPath(taskId);
+        
+        if (response.status === 'completed' && response.result) {
+          // Successfully completed
+          setLearningPath(response.result);
+          setSavedToHistory(false);
+          setLoading(false);
+          
+          // Clear polling since we got the result
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+          
+          // Close event source
+          if (progressEventSourceRef.current) {
+            progressEventSourceRef.current.close();
+            progressEventSourceRef.current = null;
+          }
+        } else if (response.status === 'failed') {
+          // Task failed
+          setError(response.error?.message || 'Learning path generation failed');
+          setLoading(false);
+          
+          // Clear polling since we have a final state
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+      } catch (err) {
+        console.error('Error polling for learning path result:', err);
+        // Don't stop polling on error - keep trying
+      }
+    }, 3000);
+  };
 
   const setupProgressUpdates = () => {
     try {

@@ -94,8 +94,35 @@ export const initAuthFromStorage = () => {
     }
   } catch (error) {
     console.error('Error initializing auth token:', error);
+    
+    // Clear any invalid token data
+    localStorage.removeItem('auth');
   }
   return false;
+};
+
+// Add a function to check if the current auth token is valid
+export const checkAuthStatus = async () => {
+  try {
+    if (!authToken) {
+      return { isAuthenticated: false };
+    }
+    
+    // Make a lightweight request to validate the token
+    const response = await api.get('/auth/status');
+    return { isAuthenticated: true, user: response.data };
+  } catch (error) {
+    console.error('Auth status check failed:', error);
+    
+    // If unauthorized, clear the invalid token
+    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+      console.warn('Token validation failed, clearing auth data');
+      clearAuthToken();
+      localStorage.removeItem('auth');
+    }
+    
+    return { isAuthenticated: false, error };
+  }
 };
 
 // Initialize auth token from storage on import
@@ -105,52 +132,87 @@ initAuthFromStorage();
 export const getProgressUpdates = (taskId, onMessage, onError, onComplete) => {
   // Create the correct URL using the same API_URL base
   const url = new URL(`/api/progress/${taskId}`, API_URL);
+  let retryCount = 0;
+  const MAX_RETRIES = 3;
+  let eventSource = null;
   
-  try {
-    const eventSource = new EventSource(url.toString());
-    
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        
-        if (data.complete) {
-          eventSource.close();
-          if (onComplete) onComplete();
-          return;
-        }
-        
-        // Check for error message format
-        if (data.message && data.message.startsWith("Error:")) {
-          // This is an error message from the server
-          if (onError) {
-            onError(new Error(data.message.replace("Error: ", "")));
+  // Function to create and connect the EventSource
+  const connect = () => {
+    try {
+      console.log(`Connecting to SSE progress updates for task ${taskId}`);
+      eventSource = new EventSource(url.toString());
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.complete) {
+            console.log(`SSE connection completed for task ${taskId}`);
+            eventSource.close();
+            if (onComplete) onComplete();
+            return;
           }
-          return;
+          
+          // Check for error message format
+          if (data.message && data.message.startsWith("Error:")) {
+            // This is an error message from the server
+            if (onError) {
+              onError(new Error(data.message.replace("Error: ", "")));
+            }
+            return;
+          }
+          
+          // Reset retry count on successful messages
+          retryCount = 0;
+          
+          if (onMessage) onMessage(data);
+        } catch (err) {
+          console.error('Error parsing SSE message:', err);
+          if (onError) onError(err);
         }
+      };
+      
+      eventSource.onerror = (error) => {
+        console.error('SSE Error:', error);
         
-        if (onMessage) onMessage(data);
-      } catch (err) {
-        console.error('Error parsing SSE message:', err);
-        if (onError) onError(err);
+        // Close the current connection
+        eventSource.close();
+        
+        // Try to reconnect if we haven't exceeded max retries
+        if (retryCount < MAX_RETRIES) {
+          retryCount++;
+          console.log(`Retrying SSE connection (attempt ${retryCount}/${MAX_RETRIES})...`);
+          // Wait 1 second before reconnecting
+          setTimeout(connect, 1000);
+        } else {
+          console.error(`Failed to connect to SSE after ${MAX_RETRIES} attempts`);
+          if (onError) onError(new Error('Connection to progress updates was lost. Please check your network connection.'));
+        }
+      };
+      
+      // Add onopen handler to track successful connections
+      eventSource.onopen = () => {
+        console.log(`SSE connection opened successfully for task ${taskId}`);
+        // Reset retry count on successful connection
+        retryCount = 0;
+      };
+    } catch (initError) {
+      console.error('Error initializing SSE connection:', initError);
+      if (onError) onError(new Error('Failed to connect to progress updates. Please try refreshing the page.'));
+    }
+  };
+  
+  // Start the connection
+  connect();
+  
+  return {
+    close: () => {
+      if (eventSource) {
+        console.log(`Manually closing SSE connection for task ${taskId}`);
+        eventSource.close();
       }
-    };
-    
-    eventSource.onerror = (error) => {
-      console.error('SSE Error:', error);
-      eventSource.close();
-      if (onError) onError(new Error('Connection to progress updates was lost. Please check your network connection.'));
-    };
-    
-    return {
-      close: () => eventSource.close(),
-    };
-  } catch (initError) {
-    console.error('Error initializing SSE connection:', initError);
-    if (onError) onError(new Error('Failed to connect to progress updates. Please try refreshing the page.'));
-    return {
-      close: () => {}, // Dummy close function for consistent API
-    };
-  }
+    },
+  };
 };
 
 // Delete a learning path task
@@ -457,6 +519,14 @@ export const getLearningPath = async (taskId) => {
       throw error;
     }
     
+    // Handle different API response formats - some endpoints use 'result', others use 'learning_path'
+    if (response.data.status === 'completed') {
+      // Normalize the response to always have 'result' field
+      if (response.data.learning_path && !response.data.result) {
+        response.data.result = response.data.learning_path;
+      }
+    }
+    
     return response.data;
   } catch (error) {
     console.error('Error fetching learning path:', error);
@@ -469,22 +539,49 @@ export const getHistoryPreview = async (sortBy = 'creation_date', filterSource =
   try {
     // If no auth token is present, fall back to local storage
     if (!authToken) {
+      console.log('No auth token present, using local storage for history');
       return localHistoryService.getHistoryPreview(sortBy, filterSource, searchTerm);
     }
     
-    // Build query parameters
-    const params = new URLSearchParams();
-    params.append('sort_by', sortBy);
-    if (filterSource) params.append('source', filterSource);
-    if (searchTerm) params.append('search', searchTerm);
-    
-    const response = await api.get(`/learning-paths?${params.toString()}`);
-    return response.data;
+    try {
+      // Build query parameters
+      const params = new URLSearchParams();
+      params.append('sort_by', sortBy);
+      if (filterSource) params.append('source', filterSource);
+      if (searchTerm) params.append('search', searchTerm);
+      
+      const response = await api.get(`/learning-paths?${params.toString()}`);
+      
+      // Ensure response.data has valid entries property
+      if (!response.data || !response.data.entries) {
+        console.warn('API response missing entries property, using empty array');
+        return { entries: [], total: 0 };
+      }
+      
+      return response.data;
+    } catch (serverError) {
+      console.error('Server error fetching history:', serverError);
+      
+      // If we get a 401/403 error, clear the invalid auth token
+      if (serverError.response && (serverError.response.status === 401 || serverError.response.status === 403)) {
+        console.warn('Authentication error (401/403), clearing token and falling back to local storage');
+        clearAuthToken();
+      }
+      
+      // Fall back to local storage
+      return localHistoryService.getHistoryPreview(sortBy, filterSource, searchTerm);
+    }
   } catch (error) {
     console.error('Error fetching history preview:', error);
     
-    // Fall back to local history if server fails
-    return localHistoryService.getHistoryPreview(sortBy, filterSource, searchTerm);
+    // Ensure we always return a valid data structure
+    try {
+      return localHistoryService.getHistoryPreview(sortBy, filterSource, searchTerm);
+    } catch (localError) {
+      console.error('Error fetching from local history:', localError);
+      // Return a valid empty result structure as last resort
+      return { entries: [], total: 0 };
+    }
   }
 };
 
@@ -512,11 +609,19 @@ export const getHistoryEntry = async (entryId) => {
         return { entry: response.data };
       } catch (serverError) {
         console.error('Server error fetching history entry:', serverError);
-        // Fall back to local storage if server fails
+        
+        // If we get a 401/403 error, clear the invalid auth token
+        if (serverError.response && (serverError.response.status === 401 || serverError.response.status === 403)) {
+          console.warn('Authentication error (401/403), clearing token and falling back to local storage');
+          clearAuthToken();
+        }
+        
+        // Fall back to local storage
         const localEntry = localHistoryService.getHistoryEntry(entryId);
         if (localEntry && localEntry.entry) {
           return localEntry;
         }
+        
         // Try to find in localStorage by matching the topic if possible
         try {
           const allLocalEntries = localHistoryService.getLocalHistory().entries || [];
@@ -529,8 +634,8 @@ export const getHistoryEntry = async (entryId) => {
           console.error('Error searching local entries by ID match:', e);
         }
         
-        // If both fail, rethrow the original error
-        throw serverError;
+        // If both fail, throw a more helpful error
+        throw new Error('Learning path not found. The ID may be invalid or the item has been deleted.');
       }
     } else {
       // Not authenticated, use local storage
@@ -539,7 +644,17 @@ export const getHistoryEntry = async (entryId) => {
   } catch (error) {
     console.error('Error fetching history entry:', error);
     // Try local storage as final fallback
-    return localHistoryService.getHistoryEntry(entryId);
+    try {
+      const localEntry = localHistoryService.getHistoryEntry(entryId);
+      if (localEntry && localEntry.entry) {
+        return localEntry;
+      }
+    } catch (localError) {
+      console.error('Local storage fallback also failed:', localError);
+    }
+    
+    // If all fallbacks fail, throw the original error
+    throw error;
   }
 };
 
@@ -703,5 +818,6 @@ export default {
   migrateLearningPaths,
   getProgressUpdates,
   deleteLearningPath,
+  checkAuthStatus,
 };
 

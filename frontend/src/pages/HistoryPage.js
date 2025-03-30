@@ -630,9 +630,22 @@ function HistoryPage() {
   const loadHistory = async () => {
     try {
       setLoading(true);
+      
+      // Check auth status first to handle invalid tokens
+      await api.checkAuthStatus();
+      
       const response = await api.getHistoryPreview(sortBy, filterSource, searchTerm);
-      setEntries(response.entries || []);
+      
+      // Ensure entries is always an array, even if response is invalid
+      if (!response || !response.entries) {
+        console.warn('History response missing entries array, using empty array');
+        setEntries([]);
+      } else {
+        setEntries(response.entries);
+      }
     } catch (error) {
+      console.error('Error loading history:', error);
+      setEntries([]); // Ensure we set an empty array on error
       showNotification('Error loading history: ' + (error.message || 'Unknown error'), 'error');
     } finally {
       setLoading(false);
