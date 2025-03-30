@@ -420,14 +420,19 @@ const HistoryEntryCard = ({ entry, onView, onDelete, onToggleFavorite, onUpdateT
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
+  // For debugging - log the ID formats
+  useEffect(() => {
+    console.debug(`Entry ${entry.topic} - ID: ${entry.id}, path_id: ${entry.path_id}`);
+  }, [entry]);
+
   const handleAddTag = async (newTag) => {
     const updatedTags = [...entry.tags, newTag];
-    await onUpdateTags(entry.id, updatedTags);
+    await onUpdateTags(entry.path_id, updatedTags);
   };
 
   const handleDeleteTag = async (tagToDelete) => {
     const updatedTags = entry.tags.filter(tag => tag !== tagToDelete);
-    await onUpdateTags(entry.id, updatedTags);
+    await onUpdateTags(entry.path_id, updatedTags);
   };
 
   return (
@@ -443,7 +448,7 @@ const HistoryEntryCard = ({ entry, onView, onDelete, onToggleFavorite, onUpdateT
             </Typography>
             <IconButton
               color={entry.favorite ? "warning" : "default"}
-              onClick={() => onToggleFavorite(entry.id, !entry.favorite)}
+              onClick={() => onToggleFavorite(entry.path_id, !entry.favorite)}
               size="small"
             >
               {entry.favorite ? <StarIcon /> : <StarBorderIcon />}
@@ -489,7 +494,7 @@ const HistoryEntryCard = ({ entry, onView, onDelete, onToggleFavorite, onUpdateT
           }}>
             <Button
               startIcon={<ExpandMoreIcon />}
-              onClick={() => onView(entry.id)}
+              onClick={() => onView(entry.path_id)}
               size="small"
               sx={{ mb: isMobile ? 1 : 0, width: isMobile ? '100%' : 'auto' }}
             >
@@ -497,7 +502,7 @@ const HistoryEntryCard = ({ entry, onView, onDelete, onToggleFavorite, onUpdateT
             </Button>
             
             <Box sx={{ display: 'flex', justifyContent: isMobile ? 'space-between' : 'flex-end', width: isMobile ? '100%' : 'auto' }}>
-              <IconButton size="small" onClick={() => onExport(entry.id)} title="Export">
+              <IconButton size="small" onClick={() => onExport(entry.path_id)} title="Export">
                 <DownloadIcon fontSize="small" />
               </IconButton>
               <IconButton
@@ -517,7 +522,7 @@ const HistoryEntryCard = ({ entry, onView, onDelete, onToggleFavorite, onUpdateT
           title="Delete Learning Path"
           message={`Are you sure you want to delete "${entry.topic}"?`}
           onConfirm={() => {
-            onDelete(entry.id);
+            onDelete(entry.path_id);
             setConfirmDelete(false);
           }}
           onCancel={() => setConfirmDelete(false)}
@@ -809,9 +814,9 @@ function HistoryPage() {
             </Box>
             <Chip
               icon={<StorageIcon />}
-              label="Stored locally in your browser"
+              label="Synchronized with your account"
               size="small"
-              color="secondary"
+              color="primary"
               variant="outlined"
               sx={{ mt: 1, mb: 1 }}
             />

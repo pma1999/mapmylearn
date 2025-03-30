@@ -335,30 +335,58 @@ export const migrateLearningPaths = async (learningPaths) => {
       learningPaths = localHistory.entries || [];
     }
     
-    // Process the learning paths to ensure they're in the right format
+    // Process the learning paths to ensure they're in the right format for migration
     const processedPaths = learningPaths.map(path => {
-      // Ensure the path has an ID value that can be preserved
-      if (!path.id && !path.path_id) {
-        // Generate a UUID-like string if no ID exists at all
-        path.id = Date.now() + '-' + Math.random().toString(36).substring(2, 15);
-      } 
-      // If path.id exists, ensure it's a string
-      else if (path.id) {
-        path.id = String(path.id);
-      }
-      // If only path_id exists, use that as id
-      else if (path.path_id) {
-        path.id = String(path.path_id);
+      // Create a new object to avoid modifying the original
+      const processedPath = { ...path };
+      
+      // Ensure path_id exists (use UUID format which is what the backend expects)
+      if (!processedPath.path_id) {
+        // If an id exists, use it as path_id (but ensure it's UUID-like)
+        if (processedPath.id) {
+          // If id already looks like a UUID (contains hyphens), use it directly
+          if (String(processedPath.id).includes('-')) {
+            processedPath.path_id = String(processedPath.id);
+          } else {
+            // Otherwise, generate a UUID-like ID that incorporates the original id
+            const timestamp = Date.now();
+            const randomPart = Math.random().toString(36).substring(2, 10);
+            processedPath.path_id = `${timestamp}-${randomPart}-${String(processedPath.id)}`;
+          }
+        } else {
+          // No id at all, generate a completely new UUID-like string
+          const timestamp = Date.now();
+          const randomPart1 = Math.random().toString(36).substring(2, 10);
+          const randomPart2 = Math.random().toString(36).substring(2, 10);
+          processedPath.path_id = `${timestamp}-${randomPart1}-${randomPart2}`;
+        }
       }
       
       // Make sure topic exists
-      if (!path.topic && path.path_data && path.path_data.topic) {
-        path.topic = path.path_data.topic;
-      } else if (!path.topic) {
-        path.topic = "Untitled Path";
+      if (!processedPath.topic && processedPath.path_data && processedPath.path_data.topic) {
+        processedPath.topic = processedPath.path_data.topic;
+      } else if (!processedPath.topic) {
+        processedPath.topic = "Untitled Path";
       }
       
-      return path;
+      // Make sure path_data exists
+      if (!processedPath.path_data) {
+        // If it's not there, use the entry itself as path_data
+        // This handles the case where the entire entry is actually the path data
+        processedPath.path_data = { ...path };
+      }
+      
+      // Make sure tags array exists
+      if (!processedPath.tags || !Array.isArray(processedPath.tags)) {
+        processedPath.tags = [];
+      }
+      
+      // Make sure source is set
+      if (!processedPath.source) {
+        processedPath.source = 'imported';
+      }
+      
+      return processedPath;
     });
     
     console.log("Migrating learning paths:", processedPaths);
@@ -587,24 +615,13 @@ export const getHistoryPreview = async (sortBy = 'creation_date', filterSource =
 
 export const getHistoryEntry = async (entryId) => {
   try {
-    // If authenticated, use the server API regardless of ID format
+    // If authenticated, use the server API
     if (authToken) {
       try {
-        // Check if entryId is a numeric ID or a UUID format
-        const isNumericId = /^\d+$/.test(entryId);
-        let localEntry = null;
+        // Log the ID being used
+        console.log('Fetching learning path with ID:', entryId);
         
-        // For numeric IDs, try local storage first
-        if (isNumericId) {
-          localEntry = localHistoryService.getHistoryEntry(entryId);
-          if (localEntry && localEntry.entry) {
-            console.log('Found entry in local storage for numeric ID:', entryId);
-            return localEntry;
-          }
-        }
-        
-        // Try server with the provided ID
-        console.log('Fetching from server with ID:', entryId);
+        // Make the API call with the provided ID (should be path_id)
         const response = await api.get(`/learning-paths/${entryId}`);
         return { entry: response.data };
       } catch (serverError) {
@@ -616,22 +633,12 @@ export const getHistoryEntry = async (entryId) => {
           clearAuthToken();
         }
         
-        // Fall back to local storage
+        // For backward compatibility, try local storage as fallback
+        console.warn('Falling back to local storage for compatibility');
         const localEntry = localHistoryService.getHistoryEntry(entryId);
         if (localEntry && localEntry.entry) {
+          console.log('Found entry in local storage with ID:', entryId);
           return localEntry;
-        }
-        
-        // Try to find in localStorage by matching the topic if possible
-        try {
-          const allLocalEntries = localHistoryService.getLocalHistory().entries || [];
-          // Attempt to find by ID as string comparison
-          const matchedEntry = allLocalEntries.find(entry => String(entry.id) === String(entryId));
-          if (matchedEntry) {
-            return { entry: matchedEntry };
-          }
-        } catch (e) {
-          console.error('Error searching local entries by ID match:', e);
         }
         
         // If both fail, throw a more helpful error
@@ -643,17 +650,6 @@ export const getHistoryEntry = async (entryId) => {
     }
   } catch (error) {
     console.error('Error fetching history entry:', error);
-    // Try local storage as final fallback
-    try {
-      const localEntry = localHistoryService.getHistoryEntry(entryId);
-      if (localEntry && localEntry.entry) {
-        return localEntry;
-      }
-    } catch (localError) {
-      console.error('Local storage fallback also failed:', localError);
-    }
-    
-    // If all fallbacks fail, throw the original error
     throw error;
   }
 };
@@ -662,6 +658,8 @@ export const saveToHistory = async (learningPath, source = 'generated') => {
   try {
     // If authenticated, save to server
     if (authToken) {
+      console.log('Saving learning path to server database:', learningPath.topic);
+      
       const response = await api.post('/learning-paths', {
         topic: learningPath.topic || 'Untitled',
         path_data: learningPath,
@@ -670,26 +668,35 @@ export const saveToHistory = async (learningPath, source = 'generated') => {
         source: source
       });
       
+      // The server returns the path_id which we should use for all future operations
+      console.log('Learning path saved with path_id:', response.data.path_id);
+      
       return { 
         success: true, 
         entry_id: response.data.path_id 
       };
     } else {
       // Otherwise save to local storage
+      console.log('User not authenticated, saving to local storage');
       return localHistoryService.saveToHistory(learningPath, source);
     }
   } catch (error) {
     console.error('Error saving to history:', error);
     
-    // Fall back to local storage if server fails
+    // Fall back to local storage if server fails or user is not authenticated
+    console.warn('Falling back to local storage due to error');
     return localHistoryService.saveToHistory(learningPath, source);
   }
 };
 
 export const updateHistoryEntry = async (entryId, data) => {
   try {
-    // If authenticated and ID looks like a UUID, use the API
-    if (authToken && entryId.includes('-')) {
+    // If authenticated, use the API
+    if (authToken) {
+      // Log the ID being used
+      console.log('Updating learning path with ID:', entryId);
+      
+      // Make the API call with the provided ID (should be path_id)
       await api.put(`/learning-paths/${entryId}`, data);
       return { success: true };
     } else {
@@ -699,15 +706,23 @@ export const updateHistoryEntry = async (entryId, data) => {
   } catch (error) {
     console.error('Error updating history entry:', error);
     
-    // Try local storage as fallback
-    return localHistoryService.updateHistoryEntry(entryId, data);
+    // Try local storage as fallback only for unauthenticated users
+    if (!authToken) {
+      return localHistoryService.updateHistoryEntry(entryId, data);
+    }
+    
+    throw error;
   }
 };
 
 export const deleteHistoryEntry = async (entryId) => {
   try {
-    // If authenticated and ID looks like a UUID, use the API
-    if (authToken && entryId.includes('-')) {
+    // If authenticated, use the API
+    if (authToken) {
+      // Log the ID being used
+      console.log('Deleting learning path with ID:', entryId);
+      
+      // Make the API call with the provided ID (should be path_id)
       await api.delete(`/learning-paths/${entryId}`);
       return { success: true };
     } else {
@@ -717,16 +732,24 @@ export const deleteHistoryEntry = async (entryId) => {
   } catch (error) {
     console.error('Error deleting history entry:', error);
     
-    // Try local storage as fallback
-    return localHistoryService.deleteHistoryEntry(entryId);
+    // Try local storage as fallback only for unauthenticated users
+    if (!authToken) {
+      return localHistoryService.deleteHistoryEntry(entryId);
+    }
+    
+    throw error;
   }
 };
 
 export const importLearningPath = async (jsonData) => {
   try {
+    // Parse the JSON data
+    const learningPath = JSON.parse(jsonData);
+    
     // If authenticated, use the API
     if (authToken) {
-      const learningPath = JSON.parse(jsonData);
+      console.log('Importing learning path to server database:', learningPath.topic);
+      
       const response = await api.post('/learning-paths', {
         topic: learningPath.topic || 'Untitled',
         path_data: learningPath,
@@ -735,6 +758,8 @@ export const importLearningPath = async (jsonData) => {
         source: 'imported'
       });
       
+      console.log('Learning path imported with path_id:', response.data.path_id);
+      
       return {
         success: true,
         entry_id: response.data.path_id,
@@ -742,12 +767,14 @@ export const importLearningPath = async (jsonData) => {
       };
     } else {
       // Otherwise use local storage
+      console.log('User not authenticated, importing to local storage');
       return localHistoryService.importLearningPath(jsonData);
     }
   } catch (error) {
     console.error('Error importing learning path:', error);
     
-    // Fall back to local storage if server fails
+    // Fall back to local storage if server fails or user is not authenticated
+    console.warn('Falling back to local storage due to error');
     return localHistoryService.importLearningPath(jsonData);
   }
 };
@@ -767,8 +794,16 @@ export const exportHistory = async () => {
     // If authenticated, get all learning paths from API
     if (authToken) {
       const response = await api.get('/learning-paths?per_page=1000');
+      
+      // Ensure we have the path_id for each entry in the exported data
+      const entries = response.data.entries.map(entry => ({
+        ...entry,
+        // Explicitly include path_id in case frontend code expects it at this property
+        id: entry.path_id 
+      }));
+      
       return {
-        entries: response.data.entries,
+        entries: entries,
         last_updated: new Date().toISOString()
       };
     } else {

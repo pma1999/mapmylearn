@@ -57,35 +57,9 @@ const MigrationPage = () => {
     setError(null);
 
     try {
-      // Pre-process local paths to ensure IDs are preserved properly
-      const processedPaths = localPaths.map(path => {
-        // Ensure the path has an ID value that can be preserved
-        if (!path.id && !path.path_id) {
-          // Generate a UUID if no ID exists at all
-          path.id = String(Date.now()) + '-' + Math.random().toString(36).substring(2, 15);
-        } 
-        // If path.id exists, ensure it's a string
-        else if (path.id) {
-          path.id = String(path.id);
-        }
-        // If only path_id exists, use that as id
-        else if (path.path_id) {
-          path.id = String(path.path_id);
-        }
-        
-        // Make sure path_data exists
-        if (!path.path_data) {
-          // If it's not there, use the entry itself as path_data
-          // This handles the case where the entire entry is actually the path data
-          path.path_data = {...path};
-        }
-        
-        return path;
-      });
-      
-      console.log('Starting migration with processed paths:', processedPaths);
-      
-      const result = await migrateLearningPaths(processedPaths);
+      // The enhanced migrateLearningPaths function in api.js now handles all the preprocessing
+      console.log('Starting migration of local learning paths');
+      const result = await migrateLearningPaths(localPaths);
       setMigrationStats(result);
       setMigrationComplete(true);
     } catch (err) {
