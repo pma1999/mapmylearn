@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Link as RouterLink, useLocation } from 'react-router-dom';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import { 
   AppBar, 
   Toolbar, 
@@ -16,13 +16,18 @@ import {
   Slide,
   Tooltip,
   Avatar,
-  useScrollTrigger
+  useScrollTrigger,
+  Divider
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import SchoolIcon from '@mui/icons-material/School';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import LogoutIcon from '@mui/icons-material/Logout';
+import LoginIcon from '@mui/icons-material/Login';
+import PersonIcon from '@mui/icons-material/Person';
 import Fab from '@mui/material/Fab';
 import Zoom from '@mui/material/Zoom';
+import { useAuth } from '../services/authContext';
 
 const navItems = [
   { text: 'Home', path: '/', ariaLabel: 'Go to homepage' },
@@ -110,11 +115,32 @@ const NavLogo = React.memo(() => (
 
 function Navbar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const [anchorEl, setAnchorEl] = useState(null);
+  const [userMenuAnchorEl, setUserMenuAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
+  const userMenuOpen = Boolean(userMenuAnchorEl);
   const [scrolled, setScrolled] = useState(false);
+  const { isAuthenticated, user, logout, loading } = useAuth();
+  
+  // Auth-aware navigation items
+  const navItems = useMemo(() => {
+    const items = [
+      { text: 'Home', path: '/', ariaLabel: 'Go to homepage' },
+    ];
+    
+    // Only show these items when authenticated
+    if (isAuthenticated) {
+      items.push(
+        { text: 'Generator', path: '/generator', ariaLabel: 'Go to generator page' },
+        { text: 'History', path: '/history', ariaLabel: 'View your history' }
+      );
+    }
+    
+    return items;
+  }, [isAuthenticated]);
   
   // Handle scrolling effects
   const trigger = useScrollTrigger({
@@ -143,6 +169,14 @@ function Navbar() {
   const handleMenuClose = useCallback(() => {
     setAnchorEl(null);
   }, []);
+  
+  const handleUserMenuOpen = useCallback((event) => {
+    setUserMenuAnchorEl(event.currentTarget);
+  }, []);
+
+  const handleUserMenuClose = useCallback(() => {
+    setUserMenuAnchorEl(null);
+  }, []);
 
   const handleKeyDown = useCallback((event, path) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -150,6 +184,12 @@ function Navbar() {
       window.location.href = path;
     }
   }, []);
+  
+  const handleLogout = useCallback(async () => {
+    handleUserMenuClose();
+    await logout();
+    navigate('/');
+  }, [logout, navigate, handleUserMenuClose]);
 
   const DesktopNav = useMemo(() => (
     <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -208,27 +248,99 @@ function Navbar() {
         </Tooltip>
       ))}
       
-      {/* Optional user avatar button - uncomment if you have user authentication */}
-      {/*
-      <Tooltip title="Account settings">
-        <IconButton 
-          sx={{ 
-            ml: 2,
-            border: '2px solid rgba(255,255,255,0.7)',
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              borderColor: 'white',
-              transform: 'scale(1.05)'
-            }
-          }}
-          aria-label="User account"
-        >
-          <Avatar sx={{ width: 32, height: 32, bgcolor: theme.palette.secondary.main }}>U</Avatar>
-        </IconButton>
-      </Tooltip>
-      */}
+      {isAuthenticated ? (
+        // User menu
+        <>
+          <Tooltip title="Account settings">
+            <IconButton 
+              onClick={handleUserMenuOpen}
+              sx={{ 
+                ml: 2,
+                border: '2px solid rgba(255,255,255,0.7)',
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  borderColor: 'white',
+                  transform: 'scale(1.05)'
+                }
+              }}
+              aria-label="User account"
+              aria-controls={userMenuOpen ? 'user-menu' : undefined}
+              aria-haspopup="true"
+              aria-expanded={userMenuOpen ? 'true' : undefined}
+            >
+              <Avatar sx={{ width: 32, height: 32, bgcolor: theme.palette.secondary.main }}>
+                {user?.full_name?.charAt(0) || user?.email?.charAt(0) || 'U'}
+              </Avatar>
+            </IconButton>
+          </Tooltip>
+          
+          <Menu
+            id="user-menu"
+            anchorEl={userMenuAnchorEl}
+            open={userMenuOpen}
+            onClose={handleUserMenuClose}
+            MenuListProps={{
+              'aria-labelledby': 'user-button',
+            }}
+            transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+            anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+          >
+            {user && (
+              <Box sx={{ px: 2, py: 1, minWidth: 180 }}>
+                <Typography variant="subtitle1" noWrap>
+                  {user.full_name || 'User'}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" noWrap>
+                  {user.email}
+                </Typography>
+              </Box>
+            )}
+            <Divider />
+            <MenuItem onClick={handleLogout}>
+              <LogoutIcon fontSize="small" sx={{ mr: 1 }} />
+              Logout
+            </MenuItem>
+          </Menu>
+        </>
+      ) : (
+        // Login/Register buttons
+        <>
+          <Button
+            component={RouterLink}
+            to="/login"
+            variant="outlined"
+            startIcon={<LoginIcon />}
+            sx={{ 
+              color: 'white',
+              borderColor: 'rgba(255,255,255,0.5)',
+              '&:hover': {
+                borderColor: 'white',
+                backgroundColor: 'rgba(255,255,255,0.1)',
+              }
+            }}
+          >
+            Login
+          </Button>
+          
+          <Button
+            component={RouterLink}
+            to="/register"
+            variant="contained"
+            startIcon={<PersonIcon />}
+            sx={{ 
+              ml: 2,
+              backgroundColor: theme.palette.secondary.main,
+              '&:hover': {
+                backgroundColor: theme.palette.secondary.dark,
+              }
+            }}
+          >
+            Register
+          </Button>
+        </>
+      )}
     </Box>
-  ), [location.pathname, handleKeyDown, theme.palette.secondary.light]);
+  ), [location.pathname, handleKeyDown, theme, isAuthenticated, user, userMenuOpen, userMenuAnchorEl, handleUserMenuOpen, handleUserMenuClose, handleLogout]);
 
   const MobileNav = useMemo(() => (
     <>
@@ -250,142 +362,115 @@ function Navbar() {
           '&:focus-visible': {
             outline: `2px solid ${theme.palette.secondary.light}`,
             outlineOffset: '2px',
-          },
+          }
         }}
       >
         <MenuIcon />
       </IconButton>
+
       <Menu
         id="mobile-menu"
         anchorEl={anchorEl}
         open={open}
         onClose={handleMenuClose}
-        TransitionComponent={Fade}
         MenuListProps={{
-          'aria-labelledby': 'mobile-button',
-          sx: {
-            py: 1
-          }
+          'aria-labelledby': 'menu-button',
         }}
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'right',
-        }}
-        transformOrigin={{
-          vertical: 'top',
-          horizontal: 'right',
-        }}
-        sx={{
-          mt: 1.5,
-          '& .MuiPaper-root': {
-            borderRadius: 2,
-            boxShadow: '0 8px 16px rgba(0,0,0,0.15)',
-            minWidth: 180,
-            background: theme => `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 100%)`,
-            border: '1px solid rgba(255,255,255,0.1)',
-          }
-        }}
+        TransitionComponent={Fade}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
       >
         {navItems.map((item) => (
-          <MenuItem
-            key={item.path}
-            component={RouterLink}
+          <MenuItem 
+            key={item.path} 
+            component={RouterLink} 
             to={item.path}
-            onClick={handleMenuClose}
             selected={location.pathname === item.path}
-            aria-current={location.pathname === item.path ? 'page' : undefined}
+            onClick={handleMenuClose}
             sx={{
-              minWidth: '180px',
-              padding: '12px 16px',
-              borderRadius: 1,
-              mx: 1,
-              my: 0.5,
-              color: 'white',
-              position: 'relative',
-              fontWeight: location.pathname === item.path ? 700 : 400,
-              backgroundColor: location.pathname === item.path ? 'rgba(255,255,255,0.15) !important' : 'transparent',
-              '&:hover': {
-                backgroundColor: 'rgba(255,255,255,0.1) !important',
-              },
-              '&:focus-visible': {
-                outline: `2px solid ${theme.palette.secondary.light}`,
-                outlineOffset: '-2px',
-              },
-              '&::after': {
-                content: '""',
-                position: 'absolute',
-                left: 0,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                height: '60%',
-                width: location.pathname === item.path ? '3px' : '0px',
-                backgroundColor: theme.palette.secondary.light,
-                borderRadius: '0 3px 3px 0',
-                transition: 'width 0.2s ease-in-out'
-              },
-              transition: 'all 0.2s ease-in-out',
+              minWidth: 150,
+              fontSize: '1rem',
+              py: 1.5
             }}
           >
             {item.text}
           </MenuItem>
         ))}
+        
+        <Divider sx={{ my: 1 }} />
+        
+        {isAuthenticated ? (
+          <>
+            {user && (
+              <Box sx={{ px: 2, py: 1 }}>
+                <Typography variant="subtitle2" noWrap>
+                  {user.full_name || 'User'}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" noWrap sx={{ fontSize: '0.8rem' }}>
+                  {user.email}
+                </Typography>
+              </Box>
+            )}
+            <MenuItem onClick={handleLogout}>
+              <LogoutIcon fontSize="small" sx={{ mr: 1 }} />
+              Logout
+            </MenuItem>
+          </>
+        ) : (
+          <>
+            <MenuItem 
+              component={RouterLink} 
+              to="/login"
+              onClick={handleMenuClose}
+            >
+              <LoginIcon fontSize="small" sx={{ mr: 1 }} />
+              Login
+            </MenuItem>
+            <MenuItem 
+              component={RouterLink} 
+              to="/register"
+              onClick={handleMenuClose}
+            >
+              <PersonIcon fontSize="small" sx={{ mr: 1 }} />
+              Register
+            </MenuItem>
+          </>
+        )}
       </Menu>
     </>
-  ), [anchorEl, handleMenuClose, handleMenuOpen, location.pathname, open, theme]);
+  ), [anchorEl, open, handleMenuOpen, handleMenuClose, theme.palette.secondary.light, location.pathname, navItems, isAuthenticated, user, handleLogout]);
 
   return (
     <>
-      <Slide appear={false} direction="down" in={!trigger}>
-        <AppBar 
-          position="fixed" 
-          color="primary" 
-          elevation={scrolled ? 8 : 2}
-          sx={{
-            boxShadow: scrolled ? '0 4px 20px rgba(0,0,0,0.2)' : '0 2px 10px rgba(0,0,0,0.1)',
-            backdropFilter: 'blur(10px)',
-            background: theme => scrolled 
-              ? `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 100%)`
-              : `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-            height: scrolled ? 64 : 80,
-            transition: 'all 0.3s ease',
-            borderBottom: '1px solid rgba(255,255,255,0.1)'
-          }}
-        >
-          <Container maxWidth="lg">
-            <Toolbar 
-              disableGutters 
-              sx={{ 
-                height: '100%',
-                justifyContent: 'space-between',
-                transition: 'all 0.3s ease',
-                py: scrolled ? 1 : 1.5,
-              }}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
-                <NavLogo />
-              </Box>
-              {isDesktop ? DesktopNav : MobileNav}
-            </Toolbar>
-          </Container>
-        </AppBar>
-      </Slide>
+      <AppBar 
+        position="sticky" 
+        sx={{ 
+          backgroundColor: scrolled ? 'rgba(25, 118, 210, 0.95)' : 'rgba(25, 118, 210, 0.8)',
+          backdropFilter: 'blur(8px)',
+          boxShadow: scrolled ? 3 : 0,
+          transition: 'all 0.3s ease',
+        }}
+        id="back-to-top-anchor"
+      >
+        <Container maxWidth="lg">
+          <Toolbar disableGutters sx={{ py: { xs: 1.5, md: 1 } }}>
+            <NavLogo />
+            <Box sx={{ flexGrow: 1 }} />
+            {isDesktop ? DesktopNav : MobileNav}
+          </Toolbar>
+        </Container>
+      </AppBar>
       
-      {/* This element gives proper spacing below the fixed navbar */}
-      <Toolbar id="back-to-top-anchor" sx={{ mb: 2 }} />
-      
-      {/* Scroll to top button */}
       <ScrollTop>
         <Fab
           color="secondary"
           size="small"
           aria-label="scroll back to top"
           sx={{
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            boxShadow: 3,
             '&:hover': {
-              transform: 'translateY(-2px)',
-              boxShadow: '0 6px 16px rgba(0,0,0,0.2)',
-            },
-            transition: 'all 0.3s ease',
+              backgroundColor: theme => theme.palette.secondary.dark,
+            }
           }}
         >
           <KeyboardArrowUpIcon />
@@ -395,4 +480,4 @@ function Navbar() {
   );
 }
 
-export default React.memo(Navbar); 
+export default Navbar; 

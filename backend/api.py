@@ -18,6 +18,14 @@ import time
 import httpx
 import traceback
 
+# Database imports
+from backend.config.database import engine, Base
+from backend.routes.auth import router as auth_router
+from backend.routes.learning_paths import router as learning_paths_router
+
+# Import rate limiter
+from utils.rate_limiter import rate_limiting_middleware
+
 # Initialize startup time for health check and uptime reporting
 startup_time = time.time()
 
@@ -61,6 +69,23 @@ app = FastAPI(
     description="API for Learny Learning Path Generator",
     version="0.1.0"
 )
+
+# Create the database tables if they don't exist
+# We'll use alembic for proper migrations in production
+@app.on_event("startup")
+async def startup_db_client():
+    logger.info("Creating database tables if they don't exist...")
+    try:
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database tables initialized successfully")
+    except Exception as e:
+        logger.error(f"Error initializing database tables: {str(e)}")
+        # Don't raise the exception - we'll let the app start anyway and fail on actual db operations
+        # This allows the app to run without a database for development
+
+# Include the auth and learning path routers
+app.include_router(auth_router, prefix="/api")
+app.include_router(learning_paths_router, prefix="/api")
 
 # --------------------------------------------------------------------------------
 # Global exception handler middleware
@@ -162,32 +187,51 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     )
 
 # --------------------------------------------------------------------------------
-# Configuración automática de CORS y seguridad de endpoints (Mejora 1)
+# Configuración automática de CORS y seguridad de endpoints 
 # --------------------------------------------------------------------------------
 # Se configuran los orígenes permitidos de forma automática según el entorno:
-# - En producción (cuando existe la variable "RAILWAY_STATIC_URL") se permiten
-#   los dominios de los despliegues de Vercel y Railway.
+# - En producción se permiten los dominios específicos de Vercel y Railway.
 # - En desarrollo, se permite únicamente el origen local.
-if os.getenv("RAILWAY_STATIC_URL"):
-    # Entorno de producción
+environment = os.getenv("ENVIRONMENT", "development")
+is_production = environment == "production"
+
+if is_production:
+    # Entorno de producción - usar lista explícita de dominios permitidos
     allowed_origins = [
-        "https://learny-peach.vercel.app",
-        "https://learny-pablos-projects-d80d0b2f.vercel.app",
-        "https://learny-git-main-pablos-projects-d80d0b2f.vercel.app",
-        "https://web-production-62f88.up.railway.app"
+        "https://learni-peach.vercel.app",               # Producción principal
+        "https://learny-pablos-projects-d80d0b2f.vercel.app",       # Despliegue específico
+        "https://learny-git-main-pablos-projects-d80d0b2f.vercel.app",  # Rama principal
+        "https://web-production-62f88.up.railway.app"     # Backend (para posibles solicitudes cross-origin)
     ]
-    if os.getenv("FRONTEND_URL"):
-        allowed_origins.append(os.getenv("FRONTEND_URL"))
+    
+    # Añadir orígenes adicionales desde la variable de entorno si existe
+    frontend_url = os.getenv("FRONTEND_URL")
+    if frontend_url and frontend_url not in allowed_origins:
+        allowed_origins.append(frontend_url)
+        
+    # Registrar los dominios permitidos
+    logger.info(f"Running in PRODUCTION mode with allowed origins: {allowed_origins}")
 else:
     # Entorno de desarrollo local
     allowed_origins = ["http://localhost:3000"]
+    logger.info("Running in DEVELOPMENT mode with local origins only")
 
+# Add rate limiting middleware before CORS middleware
+@app.middleware("http")
+async def apply_rate_limiting(request: Request, call_next):
+    """Apply rate limiting to protect against abuse"""
+    if os.getenv("ENABLE_RATE_LIMITING", "false").lower() == "true":
+        return await rate_limiting_middleware(request, call_next)
+    return await call_next(request)
+
+# Añadir middleware CORS con la configuración apropiada
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    max_age=86400,  # Cachear resultados de pre-vuelo por 24 horas
 )
 # --------------------------------------------------------------------------------
 # Fin de configuración automática de CORS

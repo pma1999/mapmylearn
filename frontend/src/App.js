@@ -9,10 +9,17 @@ import HomePage from './pages/HomePage';
 import GeneratorPage from './pages/GeneratorPage';
 import ResultPage from './pages/ResultPage';
 import HistoryPage from './pages/HistoryPage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import MigrationPage from './pages/MigrationPage';
 
 // Import components
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
+import ProtectedRoute from './components/ProtectedRoute';
+
+// Import auth provider
+import { AuthProvider } from './services/authContext';
 
 // Create theme
 const theme = createTheme({
@@ -39,22 +46,47 @@ const theme = createTheme({
 
 function App() {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-        <Navbar />
-        <Container component="main" sx={{ mt: 4, mb: 4, flex: 1 }}>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/generator" element={<GeneratorPage />} />
-            <Route path="/result/:taskId" element={<ResultPage />} />
-            <Route path="/history" element={<HistoryPage />} />
-            <Route path="/history/:entryId" element={<ResultPage source="history" />} />
-          </Routes>
-        </Container>
-        <Footer />
-      </Box>
-    </ThemeProvider>
+    <AuthProvider>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+          <Navbar />
+          <Container component="main" sx={{ mt: 4, mb: 4, flex: 1 }}>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/generator" element={
+                <ProtectedRoute>
+                  <GeneratorPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/result/:taskId" element={
+                <ProtectedRoute>
+                  <ResultPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/history" element={
+                <ProtectedRoute>
+                  <HistoryPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/history/:entryId" element={
+                <ProtectedRoute>
+                  <ResultPage source="history" />
+                </ProtectedRoute>
+              } />
+              <Route path="/migrate" element={
+                <ProtectedRoute>
+                  <MigrationPage />
+                </ProtectedRoute>
+              } />
+            </Routes>
+          </Container>
+          <Footer />
+        </Box>
+      </ThemeProvider>
+    </AuthProvider>
   );
 }
 

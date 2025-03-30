@@ -1,344 +1,232 @@
-# Deployment Guide for Learny
+# Guía de Despliegue: Learni
 
-This guide explains how to deploy the Learny application using Vercel for the frontend and Railway for the backend, as well as how to run it locally for development and testing.
+Esta guía proporciona instrucciones detalladas sobre cómo desplegar la aplicación Learni en producción, utilizando Vercel para el frontend y Railway para el backend.
 
-## Local Development
+## Requisitos Previos
 
-### Setting Up Local Backend
+- Cuenta en [Railway](https://railway.app/)
+- Cuenta en [Vercel](https://vercel.com/)
+- Git instalado
+- Node.js (v16 o superior)
+- Python (v3.9 o superior)
+- CLIs de Railway y Vercel (opcionales, pero recomendados)
 
-1. **Create a virtual environment:**
+## Estructura del Proyecto
 
-   ```bash
-   python -m venv venv
-   .\venv\Scripts\activate  # On Windows PowerShell
-   ```
+Learni consiste en dos componentes principales:
 
-2. **Install dependencies:**
+1. **Frontend**: Aplicación React alojada en `./frontend/`
+2. **Backend**: API FastAPI alojada en `./backend/`
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+## 1. Configuración de Variables de Entorno
 
-3. **Set up environment variables:**
-   
-   Create a `.env` file in the root directory with:
+### Backend (Railway)
 
-   ```
-   OPENAI_API_KEY=your_openai_api_key_here
-   PPLX_API_KEY=your_perplexity_api_key_here
-   # In development, SERVER_SECRET_KEY is optional
-   # SERVER_SECRET_KEY=your_secure_random_key_here
-   ```
+Crea un archivo `.env` en el directorio `backend/` con las siguientes variables:
 
-4. **Run the backend:**
+```
+# PostgreSQL Database Configuration
+DATABASE_URL=postgres://username:password@hostname:port/database_name
 
-   ```bash
-   uvicorn api:app --reload --host 0.0.0.0 --port 8000
-   ```
+# JWT Authentication Settings
+JWT_SECRET_KEY=your_secure_secret_key
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
 
-### Setting Up Local Frontend
+# Environment settings
+ENVIRONMENT=production
 
-1. **Install dependencies:**
+# CORS settings
+FRONTEND_URL=https://learny-peach.vercel.app
 
-   ```bash
-   cd frontend
-   npm install
-   ```
+# Security settings
+ENABLE_RATE_LIMITING=true
+RATE_LIMIT_REQUESTS=100
+RATE_LIMIT_WINDOW_SECONDS=60
 
-2. **Run the frontend:**
+# Logging configuration
+LOG_LEVEL=INFO
+LOG_FILE=learning_path.log
+DATA_LOGGING=true
+JSON_FORMAT=true
+```
 
-   ```bash
-   npm start
-   ```
+### Frontend (Vercel)
 
-3. **Access the application:**
-   Open your browser and go to `http://localhost:3000`
+Crea un archivo `.env.production` en el directorio `frontend/` con:
 
-## Prerequisites
+```
+# API URL pointing to the Railway backend
+REACT_APP_API_URL=https://your-railway-app-url.up.railway.app
 
-- [Vercel Account](https://vercel.com)
-- [Railway Account](https://railway.app)
-- [GitHub Account](https://github.com)
-- OpenAI API Key
-- Perplexity API Key
+# Additional settings
+REACT_APP_ENABLE_ANALYTICS=true
+REACT_APP_ENVIRONMENT=production
+```
 
-## Deploying the Backend to Railway
+## 2. Despliegue del Backend en Railway
 
-### Option 1: Deploy via Railway Dashboard
+### Método Manual
 
-1. **Push your code to GitHub**
-   
-   Make sure your project is in a GitHub repository.
-
-2. **Create a new project in Railway**
-
-   - Go to [Railway Dashboard](https://railway.app/dashboard)
-   - Click "New Project" and select "Deploy from GitHub repo"
-   - Select your repository
-   - Railway will automatically detect the configuration from `railway.json` and `Procfile`
-
-3. **Configure environment variables**
-
-   In the Railway dashboard, add the following environment variables:
-   
-   - `OPENAI_API_KEY`: Your OpenAI API key
-   - `PPLX_API_KEY`: Your Perplexity API key
-   - `SERVER_SECRET_KEY`: A secure secret key for encrypting API keys (REQUIRED in production)
-   - `FRONTEND_URL`: Your Vercel frontend URL (once deployed)
-   - Any other environment variables needed by your application
-   
-   **IMPORTANT: About SERVER_SECRET_KEY**
-   
-   The `SERVER_SECRET_KEY` is used to encrypt sensitive data, including API keys provided by users. 
-   This variable is **mandatory** in production environments - the application will refuse to start 
-   without it. You can generate a secure random key with this command:
-   
-   ```bash
-   openssl rand -hex 32
-   ```
-   
-   Once set, do not change this key as it will invalidate all existing encrypted tokens.
-   Ensure this key is kept secure and not exposed in public repositories.
-
-4. **Deploy the backend**
-
-   Railway will automatically deploy your application based on the configuration in `railway.json`.
-
-5. **Get your backend URL**
-
-   Once deployed, Railway will provide you with a URL for your backend service. Note this URL as you'll need it for the frontend configuration.
-
-### Option 2: Deploy via Railway CLI
-
-1. **Install Railway CLI**
-
-   ```bash
-   npm i -g @railway/cli
-   ```
-
-2. **Login to Railway**
-
+1. Inicia sesión en Railway
    ```bash
    railway login
    ```
 
-3. **Initialize your project**
-
+2. Inicializa el proyecto (si no está ya inicializado)
    ```bash
+   cd backend
    railway init
    ```
 
-4. **Link to an existing project (if you already created one in the dashboard)**
-
+3. Crea una base de datos PostgreSQL en Railway
    ```bash
-   railway link
+   railway add plugin postgresql
    ```
 
-5. **Set environment variables**
-
+4. Obtén la URL de la base de datos
    ```bash
-   railway variables set OPENAI_API_KEY=your_openai_api_key
-   railway variables set PPLX_API_KEY=your_perplexity_api_key
-   railway variables set SERVER_SECRET_KEY=your_secure_random_key
-   railway variables set FRONTEND_URL=your_vercel_frontend_url
+   railway variables get DATABASE_URL
    ```
 
-6. **Deploy the application**
+5. Configura las variables de entorno
+   ```bash
+   railway variables set JWT_SECRET_KEY=your_secure_secret_key
+   railway variables set ENVIRONMENT=production
+   railway variables set ENABLE_RATE_LIMITING=true
+   railway variables set FRONTEND_URL=https://learni-peach.vercel.app
+   ```
 
+6. Despliega el proyecto
    ```bash
    railway up
    ```
 
-7. **Get your deployment URL**
+### Método Automatizado
 
+1. Ejecuta el script de despliegue
    ```bash
-   railway status
+   chmod +x backend/scripts/deploy_railway.sh
+   ./backend/scripts/deploy_railway.sh
    ```
 
-## Deploying the Frontend to Vercel
+2. Sigue las instrucciones en la terminal
 
-1. **Update the API URL in vercel.json**
+### Post-despliegue
 
-   In the `frontend/vercel.json` file, replace `https://your-railway-app-name.railway.app` with your actual Railway backend URL.
+1. Ejecuta las migraciones de base de datos
+   ```bash
+   railway run python scripts/init_db.py
+   ```
 
-2. **Push changes to GitHub**
+2. (Opcional) Crea un usuario administrador
+   ```bash
+   railway run python scripts/init_db.py --admin-email admin@example.com --admin-password securepassword
+   ```
 
-   Make sure all changes are committed and pushed to your GitHub repository.
+## 3. Despliegue del Frontend en Vercel
 
-3. **Create a new project in Vercel**
+### Método Manual
 
-   - Go to [Vercel Dashboard](https://vercel.com/dashboard)
-   - Click "Add New" > "Project"
-   - Import your GitHub repository
-   - Configure the project:
-     - Root Directory: `frontend`
-     - Build Command: `npm run build`
-     - Output Directory: `build`
+1. Inicia sesión en Vercel
+   ```bash
+   vercel login
+   ```
 
-4. **Configure environment variables**
+2. Navega al directorio del frontend
+   ```bash
+   cd frontend
+   ```
 
-   In the Vercel dashboard, add the following environment variables:
-   
-   - `REACT_APP_API_URL`: Your Railway backend URL
+3. Despliega en Vercel
+   ```bash
+   vercel
+   ```
 
-5. **Deploy the frontend**
+4. Configura las variables de entorno en la interfaz web de Vercel o mediante CLI
+   ```bash
+   vercel env add REACT_APP_API_URL production https://your-railway-app-url.up.railway.app
+   vercel env add REACT_APP_ENVIRONMENT production production
+   ```
 
-   Click "Deploy" and Vercel will build and deploy your frontend application.
+5. Realiza el despliegue de producción
+   ```bash
+   vercel --prod
+   ```
 
-## Switching Between Local and Deployed Environments
+### Método Automatizado
 
-### Frontend
+1. Ejecuta el script de despliegue
+   ```bash
+   chmod +x frontend/scripts/deploy_vercel.sh
+   ./frontend/scripts/deploy_vercel.sh
+   ```
 
-1. **For local development:**
-   - No environment variable changes needed
-   - The frontend will automatically use `http://localhost:8000` as the API URL
+2. Sigue las instrucciones en la terminal
 
-2. **For testing with deployed backend:**
-   - Create a `frontend/.env.local` file with:
-     ```
-     REACT_APP_API_URL=https://your-railway-app-name.railway.app
-     ```
+## 4. Configuración de Dominio Personalizado (Opcional)
 
-### Backend
+### En Vercel
+1. Ve a Dashboard > Learni > Settings > Domains
+2. Agrega tu dominio personalizado (ej. learni.yourdomain.com)
+3. Sigue las instrucciones para configurar los registros DNS
 
-1. **For local development:**
-   - The CORS settings already include `http://localhost:3000`
-   - No changes needed
+### En Railway
+1. Ve a tu proyecto > Settings > Domains
+2. Agrega tu dominio personalizado para la API (ej. api.learni.yourdomain.com)
+3. Configura los registros DNS según las instrucciones
 
-2. **For production:**
-   - Ensure the `FRONTEND_URL` environment variable is set in Railway
-   - Make sure your frontend Vercel domain is in the allowed_origins list in `api.py`
+## 5. Monitorización y Mantenimiento
 
-## Connecting Frontend and Backend
+### Registros (Logs)
+- **Backend**: Accede a los registros desde Railway dashboard o mediante CLI:
+  ```bash
+  railway logs
+  ```
 
-1. **Update Railway environment variables**
+- **Frontend**: Accede a los registros desde Vercel dashboard o mediante CLI:
+  ```bash
+  vercel logs
+  ```
 
-   Once your frontend is deployed, go back to Railway and add your Vercel frontend URL to the `FRONTEND_URL` environment variable.
+### Copias de Seguridad de Base de Datos
+1. Realiza una copia de seguridad periódica de la base de datos PostgreSQL
+   ```bash
+   railway run pg_dump -U postgres > backup_$(date +%Y%m%d).sql
+   ```
 
-2. **Verify the connection**
+2. Guarda las copias de seguridad en un lugar seguro
 
-   Visit your Vercel frontend URL and ensure it can communicate with the backend by testing the generation of a learning path.
+### Actualizaciones de Aplicación
+1. Actualiza tu código en la rama principal (main/master)
+2. Utiliza los scripts de despliegue o comandos manuales para actualizar las aplicaciones
 
-## Troubleshooting
+## 6. Solución de Problemas Comunes
 
-- **CORS Issues**: Ensure the `allowed_origins` in `api.py` includes your Vercel domain
-- **API Connection Failures**: Check that environment variables are set correctly on both platforms
-- **Application Fails to Start**: 
-  - Verify that `SERVER_SECRET_KEY` is set in production environments
-  - If you see an error about missing SERVER_SECRET_KEY, generate one as described in the "Configure environment variables" section
-- **Deployment Failures**: 
-  - On Railway: Check logs in the Railway dashboard
-  - On Vercel: Check build logs in the Vercel dashboard
+### El Backend No Se Conecta a la Base de Datos
+- Verifica la variable `DATABASE_URL` en Railway
+- Asegúrate de que la base de datos PostgreSQL esté activa
 
-## Custom Domains (Optional)
+### CORS Error en el Frontend
+- Verifica que la URL del frontend esté correctamente configurada en la variable `FRONTEND_URL` del backend
+- Comprueba que la URL de la API en el frontend sea correcta
 
-Both Vercel and Railway support custom domains:
+### Problemas de Autenticación
+- Verifica que `JWT_SECRET_KEY` esté configurado en Railway
+- Comprueba que las cookies funcionen correctamente (especialmente en dominios personalizados)
 
-- **Vercel**: Go to your project settings > Domains to add a custom domain
-- **Railway**: Go to your project settings > Domains to add a custom domain
-
-If you add custom domains, remember to update the corresponding environment variables and CORS settings.
-
-# Error Handling
-
-## Overview
-
-The application implements a comprehensive error handling strategy to ensure that all errors are:
-
-1. **Captured and Logged**: All exceptions are caught, logged with appropriate context, and include stack traces for easier debugging.
-2. **Properly Reported**: User-facing error messages are sanitized to avoid exposing sensitive information.
-3. **Consistently Formatted**: All error responses follow a standard JSON format that the frontend can easily process.
-4. **Progress-Tracked**: For background tasks, errors are reported via progress updates in real-time.
-
-## API Key Validation
-
-Learny implements strict validation for API keys to ensure security and proper functionality:
-
-### Format Validation
-
-API keys must follow specific formats:
-
-- **Google API Keys**: Must start with `AIza` followed by exactly 35 alphanumeric characters, underscores, or hyphens (pattern: `^AIza[0-9A-Za-z_-]{35}$`)
-- **Perplexity API Keys**: Must start with `pplx-` followed by at least 32 alphanumeric characters (pattern: `^pplx-[0-9A-Za-z]{32,}$`)
-
-### Functional Validation
-
-Even if an API key has the correct format, the system performs a minimal "ping" test to verify that the key is functional:
-
-- A small test request is made to the respective service
-- The system catches and categorizes common errors (unauthorized, quota exceeded, etc.)
-- User-friendly error messages are returned without exposing sensitive details
-
-### Security Measures
-
-To protect API keys and sensitive data:
-
-1. Keys are never stored in plain text
-2. All stored keys are encrypted using a symmetric encryption algorithm (Fernet)
-3. The encryption key is derived from `SERVER_SECRET_KEY`, which is mandatory in production
-4. Users interact with the system using temporary tokens that reference their stored keys
-5. Tokens expire after 24 hours by default
-6. API keys are never included in logs or error messages
-
-## Error Response Format
-
-All API error responses follow this consistent format:
-
-```json
-{
-  "status": "failed",
-  "error": {
-    "message": "User-friendly error message",
-    "type": "error_type",
-    "details": {},  // Optional additional details
-    "error_id": "unique-reference-id"  // For server errors
-  }
-}
+### Migraciones de Base de Datos
+Si encuentras errores al ejecutar migraciones:
+```bash
+railway run python scripts/init_db.py --no-migrations
 ```
 
-## Error Types
+## Actualizaciones Futuras
+Para actualizar tu aplicación desplegada:
 
-The system handles several types of errors:
+1. Realiza cambios en tu código local
+2. Ejecuta pruebas para asegurar que todo funciona correctamente
+3. Haz commit y push a la rama principal
+4. Ejecuta los scripts de despliegue para Railway y Vercel
 
-1. **HTTP Errors**: Regular HTTP exceptions like 404 (Not Found), 400 (Bad Request), etc.
-2. **Validation Errors**: Input validation failures from Pydantic models.
-3. **Learning Path Generation Errors**: Specific errors that occur during learning path generation.
-4. **Unexpected Errors**: Any unhandled exceptions caught by the middleware.
-
-## Background Task Error Handling
-
-Background tasks (like learning path generation) implement these error handling practices:
-
-1. Each critical operation is wrapped in try/except blocks.
-2. When an error occurs, it's logged with full details.
-3. A user-friendly error message is sent via the progress callback.
-4. The task status is updated to "failed" with error details.
-
-## Frontend Error Handling
-
-The frontend uses axios interceptors to process error responses and display user-friendly messages. It:
-
-1. Extracts structured error information from the response.
-2. Presents appropriate error messages to users.
-3. Includes error reference IDs for easier support troubleshooting.
-
-## Testing Error Handling
-
-Unit tests verify the error handling behavior, including:
-
-1. Testing that HTTP exceptions return the standardized format.
-2. Verifying validation errors are properly formatted.
-3. Confirming that task-specific errors are reported via progress updates.
-4. Testing that the global middleware catches unhandled exceptions.
-
-## Logging
-
-All errors are logged using structured JSON logging with these details:
-
-1. Timestamp
-2. Log level
-3. Module, function, and line number
-4. Full exception details and stack trace (in development mode)
-5. Sanitized exception details (in production mode)
-
-This comprehensive approach ensures that no errors go unnoticed or unreported, improving overall application reliability and user experience. 
+¡Felicitaciones! Tu aplicación Learni debería estar correctamente desplegada y funcionando. 

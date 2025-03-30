@@ -129,129 +129,64 @@ function ResultPage(props) {
   }, []);
 
   useEffect(() => {
-    const fetchData = async () => {
+    const loadLearningPath = async () => {
+      setLoading(true);
+      setError(null);
+      
       try {
         if (isFromHistory) {
-          // Load from history
-          const historyEntryId = entryId || location.pathname.split('/history/')[1];
-          const data = await getHistoryEntry(historyEntryId);
-          
-          if (data && data.entry) {
-            setLearningPath(data.entry.path_data);
-            setSavedToHistory(true); // It's already in history
-            setLoading(false);
-          } else {
-            setError('Learning path not found in history.');
-            setLoading(false);
+          // Load from history API
+          const historyResponse = await getHistoryEntry(entryId);
+          if (!historyResponse || !historyResponse.entry) {
+            throw new Error('Learning path not found in history. It may have been deleted or not properly migrated.');
           }
+          const pathData = historyResponse.entry.path_data;
+          setLearningPath(pathData);
+          setSavedToHistory(true);
+          setLoading(false);
         } else {
-          // Load from API (existing code)
-          const data = await getLearningPath(taskId);
+          // Load from task API
+          const response = await getLearningPath(taskId);
           
-          if (data.status === 'completed') {
-            setLearningPath(data.result);
+          if (response.status === 'completed' && response.learning_path) {
+            setLearningPath(response.learning_path);
+            setSavedToHistory(true);
+            setLoading(false);
             
-            // Auto-save the completed learning path if auto-save is enabled
-            if (autoSaveEnabled && !savedToHistory && data.result) {
-              try {
-                const result = await saveToHistory(data.result, 'generated');
-                
-                if (result.success) {
-                  setSavedToHistory(true);
-                  showNotification('Learning path saved to history automatically', 'success');
-                  
-                  // If tags or favorite are set, update the entry
-                  if (initialTags.length > 0 || initialFavorite) {
-                    try {
-                      await updateHistoryEntry(result.entry_id, { 
-                        tags: initialTags, 
-                        favorite: initialFavorite 
-                      });
-                    } catch (error) {
-                      console.error('Error updating history entry:', error);
-                    }
-                  }
-                }
-              } catch (error) {
-                console.error('Error auto-saving to history:', error);
-                showNotification('Failed to auto-save learning path', 'error');
-              }
+            // Close event source if it's open
+            if (progressEventSourceRef.current) {
+              progressEventSourceRef.current.close();
+              progressEventSourceRef.current = null;
             }
-            
+          } else if (response.status === 'failed') {
+            // Task failed
+            setError(response.error?.message || 'Learning path generation failed');
             setLoading(false);
-          } else if (data.status === 'error') {
-            setError(data.error || 'An error occurred while generating your learning path.');
-            setLoading(false);
-          } else if (data.status === 'running') {
-            // If still running, set up event source for progress updates
+          } else if (response.status === 'pending' || response.status === 'in_progress') {
+            // Start listening for updates since task is still in progress
             setupProgressUpdates();
-            
-            // Poll for completion every 5 seconds
-            const interval = setInterval(async () => {
-              try {
-                const updatedData = await getLearningPath(taskId);
-                if (updatedData.status !== 'running') {
-                  clearInterval(interval);
-                  if (progressEventSourceRef.current) {
-                    progressEventSourceRef.current.close();
-                  }
-                  
-                  if (updatedData.status === 'completed') {
-                    setLearningPath(updatedData.result);
-                    
-                    // Auto-save the completed learning path if auto-save is enabled
-                    if (autoSaveEnabled && !savedToHistory && updatedData.result) {
-                      try {
-                        const result = await saveToHistory(updatedData.result, 'generated');
-                        
-                        if (result.success) {
-                          setSavedToHistory(true);
-                          showNotification('Learning path saved to history automatically', 'success');
-                          
-                          // If tags or favorite are set, update the entry
-                          if (initialTags.length > 0 || initialFavorite) {
-                            try {
-                              await updateHistoryEntry(result.entry_id, { 
-                                tags: initialTags, 
-                                favorite: initialFavorite 
-                              });
-                            } catch (error) {
-                              console.error('Error updating history entry:', error);
-                            }
-                          }
-                        }
-                      } catch (error) {
-                        console.error('Error auto-saving to history:', error);
-                        showNotification('Failed to auto-save learning path', 'error');
-                      }
-                    }
-                  } else if (updatedData.status === 'error') {
-                    setError(updatedData.error || 'An error occurred while generating your learning path.');
-                  }
-                  setLoading(false);
-                }
-              } catch (err) {
-                console.error('Error polling for learning path:', err);
-              }
-            }, 5000);
-            
-            return () => {
-              clearInterval(interval);
-              if (progressEventSourceRef.current) {
-                progressEventSourceRef.current.close();
-              }
-            };
           }
         }
       } catch (err) {
-        console.error('Error fetching learning path:', err);
-        setError('Failed to fetch learning path. Please try again later.');
+        console.error('Error loading learning path:', err);
+        setError(err.message || 'Error loading learning path. Please try again.');
         setLoading(false);
       }
     };
     
-    fetchData();
-  }, [taskId, entryId, isFromHistory, location.pathname, autoSaveEnabled, savedToHistory, initialTags, initialFavorite]);
+    // Only load data if we have a task ID or entry ID
+    if (taskId || (isFromHistory && entryId)) {
+      loadLearningPath();
+    }
+    
+    // Cleanup function
+    return () => {
+      if (progressEventSourceRef.current) {
+        progressEventSourceRef.current.close();
+        progressEventSourceRef.current = null;
+      }
+    };
+  }, [taskId, entryId, isFromHistory, getLearningPath, getHistoryEntry]);
 
   const setupProgressUpdates = () => {
     try {
@@ -422,11 +357,55 @@ function ResultPage(props) {
   if (error) {
     return (
       <Container maxWidth="lg" sx={{ py: { xs: 3, md: 4 } }}>
-        <ErrorState 
-          error={error} 
-          onHomeClick={handleHomeClick} 
-          onTryAgainClick={handleNewLearningPathClick} 
-        />
+        <Paper
+          elevation={3}
+          sx={{
+            p: 4,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            textAlign: 'center',
+            maxWidth: '600px',
+            mx: 'auto',
+            mt: 4
+          }}
+        >
+          <ErrorIcon color="error" sx={{ fontSize: 60, mb: 2 }} />
+          
+          <Typography variant="h5" component="h2" gutterBottom fontWeight="bold">
+            Error Generating Learning Path
+          </Typography>
+          
+          <Typography variant="body1" sx={{ mb: 3 }}>
+            {error.includes("not found") 
+              ? "The learning path you're looking for couldn't be found. It may have been deleted or not properly migrated from your local storage."
+              : error
+            }
+          </Typography>
+          
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
+            We recommend trying one of the following options:
+          </Typography>
+          
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <Button 
+              variant="contained" 
+              color="primary" 
+              startIcon={<HomeIcon />}
+              onClick={handleHomeClick}
+            >
+              Go to Home
+            </Button>
+            
+            <Button 
+              variant="outlined"
+              startIcon={<AddIcon />}
+              onClick={handleNewLearningPathClick}
+            >
+              Create New Path
+            </Button>
+          </Box>
+        </Paper>
       </Container>
     );
   }

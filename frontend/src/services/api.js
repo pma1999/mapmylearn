@@ -62,7 +62,109 @@ api.interceptors.response.use(
   }
 );
 
-// Session storage keys
+// Auth token handling
+let authToken = null;
+
+// Set auth token for API requests
+export const setAuthToken = (token) => {
+  authToken = token;
+  if (token) {
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+  } else {
+    delete api.defaults.headers.common['Authorization'];
+  }
+};
+
+// Clear auth token
+export const clearAuthToken = () => {
+  authToken = null;
+  delete api.defaults.headers.common['Authorization'];
+};
+
+// Check if token exists in storage and set it
+export const initAuthFromStorage = () => {
+  try {
+    const authData = localStorage.getItem('auth');
+    if (authData) {
+      const { accessToken } = JSON.parse(authData);
+      if (accessToken) {
+        setAuthToken(accessToken);
+        return true;
+      }
+    }
+  } catch (error) {
+    console.error('Error initializing auth token:', error);
+  }
+  return false;
+};
+
+// Initialize auth token from storage on import
+initAuthFromStorage();
+
+// Get progress updates for a learning path using SSE (Server-Sent Events)
+export const getProgressUpdates = (taskId, onMessage, onError, onComplete) => {
+  // Create the correct URL using the same API_URL base
+  const url = new URL(`/api/progress/${taskId}`, API_URL);
+  
+  try {
+    const eventSource = new EventSource(url.toString());
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        if (data.complete) {
+          eventSource.close();
+          if (onComplete) onComplete();
+          return;
+        }
+        
+        // Check for error message format
+        if (data.message && data.message.startsWith("Error:")) {
+          // This is an error message from the server
+          if (onError) {
+            onError(new Error(data.message.replace("Error: ", "")));
+          }
+          return;
+        }
+        
+        if (onMessage) onMessage(data);
+      } catch (err) {
+        console.error('Error parsing SSE message:', err);
+        if (onError) onError(err);
+      }
+    };
+    
+    eventSource.onerror = (error) => {
+      console.error('SSE Error:', error);
+      eventSource.close();
+      if (onError) onError(new Error('Connection to progress updates was lost. Please check your network connection.'));
+    };
+    
+    return {
+      close: () => eventSource.close(),
+    };
+  } catch (initError) {
+    console.error('Error initializing SSE connection:', initError);
+    if (onError) onError(new Error('Failed to connect to progress updates. Please try refreshing the page.'));
+    return {
+      close: () => {}, // Dummy close function for consistent API
+    };
+  }
+};
+
+// Delete a learning path task
+export const deleteLearningPath = async (taskId) => {
+  try {
+    const response = await api.delete(`/learning-path/${taskId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error deleting learning path:', error);
+    throw new Error(error.message || 'Failed to delete learning path. Please try again.');
+  }
+};
+
+// Session storage keys for API keys
 const GOOGLE_KEY_TOKEN_STORAGE = 'learning_path_google_key_token';
 const PPLX_KEY_TOKEN_STORAGE = 'learning_path_pplx_key_token';
 const REMEMBER_TOKENS_STORAGE = 'learning_path_remember_tokens';
@@ -110,6 +212,103 @@ export const clearSavedApiTokens = () => {
     sessionStorage.removeItem(REMEMBER_TOKENS_STORAGE);
   } catch (error) {
     console.error('Error clearing API tokens from session storage:', error);
+  }
+};
+
+// Authentication API functions
+export const register = async (email, password, fullName) => {
+  try {
+    const response = await api.post('/auth/register', {
+      email,
+      password,
+      full_name: fullName
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Registration error:', error);
+    throw error;
+  }
+};
+
+export const login = async (email, password, rememberMe = false) => {
+  try {
+    const response = await api.post('/auth/login', {
+      email,
+      password,
+      remember_me: rememberMe
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Login error:', error);
+    throw error;
+  }
+};
+
+export const refreshAuthToken = async () => {
+  try {
+    const response = await api.post('/auth/refresh');
+    return response.data;
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    throw error;
+  }
+};
+
+export const logout = async () => {
+  try {
+    await api.post('/auth/logout');
+    return true;
+  } catch (error) {
+    console.error('Logout error:', error);
+    throw error;
+  }
+};
+
+// Learn path migration function
+export const migrateLearningPaths = async (learningPaths) => {
+  try {
+    // If learning paths weren't provided directly, get them from local storage
+    if (!learningPaths || !Array.isArray(learningPaths)) {
+      const localHistory = localHistoryService.getLocalHistory();
+      learningPaths = localHistory.entries || [];
+    }
+    
+    // Process the learning paths to ensure they're in the right format
+    const processedPaths = learningPaths.map(path => {
+      // Ensure the path has an ID value that can be preserved
+      if (!path.id && !path.path_id) {
+        // Generate a UUID-like string if no ID exists at all
+        path.id = Date.now() + '-' + Math.random().toString(36).substring(2, 15);
+      } 
+      // If path.id exists, ensure it's a string
+      else if (path.id) {
+        path.id = String(path.id);
+      }
+      // If only path_id exists, use that as id
+      else if (path.path_id) {
+        path.id = String(path.path_id);
+      }
+      
+      // Make sure topic exists
+      if (!path.topic && path.path_data && path.path_data.topic) {
+        path.topic = path.path_data.topic;
+      } else if (!path.topic) {
+        path.topic = "Untitled Path";
+      }
+      
+      return path;
+    });
+    
+    console.log("Migrating learning paths:", processedPaths);
+    
+    const response = await api.post('/learning-paths/migrate', {
+      learning_paths: processedPaths
+    });
+    
+    return response.data;
+  } catch (error) {
+    console.error('Learning path migration error:', error);
+    throw error;
   }
 };
 
@@ -261,133 +460,248 @@ export const getLearningPath = async (taskId) => {
     return response.data;
   } catch (error) {
     console.error('Error fetching learning path:', error);
-    throw new Error(error.message || 'Failed to retrieve learning path. Please try again.');
+    throw error;
   }
 };
 
-// Get progress updates for a learning path using SSE (Server-Sent Events)
-export const getProgressUpdates = (taskId, onMessage, onError, onComplete) => {
-  // Create the correct URL using the same API_URL base
-  const url = new URL(`/api/progress/${taskId}`, API_URL);
-  
+// History API functions (now using server-side API)
+export const getHistoryPreview = async (sortBy = 'creation_date', filterSource = null, searchTerm = null) => {
   try {
-    const eventSource = new EventSource(url.toString());
+    // If no auth token is present, fall back to local storage
+    if (!authToken) {
+      return localHistoryService.getHistoryPreview(sortBy, filterSource, searchTerm);
+    }
     
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        
-        if (data.complete) {
-          eventSource.close();
-          if (onComplete) onComplete();
-          return;
-        }
-        
-        // Check for error message format
-        if (data.message && data.message.startsWith("Error:")) {
-          // This is an error message from the server
-          if (onError) {
-            onError(new Error(data.message.replace("Error: ", "")));
-          }
-          return;
-        }
-        
-        if (onMessage) onMessage(data);
-      } catch (err) {
-        console.error('Error parsing SSE message:', err);
-        if (onError) onError(err);
-      }
-    };
+    // Build query parameters
+    const params = new URLSearchParams();
+    params.append('sort_by', sortBy);
+    if (filterSource) params.append('source', filterSource);
+    if (searchTerm) params.append('search', searchTerm);
     
-    eventSource.onerror = (error) => {
-      console.error('SSE Error:', error);
-      eventSource.close();
-      if (onError) onError(new Error('Connection to progress updates was lost. Please check your network connection.'));
-    };
-    
-    return {
-      close: () => eventSource.close(),
-    };
-  } catch (initError) {
-    console.error('Error initializing SSE connection:', initError);
-    if (onError) onError(new Error('Failed to connect to progress updates. Please try refreshing the page.'));
-    return {
-      close: () => {}, // Dummy close function for consistent API
-    };
-  }
-};
-
-// Delete a learning path task
-export const deleteLearningPath = async (taskId) => {
-  try {
-    const response = await api.delete(`/learning-path/${taskId}`);
+    const response = await api.get(`/learning-paths?${params.toString()}`);
     return response.data;
   } catch (error) {
-    console.error('Error deleting learning path:', error);
-    throw new Error(error.message || 'Failed to delete learning path. Please try again.');
+    console.error('Error fetching history preview:', error);
+    
+    // Fall back to local history if server fails
+    return localHistoryService.getHistoryPreview(sortBy, filterSource, searchTerm);
   }
 };
 
-// HISTORY API METHODS - Using local storage instead of server
-
-// Get history preview list
-export const getHistoryPreview = async (sortBy = 'creation_date', filterSource = null, search = null) => {
-  const entries = localHistoryService.getHistoryPreview(sortBy, filterSource, search);
-  return { entries };
-};
-
-// Get complete learning path data for a specific entry
 export const getHistoryEntry = async (entryId) => {
-  return localHistoryService.getHistoryEntry(entryId);
+  try {
+    // If authenticated, use the server API regardless of ID format
+    if (authToken) {
+      try {
+        // Check if entryId is a numeric ID or a UUID format
+        const isNumericId = /^\d+$/.test(entryId);
+        let localEntry = null;
+        
+        // For numeric IDs, try local storage first
+        if (isNumericId) {
+          localEntry = localHistoryService.getHistoryEntry(entryId);
+          if (localEntry && localEntry.entry) {
+            console.log('Found entry in local storage for numeric ID:', entryId);
+            return localEntry;
+          }
+        }
+        
+        // Try server with the provided ID
+        console.log('Fetching from server with ID:', entryId);
+        const response = await api.get(`/learning-paths/${entryId}`);
+        return { entry: response.data };
+      } catch (serverError) {
+        console.error('Server error fetching history entry:', serverError);
+        // Fall back to local storage if server fails
+        const localEntry = localHistoryService.getHistoryEntry(entryId);
+        if (localEntry && localEntry.entry) {
+          return localEntry;
+        }
+        // Try to find in localStorage by matching the topic if possible
+        try {
+          const allLocalEntries = localHistoryService.getLocalHistory().entries || [];
+          // Attempt to find by ID as string comparison
+          const matchedEntry = allLocalEntries.find(entry => String(entry.id) === String(entryId));
+          if (matchedEntry) {
+            return { entry: matchedEntry };
+          }
+        } catch (e) {
+          console.error('Error searching local entries by ID match:', e);
+        }
+        
+        // If both fail, rethrow the original error
+        throw serverError;
+      }
+    } else {
+      // Not authenticated, use local storage
+      return localHistoryService.getHistoryEntry(entryId);
+    }
+  } catch (error) {
+    console.error('Error fetching history entry:', error);
+    // Try local storage as final fallback
+    return localHistoryService.getHistoryEntry(entryId);
+  }
 };
 
-// Save a new learning path to history
 export const saveToHistory = async (learningPath, source = 'generated') => {
-  return localHistoryService.saveToHistory(learningPath, source);
+  try {
+    // If authenticated, save to server
+    if (authToken) {
+      const response = await api.post('/learning-paths', {
+        topic: learningPath.topic || 'Untitled',
+        path_data: learningPath,
+        favorite: false,
+        tags: [],
+        source: source
+      });
+      
+      return { 
+        success: true, 
+        entry_id: response.data.path_id 
+      };
+    } else {
+      // Otherwise save to local storage
+      return localHistoryService.saveToHistory(learningPath, source);
+    }
+  } catch (error) {
+    console.error('Error saving to history:', error);
+    
+    // Fall back to local storage if server fails
+    return localHistoryService.saveToHistory(learningPath, source);
+  }
 };
 
-// Update history entry metadata (favorite status, tags)
 export const updateHistoryEntry = async (entryId, data) => {
-  return localHistoryService.updateHistoryEntry(entryId, data);
+  try {
+    // If authenticated and ID looks like a UUID, use the API
+    if (authToken && entryId.includes('-')) {
+      await api.put(`/learning-paths/${entryId}`, data);
+      return { success: true };
+    } else {
+      // Otherwise use local storage
+      return localHistoryService.updateHistoryEntry(entryId, data);
+    }
+  } catch (error) {
+    console.error('Error updating history entry:', error);
+    
+    // Try local storage as fallback
+    return localHistoryService.updateHistoryEntry(entryId, data);
+  }
 };
 
-// Delete history entry
 export const deleteHistoryEntry = async (entryId) => {
-  return localHistoryService.deleteHistoryEntry(entryId);
+  try {
+    // If authenticated and ID looks like a UUID, use the API
+    if (authToken && entryId.includes('-')) {
+      await api.delete(`/learning-paths/${entryId}`);
+      return { success: true };
+    } else {
+      // Otherwise use local storage
+      return localHistoryService.deleteHistoryEntry(entryId);
+    }
+  } catch (error) {
+    console.error('Error deleting history entry:', error);
+    
+    // Try local storage as fallback
+    return localHistoryService.deleteHistoryEntry(entryId);
+  }
 };
 
-// Import learning path from JSON
 export const importLearningPath = async (jsonData) => {
-  return localHistoryService.importLearningPath(jsonData);
+  try {
+    // If authenticated, use the API
+    if (authToken) {
+      const learningPath = JSON.parse(jsonData);
+      const response = await api.post('/learning-paths', {
+        topic: learningPath.topic || 'Untitled',
+        path_data: learningPath,
+        favorite: false,
+        tags: [],
+        source: 'imported'
+      });
+      
+      return {
+        success: true,
+        entry_id: response.data.path_id,
+        topic: learningPath.topic
+      };
+    } else {
+      // Otherwise use local storage
+      return localHistoryService.importLearningPath(jsonData);
+    }
+  } catch (error) {
+    console.error('Error importing learning path:', error);
+    
+    // Fall back to local storage if server fails
+    return localHistoryService.importLearningPath(jsonData);
+  }
 };
 
-// Export all history as JSON
-export const exportHistory = async () => {
-  return localHistoryService.exportHistory();
-};
-
-// Clear all history
 export const clearHistory = async () => {
+  try {
+    // We don't have a bulk delete API, so we'll just clear local storage
+    return localHistoryService.clearHistory();
+  } catch (error) {
+    console.error('Error clearing history:', error);
+    throw error;
+  }
+};
+
+export const exportHistory = async () => {
+  try {
+    // If authenticated, get all learning paths from API
+    if (authToken) {
+      const response = await api.get('/learning-paths?per_page=1000');
+      return {
+        entries: response.data.entries,
+        last_updated: new Date().toISOString()
+      };
+    } else {
+      // Otherwise get from local storage
+      return localHistoryService.getLocalHistory();
+    }
+  } catch (error) {
+    console.error('Error exporting history:', error);
+    
+    // Fall back to local storage if server fails
+    return localHistoryService.getLocalHistory();
+  }
+};
+
+// Get raw local history (used for migration)
+export const getLocalHistoryRaw = () => {
+  return localHistoryService.getLocalHistory();
+};
+
+// Clear local history
+export const clearLocalHistory = () => {
   return localHistoryService.clearHistory();
 };
 
 export default {
   generateLearningPath,
   getLearningPath,
-  getProgressUpdates,
-  deleteLearningPath,
   getHistoryPreview,
   getHistoryEntry,
   saveToHistory,
   updateHistoryEntry,
   deleteHistoryEntry,
   importLearningPath,
-  exportHistory,
   clearHistory,
+  exportHistory,
+  getLocalHistoryRaw,
+  clearLocalHistory,
   validateApiKeys,
   authenticateApiKeys,
   saveApiTokens,
   getSavedApiTokens,
   clearSavedApiTokens,
+  register,
+  login,
+  refreshAuthToken,
+  logout,
+  migrateLearningPaths,
+  getProgressUpdates,
+  deleteLearningPath,
 };
 
