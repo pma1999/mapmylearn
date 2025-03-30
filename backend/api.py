@@ -198,7 +198,7 @@ is_production = environment == "production"
 if is_production:
     # Entorno de producción - usar lista explícita de dominios permitidos
     allowed_origins = [
-        "https://learni-peach.vercel.app",               # Producción principal
+        "https://learny-peach.vercel.app",               # Producción principal
         "https://learny-pablos-projects-d80d0b2f.vercel.app",       # Despliegue específico
         "https://learny-git-main-pablos-projects-d80d0b2f.vercel.app",  # Rama principal
         "https://web-production-62f88.up.railway.app"     # Backend (para posibles solicitudes cross-origin)

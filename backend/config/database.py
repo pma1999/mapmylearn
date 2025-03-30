@@ -14,7 +14,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 # If DATABASE_URL is not set, create a default SQLite database for development
 if not DATABASE_URL:
     # Default to SQLite for easier development
-    sqlite_db_path = os.path.join(os.getcwd(), "learni.db")
+    sqlite_db_path = os.path.join(os.getcwd(), "learny.db")
     DATABASE_URL = f"sqlite:///{sqlite_db_path}"
     print(f"Using SQLite database at: {sqlite_db_path}")
 elif DATABASE_URL.startswith("postgres"):
@@ -32,7 +32,7 @@ elif DATABASE_URL.startswith("postgres"):
     except Exception as e:
         print(f"Warning: Error processing DATABASE_URL: {e}")
         # Fall back to SQLite if there's an issue
-        sqlite_db_path = os.path.join(os.getcwd(), "learni.db")
+        sqlite_db_path = os.path.join(os.getcwd(), "learny.db")
         DATABASE_URL = f"sqlite:///{sqlite_db_path}"
         print(f"Falling back to SQLite database at: {sqlite_db_path}")
 
