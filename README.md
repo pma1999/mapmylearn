@@ -14,7 +14,7 @@
 
 ## 🚀 Overview
 
-Learny is an innovative AI-powered application that generates personalized learning paths for any topic. Simply enter what you want to learn, and Learny will create a structured, comprehensive curriculum with modules and submodules specifically designed for that subject. The system leverages large language models (LLMs) to research, organize, and develop educational content, saving you hours of curriculum planning.
+Learny is an innovative AI-powered application that generates personalized learning paths for any topic. Simply enter what you want to learn, and Learny will create a structured, comprehensive curriculum with modules and submodules specifically designed for that subject. The system leverages large language models (LLMs) to research, organize, and develop educational content, saving you hours of curriculum planning
 
 ## ✨ Features
 
