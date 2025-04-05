@@ -1,0 +1,5 @@
+[deploy]
+startCommand = "python bootstrap.py"
+restartPolicyType = "ON_FAILURE"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 10 
