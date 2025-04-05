@@ -1,1 +1,1 @@
-web: python bootstrap.py 
+web: /bin/bash /app/startup.sh 

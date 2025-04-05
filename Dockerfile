@@ -48,5 +48,14 @@ COPY . .
 # Install the project
 RUN pip install -e .
 
-# Command to run (using shell form to allow environment variable substitution)
-CMD python bootstrap.py 
+# Create startup script with proper environment variable handling
+RUN echo '#!/bin/bash\n\
+echo "Starting application with environment:"\n\
+echo "PORT=$PORT"\n\
+echo "PYTHONPATH=$PYTHONPATH"\n\
+python bootstrap.py\n\
+' > /app/startup.sh && chmod +x /app/startup.sh
+
+# Use shell form to ensure environment variables are expanded
+# Use the startup script to add an extra layer of environment variable handling
+CMD ["/bin/bash", "/app/startup.sh"] 
