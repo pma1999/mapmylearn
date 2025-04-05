@@ -8,12 +8,10 @@ import tempfile
 import html
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, List, Optional
-import base64
-import json
+from typing import Dict, Any, List, Optional, Union
 import logging
-import markdown
 import re
+import markdown
 from markdown_it import MarkdownIt
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from weasyprint import HTML, CSS
@@ -22,22 +20,20 @@ from weasyprint.text.fonts import FontConfiguration
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Get the current directory to locate templates
-TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
-CSS_DIR = os.path.join(TEMPLATE_DIR, "css")
-
-# Create template directory if it doesn't exist
-os.makedirs(TEMPLATE_DIR, exist_ok=True)
-os.makedirs(CSS_DIR, exist_ok=True)
-
-# Create Jinja2 environment
-env = Environment(
-    loader=FileSystemLoader(TEMPLATE_DIR),
-    autoescape=select_autoescape(['html', 'xml'])
-)
-
-# PDF base styling
-BASE_CSS = """
+class TemplateManager:
+    """Manages templates for PDF generation."""
+    
+    # Base template directory
+    BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+    TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
+    CSS_DIR = os.path.join(TEMPLATE_DIR, "css")
+    
+    # Default template and CSS filenames
+    TEMPLATE_FILENAME = "learning_path_template.html"
+    CSS_FILENAME = "pdf_styles.css"
+    
+    # Base CSS content
+    BASE_CSS = """
 @page {
     margin: 1cm;
     @top-center {
@@ -241,15 +237,9 @@ li {
     text-align: center;
 }
 """
-
-# Create the CSS file if it doesn't exist
-css_file_path = os.path.join(CSS_DIR, "pdf_styles.css")
-if not os.path.exists(css_file_path):
-    with open(css_file_path, "w") as f:
-        f.write(BASE_CSS)
-
-# Create the HTML template for the PDF
-TEMPLATE_HTML = """
+    
+    # Base HTML template
+    BASE_HTML = """
 <!DOCTYPE html>
 <html>
 <head>
@@ -360,117 +350,331 @@ TEMPLATE_HTML = """
 </body>
 </html>
 """
-
-# Create the template file if it doesn't exist
-template_file_path = os.path.join(TEMPLATE_DIR, "learning_path_template.html")
-if not os.path.exists(template_file_path):
-    with open(template_file_path, "w") as f:
-        f.write(TEMPLATE_HTML)
-
-def _format_date(date_obj):
-    """Format a datetime object into a readable string."""
-    if not date_obj:
-        return None
-    return date_obj.strftime("%B %d, %Y")
-
-def _process_markdown(text):
-    """Process markdown text to HTML."""
-    if not text:
-        return ""
     
-    try:
-        # Process any markdown headers (# headers) that might not be properly formatted
-        # Add a space after the # if there isn't one
+    def __init__(self):
+        """Initialize the template manager and ensure template files exist."""
+        self._ensure_directories_exist()
+        self._ensure_template_files_exist()
+        self._initialize_jinja_env()
+    
+    def _ensure_directories_exist(self):
+        """Ensure template directories exist."""
+        os.makedirs(self.TEMPLATE_DIR, exist_ok=True)
+        os.makedirs(self.CSS_DIR, exist_ok=True)
+    
+    def _ensure_template_files_exist(self):
+        """Ensure template and CSS files exist."""
+        # Create CSS file if it doesn't exist
+        css_file_path = os.path.join(self.CSS_DIR, self.CSS_FILENAME)
+        if not os.path.exists(css_file_path):
+            with open(css_file_path, "w") as f:
+                f.write(self.BASE_CSS)
+        
+        # Create HTML template if it doesn't exist
+        template_file_path = os.path.join(self.TEMPLATE_DIR, self.TEMPLATE_FILENAME)
+        if not os.path.exists(template_file_path):
+            with open(template_file_path, "w") as f:
+                f.write(self.BASE_HTML)
+    
+    def _initialize_jinja_env(self):
+        """Initialize Jinja2 environment."""
+        self.env = Environment(
+            loader=FileSystemLoader(self.TEMPLATE_DIR),
+            autoescape=select_autoescape(['html', 'xml'])
+        )
+    
+    def get_css_content(self) -> str:
+        """Get CSS content from file."""
+        try:
+            css_file_path = os.path.join(self.CSS_DIR, self.CSS_FILENAME)
+            with open(css_file_path, "r") as f:
+                css_content = f.read()
+            
+            # Decode HTML entities
+            css_content = html.unescape(css_content)
+            return css_content
+        except Exception as css_error:
+            logger.error(f"Error loading CSS: {str(css_error)}")
+            # Return minimal fallback CSS
+            return """
+            body { font-family: sans-serif; margin: 2cm; line-height: 1.5; }
+            h1 { font-size: 18pt; margin-top: 1cm; }
+            h2 { font-size: 14pt; }
+            """
+    
+    def render_template(self, template_data: Dict[str, Any]) -> str:
+        """Render HTML template with provided data."""
+        try:
+            template = self.env.get_template(self.TEMPLATE_FILENAME)
+            return template.render(**template_data)
+        except Exception as template_error:
+            logger.error(f"Error rendering template: {str(template_error)}")
+            raise
+
+
+class MarkdownProcessor:
+    """Processes markdown content for PDF rendering."""
+    
+    @staticmethod
+    def preprocess_content(text: str) -> str:
+        """
+        Prepare markdown content for consistent rendering between UI and PDF.
+        
+        Args:
+            text: The markdown text to preprocess
+            
+        Returns:
+            Preprocessed markdown text
+        """
+        if not text:
+            return text
+        
+        # Remove ```markdown only at the beginning of content
+        if text.startswith("```markdown\n"):
+            text = text.replace("```markdown\n", "", 1)
+        
+        # Ensure proper header formatting
         text = re.sub(r'(^|\n)(\#{1,6})([^\s#])', r'\1\2 \3', text)
         
-        # First try with markdown-it-py for better rendering
+        return text
+    
+    @staticmethod
+    def convert_to_html(text: str) -> str:
+        """
+        Convert markdown text to HTML.
+        
+        Args:
+            text: The markdown text to convert
+            
+        Returns:
+            HTML representation of the markdown
+        """
+        if not text:
+            return ""
+        
         try:
-            md = MarkdownIt("commonmark", {"html": True})
-            return md.render(text)
+            # Preprocess text for consistent handling
+            text = MarkdownProcessor.preprocess_content(text)
+            
+            # Try with markdown-it-py for better rendering
+            try:
+                md = MarkdownIt("commonmark", {"html": True})
+                return md.render(text)
+            except Exception as e:
+                logger.warning(f"Error with markdown-it-py: {str(e)}. Falling back to python-markdown.")
+                # Fall back to python-markdown with extensions
+                return markdown.markdown(text, extensions=[
+                    'tables',
+                    'fenced_code',
+                    'codehilite',
+                    'nl2br',
+                    'sane_lists'
+                ])
         except Exception as e:
-            logger.warning(f"Error with markdown-it-py: {str(e)}. Falling back to python-markdown.")
-            # Fall back to python-markdown with extensions
-            return markdown.markdown(text, extensions=[
-                'tables',
-                'fenced_code',
-                'codehilite',
-                'nl2br',
-                'sane_lists'
-            ])
-    except Exception as e:
-        logger.error(f"Error processing markdown: {str(e)}")
-        # Return plain text as fallback
-        return f"<p>{text}</p>"
+            logger.error(f"Error processing markdown: {str(e)}")
+            # Return plain text as fallback
+            return f"<p>{text}</p>"
 
-def _extract_modules(path_data):
-    """Extract modules from learning path data."""
-    modules = []
-    
-    # Handle different potential structures
-    if "modules" in path_data:
-        raw_modules = path_data["modules"]
-    elif "content" in path_data and "modules" in path_data["content"]:
-        raw_modules = path_data["content"]["modules"]
-    else:
-        # Try to find modules in the structure
-        raw_modules = []
-        for key, value in path_data.items():
-            if isinstance(value, list) and all(isinstance(item, dict) for item in value):
-                raw_modules = value
-                break
-    
-    # Process each module
-    for i, module in enumerate(raw_modules):
-        module_title = module.get("title", f"Module {i+1}")
-        
-        # Process module description with markdown
-        module_description = module.get("description", "")
-        processed_description = _process_markdown(module_description)
-        
-        # Extract resources
-        resources = module.get("resources", [])
-        
-        # Process submodules
-        sub_modules = []
-        
-        # Check various submodule keys
-        submodules_data = None
-        for key in ["sub_modules", "subModules", "subjects", "topics", "subtopics", "lessons", "submodules"]:
-            if key in module and isinstance(module[key], list):
-                submodules_data = module[key]
-                break
-        
-        if submodules_data:
-            for j, sub in enumerate(submodules_data):
-                sub_title = sub.get("title", f"Subtopic {j+1}")
-                
-                # Process submodule description with markdown
-                sub_description = sub.get("description", "")
-                processed_sub_description = _process_markdown(sub_description)
-                
-                # Extract and process submodule content (main body text)
-                sub_content = sub.get("content", "")
-                processed_sub_content = _process_markdown(sub_content)
-                
-                # Extract resources
-                sub_resources = sub.get("resources", [])
-                
-                sub_modules.append({
-                    "title": sub_title,
-                    "description": processed_sub_description,
-                    "content": processed_sub_content,
-                    "resources": sub_resources
-                })
-        
-        modules.append({
-            "title": module_title,
-            "description": processed_description,
-            "resources": resources,
-            "sub_modules": sub_modules
-        })
-    
-    return modules
 
+class LearningPathExtractor:
+    """Extracts and processes learning path content."""
+    
+    @staticmethod
+    def format_date(date_obj: Union[str, datetime, None]) -> str:
+        """
+        Format a date object as a readable string.
+        
+        Args:
+            date_obj: The date to format (string, datetime or None)
+            
+        Returns:
+            Formatted date string
+        """
+        if not date_obj:
+            return "N/A"
+        
+        if isinstance(date_obj, str):
+            try:
+                date_obj = datetime.fromisoformat(date_obj.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                try:
+                    date_obj = datetime.strptime(date_obj, "%Y-%m-%dT%H:%M:%S.%fZ")
+                except (ValueError, TypeError):
+                    return date_obj
+        
+        if isinstance(date_obj, datetime):
+            return date_obj.strftime("%B %d, %Y")
+        
+        return str(date_obj)
+    
+    @staticmethod
+    def extract_modules(path_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Extract and process modules from learning path data.
+        
+        Args:
+            path_data: The learning path data structure
+            
+        Returns:
+            List of processed modules with their content
+        """
+        modules = []
+        
+        # Handle different potential structures
+        if "modules" in path_data:
+            raw_modules = path_data["modules"]
+        elif "content" in path_data and "modules" in path_data["content"]:
+            raw_modules = path_data["content"]["modules"]
+        else:
+            # Try to find modules in the structure
+            raw_modules = []
+            for key, value in path_data.items():
+                if isinstance(value, list) and all(isinstance(item, dict) for item in value):
+                    raw_modules = value
+                    break
+        
+        # Process each module
+        for i, module in enumerate(raw_modules):
+            module_title = module.get("title", f"Module {i+1}")
+            
+            # Preprocess and process module description
+            module_description = MarkdownProcessor.preprocess_content(module.get("description", ""))
+            processed_description = MarkdownProcessor.convert_to_html(module_description)
+            
+            # Extract resources
+            resources = module.get("resources", [])
+            
+            # Process submodules
+            sub_modules = []
+            
+            # Check various submodule keys
+            submodules_data = None
+            for key in ["sub_modules", "subModules", "subjects", "topics", "subtopics", "lessons", "submodules"]:
+                if key in module and isinstance(module[key], list):
+                    submodules_data = module[key]
+                    break
+            
+            if submodules_data:
+                for j, sub in enumerate(submodules_data):
+                    sub_title = sub.get("title", f"Subtopic {j+1}")
+                    
+                    # Preprocess and process submodule description and content
+                    sub_description = MarkdownProcessor.preprocess_content(sub.get("description", ""))
+                    sub_content = MarkdownProcessor.preprocess_content(sub.get("content", ""))
+                    
+                    processed_sub_description = MarkdownProcessor.convert_to_html(sub_description)
+                    processed_sub_content = MarkdownProcessor.convert_to_html(sub_content)
+                    
+                    # Extract resources
+                    sub_resources = sub.get("resources", [])
+                    
+                    sub_modules.append({
+                        "title": sub_title,
+                        "description": processed_sub_description,
+                        "content": processed_sub_content,
+                        "resources": sub_resources
+                    })
+            
+            modules.append({
+                "title": module_title,
+                "description": processed_description,
+                "resources": resources,
+                "sub_modules": sub_modules
+            })
+        
+        return modules
+
+
+class PDFGenerator:
+    """Main class for generating PDFs from learning paths."""
+    
+    def __init__(self):
+        """Initialize the PDF Generator with template manager."""
+        self.template_manager = TemplateManager()
+    
+    def generate(self, learning_path: Dict[str, Any], user_name: Optional[str] = None) -> str:
+        """
+        Generate a PDF from a learning path.
+        
+        Args:
+            learning_path: The learning path data
+            user_name: Optional username to include in the PDF
+            
+        Returns:
+            Path to the generated PDF file
+        """
+        try:
+            logger.info(f"Generating PDF for learning path: {learning_path.get('topic', 'Untitled')}")
+            
+            # Extract important dates
+            creation_date = LearningPathExtractor.format_date(learning_path.get("creation_date", datetime.now()))
+            last_modified_date = LearningPathExtractor.format_date(learning_path.get("last_modified_date"))
+            generation_date = LearningPathExtractor.format_date(datetime.now())
+            
+            # Extract and process modules
+            modules = LearningPathExtractor.extract_modules(learning_path.get("path_data", {}))
+            
+            # Get CSS content
+            css_content = self.template_manager.get_css_content()
+            
+            # Prepare template data
+            template_data = {
+                "learning_path": learning_path,
+                "creation_date": creation_date,
+                "last_modified_date": last_modified_date,
+                "generation_date": generation_date,
+                "modules": modules,
+                "css": css_content,
+                "user_name": user_name
+            }
+            
+            # Render HTML content
+            html_content = self.template_manager.render_template(template_data)
+            
+            # Create temporary file for PDF
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                try:
+                    # Configure fonts
+                    font_config = FontConfiguration()
+                    
+                    # Create HTML object and generate PDF
+                    html_obj = HTML(string=html_content)
+                    html_obj.write_pdf(
+                        tmp.name,
+                        font_config=font_config
+                    )
+                    
+                    logger.info(f"PDF generated successfully: {tmp.name}")
+                    return tmp.name
+                except Exception as pdf_error:
+                    logger.error(f"Error generating PDF with WeasyPrint: {str(pdf_error)}")
+                    if hasattr(pdf_error, 'args') and pdf_error.args:
+                        logger.error(f"Error details: {pdf_error.args}")
+                    raise
+        
+        except Exception as e:
+            logger.error(f"Error generating PDF: {str(e)}")
+            raise
+
+
+def create_filename(topic: str) -> str:
+    """
+    Create a sanitized filename from the topic.
+    
+    Args:
+        topic: The learning path topic
+        
+    Returns:
+        Sanitized filename with timestamp
+    """
+    # Remove characters that are problematic in filenames
+    sanitized = "".join(c for c in topic if c.isalnum() or c in (' ', '_', '-')).strip()
+    sanitized = sanitized.replace(' ', '_')
+    timestamp = datetime.now().strftime("%Y%m%d")
+    return f"learning_path_{sanitized}_{timestamp}.pdf"
+
+
+# Main function to generate PDF
 def generate_pdf(learning_path: Dict[str, Any], user_name: Optional[str] = None) -> str:
     """
     Generate a PDF from a learning path.
@@ -482,87 +686,5 @@ def generate_pdf(learning_path: Dict[str, Any], user_name: Optional[str] = None)
     Returns:
         Path to the generated PDF file
     """
-    try:
-        logger.info(f"Generating PDF for learning path: {learning_path.get('topic', 'Untitled')}")
-        
-        # Extract important dates
-        creation_date = _format_date(learning_path.get("creation_date", datetime.now()))
-        last_modified_date = _format_date(learning_path.get("last_modified_date"))
-        generation_date = _format_date(datetime.now())
-        
-        # Extract and process modules
-        modules = _extract_modules(learning_path.get("path_data", {}))
-        
-        # Read CSS
-        try:
-            with open(css_file_path, "r") as f:
-                css_content = f.read()
-            
-            # Decode HTML entities to handle special characters properly
-            css_content = html.unescape(css_content)
-            
-            # Log a sample of the CSS to help debug entity encoding issues
-            logger.debug(f"CSS after decoding (first 100 chars): {css_content[:100]}...")
-        except Exception as css_error:
-            logger.error(f"Error processing CSS: {str(css_error)}")
-            # Use a minimal fallback CSS if there's an error
-            css_content = """
-            body { font-family: sans-serif; margin: 2cm; line-height: 1.5; }
-            h1 { font-size: 18pt; margin-top: 1cm; }
-            h2 { font-size: 14pt; }
-            """
-        
-        # Prepare template data
-        template_data = {
-            "learning_path": learning_path,
-            "creation_date": creation_date,
-            "last_modified_date": last_modified_date,
-            "generation_date": generation_date,
-            "modules": modules,
-            "css": css_content,
-            "user_name": user_name
-        }
-        
-        # Load template and render HTML
-        try:
-            template = env.get_template("learning_path_template.html")
-            html_content = template.render(**template_data)
-        except Exception as template_error:
-            logger.error(f"Error rendering template: {str(template_error)}")
-            raise
-        
-        # Create a temporary file for the PDF
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-            try:
-                # Configure fonts
-                font_config = FontConfiguration()
-                
-                # Create HTML object
-                html_obj = HTML(string=html_content)
-                
-                # Generate PDF
-                html_obj.write_pdf(
-                    tmp.name,
-                    font_config=font_config
-                )
-                
-                logger.info(f"PDF generated successfully: {tmp.name}")
-                return tmp.name
-            except Exception as pdf_error:
-                logger.error(f"Error generating PDF with WeasyPrint: {str(pdf_error)}")
-                # If possible, include more context about the error
-                if hasattr(pdf_error, 'args') and pdf_error.args:
-                    logger.error(f"Error details: {pdf_error.args}")
-                raise
-    
-    except Exception as e:
-        logger.error(f"Error generating PDF: {str(e)}")
-        raise
-
-def create_filename(topic):
-    """Create a sanitized filename from the topic."""
-    # Remove characters that are problematic in filenames
-    sanitized = "".join(c for c in topic if c.isalnum() or c in (' ', '_', '-')).strip()
-    sanitized = sanitized.replace(' ', '_')
-    timestamp = datetime.now().strftime("%Y%m%d")
-    return f"learning_path_{sanitized}_{timestamp}.pdf" 
+    pdf_generator = PDFGenerator()
+    return pdf_generator.generate(learning_path, user_name) 
