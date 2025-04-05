@@ -70,7 +70,10 @@ const useLearningPathActions = (
       
       const a = document.createElement('a');
       a.href = url;
-      a.download = `learning_path_${learningPath.topic.replace(/\\s+/g, '_').substring(0, 30)}.json`;
+      const fileName = learningPath.topic 
+        ? `learning_path_${learningPath.topic.replace(/\\s+/g, '_').substring(0, 30)}.json`
+        : 'learning_path.json';
+      a.download = fileName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -123,7 +126,10 @@ const useLearningPathActions = (
       const url = URL.createObjectURL(pdfBlob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `learning_path_${learningPath.topic.replace(/\\s+/g, '_').substring(0, 30)}.pdf`;
+      const fileName = learningPath.topic 
+        ? `learning_path_${learningPath.topic.replace(/\\s+/g, '_').substring(0, 30)}.pdf`
+        : 'learning_path.pdf';
+      a.download = fileName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

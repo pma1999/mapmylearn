@@ -53,7 +53,7 @@ const SaveDialog = ({
   onTagChange,
   onTagKeyDown,
   onFavoriteChange,
-  isMobile
+  isMobile = false
 }) => {
   const theme = useTheme();
 
@@ -187,10 +187,6 @@ SaveDialog.propTypes = {
   onTagKeyDown: PropTypes.func.isRequired,
   onFavoriteChange: PropTypes.func.isRequired,
   isMobile: PropTypes.bool
-};
-
-SaveDialog.defaultProps = {
-  isMobile: false
 };
 
 export default SaveDialog; 

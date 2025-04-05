@@ -18,7 +18,7 @@ import { motion } from 'framer-motion';
  * @param {boolean} props.isPolling Whether the component is polling for updates
  * @returns {JSX.Element} Loading state component
  */
-const LoadingState = ({ progressMessages, isPolling }) => {
+const LoadingState = ({ progressMessages = [], isPolling = false }) => {
   const theme = useTheme();
   
   // Retrieve the topic from sessionStorage (for new generations)
@@ -167,11 +167,6 @@ LoadingState.propTypes = {
     type: PropTypes.string
   })),
   isPolling: PropTypes.bool
-};
-
-LoadingState.defaultProps = {
-  progressMessages: [],
-  isPolling: false
 };
 
 export default LoadingState; 

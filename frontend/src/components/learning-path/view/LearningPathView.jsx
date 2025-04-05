@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { useParams } from 'react-router-dom';
 import { Container, Snackbar, Alert, useMediaQuery, useTheme } from '@mui/material';
@@ -31,6 +31,9 @@ const LearningPathView = ({ source }) => {
   // States for tracking save status updates
   const [localSavedToHistory, setLocalSavedToHistory] = useState(false);
   const [localEntryId, setLocalEntryId] = useState(null);
+  const [localLearningPath, setLocalLearningPath] = useState(null);
+  const [localLoading, setLocalLoading] = useState(true);
+  const [localError, setLocalError] = useState('');
   
   // Load learning path data from appropriate source
   const {
@@ -38,25 +41,55 @@ const LearningPathView = ({ source }) => {
     loading,
     error,
     isFromHistory,
-    savedToHistory: initialSavedToHistory
+    savedToHistory: initialSavedToHistory,
+    refreshData
   } = useLearningPathData(source);
   
-  // Combined saved state (from hook or local updates)
+  // Combined states (from hook or local updates)
   const savedToHistory = localSavedToHistory || initialSavedToHistory;
+  const currentLearningPath = localLearningPath || learningPath;
+  const isLoading = localLoading !== false && loading;
+  const currentError = localError || error;
+  
+  // Callback for when a task completes
+  const handleTaskComplete = useCallback((response) => {
+    console.log('Task completed with status:', response.status);
+    if (response.status === 'completed' && response.result) {
+      // Update the data directly
+      setLocalLearningPath(response.result);
+      setLocalLoading(false);
+      setLocalError('');
+    } else if (response.status === 'failed') {
+      // Set error state
+      setLocalError(response.error?.message || 'Learning path generation failed');
+      setLocalLoading(false);
+    }
+  }, []);
   
   // Track generation progress for new learning paths
   const {
     progressMessages,
     isPolling,
-    startPollingForResult
-  } = useProgressTracking(taskId);
+    taskStatus,
+    startPollingForResult,
+    checkTaskStatus
+  } = useProgressTracking(taskId, handleTaskComplete);
   
   // Initialize progress tracking for running tasks
   useEffect(() => {
-    if (!isFromHistory && taskId && loading) {
+    if (!isFromHistory && taskId && isLoading) {
       startPollingForResult();
     }
-  }, [isFromHistory, taskId, loading, startPollingForResult]);
+  }, [isFromHistory, taskId, isLoading, startPollingForResult]);
+  
+  // Check task status when component mounts if needed
+  useEffect(() => {
+    // If we're in the result page and task is not from history,
+    // check the current status once
+    if (!isFromHistory && taskId && !currentLearningPath) {
+      checkTaskStatus();
+    }
+  }, [isFromHistory, taskId, checkTaskStatus, currentLearningPath]);
   
   // Setup actions for the learning path
   const {
@@ -81,7 +114,7 @@ const LearningPathView = ({ source }) => {
     handleTagKeyDown,
     handleNotificationClose
   } = useLearningPathActions(
-    learningPath,
+    currentLearningPath,
     isFromHistory,
     savedToHistory,
     localEntryId || entryId,
@@ -111,7 +144,7 @@ const LearningPathView = ({ source }) => {
   };
   
   // Loading state
-  if (loading) {
+  if (isLoading) {
     return (
       <LoadingState 
         progressMessages={progressMessages}
@@ -121,10 +154,10 @@ const LearningPathView = ({ source }) => {
   }
   
   // Error state
-  if (error) {
+  if (currentError) {
     return (
       <ErrorState 
-        error={error} 
+        error={currentError} 
         onHomeClick={handleHomeClick}
         onNewLearningPathClick={handleNewLearningPathClick}
       />
@@ -135,17 +168,21 @@ const LearningPathView = ({ source }) => {
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 3, md: 4 } }}>
       {/* Header Section */}
-      <LearningPathHeader 
-        topic={learningPath.topic}
-        savedToHistory={savedToHistory}
-        onDownload={handleDownloadJSON}
-        onDownloadPDF={handleDownloadPDFWithUpdate}
-        onSaveToHistory={handleSaveToHistory}
-        onNewLearningPath={handleNewLearningPathClick}
-      />
-      
-      {/* Modules Section */}
-      <ModuleSection modules={learningPath.modules} />
+      {currentLearningPath && (
+        <>
+          <LearningPathHeader 
+            topic={currentLearningPath.topic}
+            savedToHistory={savedToHistory}
+            onDownload={handleDownloadJSON}
+            onDownloadPDF={handleDownloadPDFWithUpdate}
+            onSaveToHistory={handleSaveToHistory}
+            onNewLearningPath={handleNewLearningPathClick}
+          />
+          
+          {/* Modules Section */}
+          <ModuleSection modules={currentLearningPath.modules} />
+        </>
+      )}
       
       {/* Save to History Dialog */}
       <SaveDialog

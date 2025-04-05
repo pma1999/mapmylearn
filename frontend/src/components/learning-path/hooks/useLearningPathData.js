@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import { getLearningPath, getHistoryEntry } from '../../../services/api';
 
@@ -7,7 +7,7 @@ import { getLearningPath, getHistoryEntry } from '../../../services/api';
  * Abstracts the source of the data (generated or history)
  * 
  * @param {string} source - Optional source override ('history' or null)
- * @returns {Object} { learningPath, loading, error, isFromHistory, savedToHistory }
+ * @returns {Object} { learningPath, loading, error, isFromHistory, savedToHistory, refreshData }
  */
 const useLearningPathData = (source = null) => {
   const { taskId, entryId } = useParams();
@@ -18,12 +18,18 @@ const useLearningPathData = (source = null) => {
   const [error, setError] = useState('');
   const [isFromHistory, setIsFromHistory] = useState(false);
   const [savedToHistory, setSavedToHistory] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Determine if data should be loaded from history
   const shouldLoadFromHistory = 
     source === 'history' || 
     location.pathname.startsWith('/history/') || 
     !!entryId;
+
+  // Function to manually refresh data
+  const refreshData = useCallback(() => {
+    setRefreshTrigger(prev => prev + 1);
+  }, []);
 
   useEffect(() => {
     const loadData = async () => {
@@ -43,6 +49,7 @@ const useLearningPathData = (source = null) => {
           setData(pathData);
           setIsFromHistory(true);
           setSavedToHistory(true);
+          setLoading(false); // Set loading to false only when data is loaded
         } else {
           // Load from task API
           const response = await getLearningPath(taskId);
@@ -51,33 +58,36 @@ const useLearningPathData = (source = null) => {
             setData(response.result);
             setSavedToHistory(false);
             setIsFromHistory(false);
+            setLoading(false); // Set loading to false only when data is loaded
           } else if (response.status === 'failed') {
             setError(response.error?.message || 'Learning path generation failed');
-          } else {
-            // For pending/running tasks, don't update data yet
-            // The calling component should handle progress updates
-            return;
+            setLoading(false); // Set loading to false on error
+          } else if (response.status === 'running' || response.status === 'pending' || response.status === 'in_progress') {
+            // Keep loading state true for running tasks
+            // Don't update data yet - the progress tracking will handle updates
+            console.log('Task is still running with status:', response.status);
+            // Important: DON'T set loading to false here
           }
         }
       } catch (err) {
         console.error('Error loading learning path:', err);
         setError(err.message || 'Error loading learning path. Please try again.');
-      } finally {
-        setLoading(false);
+        setLoading(false); // Set loading to false on error
       }
     };
     
     if (shouldLoadFromHistory ? entryId : taskId) {
       loadData();
     }
-  }, [taskId, entryId, shouldLoadFromHistory]);
+  }, [taskId, entryId, shouldLoadFromHistory, refreshTrigger]);
 
   return {
     learningPath: data,
     loading,
     error,
     isFromHistory,
-    savedToHistory
+    savedToHistory,
+    refreshData
   };
 };
 
