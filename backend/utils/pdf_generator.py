@@ -165,20 +165,69 @@ li {
     font-size: 9pt;
 }
 
-.module {
-    margin-bottom: 1cm;
-    page-break-inside: avoid;
+/* Module intro styling */
+.module-intro {
+    min-height: 70vh;
+    padding: 1cm 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.module-intro h1 {
+    margin-top: 0;
+}
+
+.module-page-break {
+    page-break-after: always;
+}
+
+.module-toc {
+    margin-top: auto;
+    border-top: 1px solid #ddd;
+    padding-top: 1cm;
+}
+
+.module-toc h3 {
+    margin-top: 0;
+    color: #3498db;
+}
+
+.module-toc ul {
+    list-style-type: none;
+    padding-left: 0;
+}
+
+.module-toc li {
+    margin-bottom: 0.5cm;
+    font-size: 12pt;
+}
+
+.module-toc a {
+    text-decoration: none;
+    color: #2c3e50;
 }
 
 .submodule {
     margin-bottom: 0.8cm;
     page-break-inside: avoid;
+    page-break-before: auto;
+}
+
+.submodule h3 {
+    page-break-after: avoid;
 }
 
 .submodule .content {
     margin-top: 0.5cm;
     margin-bottom: 0.5cm;
     line-height: 1.6;
+    page-break-before: auto;
+    page-break-after: auto;
+    page-break-inside: avoid;
+}
+
+.submodule .resources {
+    page-break-before: auto;
 }
 
 .submodule .content p {
@@ -215,6 +264,8 @@ li {
     padding: 0.5cm;
     margin-top: 0.5cm;
     margin-bottom: 0.5cm;
+    page-break-before: auto;
+    page-break-inside: avoid;
 }
 
 .resources h4 {

@@ -57,7 +57,8 @@
 
     <!-- Content -->
     {% for module in modules %}
-    <div class="module">
+    <!-- Module Introduction Page -->
+    <div class="module-intro">
         <h1 id="module-{{ loop.index }}">{{ module.title }}</h1>
         {{ module.description|safe }}
         
@@ -73,32 +74,50 @@
         {% endif %}
         
         {% if module.sub_modules %}
-            {% set module_index = loop.index %}
-            {% for sub_module in module.sub_modules %}
-            <div class="submodule">
-                <h3 id="submodule-{{ module_index }}-{{ loop.index }}">{{ sub_module.title }}</h3>
-                {{ sub_module.description|safe }}
-                
-                {% if sub_module.content %}
-                <div class="content">
-                    {{ sub_module.content|safe }}
-                </div>
-                {% endif %}
-                
-                {% if sub_module.resources %}
-                <div class="resources">
-                    <h4>Resources</h4>
-                    <ul>
-                        {% for resource in sub_module.resources %}
-                        <li>{{ resource }}</li>
-                        {% endfor %}
-                    </ul>
-                </div>
-                {% endif %}
-            </div>
-            {% endfor %}
+        <!-- Module-specific Table of Contents -->
+        <div class="module-toc">
+            <h3>In this module:</h3>
+            <ul>
+                {% set module_index = loop.index %}
+                {% for sub_module in module.sub_modules %}
+                <li>
+                    <a href="#submodule-{{ module_index }}-{{ loop.index }}">{{ sub_module.title }}</a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
         {% endif %}
     </div>
+    
+    <!-- Force a page break after module intro -->
+    <div class="module-page-break"></div>
+    
+    {% if module.sub_modules %}
+        {% set module_index = loop.index %}
+        {% for sub_module in module.sub_modules %}
+        <div class="submodule">
+            <h3 id="submodule-{{ module_index }}-{{ loop.index }}">{{ sub_module.title }}</h3>
+            {{ sub_module.description|safe }}
+            
+            {% if sub_module.content %}
+            <div class="content">
+                {{ sub_module.content|safe }}
+            </div>
+            {% endif %}
+            
+            {% if sub_module.resources %}
+            <div class="resources">
+                <h4>Resources</h4>
+                <ul>
+                    {% for resource in sub_module.resources %}
+                    <li>{{ resource }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% endif %}
     {% endfor %}
 
     <!-- Footer with generation info -->
