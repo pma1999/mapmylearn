@@ -364,7 +364,7 @@ async def download_learning_path_pdf(
         response.headers["Content-Disposition"] = f"attachment; filename={filename}"
         
         # Cleanup handler that will delete the temp file after it's been sent
-        def cleanup_temp_file():
+        async def cleanup_temp_file():
             try:
                 if os.path.exists(pdf_path):
                     os.unlink(pdf_path)

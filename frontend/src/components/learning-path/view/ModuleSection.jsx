@@ -1,9 +1,19 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 import { Box, Grid, Typography, Alert, useTheme, useMediaQuery } from '@mui/material';
 import { motion } from 'framer-motion';
-import ModuleCard from './ModuleCard';
 
-const ModuleGrid = ({ modules }) => {
+// Reutilizamos los componentes de módulos existentes que no hemos refactorizado aún
+import ModuleCard from '../../../components/organisms/ModuleCard';
+
+/**
+ * Component for displaying learning path modules
+ * 
+ * @param {Object} props Component props
+ * @param {Array} props.modules Array of module objects
+ * @returns {JSX.Element} Module section component
+ */
+const ModuleSection = ({ modules }) => {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   
@@ -56,4 +66,20 @@ const ModuleGrid = ({ modules }) => {
   );
 };
 
-export default ModuleGrid; 
+ModuleSection.propTypes = {
+  modules: PropTypes.arrayOf(
+    PropTypes.shape({
+      title: PropTypes.string.isRequired,
+      description: PropTypes.string.isRequired,
+      prerequisites: PropTypes.arrayOf(PropTypes.string),
+      submodules: PropTypes.arrayOf(
+        PropTypes.shape({
+          title: PropTypes.string.isRequired,
+          content: PropTypes.string.isRequired
+        })
+      )
+    })
+  ).isRequired
+};
+
+export default ModuleSection; 

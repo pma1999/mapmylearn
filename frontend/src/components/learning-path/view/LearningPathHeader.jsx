@@ -1,4 +1,5 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 import {
   Box,
   Typography,
@@ -6,7 +7,6 @@ import {
   Paper,
   Divider,
   Stack,
-  Chip,
   useTheme,
   useMediaQuery,
   Tooltip
@@ -18,6 +18,18 @@ import SchoolIcon from '@mui/icons-material/School';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import { motion } from 'framer-motion';
 
+/**
+ * Header component for learning path display
+ * 
+ * @param {Object} props Component props 
+ * @param {string} props.topic Learning path topic/title
+ * @param {boolean} props.savedToHistory Whether the learning path is saved to history
+ * @param {Function} props.onDownload Handler for JSON download
+ * @param {Function} props.onDownloadPDF Handler for PDF download
+ * @param {Function} props.onSaveToHistory Handler for saving to history
+ * @param {Function} props.onNewLearningPath Handler for creating a new learning path
+ * @returns {JSX.Element} Header component
+ */
 const LearningPathHeader = ({ 
   topic, 
   savedToHistory, 
@@ -254,6 +266,15 @@ const LearningPathHeader = ({
       </motion.div>
     </Paper>
   );
+};
+
+LearningPathHeader.propTypes = {
+  topic: PropTypes.string.isRequired,
+  savedToHistory: PropTypes.bool.isRequired,
+  onDownload: PropTypes.func.isRequired,
+  onDownloadPDF: PropTypes.func.isRequired,
+  onSaveToHistory: PropTypes.func.isRequired,
+  onNewLearningPath: PropTypes.func.isRequired
 };
 
 export default LearningPathHeader; 

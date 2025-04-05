@@ -17,6 +17,7 @@ import MigrationPage from './pages/MigrationPage';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
+import LearningPathView from './components/learning-path/view/LearningPathView';
 
 // Import auth provider
 import { AuthProvider } from './services/authContext';
@@ -73,7 +74,7 @@ function App() {
               } />
               <Route path="/history/:entryId" element={
                 <ProtectedRoute>
-                  <ResultPage source="history" />
+                  <LearningPathView source="history" />
                 </ProtectedRoute>
               } />
               <Route path="/migrate" element={

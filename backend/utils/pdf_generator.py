@@ -5,6 +5,7 @@ Converts learning path data structures into well-formatted PDF documents.
 
 import os
 import tempfile
+import html
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, List, Optional
@@ -377,24 +378,29 @@ def _process_markdown(text):
     if not text:
         return ""
     
-    # Process any markdown headers (# headers) that might not be properly formatted
-    # Add a space after the # if there isn't one
-    text = re.sub(r'(^|\n)(\#{1,6})([^\s#])', r'\1\2 \3', text)
-    
-    # First try with markdown-it-py for better rendering
     try:
-        md = MarkdownIt("commonmark", {"html": True})
-        return md.render(text)
+        # Process any markdown headers (# headers) that might not be properly formatted
+        # Add a space after the # if there isn't one
+        text = re.sub(r'(^|\n)(\#{1,6})([^\s#])', r'\1\2 \3', text)
+        
+        # First try with markdown-it-py for better rendering
+        try:
+            md = MarkdownIt("commonmark", {"html": True})
+            return md.render(text)
+        except Exception as e:
+            logger.warning(f"Error with markdown-it-py: {str(e)}. Falling back to python-markdown.")
+            # Fall back to python-markdown with extensions
+            return markdown.markdown(text, extensions=[
+                'tables',
+                'fenced_code',
+                'codehilite',
+                'nl2br',
+                'sane_lists'
+            ])
     except Exception as e:
-        logger.warning(f"Error with markdown-it-py: {str(e)}. Falling back to python-markdown.")
-        # Fall back to python-markdown with extensions
-        return markdown.markdown(text, extensions=[
-            'tables',
-            'fenced_code',
-            'codehilite',
-            'nl2br',
-            'sane_lists'
-        ])
+        logger.error(f"Error processing markdown: {str(e)}")
+        # Return plain text as fallback
+        return f"<p>{text}</p>"
 
 def _extract_modules(path_data):
     """Extract modules from learning path data."""
@@ -488,8 +494,23 @@ def generate_pdf(learning_path: Dict[str, Any], user_name: Optional[str] = None)
         modules = _extract_modules(learning_path.get("path_data", {}))
         
         # Read CSS
-        with open(css_file_path, "r") as f:
-            css_content = f.read()
+        try:
+            with open(css_file_path, "r") as f:
+                css_content = f.read()
+            
+            # Decode HTML entities to handle special characters properly
+            css_content = html.unescape(css_content)
+            
+            # Log a sample of the CSS to help debug entity encoding issues
+            logger.debug(f"CSS after decoding (first 100 chars): {css_content[:100]}...")
+        except Exception as css_error:
+            logger.error(f"Error processing CSS: {str(css_error)}")
+            # Use a minimal fallback CSS if there's an error
+            css_content = """
+            body { font-family: sans-serif; margin: 2cm; line-height: 1.5; }
+            h1 { font-size: 18pt; margin-top: 1cm; }
+            h2 { font-size: 14pt; }
+            """
         
         # Prepare template data
         template_data = {
@@ -502,26 +523,37 @@ def generate_pdf(learning_path: Dict[str, Any], user_name: Optional[str] = None)
             "user_name": user_name
         }
         
-        # Load template
-        template = env.get_template("learning_path_template.html")
-        html_content = template.render(**template_data)
+        # Load template and render HTML
+        try:
+            template = env.get_template("learning_path_template.html")
+            html_content = template.render(**template_data)
+        except Exception as template_error:
+            logger.error(f"Error rendering template: {str(template_error)}")
+            raise
         
         # Create a temporary file for the PDF
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-            # Configure fonts
-            font_config = FontConfiguration()
-            
-            # Create HTML object
-            html = HTML(string=html_content)
-            
-            # Generate PDF
-            html.write_pdf(
-                tmp.name,
-                font_config=font_config
-            )
-            
-            logger.info(f"PDF generated successfully: {tmp.name}")
-            return tmp.name
+            try:
+                # Configure fonts
+                font_config = FontConfiguration()
+                
+                # Create HTML object
+                html_obj = HTML(string=html_content)
+                
+                # Generate PDF
+                html_obj.write_pdf(
+                    tmp.name,
+                    font_config=font_config
+                )
+                
+                logger.info(f"PDF generated successfully: {tmp.name}")
+                return tmp.name
+            except Exception as pdf_error:
+                logger.error(f"Error generating PDF with WeasyPrint: {str(pdf_error)}")
+                # If possible, include more context about the error
+                if hasattr(pdf_error, 'args') and pdf_error.args:
+                    logger.error(f"Error details: {pdf_error.args}")
+                raise
     
     except Exception as e:
         logger.error(f"Error generating PDF: {str(e)}")
