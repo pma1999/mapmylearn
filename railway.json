@@ -1,11 +1,10 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS",
-    "buildCommand": "pip install -r backend/requirements.txt && pip install -e ."
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "./Dockerfile"
   },
   "deploy": {
-    "startCommand": "python bootstrap.py",
     "healthcheckPath": "/api/health",
     "healthcheckTimeout": 10,
     "restartPolicyType": "ON_FAILURE"
@@ -18,7 +17,6 @@
     "LOG_LEVEL": "INFO",
     "PYTHONPATH": ".",
     "TRUSTED_HOSTS": "web-production-62f88.up.railway.app",
-    "ALLOWED_ORIGINS": "https://learny-peach.vercel.app,https://learny-pablos-projects-d80d0b2f.vercel.app,https://learny-git-main-pablos-projects-d80d0b2f.vercel.app",
-    "NIXPACKS_PKGS": "cairo pango gobject-introspection glib libffi pkg-config gdk-pixbuf gtk+3 harfbuzz"
+    "ALLOWED_ORIGINS": "https://learny-peach.vercel.app,https://learny-pablos-projects-d80d0b2f.vercel.app,https://learny-git-main-pablos-projects-d80d0b2f.vercel.app"
   }
 } 
