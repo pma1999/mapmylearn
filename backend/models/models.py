@@ -50,6 +50,19 @@ class Submodule(BaseModel):
     key_components: List[str] = Field(default_factory=list, description="Key topics")
     depth_level: str = Field(default="intermediate", description="Level: basic, intermediate, advanced, expert")
 
+# Quiz Question Model
+class QuizOption(BaseModel):
+    text: str = Field(..., description="The text of this answer option")
+    is_correct: bool = Field(..., description="Whether this option is the correct answer")
+
+class QuizQuestion(BaseModel):
+    question: str = Field(..., description="The question text")
+    options: List[QuizOption] = Field(..., description="List of answer options (typically 4)")
+    explanation: str = Field(..., description="Explanation of the correct answer")
+
+class QuizQuestionList(BaseModel):
+    questions: List[QuizQuestion] = Field(..., description="List of quiz questions for a submodule")
+
 # Enhanced SubmoduleContent Model
 class SubmoduleContent(BaseModel):
     module_id: int = Field(..., description="ID of the parent module")
@@ -59,6 +72,7 @@ class SubmoduleContent(BaseModel):
     search_queries: List[SearchQuery] = Field(..., description="Search queries for submodule research")
     search_results: List[Dict[str, Any]] = Field(..., description="Search results for submodule")
     content: str = Field(..., description="Developed content")
+    quiz_questions: Optional[List[QuizQuestion]] = Field(default=None, description="Quiz questions for this submodule")
     summary: str = Field(default="", description="Brief summary")
     connections: Dict[str, str] = Field(default_factory=dict, description="Connections to other modules/submodules")
 
@@ -112,6 +126,11 @@ class LearningPathState(TypedDict):
     current_submodule_batch_index: Optional[int]
     submodules_in_process: Optional[Dict[tuple, Dict[str, Any]]]
     developed_submodules: Optional[List[SubmoduleContent]]
+    # Quiz generation tracking
+    quiz_generation_enabled: Optional[bool]
+    quiz_questions_by_submodule: Optional[Dict[str, List[QuizQuestion]]]
+    quiz_generation_in_progress: Optional[Dict[str, bool]]
+    quiz_generation_errors: Optional[Dict[str, str]]
     # Key provider references instead of direct API keys
     google_key_provider: Optional[Any]  # GoogleKeyProvider but avoiding import cycles
     pplx_key_provider: Optional[Any]    # PerplexityKeyProvider but avoiding import cycles

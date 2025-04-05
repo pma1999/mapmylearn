@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { useParams } from 'react-router-dom';
-import { Container, Snackbar, Alert, useMediaQuery, useTheme } from '@mui/material';
+import { Container, Snackbar, Alert, useMediaQuery, useTheme, Box, Typography, Paper, Divider } from '@mui/material';
 
 // Custom hooks
 import useLearningPathData from '../hooks/useLearningPathData';
@@ -14,6 +14,10 @@ import ModuleSection from './ModuleSection';
 import LoadingState from './LoadingState';
 import ErrorState from './ErrorState';
 import SaveDialog from './SaveDialog';
+
+// Import placeholder component for path resources
+import PlaceholderContent from '../../shared/PlaceholderContent';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
 
 /**
  * Main component for viewing a learning path
@@ -181,6 +185,61 @@ const LearningPathView = ({ source }) => {
           
           {/* Modules Section */}
           <ModuleSection modules={currentLearningPath.modules} />
+          
+          {/* Learning Path Resources Section */}
+          <Box sx={{ mt: 6, mb: 4 }}>
+            <Paper 
+              elevation={0} 
+              sx={{ 
+                p: 3, 
+                borderRadius: 2,
+                border: '1px solid',
+                borderColor: 'divider'
+              }}
+            >
+              <Box sx={{ mb: 3 }}>
+                <Typography 
+                  variant="h5" 
+                  component="h2" 
+                  sx={{ 
+                    fontWeight: 600, 
+                    color: 'primary.main',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    mb: 1
+                  }}
+                >
+                  <MenuBookIcon fontSize="large" />
+                  Learning Path Resources
+                </Typography>
+                <Typography variant="body1" color="text.secondary">
+                  Comprehensive resources to support your learning journey on {currentLearningPath.topic}.
+                </Typography>
+                <Divider sx={{ mt: 2 }} />
+              </Box>
+              
+              <PlaceholderContent 
+                title="Additional Learning Resources Coming Soon"
+                description="This section will contain curated resources for the entire learning path, including reading lists, video lectures, practice problems, and tools related to this topic."
+                type="resources"
+              />
+              
+              <Box sx={{ mt: 3, textAlign: 'center' }}>
+                <Typography 
+                  variant="body2" 
+                  color="text.secondary" 
+                  sx={{ 
+                    fontStyle: 'italic',
+                    maxWidth: '80%',
+                    mx: 'auto'
+                  }}
+                >
+                  Future updates will include community recommendations, expert-curated materials, and interactive reference tools to enhance your learning experience.
+                </Typography>
+              </Box>
+            </Paper>
+          </Box>
         </>
       )}
       

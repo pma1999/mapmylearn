@@ -14,25 +14,53 @@ import {
   useTheme,
   useMediaQuery,
   Fade,
-  Collapse
+  Badge,
+  Tabs,
+  Tab
 } from '@mui/material';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import CloseIcon from '@mui/icons-material/Close';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
+import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
+import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
 import MarkdownRenderer from '../MarkdownRenderer';
 import { motion } from 'framer-motion';
 
+// Import quiz components
+import { QuizContainer } from '../quiz';
+
+// Import placeholders for future content types
+import PlaceholderContent from '../shared/PlaceholderContent';
+
+// TabPanel component for the tabbed interface
+const TabPanel = (props) => {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`tabpanel-${index}`}
+      aria-labelledby={`tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ p: { xs: 1, sm: 2 } }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+};
+
 const SubmoduleCard = ({ submodule, index, moduleIndex }) => {
-  const [showContent, setShowContent] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const fullScreen = useMediaQuery(theme.breakpoints.down('md'));
   
-  const handleToggleContent = () => {
-    setShowContent(!showContent);
-  };
+  // Check if this submodule has quiz questions
+  const hasQuizQuestions = submodule.quiz_questions && submodule.quiz_questions.length > 0;
   
   const handleOpenModal = () => {
     setModalOpen(true);
@@ -40,6 +68,10 @@ const SubmoduleCard = ({ submodule, index, moduleIndex }) => {
   
   const handleCloseModal = () => {
     setModalOpen(false);
+  };
+  
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
   };
 
   // Animation variants for the card
@@ -90,10 +122,25 @@ const SubmoduleCard = ({ submodule, index, moduleIndex }) => {
                   fontSize: { xs: '1rem', sm: '1.1rem' },
                   mb: 1,
                   lineHeight: 1.4,
-                  color: theme.palette.text.primary
+                  color: theme.palette.text.primary,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1
                 }}
               >
                 {submodule.title}
+                <Badge 
+                  badgeContent="+" 
+                  color="secondary" 
+                  sx={{ 
+                    '& .MuiBadge-badge': {
+                      fontSize: '0.7rem',
+                      height: 18,
+                      minWidth: 18,
+                    }
+                  }}
+                  title="Contains additional sections"
+                />
               </Typography>
               
               <Typography 
@@ -108,21 +155,6 @@ const SubmoduleCard = ({ submodule, index, moduleIndex }) => {
                 {submodule.description}
               </Typography>
             </Box>
-            
-            {isMobile ? (
-              <IconButton
-                onClick={handleToggleContent}
-                aria-expanded={showContent}
-                aria-label="show content"
-                size="small"
-                sx={{
-                  ml: 1,
-                  mt: -0.5
-                }}
-              >
-                {showContent ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-              </IconButton>
-            ) : null}
           </Box>
           
           <Box 
@@ -133,18 +165,6 @@ const SubmoduleCard = ({ submodule, index, moduleIndex }) => {
               mt: 1
             }}
           >
-            {!isMobile && (
-              <Button
-                size="small"
-                startIcon={<ExpandMoreIcon />}
-                onClick={handleToggleContent}
-                color="primary"
-                sx={{ mr: 1 }}
-              >
-                {showContent ? 'Hide Details' : 'Show Details'}
-              </Button>
-            )}
-            
             <Button
               size="small"
               color="primary"
@@ -152,32 +172,13 @@ const SubmoduleCard = ({ submodule, index, moduleIndex }) => {
               startIcon={<MenuBookIcon />}
               onClick={handleOpenModal}
             >
-              Full View
+              View Content
             </Button>
           </Box>
-          
-          <Collapse in={showContent} timeout="auto" unmountOnExit>
-            <Divider sx={{ my: 2 }} />
-            
-            <Box
-              sx={{
-                mt: 2,
-                maxHeight: '250px',
-                overflow: 'auto',
-                borderRadius: 1,
-                backgroundColor: 'grey.50',
-                p: 2
-              }}
-            >
-              <MarkdownRenderer>
-                {submodule.content}
-              </MarkdownRenderer>
-            </Box>
-          </Collapse>
         </CardContent>
       </Card>
       
-      {/* Full Content Modal */}
+      {/* Enhanced Full Content Modal with Tabs */}
       <Dialog
         open={modalOpen}
         onClose={handleCloseModal}
@@ -218,29 +219,126 @@ const SubmoduleCard = ({ submodule, index, moduleIndex }) => {
           </IconButton>
         </DialogTitle>
         
-        <DialogContent dividers sx={{ p: { xs: 2, sm: 3 } }}>
-          <Typography 
-            variant="subtitle1" 
-            color="text.secondary"
-            paragraph
-            sx={{ 
-              mb: 3, 
-              fontStyle: 'italic',
-              borderLeft: '4px solid',
-              borderColor: 'primary.light',
-              pl: 2,
-              py: 1,
-              bgcolor: 'grey.50',
-              borderRadius: '0 4px 4px 0'
-            }}
-          >
-            {submodule.description}
-          </Typography>
+        <DialogContent 
+          dividers 
+          sx={{ 
+            p: 0, 
+            display: 'flex', 
+            flexDirection: 'column' 
+          }}
+        >
+          {/* Submodule description */}
+          <Box sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 } }}>
+            <Typography 
+              variant="subtitle1" 
+              color="text.secondary"
+              paragraph
+              sx={{ 
+                mb: 3, 
+                fontStyle: 'italic',
+                borderLeft: '4px solid',
+                borderColor: 'primary.light',
+                pl: 2,
+                py: 1,
+                bgcolor: 'grey.50',
+                borderRadius: '0 4px 4px 0'
+              }}
+            >
+              {submodule.description}
+            </Typography>
+          </Box>
           
-          <Box sx={{ mt: 2 }}>
-            <MarkdownRenderer>
-              {submodule.content}
-            </MarkdownRenderer>
+          {/* Tabbed interface */}
+          <Box sx={{ width: '100%' }}>
+            {/* Tabs navigation */}
+            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+              <Tabs 
+                value={activeTab} 
+                onChange={handleTabChange} 
+                aria-label="submodule content tabs"
+                variant={isMobile ? "scrollable" : "standard"}
+                scrollButtons={isMobile ? "auto" : false}
+                allowScrollButtonsMobile
+                sx={{
+                  px: { xs: 2, sm: 3 },
+                  '& .MuiTab-root': {
+                    minWidth: { xs: 'auto', sm: 100 },
+                    py: { xs: 1, sm: 1.5 },
+                    px: { xs: 2, sm: 3 },
+                    fontSize: { xs: '0.8rem', sm: '0.9rem' },
+                    fontWeight: 500,
+                  }
+                }}
+              >
+                <Tab 
+                  label="Content" 
+                  icon={<MenuBookIcon />} 
+                  iconPosition="start" 
+                  id="tab-0"
+                  aria-controls="tabpanel-0"
+                />
+                <Tab 
+                  label={hasQuizQuestions ? "Quiz" : "Exercises"}
+                  icon={<FitnessCenterIcon />} 
+                  iconPosition="start" 
+                  id="tab-1"
+                  aria-controls="tabpanel-1"
+                />
+                <Tab 
+                  label="Resources" 
+                  icon={<CollectionsBookmarkIcon />} 
+                  iconPosition="start" 
+                  id="tab-2"
+                  aria-controls="tabpanel-2"
+                />
+              </Tabs>
+            </Box>
+            
+            {/* Content tab panel */}
+            <TabPanel value={activeTab} index={0}>
+              <MarkdownRenderer>
+                {submodule.content}
+              </MarkdownRenderer>
+            </TabPanel>
+            
+            {/* Exercises tab panel - now shows quiz if available */}
+            <TabPanel value={activeTab} index={1}>
+              {hasQuizQuestions ? (
+                <QuizContainer quizQuestions={submodule.quiz_questions} />
+              ) : (
+                <>
+                  <PlaceholderContent 
+                    title="Interactive Exercises Coming Soon"
+                    description="This section will contain practice exercises to help you test your understanding and apply what you've learned."
+                    type="exercises"
+                    icon={<FitnessCenterIcon sx={{ fontSize: 40 }} />}
+                  />
+                  
+                  <Box sx={{ px: 2, mt: 3 }}>
+                    <Typography 
+                      variant="body2" 
+                      color="textSecondary" 
+                      sx={{ 
+                        fontStyle: 'italic',
+                        textAlign: 'center'
+                      }}
+                    >
+                      Future exercises will include multiple choice quizzes, code challenges, 
+                      and interactive problems to reinforce your learning.
+                    </Typography>
+                  </Box>
+                </>
+              )}
+            </TabPanel>
+            
+            {/* Resources tab panel */}
+            <TabPanel value={activeTab} index={2}>
+              <PlaceholderContent 
+                title="Additional Resources Coming Soon"
+                description="This section will contain supplementary materials to enhance your learning experience, including articles, videos, and external references."
+                type="resources"
+              />
+            </TabPanel>
           </Box>
         </DialogContent>
         

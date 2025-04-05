@@ -1,10 +1,12 @@
 import asyncio
 import logging
-from typing import Dict, Any, List, Tuple
+import re
+import json
+from typing import Dict, Any, List, Tuple, Optional
 
 from backend.core.graph_nodes.initial_flow import execute_single_search
-from backend.models.models import SearchQuery, EnhancedModule, Submodule, SubmoduleContent, LearningPathState
-from backend.parsers.parsers import submodule_parser, module_queries_parser
+from backend.models.models import SearchQuery, EnhancedModule, Submodule, SubmoduleContent, LearningPathState, QuizQuestion, QuizQuestionList
+from backend.parsers.parsers import submodule_parser, module_queries_parser, quiz_questions_parser
 from backend.services.services import get_llm, get_search_tool
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -12,6 +14,7 @@ from langchain_core.output_parsers import StrOutputParser
 # Import the extracted prompts
 from backend.prompts.learning_path_prompts import (
     SUBMODULE_PLANNING_PROMPT,
+    SUBMODULE_QUIZ_GENERATION_PROMPT
     # Removed imports for prompts now defined inline
     # SUBMODULE_QUERY_GENERATION_PROMPT,
     # SUBMODULE_CONTENT_DEVELOPMENT_PROMPT
@@ -20,6 +23,48 @@ from backend.prompts.learning_path_prompts import (
 # from prompts.prompt_registry import registry
 
 from backend.core.graph_nodes.helpers import run_chain, batch_items, escape_curly_braces
+
+# Helper function to extract JSON from potentially markdown-formatted strings
+def extract_json_from_markdown(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Extract JSON from text that might be formatted as markdown code blocks.
+    
+    Args:
+        text: The text that may contain markdown-formatted JSON
+        
+    Returns:
+        Parsed JSON object or None if extraction failed
+    """
+    # First try to parse directly as JSON (in case it's already valid JSON)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    
+    # Try to extract JSON from markdown code blocks
+    code_block_pattern = r'```(?:json)?\s*([\s\S]*?)\s*```'
+    matches = re.findall(code_block_pattern, text)
+    
+    # If we found code blocks, try each one
+    for match in matches:
+        try:
+            return json.loads(match)
+        except json.JSONDecodeError:
+            continue
+    
+    # If no code blocks or none contained valid JSON, try a more lenient approach
+    # Look for text that appears to be JSON (starting with { and ending with })
+    json_object_pattern = r'(\{[\s\S]*\})'
+    object_matches = re.findall(json_object_pattern, text)
+    
+    for match in object_matches:
+        try:
+            return json.loads(match)
+        except json.JSONDecodeError:
+            continue
+    
+    # If we couldn't extract JSON, return None
+    return None
 
 async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
     """
@@ -279,6 +324,10 @@ async def initialize_submodule_processing(state: LearningPathState) -> Dict[str,
             "current_submodule_batch_index": 0,
             "submodules_in_process": {},
             "developed_submodules": [],
+            "quiz_generation_enabled": True,  # Default to enabled
+            "quiz_questions_by_submodule": {},
+            "quiz_generation_in_progress": {},
+            "quiz_generation_errors": {},
             "steps": ["No enhanced modules available"]
         }
     
@@ -307,6 +356,10 @@ async def initialize_submodule_processing(state: LearningPathState) -> Dict[str,
             "current_submodule_batch_index": 0,
             "submodules_in_process": {},
             "developed_submodules": [],
+            "quiz_generation_enabled": True,  # Default to enabled
+            "quiz_questions_by_submodule": {},
+            "quiz_generation_in_progress": {},
+            "quiz_generation_errors": {},
             "steps": ["No valid submodules found"]
         }
     
@@ -378,10 +431,15 @@ async def initialize_submodule_processing(state: LearningPathState) -> Dict[str,
         "parallel_processing": submodule_parallel_count
     }
     
+    # Initialize quiz generation settings - enable by default
+    quiz_generation_enabled = state.get("quiz_generation_enabled", True)
+    
     if progress_callback:
+        # Add quiz information to progress message
+        quiz_info = "with quiz generation enabled" if quiz_generation_enabled else "without quiz generation"
         await progress_callback(
             f"Preparing to process {total_submodules} submodules in {total_batches} batches "
-            f"with {submodule_parallel_count} submodules in parallel",
+            f"with {submodule_parallel_count} submodules in parallel ({quiz_info})",
             phase="submodule_research",
             phase_progress=0.1,
             overall_progress=0.6,
@@ -394,7 +452,11 @@ async def initialize_submodule_processing(state: LearningPathState) -> Dict[str,
         "current_submodule_batch_index": 0,
         "submodules_in_process": {},
         "developed_submodules": [],
-        "steps": [f"Initialized LangGraph-optimized submodule processing with batch size {submodule_parallel_count}"]
+        "quiz_generation_enabled": quiz_generation_enabled,
+        "quiz_questions_by_submodule": {},
+        "quiz_generation_in_progress": {},
+        "quiz_generation_errors": {},
+        "steps": [f"Initialized LangGraph-optimized submodule processing with batch size {submodule_parallel_count} and quiz generation {'enabled' if quiz_generation_enabled else 'disabled'}"]
     }
 
 async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
@@ -582,7 +644,8 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
                     description=module.submodules[sub_id].description,
                     search_queries=data.get("search_queries", []),
                     search_results=data.get("search_results", []),
-                    content=data.get("content", "")
+                    content=data.get("content", ""),
+                    quiz_questions=data.get("quiz_questions", None)
                 ))
     
     # Update progress based on completion percentage
@@ -715,12 +778,47 @@ async def process_single_submodule(
         )
         content_time = time.time() - step_start
         
+        # STEP 4: Generate quiz questions for the submodule
+        step_start = time.time()
+        
+        # Transition to quiz generation phase
+        if progress_callback:
+            await progress_callback(
+                f"Generating quiz questions for {module.title} > {submodule.title}",
+                phase="quiz_generation",
+                phase_progress=0.0,
+                overall_progress=0.75,
+                action="started"
+            )
+        
+        # Generate quiz questions if content was successfully developed
+        quiz_questions = []
+        if submodule_content and not submodule_content.startswith("Error:"):
+            quiz_questions = await generate_submodule_quiz(
+                state, module_id, sub_id, module, submodule, submodule_content
+            )
+        else:
+            logger.warning(f"Skipping quiz generation for submodule {module_id}.{sub_id} due to content generation failure")
+            
+            # Send progress update for skipped quiz generation
+            if progress_callback:
+                await progress_callback(
+                    f"Skipped quiz generation for {module.title} > {submodule.title} due to content generation failure",
+                    phase="quiz_generation",
+                    phase_progress=0.0,
+                    overall_progress=0.75,
+                    action="skipped"
+                )
+        
+        quiz_time = time.time() - step_start
+        
         # Calculate total processing time
         total_time = time.time() - start_time
         
         logger.info(
             f"Completed submodule {module_id+1}.{sub_id+1} in {total_time:.2f}s "
-            f"(Query: {query_gen_time:.2f}s, Search: {search_time:.2f}s, Content: {content_time:.2f}s)"
+            f"(Query: {query_gen_time:.2f}s, Search: {search_time:.2f}s, "
+            f"Content: {content_time:.2f}s, Quiz: {quiz_time:.2f}s)"
         )
         
         if progress_callback:
@@ -740,11 +838,13 @@ async def process_single_submodule(
             "search_queries": submodule_search_queries, 
             "search_results": submodule_search_results, 
             "content": submodule_content,
+            "quiz_questions": quiz_questions,
             "processing_time": {
                 "total": total_time,
                 "query_generation": query_gen_time,
                 "search": search_time,
-                "content_development": content_time
+                "content_development": content_time,
+                "quiz_generation": quiz_time
             }
         }
     except Exception as e:
@@ -1267,6 +1367,190 @@ Format your response using Markdown, with clear section headings, code examples 
         logger.exception(f"Error developing submodule content: {str(e)}")
         return f"Error developing content: {str(e)}"
 
+async def generate_submodule_quiz(
+    state: LearningPathState,
+    module_id: int,
+    sub_id: int,
+    module: EnhancedModule,
+    submodule: Submodule,
+    submodule_content: str
+) -> List[QuizQuestion]:
+    """
+    Generates quiz questions for a submodule based on its content.
+    
+    Args:
+        state: The current LearningPathState.
+        module_id: Index of the parent module.
+        sub_id: Index of the submodule.
+        module: The EnhancedModule instance.
+        submodule: The Submodule instance.
+        submodule_content: The content of the submodule.
+        
+    Returns:
+        A list of quiz questions for the submodule.
+    """
+    logger = logging.getLogger("learning_path.quiz_generator")
+    logger.info(f"Generating quiz questions for submodule {sub_id+1} of module {module_id+1}: {submodule.title}")
+    
+    # Get progress callback
+    progress_callback = state.get("progress_callback")
+    
+    # Check if quiz generation is enabled (default to True if not specified)
+    if state.get("quiz_generation_enabled") is False:
+        logger.info(f"Quiz generation is disabled, skipping for submodule {module_id}.{sub_id}")
+        return []
+    
+    try:
+        # Track timing for performance analysis
+        import time
+        start_time = time.time()
+        
+        # Send progress update
+        if progress_callback:
+            await progress_callback(
+                f"Generating quiz questions for {module.title} > {submodule.title}",
+                phase="quiz_generation",
+                phase_progress=0.1,
+                overall_progress=0.8,
+                action="processing"
+            )
+        
+        # Get output language from state
+        output_language = state.get('language', 'en')
+        
+        # Import escape function from helpers
+        from backend.core.graph_nodes.helpers import escape_curly_braces
+        
+        # Escape curly braces in content and fields to avoid template parsing issues
+        escaped_content = escape_curly_braces(submodule_content)
+        user_topic = escape_curly_braces(state["user_topic"])
+        module_title = escape_curly_braces(module.title)
+        submodule_title = escape_curly_braces(submodule.title)
+        submodule_description = escape_curly_braces(submodule.description)
+        
+        # Modify the original prompt to explicitly ask for raw JSON without markdown formatting
+        # Add an explicit instruction not to use markdown formatting
+        modified_quiz_prompt = SUBMODULE_QUIZ_GENERATION_PROMPT + """
+## IMPORTANT FORMAT INSTRUCTIONS
+- Return ONLY the raw JSON output without any markdown formatting
+- DO NOT wrap your response in ```json or ``` markdown code blocks
+- Provide a clean, valid JSON object that can be directly parsed
+"""
+        
+        # Create prompt using the modified quiz generation prompt template
+        prompt = ChatPromptTemplate.from_template(modified_quiz_prompt)
+        
+        # Get Google LLM for quiz generation
+        llm = await get_llm(key_provider=state.get("google_key_provider"))
+        
+        # Try using the standard parser first, but have fallback mechanisms
+        try:
+            # Invoke the LLM chain with the quiz generation prompt
+            result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider")), quiz_questions_parser, {
+                "user_topic": user_topic,
+                "module_title": module_title,
+                "submodule_title": submodule_title,
+                "submodule_description": submodule_description,
+                "submodule_content": escaped_content[:100000],  # Limit content length to avoid token limits
+                "language": output_language,
+                "format_instructions": quiz_questions_parser.get_format_instructions()
+            })
+            
+            # Extract questions from result if parsing was successful
+            quiz_questions = result.questions
+            
+        except Exception as parsing_error:
+            # If standard parsing fails, try our custom JSON extraction approach
+            logger.warning(f"Standard parsing failed, attempting to extract JSON from response: {str(parsing_error)}")
+            
+            # Get the raw LLM output without using the parser
+            # We'll create a new chain that just returns the string output
+            output_parser = StrOutputParser()
+            raw_chain = prompt | llm | output_parser
+            
+            # Get the raw response from the LLM
+            raw_response = await raw_chain.ainvoke({
+                "user_topic": user_topic,
+                "module_title": module_title,
+                "submodule_title": submodule_title,
+                "submodule_description": submodule_description,
+                "submodule_content": escaped_content[:100000],
+                "language": output_language,
+                "format_instructions": quiz_questions_parser.get_format_instructions()
+            })
+            
+            # Try to extract and parse JSON from the raw response
+            json_data = extract_json_from_markdown(raw_response)
+            
+            if json_data and "questions" in json_data:
+                # Create a QuizQuestionList from the extracted JSON
+                result = QuizQuestionList(**json_data)
+                quiz_questions = result.questions
+                logger.info("Successfully extracted quiz questions from markdown-formatted response")
+            else:
+                # If JSON extraction fails, log the error and return an empty list
+                logger.error(f"Failed to extract valid JSON from LLM response: {raw_response[:500]}...")
+                if progress_callback:
+                    await progress_callback(
+                        f"Could not generate quiz questions for {module.title} > {submodule.title} due to formatting issues",
+                        phase="quiz_generation",
+                        phase_progress=0.5,
+                        overall_progress=0.8,
+                        action="error"
+                    )
+                return []
+        
+        # Validate that we received questions
+        if not quiz_questions:
+            logger.warning(f"No quiz questions generated for submodule {module_id}.{sub_id}")
+            return []
+        
+        # Ensure we have 10 questions (or trim if more)
+        if len(quiz_questions) > 10:
+            logger.info(f"Trimming excess quiz questions from {len(quiz_questions)} to 10")
+            quiz_questions = quiz_questions[:10]
+        
+        # Log completion and timing
+        generation_time = time.time() - start_time
+        logger.info(f"Generated {len(quiz_questions)} quiz questions for submodule {module_id}.{sub_id} in {generation_time:.2f}s")
+        
+        # Send progress update on completion
+        if progress_callback:
+            await progress_callback(
+                f"Generated {len(quiz_questions)} quiz questions for {module.title} > {submodule.title}",
+                phase="quiz_generation",
+                phase_progress=1.0,
+                overall_progress=0.85,
+                preview_data={"quiz_count": len(quiz_questions)},
+                action="completed"
+            )
+        
+        return quiz_questions
+    
+    except Exception as e:
+        error_msg = f"Error generating quiz questions for submodule {module_id}.{sub_id}: {str(e)}"
+        logger.exception(error_msg)
+        
+        # Update quiz generation errors tracking
+        if state.get("quiz_generation_errors") is None:
+            state["quiz_generation_errors"] = {}
+        
+        # Use string key for dictionary
+        error_key = f"{module_id}:{sub_id}"
+        state["quiz_generation_errors"][error_key] = str(e)
+        
+        # Send error progress update
+        if progress_callback:
+            await progress_callback(
+                f"Error generating quiz questions: {str(e)}",
+                phase="quiz_generation",
+                phase_progress=0.5,
+                overall_progress=0.8,
+                action="error"
+            )
+        
+        return []
+
 async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str, Any]:
     """
     Finalizes the enhanced learning path with all processed submodules.
@@ -1316,11 +1600,28 @@ async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str,
             )
         
         final_modules = []
+        total_quiz_questions = 0
+        
         for module_id, module in enumerate(state.get("enhanced_modules") or []):
             subs = module_to_subs.get(module_id, [])
             submodule_data = []
+            
             for sub in subs:
                 summary = sub.summary if hasattr(sub, 'summary') else (sub.content[:200].strip() + "..." if sub.content else "")
+                
+                # Include quiz questions if available
+                quiz_data = None
+                if hasattr(sub, 'quiz_questions') and sub.quiz_questions:
+                    quiz_data = []
+                    for quiz in sub.quiz_questions:
+                        quiz_data.append({
+                            "question": quiz.question,
+                            "options": [{"text": opt.text, "is_correct": opt.is_correct} for opt in quiz.options],
+                            "explanation": quiz.explanation
+                        })
+                    total_quiz_questions += len(quiz_data)
+                    
+                # Add submodule data with quiz info if available
                 submodule_data.append({
                     "id": sub.submodule_id,
                     "title": sub.title,
@@ -1328,8 +1629,11 @@ async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str,
                     "content": sub.content,
                     "order": sub.submodule_id + 1,
                     "summary": summary,
-                    "connections": getattr(sub, 'connections', {})
+                    "connections": getattr(sub, 'connections', {}),
+                    "quiz_questions": quiz_data
                 })
+                
+            # Build module data
             module_data = {
                 "id": module_id,
                 "title": module.title,
@@ -1341,9 +1645,23 @@ async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str,
                 "expected_outcomes": getattr(module, 'expected_outcomes', []),
                 "submodules": submodule_data
             }
+            
             final_modules.append(module_data)
-        final_learning_path = {"topic": state["user_topic"], "modules": final_modules, "execution_steps": state["steps"]}
-        logger.info(f"Finalized learning path with {len(final_modules)} modules")
+            
+        # Create the final learning path structure with quiz questions
+        final_learning_path = {
+            "topic": state["user_topic"], 
+            "modules": final_modules, 
+            "execution_steps": state["steps"],
+            "metadata": {
+                "total_modules": len(final_modules),
+                "total_submodules": sum(len(module["submodules"]) for module in final_modules),
+                "total_quiz_questions": total_quiz_questions,
+                "has_quizzes": total_quiz_questions > 0
+            }
+        }
+        
+        logger.info(f"Finalized learning path with {len(final_modules)} modules and {total_quiz_questions} quiz questions")
         
         # Build preview data for frontend
         preview_modules = []
@@ -1353,7 +1671,8 @@ async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str,
             module_preview = {
                 "title": module["title"],
                 "submodule_count": len(module["submodules"]),
-                "description": module["description"][:150] + "..." if len(module["description"]) > 150 else module["description"]
+                "description": module["description"][:150] + "..." if len(module["description"]) > 150 else module["description"],
+                "quiz_count": sum(1 for sub in module["submodules"] if sub.get("quiz_questions"))
             }
             preview_modules.append(module_preview)
             total_submodules += len(module["submodules"])
@@ -1361,18 +1680,20 @@ async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str,
         preview_data = {
             "modules": preview_modules,
             "total_modules": len(final_modules),
-            "total_submodules": total_submodules
+            "total_submodules": total_submodules,
+            "total_quiz_questions": total_quiz_questions
         }
         
         if progress_callback:
             await progress_callback(
-                f"Learning path complete with {len(final_modules)} modules and {total_submodules} detailed submodules",
+                f"Learning path complete with {len(final_modules)} modules, {total_submodules} detailed submodules, and {total_quiz_questions} quiz questions",
                 phase="final_assembly",
                 phase_progress=1.0,
                 overall_progress=1.0,
                 preview_data=preview_data,
                 action="completed"
             )
+            
         return {"final_learning_path": final_learning_path, "steps": ["Finalized enhanced learning path"]}
     except Exception as e:
         logger.exception(f"Error finalizing learning path: {str(e)}")

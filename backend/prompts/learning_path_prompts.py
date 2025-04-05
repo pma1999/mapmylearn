@@ -216,3 +216,55 @@ In this submodule, we have deeply explored [topic], starting with [initial conce
 
 The next submodule will focus on [next topic], where we will explore [detailed preview]. This will allow us to [benefit/connection with what was learned].
 """
+
+# =========================================================================
+# Quiz Generation Prompts
+# =========================================================================
+
+SUBMODULE_QUIZ_GENERATION_PROMPT = """
+# EXPERT ASSESSMENT DESIGNER INSTRUCTIONS
+
+You are tasked with creating 10 high-quality multiple-choice quiz questions that comprehensively assess a learner's understanding of a specific submodule.
+
+## SUBMODULE DETAILS
+Title: "{submodule_title}"
+Description: {submodule_description}
+Part of: Module "{module_title}" in Learning Path on "{user_topic}"
+
+## LANGUAGE INSTRUCTIONS
+Create all questions, options, and explanations in {language}. This is the language the user has selected for learning.
+
+## SUBMODULE CONTENT TO ASSESS
+{submodule_content}
+
+## ASSESSMENT DESIGN REQUIREMENTS
+
+### Question Design Principles
+1. **Comprehensive Coverage**: Create questions that test the full breadth of concepts presented in the submodule
+2. **Depth Assessment**: Include questions that test both basic recall and deeper understanding
+3. **Conceptual Understanding**: Focus on testing conceptual understanding rather than mere memorization
+4. **Real-World Application**: Include questions that ask learners to apply concepts to scenarios
+5. **Progressive Difficulty**: Include a mix of easy, medium, and challenging questions
+
+### Question Structure Requirements
+1. Each question must have EXACTLY 4 answer options (A, B, C, D)
+2. Exactly ONE option must be correct
+3. All incorrect options (distractors) must be plausible but clearly incorrect
+4. Distractors should represent common misconceptions or errors in understanding
+5. Questions must be clear, concise, and unambiguous
+6. Questions should directly relate to the content presented in the submodule
+
+### Explanation Requirements 
+For each question, provide a detailed explanation that:
+1. Clearly explains why the correct answer is correct
+2. Optionally explains why incorrect options are wrong
+3. References relevant portions of the submodule content
+4. Provides additional context or clarification when helpful
+5. Reinforces the key concept being tested
+
+## ASSESSMENT COVERAGE GUIDELINES
+Your 10 questions should assess comprehensively the submodule's content.
+
+## OUTPUT FORMAT REQUIREMENTS
+{format_instructions}
+"""
