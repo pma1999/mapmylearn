@@ -828,6 +828,31 @@ export const clearLocalHistory = () => {
   return localHistoryService.clearHistory();
 };
 
+/**
+ * Downloads a learning path as PDF
+ * @param {string} pathId - ID of the learning path to download
+ * @returns {Promise<Blob>} - PDF data as a Blob
+ */
+export const downloadLearningPathPDF = async (pathId) => {
+  try {
+    // Make the request with responseType blob to handle binary data
+    const response = await api.get(
+      `/learning-paths/${pathId}/pdf`, 
+      { 
+        responseType: 'blob',
+        headers: {
+          'Accept': 'application/pdf'
+        }
+      }
+    );
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error downloading PDF:', error);
+    throw new Error(error.message || 'Failed to download PDF');
+  }
+};
+
 export default {
   generateLearningPath,
   getLearningPath,
@@ -854,5 +879,6 @@ export default {
   getProgressUpdates,
   deleteLearningPath,
   checkAuthStatus,
+  downloadLearningPathPDF,
 };
 

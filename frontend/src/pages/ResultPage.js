@@ -29,7 +29,8 @@ import {
   InputAdornment,
   IconButton,
   useTheme,
-  useMediaQuery
+  useMediaQuery,
+  Tooltip
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -41,12 +42,20 @@ import SaveIcon from '@mui/icons-material/Save';
 import StorageIcon from '@mui/icons-material/Storage';
 import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 
 // Import shared MarkdownRenderer component
 import MarkdownRenderer from '../components/MarkdownRenderer';
 
 // Import API service
-import { getLearningPath, getProgressUpdates, saveToHistory, updateHistoryEntry, getHistoryEntry } from '../services/api';
+import { 
+  getLearningPath,
+  getProgressUpdates, 
+  saveToHistory, 
+  updateHistoryEntry, 
+  getHistoryEntry, 
+  downloadLearningPathPDF 
+} from '../services/api';
 
 // Import new components
 import LearningPathHeader from '../components/organisms/LearningPathHeader';
@@ -287,6 +296,52 @@ function ResultPage(props) {
     }
   };
 
+  const handleDownloadPDF = async () => {
+    if (!learningPath) return;
+    
+    try {
+      // Show loading notification
+      showNotification('Generating PDF...', 'info');
+      
+      // Get the entry ID from either the URL params or from the saved history entry
+      const id = isFromHistory ? entryId : taskId;
+      
+      // If the path is not saved to history yet, save it first
+      let targetId = id;
+      if (!isFromHistory && !savedToHistory) {
+        try {
+          const result = await saveToHistory(learningPath, 'generated');
+          if (result.success) {
+            targetId = result.entry_id;
+            setSavedToHistory(true);
+          }
+        } catch (error) {
+          console.error('Error saving to history before PDF download:', error);
+          showNotification('Please save the learning path to history first', 'error');
+          return;
+        }
+      }
+      
+      // Download the PDF
+      const pdfBlob = await downloadLearningPathPDF(targetId);
+      
+      // Create a download link
+      const url = URL.createObjectURL(pdfBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `learning_path_${learningPath.topic.replace(/\s+/g, '_').substring(0, 30)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      showNotification('PDF downloaded successfully', 'success');
+    } catch (err) {
+      console.error('Error downloading PDF:', err);
+      showNotification('Failed to download PDF', 'error');
+    }
+  };
+
   const handleHomeClick = () => {
     navigate('/');
   };
@@ -471,6 +526,7 @@ function ResultPage(props) {
         topic={learningPath.topic}
         savedToHistory={savedToHistory}
         onDownload={handleDownloadJSON}
+        onDownloadPDF={handleDownloadPDF}
         onSaveToHistory={handleSaveToHistory}
         onNewLearningPath={handleNewLearningPathClick}
       />

@@ -63,6 +63,7 @@ const HistoryPage = () => {
     handleToggleFavorite,
     handleUpdateTags,
     handleExportLearningPath,
+    handleDownloadPDF,
     handleExportAllHistory,
     handleImportLearningPath,
     handleClearHistory
@@ -107,6 +108,7 @@ const HistoryPage = () => {
                 onToggleFavorite={handleToggleFavorite}
                 onUpdateTags={handleUpdateTags}
                 onExport={handleExportLearningPath}
+                onDownloadPDF={handleDownloadPDF}
               />
             ))}
           </Grid>

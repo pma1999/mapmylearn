@@ -102,6 +102,39 @@ const useHistoryActions = (showNotification, refreshEntries) => {
   };
   
   /**
+   * Download a single learning path as PDF file
+   * @param {string} entryId - ID of the entry to download as PDF
+   */
+  const handleDownloadPDF = async (entryId) => {
+    try {
+      // Show loading notification
+      showNotification('Generating PDF...', 'info');
+      
+      // Get the learning path name for better feedback
+      const response = await api.getHistoryEntry(entryId);
+      const topic = response.entry.topic;
+      
+      // Download the PDF using the API function
+      const pdfBlob = await api.downloadLearningPathPDF(entryId);
+      
+      // Create a download link
+      const url = URL.createObjectURL(pdfBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `learning_path_${topic.replace(/\s+/g, '_')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      showNotification('PDF downloaded successfully', 'success');
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      showNotification('Failed to download PDF: ' + (error.message || 'Unknown error'), 'error');
+    }
+  };
+  
+  /**
    * Export all history entries as a single JSON file
    */
   const handleExportAllHistory = async () => {
@@ -172,6 +205,7 @@ const useHistoryActions = (showNotification, refreshEntries) => {
     handleToggleFavorite,
     handleUpdateTags,
     handleExportLearningPath,
+    handleDownloadPDF,
     handleExportAllHistory,
     handleImportLearningPath,
     handleClearHistory

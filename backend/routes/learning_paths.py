@@ -1,14 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Response
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 import uuid
+import os
 from datetime import datetime
+from fastapi.responses import FileResponse
 
 from backend.config.database import get_db
 from backend.models.auth_models import User, LearningPath
 from backend.schemas.auth_schemas import LearningPathCreate, LearningPathUpdate, LearningPathResponse, LearningPathList, MigrationRequest, MigrationResponse
 from backend.utils.auth_middleware import get_current_user
+from backend.utils.pdf_generator import generate_pdf, create_filename
 
 router = APIRouter(prefix="/learning-paths", tags=["learning-paths"])
 
@@ -319,4 +322,62 @@ async def migrate_learning_paths(
         success=len(errors) == 0,
         migrated_count=migrated_count,
         errors=errors if errors else None
-    ) 
+    )
+
+
+@router.get("/{path_id}/pdf")
+async def download_learning_path_pdf(
+    path_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate and download a PDF version of a specific learning path.
+    """
+    # Find the learning path
+    learning_path = db.query(LearningPath).filter(
+        LearningPath.path_id == path_id,
+        LearningPath.user_id == user.id
+    ).first()
+    
+    if not learning_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Learning path not found"
+        )
+    
+    try:
+        # Generate PDF
+        pdf_path = generate_pdf(learning_path.__dict__, user.full_name)
+        
+        # Create a meaningful filename
+        filename = create_filename(learning_path.topic)
+        
+        # Return the file as a download
+        response = FileResponse(
+            path=pdf_path,
+            filename=filename,
+            media_type="application/pdf"
+        )
+        
+        # Set headers to ensure file downloads properly
+        response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+        
+        # Cleanup handler that will delete the temp file after it's been sent
+        def cleanup_temp_file():
+            try:
+                if os.path.exists(pdf_path):
+                    os.unlink(pdf_path)
+            except Exception as e:
+                print(f"Error removing temporary PDF file: {e}")
+        
+        # Register cleanup function to run after response is sent
+        response.background = cleanup_temp_file
+        
+        return response
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating PDF: {str(e)}"
+        ) 

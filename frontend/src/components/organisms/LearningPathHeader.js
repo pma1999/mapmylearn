@@ -8,18 +8,21 @@ import {
   Stack,
   Chip,
   useTheme,
-  useMediaQuery
+  useMediaQuery,
+  Tooltip
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
 import SaveIcon from '@mui/icons-material/Save';
 import SchoolIcon from '@mui/icons-material/School';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import { motion } from 'framer-motion';
 
 const LearningPathHeader = ({ 
   topic, 
   savedToHistory, 
   onDownload, 
+  onDownloadPDF,
   onSaveToHistory, 
   onNewLearningPath 
 }) => {
@@ -135,17 +138,35 @@ const LearningPathHeader = ({
               {/* Mobile view - Stack buttons vertically */}
               {isMedium ? (
                 <Stack direction="column" spacing={1.5} sx={{ width: '100%' }}>
-                  <motion.div variants={buttonVariants}>
-                    <Button
-                      variant="outlined"
-                      fullWidth
-                      startIcon={<DownloadIcon />}
-                      onClick={onDownload}
-                      size={isMobile ? "small" : "medium"}
-                    >
-                      Download JSON
-                    </Button>
-                  </motion.div>
+                  <Box sx={{ display: 'flex', flexDirection: 'row', gap: 1 }}>
+                    <motion.div variants={buttonVariants} sx={{ flex: 1 }}>
+                      <Tooltip title="Download as JSON">
+                        <Button
+                          variant="outlined"
+                          fullWidth
+                          startIcon={<DownloadIcon />}
+                          onClick={onDownload}
+                          size={isMobile ? "small" : "medium"}
+                        >
+                          JSON
+                        </Button>
+                      </Tooltip>
+                    </motion.div>
+                    
+                    <motion.div variants={buttonVariants} sx={{ flex: 1 }}>
+                      <Tooltip title="Download as PDF">
+                        <Button
+                          variant="outlined"
+                          fullWidth
+                          startIcon={<PictureAsPdfIcon />}
+                          onClick={onDownloadPDF}
+                          size={isMobile ? "small" : "medium"}
+                        >
+                          PDF
+                        </Button>
+                      </Tooltip>
+                    </motion.div>
+                  </Box>
                   
                   <motion.div variants={buttonVariants}>
                     <Button
@@ -177,15 +198,31 @@ const LearningPathHeader = ({
               ) : (
                 /* Desktop view - Horizontal button layout */
                 <Stack direction="row" spacing={2}>
-                  <motion.div variants={buttonVariants}>
-                    <Button
-                      variant="outlined"
-                      startIcon={<DownloadIcon />}
-                      onClick={onDownload}
-                    >
-                      Download JSON
-                    </Button>
-                  </motion.div>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <motion.div variants={buttonVariants}>
+                      <Tooltip title="Download as JSON">
+                        <Button
+                          variant="outlined"
+                          startIcon={<DownloadIcon />}
+                          onClick={onDownload}
+                        >
+                          JSON
+                        </Button>
+                      </Tooltip>
+                    </motion.div>
+                    
+                    <motion.div variants={buttonVariants}>
+                      <Tooltip title="Download as PDF">
+                        <Button
+                          variant="outlined"
+                          startIcon={<PictureAsPdfIcon />}
+                          onClick={onDownloadPDF}
+                        >
+                          PDF
+                        </Button>
+                      </Tooltip>
+                    </motion.div>
+                  </Box>
                   
                   <motion.div variants={buttonVariants}>
                     <Button

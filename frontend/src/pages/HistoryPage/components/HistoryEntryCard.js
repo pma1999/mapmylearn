@@ -10,13 +10,21 @@ import {
   Chip,
   Grid,
   useMediaQuery,
-  useTheme
+  useTheme,
+  Tooltip,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText
 } from '@mui/material';
 import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 import DownloadIcon from '@mui/icons-material/Download';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 
 import { formatDate } from '../utils';
 import { StyledCard } from '../styledComponents';
@@ -31,11 +39,21 @@ import ConfirmationDialog from './ConfirmationDialog';
  * @param {Function} props.onDelete - Handler for deleting entry
  * @param {Function} props.onToggleFavorite - Handler for toggling favorite status
  * @param {Function} props.onUpdateTags - Handler for updating tags
- * @param {Function} props.onExport - Handler for exporting entry
+ * @param {Function} props.onExport - Handler for exporting entry as JSON
+ * @param {Function} props.onDownloadPDF - Handler for downloading entry as PDF
  * @returns {JSX.Element} History entry card component
  */
-const HistoryEntryCard = ({ entry, onView, onDelete, onToggleFavorite, onUpdateTags, onExport }) => {
+const HistoryEntryCard = ({ 
+  entry, 
+  onView, 
+  onDelete, 
+  onToggleFavorite, 
+  onUpdateTags, 
+  onExport,
+  onDownloadPDF 
+}) => {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [downloadMenuAnchor, setDownloadMenuAnchor] = useState(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
@@ -52,6 +70,24 @@ const HistoryEntryCard = ({ entry, onView, onDelete, onToggleFavorite, onUpdateT
   const handleDeleteTag = async (tagToDelete) => {
     const updatedTags = entry.tags.filter(tag => tag !== tagToDelete);
     await onUpdateTags(entry.path_id, updatedTags);
+  };
+
+  const handleOpenDownloadMenu = (event) => {
+    setDownloadMenuAnchor(event.currentTarget);
+  };
+
+  const handleCloseDownloadMenu = () => {
+    setDownloadMenuAnchor(null);
+  };
+
+  const handleDownloadJSON = () => {
+    handleCloseDownloadMenu();
+    onExport(entry.path_id);
+  };
+
+  const handleDownloadPDF = () => {
+    handleCloseDownloadMenu();
+    onDownloadPDF(entry.path_id);
   };
 
   return (
@@ -121,9 +157,35 @@ const HistoryEntryCard = ({ entry, onView, onDelete, onToggleFavorite, onUpdateT
             </Button>
             
             <Box sx={{ display: 'flex', justifyContent: isMobile ? 'space-between' : 'flex-end', width: isMobile ? '100%' : 'auto' }}>
-              <IconButton size="small" onClick={() => onExport(entry.path_id)} title="Export">
-                <DownloadIcon fontSize="small" />
-              </IconButton>
+              <Tooltip title="Download options">
+                <IconButton 
+                  size="small" 
+                  onClick={handleOpenDownloadMenu}
+                  aria-label="Download options"
+                >
+                  <DownloadIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              
+              <Menu
+                anchorEl={downloadMenuAnchor}
+                open={Boolean(downloadMenuAnchor)}
+                onClose={handleCloseDownloadMenu}
+              >
+                <MenuItem onClick={handleDownloadJSON}>
+                  <ListItemIcon>
+                    <FileDownloadIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText>Download as JSON</ListItemText>
+                </MenuItem>
+                <MenuItem onClick={handleDownloadPDF}>
+                  <ListItemIcon>
+                    <PictureAsPdfIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText>Download as PDF</ListItemText>
+                </MenuItem>
+              </Menu>
+
               <IconButton
                 size="small"
                 color="error"
@@ -153,7 +215,7 @@ const HistoryEntryCard = ({ entry, onView, onDelete, onToggleFavorite, onUpdateT
 
 HistoryEntryCard.propTypes = {
   entry: PropTypes.shape({
-    id: PropTypes.string,
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
     path_id: PropTypes.string.isRequired,
     topic: PropTypes.string.isRequired,
     creation_date: PropTypes.string,
@@ -168,7 +230,8 @@ HistoryEntryCard.propTypes = {
   onDelete: PropTypes.func.isRequired,
   onToggleFavorite: PropTypes.func.isRequired,
   onUpdateTags: PropTypes.func.isRequired,
-  onExport: PropTypes.func.isRequired
+  onExport: PropTypes.func.isRequired,
+  onDownloadPDF: PropTypes.func.isRequired
 };
 
 export default HistoryEntryCard; 
