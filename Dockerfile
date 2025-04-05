@@ -48,5 +48,5 @@ COPY . .
 # Install the project
 RUN pip install -e .
 
-# Command to run
-CMD ["python", "bootstrap.py"] 
+# Command to run (using shell form to allow environment variable substitution)
+CMD python bootstrap.py 
