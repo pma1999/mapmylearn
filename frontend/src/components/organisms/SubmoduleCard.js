@@ -24,6 +24,7 @@ import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
 import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
 import MarkdownRenderer from '../MarkdownRenderer';
 import { motion } from 'framer-motion';
+import ResourcesSection from '../shared/ResourcesSection';
 
 // Import quiz components
 import { QuizContainer } from '../quiz';
@@ -333,10 +334,11 @@ const SubmoduleCard = ({ submodule, index, moduleIndex }) => {
             
             {/* Resources tab panel */}
             <TabPanel value={activeTab} index={2}>
-              <PlaceholderContent 
-                title="Additional Resources Coming Soon"
-                description="This section will contain supplementary materials to enhance your learning experience, including articles, videos, and external references."
-                type="resources"
+              <ResourcesSection
+                resources={submodule.resources}
+                title="Additional Resources"
+                type="submodule"
+                compact={isMobile}
               />
             </TabPanel>
           </Box>

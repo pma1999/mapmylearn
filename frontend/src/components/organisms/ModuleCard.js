@@ -20,7 +20,8 @@ import { motion } from 'framer-motion';
 
 // Import SubmoduleCard component
 import SubmoduleCard from './SubmoduleCard';
-import PlaceholderContent from '../shared/PlaceholderContent';
+// Import ResourcesSection instead of PlaceholderContent
+import ResourcesSection from '../shared/ResourcesSection';
 
 const ModuleCard = ({ module, index }) => {
   const [expanded, setExpanded] = useState(index === 0);
@@ -185,51 +186,15 @@ const ModuleCard = ({ module, index }) => {
                 )
               )}
               
-              {/* Module-level Resources Section */}
-              <Box sx={{ mt: 4 }}>
-                <Box 
-                  sx={{ 
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}
-                >
-                  <Typography 
-                    variant="h6" 
-                    sx={{ 
-                      fontWeight: 600,
-                      fontSize: { xs: '1rem', sm: '1.2rem' },
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1
-                    }}
-                  >
-                    <CollectionsBookmarkIcon color="primary" />
-                    Module Resources
-                  </Typography>
-                  
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="primary"
-                    startIcon={showResources ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                    onClick={handleResourcesToggle}
-                  >
-                    {showResources ? 'Hide' : 'Show'}
-                  </Button>
-                </Box>
-                
-                <Collapse in={showResources} timeout="auto" unmountOnExit>
-                  <Box sx={{ mt: 2 }}>
-                    <PlaceholderContent 
-                      title="Module Resources Coming Soon"
-                      description="This section will contain curated resources specific to this module, including recommended readings, videos, and practice materials."
-                      type="resources"
-                      compact={false}
-                    />
-                  </Box>
-                </Collapse>
-              </Box>
+              {/* Module-level Resources Section - Updated to use ResourcesSection */}
+              <ResourcesSection 
+                resources={module.resources}
+                title="Module Resources"
+                type="module"
+                collapsible={true}
+                expanded={showResources}
+                compact={isMobile}
+              />
             </Box>
           </Collapse>
         </CardContent>

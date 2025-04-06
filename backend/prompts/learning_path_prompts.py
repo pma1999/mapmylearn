@@ -268,3 +268,242 @@ Your 10 questions should assess comprehensively the submodule's content.
 ## OUTPUT FORMAT REQUIREMENTS
 {format_instructions}
 """
+
+# =========================================================================
+# Resource Generation Prompts
+# =========================================================================
+
+TOPIC_RESOURCE_QUERY_GENERATION_PROMPT = """
+# EXPERT RESEARCHER INSTRUCTIONS
+
+Your task is to create the SINGLE MOST EFFECTIVE search query to find high-quality, comprehensive resources for a learning path on "{user_topic}".
+
+## LEARNING PATH OVERVIEW
+This search query will be used to find top-tier resources that provide broad, authoritative coverage of the entire learning path topic.
+
+## LEARNING PATH STRUCTURE
+{learning_path_context}
+
+## LANGUAGE STRATEGY
+- Content will be presented to users in {language}.
+- For search queries, use {search_language} to maximize information quality.
+- If {user_topic} is culturally/regionally specific, consider language optimization.
+
+## SEARCH QUERY REQUIREMENTS
+
+### 1. Natural Language Format
+Your query MUST be written in natural language:
+- Use complete sentences or questions
+- Make it readable and conversational
+- Clearly state what you're looking for (e.g., "I need comprehensive learning resources about...")
+- Explicitly describe the expected results (e.g., "Please show me authoritative guides, courses, and books that cover...")
+
+### 2. Comprehensive Coverage
+Your query must target resources that provide broad coverage of "{user_topic}" as a whole, addressing:
+- Foundational concepts
+- Key principles
+- Typical progression paths
+- Different depths (beginner to advanced)
+- Both theoretical and practical aspects
+
+### 3. Resource Quality and Authority
+The query should explicitly request:
+- High-quality, authoritative sources
+- Educational resources from experts
+- Comprehensive guides, courses, or books
+- Well-structured learning materials
+- Resources that offer big-picture understanding
+
+### 4. Educational Focus
+The query must emphasize:
+- Learning resources specifically (not just information)
+- Materials designed for educational purposes
+- Content that explains rather than just describes
+- Resources with depth and completeness
+- Content appropriate for self-directed learning
+
+## OUTPUT REQUIREMENTS
+Provide:
+1. A single, powerful natural language search query optimized to return the best comprehensive resources
+2. A detailed explanation of your search strategy and why it will be effective
+
+{format_instructions}
+"""
+
+MODULE_RESOURCE_QUERY_GENERATION_PROMPT = """
+# EXPERT RESEARCHER INSTRUCTIONS
+
+Your task is to create the SINGLE MOST EFFECTIVE search query to find high-quality, comprehensive resources for a specific module in a learning path.
+
+## MODULE DETAILS
+Title: "{module_title}"
+Description: {module_description}
+Part of learning path on: "{user_topic}"
+
+## MODULE CONTEXT
+This module is part of a larger learning path:
+{learning_path_context}
+
+## LANGUAGE STRATEGY
+- Content will be presented to users in {language}.
+- For search queries, use {search_language} to maximize information quality.
+- If this module covers culturally/regionally specific content, consider language optimization.
+
+## SEARCH QUERY REQUIREMENTS
+
+### 1. Natural Language Format
+Your query MUST be written in natural language:
+- Use complete sentences or questions
+- Make it readable and conversational
+- Clearly state what you're looking for (e.g., "I need learning resources about [module topic]...")
+- Explicitly describe the expected results (e.g., "Please show me tutorials, guides, and examples that teach...")
+
+### 2. Module-Specific Focus
+Your query must target resources specifically relevant to {module_title}, addressing:
+- The core concepts of this specific module
+- Appropriate depth for this module's position in the learning path
+- Key components identified in the module description
+- Specific knowledge areas that this module covers
+- Both theoretical foundations and practical applications
+
+### 3. Resource Quality and Authority
+The query should explicitly request:
+- High-quality, authoritative sources on this specific topic
+- Educational resources from subject matter experts
+- Well-structured learning materials on this module's focus
+- Resources with appropriate depth and coverage
+- Content that provides both explanations and examples
+
+### 4. Educational Value
+The query must emphasize:
+- Learning resources rather than just information
+- Materials that explain concepts thoroughly
+- Content that builds understanding progressively
+- Resources with appropriate exercises or applications
+- Materials that connect concepts within this knowledge area
+
+## OUTPUT REQUIREMENTS
+Provide:
+1. A single, powerful natural language search query optimized to return the best module-specific resources
+2. A detailed explanation of your search strategy and why it will be effective for this specific module
+
+{format_instructions}
+"""
+
+SUBMODULE_RESOURCE_QUERY_GENERATION_PROMPT = """
+# EXPERT RESEARCHER INSTRUCTIONS
+
+Your task is to create the SINGLE MOST EFFECTIVE search query to find highly targeted resources for a specific submodule.
+
+## SUBMODULE DETAILS
+Title: "{submodule_title}"
+Description: {submodule_description}
+Position: Submodule {submodule_order} of {submodule_count} in Module {module_order} of {module_count}
+Module: "{module_title}"
+Learning Path Topic: "{user_topic}"
+
+## CONTEXT
+Module context: {module_context}
+Adjacent submodules: {adjacent_context}
+
+## LANGUAGE STRATEGY
+- Content will be presented to users in {language}.
+- For search queries, use {search_language} to maximize information quality.
+- If this submodule covers specialized or regional content, consider language optimization.
+
+## SEARCH QUERY REQUIREMENTS
+
+### 1. Natural Language Format
+Your query MUST be written in natural language:
+- Use complete sentences or questions
+- Make it readable and conversational
+- Clearly state what you're looking for (e.g., "I need specific learning resources about [submodule topic]...")
+- Explicitly describe the expected results (e.g., "Please show me tutorials, videos, and exercises that teach...")
+
+### 2. Laser-Focused Targeting
+Your query must target resources that specifically address the content of this submodule:
+- The exact concepts covered in this submodule (not the broader module)
+- The specific knowledge level appropriate for this submodule
+- The particular skills or techniques this submodule teaches
+- Content that aligns precisely with this submodule's focus
+- Resources that provide appropriate depth for this specific topic
+
+### 3. Resource Quality and Diversity
+The query should explicitly request a mix of high-quality resources:
+- Tutorials or guides on this specific topic
+- Video content explaining these exact concepts
+- Interactive exercises relevant to this submodule
+- Documentation or reference materials for these specific skills
+- Examples that demonstrate these particular concepts
+
+### 4. Contextual Relevance
+The query must consider:
+- How this submodule fits within its module
+- The prerequisite knowledge from previous submodules
+- The specific applications of this knowledge
+- The progression of learning within the module
+- How this content connects to the broader learning path
+
+## OUTPUT REQUIREMENTS
+Provide:
+1. A single, powerful natural language search query optimized to return perfect resources for this specific submodule
+2. A detailed explanation of your search strategy and why it's ideal for this particular submodule
+
+{format_instructions}
+"""
+
+RESOURCE_EXTRACTION_PROMPT = """
+# EXPERT RESOURCE CURATOR INSTRUCTIONS
+
+Your task is to extract and format the absolute best resources from search results for a learning topic.
+
+## SEARCH CONTEXT
+Search Query: "{search_query}"
+Target Level: {target_level} (topic, module, or submodule)
+Topic: "{user_topic}"
+{additional_context}
+
+## SEARCH RESULTS
+{search_results}
+
+## CITATION LINKS
+The following URLs were extracted from the search results and should be used as source links for your resource recommendations:
+{search_citations}
+
+## RESOURCE CURATION REQUIREMENTS
+
+### Selection Criteria
+Select {resource_count} high-quality resources that:
+1. Provide exceptional educational value
+2. Come from authoritative sources
+3. Match the specific focus of the search query
+4. Offer clear explanations and examples
+5. Present information in an accessible way
+6. Provide appropriate depth for the target level
+7. Include diverse resource types (articles, videos, books, courses, etc.)
+
+### Resource Diversity
+Your selection MUST include a mix of resource types (do not select all of the same type):
+- At least one interactive or video resource
+- At least one text-based tutorial or guide
+- Other diverse formats (books, courses, documentation, etc.)
+
+### Required Resource Information
+For each resource, provide:
+1. Title: Clear, descriptive title
+2. Description: 1-2 sentences explaining what value this resource provides
+3. URL: Direct link to the resource - IMPORTANT: Use the citation links provided above whenever possible
+4. Type: The resource type (article, video, book, course, documentation, etc.)
+
+## CITATION USAGE INSTRUCTIONS
+- Where possible, use the exact URLs from the CITATION LINKS section above
+- Match resources mentioned in the search results with their corresponding citation link
+- If the search results mention a resource but no URL is provided in the citation links, you may use a generic URL format (e.g., "website.com") with a note that the exact link is unavailable
+
+## OUTPUT FORMAT
+Provide exactly {resource_count} resources formatted according to the requirements.
+Ensure resources are diverse, high-quality, and specifically relevant to the search query.
+Do not include general search results or low-quality resources.
+
+{format_instructions}
+"""

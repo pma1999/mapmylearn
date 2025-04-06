@@ -709,7 +709,7 @@ async def process_single_submodule(
     logger = logging.getLogger("learning_path.submodule_processor")
     logger.info(f"Processing submodule {sub_id+1} in module {module_id+1}: {submodule.title}")
     
-    progress_callback = state.get("progress_callback")
+    progress_callback = state.get('progress_callback')
     
     try:
         # Track timing for performance analysis
@@ -812,13 +812,55 @@ async def process_single_submodule(
         
         quiz_time = time.time() - step_start
         
+        # STEP 5: Generate resources for the submodule (new)
+        step_start = time.time()
+        
+        # Create initial result without resources
+        initial_result = {
+            "status": "completed", 
+            "module_id": module_id,
+            "sub_id": sub_id,
+            "search_queries": submodule_search_queries, 
+            "search_results": submodule_search_results, 
+            "content": submodule_content,
+            "quiz_questions": quiz_questions,
+            "processing_time": {
+                "total": 0,  # Will update at the end
+                "query_generation": query_gen_time,
+                "search": search_time,
+                "content_development": content_time,
+                "quiz_generation": quiz_time,
+                "resource_generation": 0  # Will update at the end
+            }
+        }
+        
+        # Skip resource integration if content generation failed
+        if submodule_content and not submodule_content.startswith("Error:"):
+            # Import the resource integration function
+            from backend.core.graph_nodes.resources import integrate_resources_with_submodule_processing
+            
+            # Generate resources and integrate with the result
+            result = await integrate_resources_with_submodule_processing(
+                state, module_id, sub_id, module, submodule, submodule_content, initial_result
+            )
+        else:
+            logger.warning(f"Skipping resource generation for submodule {module_id}.{sub_id} due to content generation failure")
+            result = initial_result
+        
+        # Calculate resource generation time
+        resource_time = time.time() - step_start
+        
         # Calculate total processing time
         total_time = time.time() - start_time
+        
+        # Update the timing information in the result
+        result["processing_time"]["resource_generation"] = resource_time
+        result["processing_time"]["total"] = total_time
         
         logger.info(
             f"Completed submodule {module_id+1}.{sub_id+1} in {total_time:.2f}s "
             f"(Query: {query_gen_time:.2f}s, Search: {search_time:.2f}s, "
-            f"Content: {content_time:.2f}s, Quiz: {quiz_time:.2f}s)"
+            f"Content: {content_time:.2f}s, Quiz: {quiz_time:.2f}s, Resources: {resource_time:.2f}s)"
         )
         
         if progress_callback:
@@ -831,22 +873,7 @@ async def process_single_submodule(
             )
         
         # Return the completed submodule data with module/submodule identifiers for proper "reduce" phase
-        return {
-            "status": "completed", 
-            "module_id": module_id,
-            "sub_id": sub_id,
-            "search_queries": submodule_search_queries, 
-            "search_results": submodule_search_results, 
-            "content": submodule_content,
-            "quiz_questions": quiz_questions,
-            "processing_time": {
-                "total": total_time,
-                "query_generation": query_gen_time,
-                "search": search_time,
-                "content_development": content_time,
-                "quiz_generation": quiz_time
-            }
-        }
+        return result
     except Exception as e:
         logger.exception(f"Error processing submodule {sub_id+1} of module {module_id+1}: {str(e)}")
         if progress_callback:
@@ -981,23 +1008,42 @@ You are tasked with creating a SINGLE OPTIMAL search query for in-depth research
 - For search queries, use {search_language} to maximize information quality and quantity.
 - If the topic is highly specialized or regional/cultural, consider whether the search language should be adjusted for optimal results.
 
+## SEARCH QUERY REQUIREMENTS
+
+### 1. Natural Language Format
+Your query MUST be written in natural language:
+- Use complete sentences or questions
+- Make it readable and conversational
+- Clearly state what you're looking for (e.g., "I need comprehensive information about [submodule topic] for creating educational content...")
+- Explicitly describe the expected results (e.g., "Please show me detailed explanations, processes, techniques, and examples related to...")
+
+### 2. Information Gathering Focus
+Your query must target information that will be used to DEVELOP educational content:
+- Focus on finding detailed, factual information about the submodule topic
+- Seek comprehensive explanations of processes, concepts, and principles
+- Look for examples, case studies, and applications that illustrate key points
+- Target technical details, methodologies, and current best practices
+- Request content that covers both theoretical foundations and practical applications
+
+### 3. Content Development Needs
+The query should explicitly request the kind of information needed to write educational content:
+- Seek explanatory content rather than just basic definitions
+- Request in-depth material that explains mechanisms and processes
+- Look for content that addresses common misconceptions or challenges
+- Ask for varied perspectives and approaches to the subject matter
+- Target information that would help create comprehensive teaching materials
+
 ## YOUR TASK
 
-Create ONE exceptionally well-crafted search query that will:
+Create ONE exceptionally well-crafted natural language search query that will:
 1. Target the most critical information needed for this specific submodule
 2. Be comprehensive enough to gather essential educational content
 3. Retrieve detailed, accurate, and authoritative information
 4. Focus precisely on the unique aspects of this submodule
 5. Balance breadth and depth to maximize learning value
 
-Your query should be:
-- Specific and targeted toward educational/tutorial content
-- Formulated to return high-quality information
-- Structured to capture the most current and relevant resources
-- Phrased to avoid redundancy with other parts of the learning path
-
 Provide:
-1. The optimal search query
+1. The optimal natural language search query
 2. A brief but comprehensive rationale explaining why this is the ideal query for this submodule
 
 {format_instructions}

@@ -99,14 +99,28 @@ async def get_search_tool(key_provider=None):
         raise ValueError("No Perplexity API key available from any source")
     
     try:
+        # Add Referer header to help return citations
+        # The Perplexity API may use this to include citation links
+        headers = {"Referer": "https://www.perplexity.ai/"}
+        
         # Using the sonar model which has search capabilities
         return ChatPerplexity(
             temperature=0.2,
             model="sonar",
             max_tokens=8000,  # Set to 8000 for normal operation
-            pplx_api_key=perplexity_api_key
+            pplx_api_key=perplexity_api_key,
+            extra_headers=headers
         )
     except Exception as e:
+        if "extra_headers" in str(e):
+            # Fallback if extra_headers param is not supported in this version
+            logger.warning("extra_headers not supported, falling back to standard initialization")
+            return ChatPerplexity(
+                temperature=0.2,
+                model="sonar",
+                max_tokens=8000,
+                pplx_api_key=perplexity_api_key
+            )
         logger.error(f"Error initializing ChatPerplexity: {str(e)}")
         raise
 

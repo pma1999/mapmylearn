@@ -1,3 +1,10 @@
+"""
+LangGraph nodes for learning path generation.
+
+This package contains all the nodes used in the learning path generation graph,
+organized by their function in the generation process.
+"""
+
 from .initial_flow import (
     generate_search_queries,
     execute_web_searches,
@@ -14,4 +21,11 @@ from .submodules import (
     develop_submodule_specific_content,
     finalize_enhanced_learning_path,
     check_submodule_batch_processing
+)
+from .resources import (
+    initialize_resource_generation,
+    generate_topic_resources,
+    process_module_resources,
+    integrate_resources_with_submodule_processing,
+    add_resources_to_final_learning_path
 )

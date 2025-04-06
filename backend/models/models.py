@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 from typing import List, Dict, Any, Optional, TypedDict, Annotated, Callable, TYPE_CHECKING
 
 # Import the key provider types but only for type checking
@@ -24,6 +24,21 @@ class SearchQuery(BaseModel):
     keywords: str = Field(..., description="Search query keywords")
     rationale: str = Field(..., description="Rationale for the search query")
 
+# Resource Model
+class Resource(BaseModel):
+    title: str = Field(..., description="Title of the resource")
+    description: str = Field(..., description="Description of what the resource offers")
+    url: str = Field(..., description="URL to access the resource")
+    type: str = Field(..., description="Type of resource (article, video, book, course, code, etc.)")
+
+class ResourceList(BaseModel):
+    resources: List[Resource] = Field(default_factory=list, description="List of resources")
+
+class ResourceQuery(BaseModel):
+    query: str = Field(..., description="Search query for finding resources")
+    context: str = Field(..., description="Context information for the resource search")
+    target_level: str = Field(..., description="Target level (topic, module, submodule)")
+
 # Basic Module Model
 class Module(BaseModel):
     title: str = Field(..., description="Title of the module")
@@ -39,6 +54,7 @@ class EnhancedModule(BaseModel):
     key_components: List[str] = Field(default_factory=list, description="Key components")
     expected_outcomes: List[str] = Field(default_factory=list, description="Expected outcomes")
     submodules: List["Submodule"] = Field(default_factory=list, description="List of submodules")
+    resources: List[Resource] = Field(default_factory=list, description="Additional resources for this module")
 
 # Submodule Model
 class Submodule(BaseModel):
@@ -49,6 +65,7 @@ class Submodule(BaseModel):
     learning_objective: str = Field(default="", description="Educational goal")
     key_components: List[str] = Field(default_factory=list, description="Key topics")
     depth_level: str = Field(default="intermediate", description="Level: basic, intermediate, advanced, expert")
+    resources: List[Resource] = Field(default_factory=list, description="Additional resources for this submodule")
 
 # Quiz Question Model
 class QuizOption(BaseModel):
@@ -75,6 +92,9 @@ class SubmoduleContent(BaseModel):
     quiz_questions: Optional[List[QuizQuestion]] = Field(default=None, description="Quiz questions for this submodule")
     summary: str = Field(default="", description="Brief summary")
     connections: Dict[str, str] = Field(default_factory=dict, description="Connections to other modules/submodules")
+    resources: List[Resource] = Field(default_factory=list, description="Additional resources for this submodule")
+    resource_search_query: Optional[ResourceQuery] = Field(default=None, description="Query used to find resources")
+    resource_search_results: Optional[List[Dict[str, Any]]] = Field(default=None, description="Raw results from resource search")
 
 # ModuleContent Model
 class ModuleContent(BaseModel):
@@ -86,6 +106,9 @@ class ModuleContent(BaseModel):
     content: str = Field(..., description="Developed module content")
     summary: str = Field(default="", description="Brief summary")
     connections: Dict[str, str] = Field(default_factory=dict, description="Connections to other modules")
+    resources: List[Resource] = Field(default_factory=list, description="Additional resources for this module")
+    resource_search_query: Optional[ResourceQuery] = Field(default=None, description="Query used to find resources")
+    resource_search_results: Optional[List[Dict[str, Any]]] = Field(default=None, description="Raw results from resource search")
 
 # Container Models
 class SearchQueryList(BaseModel):
@@ -143,7 +166,13 @@ class LearningPathState(TypedDict):
     # Other optional settings
     desired_module_count: Optional[int]
     desired_submodule_count: Optional[int]
-
+    # Resource generation settings and tracking
+    resource_generation_enabled: Optional[bool]  # Flag to enable/disable resource generation
+    topic_resources: Optional[List[Resource]]  # Resources for the entire topic
+    topic_resource_query: Optional[ResourceQuery]  # Query used for topic resources
+    topic_resource_search_results: Optional[List[Dict[str, Any]]]  # Raw results for topic resources
+    module_resources_in_process: Optional[Dict[int, Dict[str, Any]]]  # Tracking module resource generation
+    submodule_resources_in_process: Optional[Dict[str, Dict[str, Any]]]  # Tracking submodule resource generation
     
 # Enable forward references for EnhancedModule.submodules
 EnhancedModule.model_rebuild()
