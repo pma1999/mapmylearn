@@ -57,6 +57,9 @@ const EntryCell = ({ columnIndex, rowIndex, style, data }) => {
 const PerformanceStats = ({ stats, visible = false }) => {
   if (!visible || !stats) return null;
   
+  // Only show stats when they're meaningful - not for background updates
+  if (stats.fromCache && !stats.initialLoad) return null;
+  
   return (
     <Box sx={{ mt: 1, mb: 2, px: 1, fontSize: '0.75rem', color: 'text.secondary' }}>
       <Typography variant="caption" component="div">
@@ -214,7 +217,7 @@ const HistoryPage = () => {
         
         <PerformanceStats 
           stats={stats} 
-          visible={process.env.NODE_ENV === 'development'} 
+          visible={process.env.NODE_ENV === 'development' && initialLoadComplete} 
         />
         
         {loading && !initialLoadComplete ? (

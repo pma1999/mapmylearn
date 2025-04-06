@@ -21,6 +21,8 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm }, showNotificatio
   const previousEntriesRef = useRef({});
   const requestRef = useRef(null);
   const abortControllerRef = useRef(null);
+  const lastLoadTimeRef = useRef(0);
+  const loadCountRef = useRef(0);
   
   /**
    * Generate a cache key from the filter options
@@ -35,6 +37,16 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm }, showNotificatio
    * Implements stale-while-revalidate pattern and aborts ongoing requests
    */
   const loadHistory = useCallback(async (forceRefresh = false) => {
+    // Prevent too frequent refreshes (throttle to at most once per second)
+    const now = Date.now();
+    if (!forceRefresh && now - lastLoadTimeRef.current < 1000) {
+      return;
+    }
+    lastLoadTimeRef.current = now;
+    
+    // Increment load counter for this session
+    const currentLoadCount = ++loadCountRef.current;
+    
     try {
       // Cancel any in-flight requests
       if (abortControllerRef.current) {
@@ -59,7 +71,8 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm }, showNotificatio
           setStats({
             total: cachedData.total || 0,
             loadTime: 0,
-            fromCache: true
+            fromCache: true,
+            initialLoad: true
           });
           setInitialLoadComplete(true);
           setLoading(false);
@@ -76,6 +89,12 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm }, showNotificatio
       requestRef.current = api.getHistoryPreview(sortBy, filterSource, searchTerm);
       const response = await requestRef.current;
       
+      // If this is a stale request (a newer one has started), ignore the results
+      if (currentLoadCount < loadCountRef.current) {
+        console.log('Ignoring stale response from previous request');
+        return;
+      }
+      
       // Calculate load time
       const loadTime = performance.now() - startTime;
       
@@ -86,15 +105,26 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm }, showNotificatio
       if (!response || !response.entries) {
         console.warn('History response missing entries array, using empty array');
         setEntries([]);
-        setStats({ total: 0, loadTime, fromCache: false });
-      } else {
-        setEntries(response.entries);
-        setStats({
-          total: response.total || 0,
+        setStats({ 
+          total: 0, 
           loadTime, 
           fromCache: false,
-          serverTime: response.request_time_ms
+          initialLoad: !initialLoadComplete 
         });
+      } else {
+        // Only update state if the data has actually changed
+        const entriesChanged = JSON.stringify(entries) !== JSON.stringify(response.entries);
+        
+        if (entriesChanged || forceRefresh) {
+          setEntries(response.entries);
+          setStats({
+            total: response.total || 0,
+            loadTime, 
+            fromCache: false,
+            serverTime: response.request_time_ms,
+            initialLoad: !initialLoadComplete
+          });
+        }
       }
       
       setInitialLoadComplete(true);
@@ -117,17 +147,26 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm }, showNotificatio
         showNotification('Error loading history: ' + (error.message || 'Unknown error'), 'error');
       }
     }
-  }, [sortBy, filterSource, searchTerm, initialLoadComplete, getCacheKey, showNotification]);
+  }, [sortBy, filterSource, searchTerm, initialLoadComplete, getCacheKey, showNotification, entries]);
   
   // Load history when filter options change
   useEffect(() => {
     loadHistory();
+    
+    // Set up polling for background updates (every 30 seconds)
+    const pollingInterval = setInterval(() => {
+      // Only poll if the page is visible to save resources
+      if (document.visibilityState === 'visible') {
+        loadHistory(false);
+      }
+    }, 30000); // 30 seconds
     
     // Cleanup function to abort any pending requests on unmount or filter change
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
+      clearInterval(pollingInterval);
     };
   }, [sortBy, filterSource, searchTerm, loadHistory]);
   
