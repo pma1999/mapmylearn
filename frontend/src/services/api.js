@@ -564,6 +564,10 @@ export const getLearningPath = async (taskId) => {
 
 // History API functions (now using server-side API)
 export const getHistoryPreview = async (sortBy = 'creation_date', filterSource = null, searchTerm = null) => {
+  // Create a cache key based on filter parameters
+  const cacheKey = `history_preview_${sortBy}_${filterSource || 'null'}_${searchTerm || 'null'}`;
+  const cacheTimeMs = 60000; // 1 minute cache
+  
   try {
     // If no auth token is present, fall back to local storage
     if (!authToken) {
@@ -571,45 +575,65 @@ export const getHistoryPreview = async (sortBy = 'creation_date', filterSource =
       return localHistoryService.getHistoryPreview(sortBy, filterSource, searchTerm);
     }
     
-    try {
-      // Build query parameters
-      const params = new URLSearchParams();
-      params.append('sort_by', sortBy);
-      if (filterSource) params.append('source', filterSource);
-      if (searchTerm) params.append('search', searchTerm);
+    // Check browser cache first for faster repeat loads
+    const cachedData = sessionStorage.getItem(cacheKey);
+    if (cachedData) {
+      const { data, timestamp } = JSON.parse(cachedData);
+      const age = Date.now() - timestamp;
       
-      const response = await api.get(`/learning-paths?${params.toString()}`);
-      
-      // Ensure response.data has valid entries property
-      if (!response.data || !response.data.entries) {
-        console.warn('API response missing entries property, using empty array');
-        return { entries: [], total: 0 };
+      // Use cached data if it's fresh enough (less than cacheTimeMs old)
+      if (age < cacheTimeMs) {
+        console.log(`Using cached history data (${Math.round(age / 1000)}s old)`);
+        return data;
+      } else {
+        console.log('Cached history data expired, fetching fresh data');
       }
-      
-      return response.data;
-    } catch (serverError) {
-      console.error('Server error fetching history:', serverError);
-      
-      // If we get a 401/403 error, clear the invalid auth token
-      if (serverError.response && (serverError.response.status === 401 || serverError.response.status === 403)) {
-        console.warn('Authentication error (401/403), clearing token and falling back to local storage');
-        clearAuthToken();
-      }
-      
-      // Fall back to local storage
-      return localHistoryService.getHistoryPreview(sortBy, filterSource, searchTerm);
     }
-  } catch (error) {
-    console.error('Error fetching history preview:', error);
     
-    // Ensure we always return a valid data structure
-    try {
-      return localHistoryService.getHistoryPreview(sortBy, filterSource, searchTerm);
-    } catch (localError) {
-      console.error('Error fetching from local history:', localError);
-      // Return a valid empty result structure as last resort
+    // Prepare request with optimized parameters
+    const params = new URLSearchParams();
+    params.append('sort_by', sortBy);
+    params.append('include_full_data', 'false'); // Use lightweight endpoint
+    if (filterSource) params.append('source', filterSource);
+    if (searchTerm) params.append('search', searchTerm);
+    
+    console.time('History API Request');
+    const response = await api.get(`/learning-paths?${params.toString()}`);
+    console.timeEnd('History API Request');
+    
+    if (response.data?.request_time_ms) {
+      console.log(`Server processing time: ${response.data.request_time_ms}ms`);
+    }
+    
+    // Ensure response.data has valid entries property
+    if (!response.data || !response.data.entries) {
+      console.warn('API response missing entries property, using empty array');
       return { entries: [], total: 0 };
     }
+    
+    // Cache the successful response
+    try {
+      sessionStorage.setItem(cacheKey, JSON.stringify({
+        data: response.data,
+        timestamp: Date.now()
+      }));
+    } catch (cacheError) {
+      console.warn('Failed to cache history data:', cacheError);
+      // Non-critical error, continue without caching
+    }
+    
+    return response.data;
+  } catch (serverError) {
+    console.error('Server error fetching history:', serverError);
+    
+    // If we get a 401/403 error, clear the invalid auth token
+    if (serverError.response && (serverError.response.status === 401 || serverError.response.status === 403)) {
+      console.warn('Authentication error (401/403), clearing token and falling back to local storage');
+      clearAuthToken();
+    }
+    
+    // Fall back to local storage
+    return localHistoryService.getHistoryPreview(sortBy, filterSource, searchTerm);
   }
 };
 

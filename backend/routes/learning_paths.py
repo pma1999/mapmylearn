@@ -24,14 +24,35 @@ async def get_learning_paths(
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(10, ge=1, le=100, description="Items per page"),
     favorite_only: bool = Query(False, description="Only return favorite learning paths"),
+    include_full_data: bool = Query(False, description="Include full path_data in response"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Get all learning paths for the current user with filtering and pagination.
     """
-    # Build query
-    query = db.query(LearningPath).filter(LearningPath.user_id == user.id)
+    # Start timing the request for performance monitoring
+    start_time = datetime.utcnow()
+    
+    # Select only needed columns for better performance
+    # Only include path_data if explicitly requested
+    if include_full_data:
+        query = db.query(LearningPath)
+    else:
+        query = db.query(
+            LearningPath.id,
+            LearningPath.path_id,
+            LearningPath.user_id,
+            LearningPath.topic,
+            LearningPath.creation_date,
+            LearningPath.last_modified_date,
+            LearningPath.favorite,
+            LearningPath.tags,
+            LearningPath.source
+        )
+    
+    # Apply user filter - this should be the first filter for index usage
+    query = query.filter(LearningPath.user_id == user.id)
     
     # Apply favorite filter
     if favorite_only:
@@ -48,15 +69,9 @@ async def get_learning_paths(
         query = query.filter(
             # Search in topic
             LearningPath.topic.ilike(search_term)
-            # Note: Proper JSON/JSONB search would depend on the specific database
-            # For PostgreSQL, we would use something like:
-            # or LearningPath.tags.cast(sa.String).ilike(search_term)
         )
     
-    # Get total count before pagination
-    total_count = query.count()
-    
-    # Apply sorting
+    # Apply sorting - ensure these match database indexes
     if sort_by == "creation_date":
         query = query.order_by(LearningPath.creation_date.desc())
     elif sort_by == "last_modified_date":
@@ -70,18 +85,98 @@ async def get_learning_paths(
         # Default to creation date if invalid sort field
         query = query.order_by(LearningPath.creation_date.desc())
     
-    # Apply pagination
-    offset = (page - 1) * per_page
-    query = query.offset(offset).limit(per_page)
+    # Instead of separate count query, we'll use window functions
+    # for more efficient counting with the same query
+    from sqlalchemy import func
+    from sqlalchemy.sql import label
     
-    # Execute query
-    learning_paths = query.all()
+    # First prepare the base query with all the filters
+    filtered_query = query
+    
+    # Get total count using SQL COUNT OVER() window function to avoid a separate query
+    if db.bind.dialect.name == 'postgresql':
+        # PostgreSQL supports window functions - most efficient approach
+        count_query = filtered_query.add_columns(
+            func.count().over().label('total_count')
+        )
+        
+        # Apply pagination for data fetching
+        offset = (page - 1) * per_page
+        paginated_query = count_query.offset(offset).limit(per_page)
+        
+        # Execute query and get results
+        results = paginated_query.all()
+        
+        # Extract total count from first row
+        total_count = results[0].total_count if results else 0
+        
+        # Convert to dictionaries for serialization, excluding the count column
+        if include_full_data:
+            learning_paths = [row for row in results]
+        else:
+            learning_paths = [
+                LearningPath(
+                    id=row.id,
+                    path_id=row.path_id,
+                    user_id=row.user_id,
+                    topic=row.topic,
+                    creation_date=row.creation_date,
+                    last_modified_date=row.last_modified_date,
+                    favorite=row.favorite,
+                    tags=row.tags,
+                    source=row.source,
+                    path_data={} if not include_full_data else row.path_data
+                )
+                for row in results
+            ]
+    else:
+        # For other databases (SQLite, etc.), fall back to a separate count query
+        total_count = filtered_query.count()
+        
+        # Apply pagination
+        offset = (page - 1) * per_page
+        paginated_query = filtered_query.offset(offset).limit(per_page)
+        
+        # Execute query and get results
+        results = paginated_query.all()
+        
+        if not include_full_data and results:
+            # For SQLite or other DBs, we need to manually create lightweight objects
+            if hasattr(results[0], '_asdict'):  # For query with individual columns
+                learning_paths = [
+                    LearningPath(
+                        id=row.id,
+                        path_id=row.path_id,
+                        user_id=row.user_id,
+                        topic=row.topic,
+                        creation_date=row.creation_date,
+                        last_modified_date=row.last_modified_date,
+                        favorite=row.favorite,
+                        tags=row.tags,
+                        source=row.source,
+                        path_data={}
+                    )
+                    for row in results
+                ]
+            else:
+                learning_paths = results
+                # Remove path_data to reduce payload size
+                for path in learning_paths:
+                    if not include_full_data:
+                        path.path_data = {}
+        else:
+            learning_paths = results
+    
+    # Calculate request duration for monitoring
+    end_time = datetime.utcnow()
+    duration_ms = (end_time - start_time).total_seconds() * 1000
     
     return {
         "entries": learning_paths,
         "total": total_count,
         "page": page,
-        "per_page": per_page
+        "per_page": per_page,
+        "request_time_ms": int(duration_ms)
     }
 
 

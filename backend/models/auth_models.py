@@ -94,4 +94,11 @@ class LearningPath(Base):
         Index('idx_learning_path_user_id', user_id),
         Index('idx_learning_path_path_id', path_id),
         Index('idx_learning_path_topic', topic),
+        # Composite indexes for common query patterns
+        Index('idx_learning_path_user_date', user_id, creation_date.desc()),
+        Index('idx_learning_path_user_favorite', user_id, favorite),
+        Index('idx_learning_path_user_modified', user_id, last_modified_date.desc()),
+        Index('idx_learning_path_user_source', user_id, source),
+        # For frequently used sorting combinations
+        Index('idx_learning_path_user_fav_date', user_id, favorite, creation_date.desc()),
     ) 
