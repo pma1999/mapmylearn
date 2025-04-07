@@ -1254,7 +1254,7 @@ async def develop_submodule_specific_content(
     output_language = state.get('language', 'en')
     
     # Import escape function from helpers
-    from backend.core.graph_nodes.helpers import escape_curly_braces
+    from backend.core.graph_nodes.helpers import escape_curly_braces, run_chain
     
     # Process the single search result
     formatted_results = ""
@@ -1374,33 +1374,38 @@ Format your response using Markdown, with clear section headings, code examples 
     
     prompt = ChatPromptTemplate.from_template(single_result_prompt)
     try:
-        # Properly await the LLM coroutine
-        llm = await get_llm(key_provider=state.get("google_key_provider"))
-        output_parser = StrOutputParser()
-        chain = prompt | llm | output_parser
+        # Use the run_chain function with retry mechanism instead of direct chain invocation
+        from langchain.schema.output_parser import StrOutputParser
         
-        # Escapar las llaves en los campos de texto
+        # Escapar las llaves en los campos de texto (restore these important variable assignments)
         user_topic = escape_curly_braces(state["user_topic"])
         submodule_title = escape_curly_braces(submodule.title)
         submodule_description = escape_curly_braces(submodule.description)
         
-        sub_content = await chain.ainvoke({
-            "user_topic": user_topic,
-            "module_title": module_title,
-            "module_description": module_desc,
-            "submodule_title": submodule_title,
-            "submodule_description": submodule_description,
-            "module_order": module_id + 1,
-            "module_count": len(state.get("enhanced_modules") or []),
-            "submodule_order": sub_id + 1,
-            "submodule_count": len(module.submodules),
-            "module_context": module_context,
-            "adjacent_context": adjacent_context,
-            "learning_path_context": learning_path_context,
-            "search_results": formatted_results,
-            "format_instructions": "",
-            "language": output_language
-        })
+        sub_content = await run_chain(
+            prompt, 
+            lambda: get_llm(key_provider=state.get("google_key_provider")),
+            StrOutputParser(),
+            {
+                "user_topic": user_topic,
+                "module_title": module_title,
+                "module_description": module_desc,
+                "submodule_title": submodule_title,
+                "submodule_description": submodule_description,
+                "module_order": module_id + 1,
+                "module_count": len(state.get("enhanced_modules") or []),
+                "submodule_order": sub_id + 1,
+                "submodule_count": len(module.submodules),
+                "module_context": module_context,
+                "adjacent_context": adjacent_context,
+                "learning_path_context": learning_path_context,
+                "search_results": formatted_results,
+                "format_instructions": "",
+                "language": output_language
+            },
+            max_retries=3,
+            initial_retry_delay=1.0
+        )
         
         if not sub_content:
             logger.error("LLM returned empty content")
@@ -1509,21 +1514,23 @@ async def generate_submodule_quiz(
             # If standard parsing fails, try our custom JSON extraction approach
             logger.warning(f"Standard parsing failed, attempting to extract JSON from response: {str(parsing_error)}")
             
-            # Get the raw LLM output without using the parser
-            # We'll create a new chain that just returns the string output
-            output_parser = StrOutputParser()
-            raw_chain = prompt | llm | output_parser
-            
-            # Get the raw response from the LLM
-            raw_response = await raw_chain.ainvoke({
-                "user_topic": user_topic,
-                "module_title": module_title,
-                "submodule_title": submodule_title,
-                "submodule_description": submodule_description,
-                "submodule_content": escaped_content[:100000],
-                "language": output_language,
-                "format_instructions": quiz_questions_parser.get_format_instructions()
-            })
+            # Use run_chain with StrOutputParser instead of direct chain invocation
+            raw_response = await run_chain(
+                prompt,
+                lambda: get_llm(key_provider=state.get("google_key_provider")),
+                StrOutputParser(),
+                {
+                    "user_topic": user_topic,
+                    "module_title": module_title,
+                    "submodule_title": submodule_title,
+                    "submodule_description": submodule_description,
+                    "submodule_content": escaped_content[:100000],
+                    "language": output_language,
+                    "format_instructions": quiz_questions_parser.get_format_instructions()
+                },
+                max_retries=3,
+                initial_retry_delay=1.0
+            )
             
             # Try to extract and parse JSON from the raw response
             json_data = extract_json_from_markdown(raw_response)

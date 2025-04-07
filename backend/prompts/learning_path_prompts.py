@@ -496,9 +496,10 @@ For each resource, provide:
 4. Type: The resource type (article, video, book, course, documentation, etc.)
 
 ## CITATION USAGE INSTRUCTIONS
-- Where possible, use the exact URLs from the CITATION LINKS section above
+- ONLY use the exact URLs from the CITATION LINKS section above
 - Match resources mentioned in the search results with their corresponding citation link
-- If the search results mention a resource but no URL is provided in the citation links, you may use a generic URL format (e.g., "website.com") with a note that the exact link is unavailable
+- DO NOT invent or make up any URLs. Never use generic URLs like "example.com" or similar placeholder formats
+- If a resource mentioned in the search results does not have a corresponding real URL in the citation links, DO NOT include that resource
 
 ## OUTPUT FORMAT
 Provide exactly {resource_count} resources formatted according to the requirements.
