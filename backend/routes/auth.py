@@ -222,3 +222,14 @@ async def auth_status(current_user: User = Depends(get_current_user)):
     Returns the user's information if authenticated.
     """
     return current_user 
+
+@router.get("/credits")
+async def get_user_credits(current_user: User = Depends(get_current_user)):
+    """
+    Get the current user's credit balance.
+    """
+    return {
+        "credits": current_user.credits,
+        "user_id": current_user.id,
+        "email": current_user.email
+    } 

@@ -52,6 +52,21 @@ const useProgressTracking = () => {
   }, []);
 
   /**
+   * Reset progress tracking state
+   */
+  const resetProgress = useCallback(() => {
+    setProgressUpdates([]);
+    setProgressPercentage(0);
+    setTaskId(null);
+    
+    // Close any existing EventSource connection
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+  }, []);
+
+  /**
    * Connect to the SSE endpoint for progress updates
    * @param {string} id - Task ID to track progress for
    */
@@ -106,7 +121,8 @@ const useProgressTracking = () => {
     progressPercentage,
     taskId,
     connectToProgressUpdates,
-    setTaskId
+    setTaskId,
+    resetProgress
   };
 };
 

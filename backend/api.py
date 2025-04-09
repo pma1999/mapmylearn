@@ -19,9 +19,12 @@ import httpx
 import traceback
 
 # Database imports
-from backend.config.database import engine, Base
+from backend.config.database import engine, Base, get_db
 from backend.routes.auth import router as auth_router
 from backend.routes.learning_paths import router as learning_paths_router
+from backend.routes.admin import router as admin_router
+from backend.models.auth_models import User, CreditTransaction
+from backend.utils.auth import decode_access_token
 
 # Import rate limiter
 from backend.utils.rate_limiter import rate_limiting_middleware
@@ -83,9 +86,10 @@ async def startup_db_client():
         # Don't raise the exception - we'll let the app start anyway and fail on actual db operations
         # This allows the app to run without a database for development
 
-# Include the auth and learning path routers
+# Include the auth, learning path, and admin routers
 app.include_router(auth_router, prefix="/api")
 app.include_router(learning_paths_router, prefix="/api")
+app.include_router(admin_router, prefix="/api")
 
 # --------------------------------------------------------------------------------
 # Global exception handler middleware
@@ -368,17 +372,56 @@ async def authenticate_api_keys(request: ApiKeyAuthRequest, req: Request):
 async def api_generate_learning_path(request: LearningPathRequest, background_tasks: BackgroundTasks, req: Request):
     """
     Generate a learning path for the specified topic.
+    
     This endpoint starts a background task to generate the learning path.
+    API keys are now provided by the server - no need for user-provided keys.
+    User API key tokens are still accepted for backward compatibility.
+    
     The task ID can be used to retrieve the result or track progress.
     """
     client_ip = req.client.host if req.client else None
     
-    # Check if at least one of the key tokens is provided
-    if not request.google_key_token and not request.pplx_key_token:
-        raise HTTPException(
-            status_code=400,
-            detail="API key tokens are required. Please provide valid API keys through the /api/auth/api-keys endpoint."
-        )
+    # Get current user if authenticated
+    user = None
+    user_id = None
+    try:
+        if req.headers.get("Authorization"):
+            # Get db session
+            db = next(get_db())
+            # Get user from auth token
+            auth_header = req.headers.get("Authorization")
+            if auth_header and auth_header.startswith("Bearer "):
+                token = auth_header.replace("Bearer ", "")
+                token_data = decode_access_token(token)
+                if token_data:
+                    user = db.query(User).filter(User.id == token_data.user_id).first()
+                    if user:
+                        user_id = user.id
+                        
+                        # Check if user has sufficient credits
+                        if user.credits <= 0:
+                            raise HTTPException(
+                                status_code=status.HTTP_403_FORBIDDEN,
+                                detail="Insufficient credits. Please contact the administrator to add credits to your account."
+                            )
+                        
+                        # Deduct one credit for the generation and record the transaction
+                        user.credits -= 1
+                        
+                        # Create credit transaction record
+                        transaction = CreditTransaction(
+                            user_id=user.id,
+                            amount=-1,  # Negative amount for usage
+                            action_type="generation_use",
+                            notes=f"Used 1 credit to generate learning path for topic: {request.topic}"
+                        )
+                        db.add(transaction)
+                        db.commit()
+                        logger.info(f"Deducted 1 credit from user {user.id}, remaining credits: {user.credits}")
+    except Exception as e:
+        logger.warning(f"Error getting user or checking credits: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise
     
     # Create a unique task ID
     task_id = str(uuid.uuid4())
@@ -390,7 +433,7 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
         
     # Initialize the task in active_generations dictionary
     async with active_generations_lock:
-        active_generations[task_id] = {"status": "running", "result": None}
+        active_generations[task_id] = {"status": "running", "result": None, "user_id": user_id}
 
     # Define a progress callback that puts messages into the queue
     async def progress_callback(update: Union[str, ProgressUpdate]):
@@ -399,63 +442,67 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
             timestamp = datetime.now().isoformat()
             update = ProgressUpdate(message=update, timestamp=timestamp)
         
-        async with progress_queues_lock:
-            if task_id in progress_queues:
-                await progress_queues[task_id].put(update)
-    
-    # Start the learning path generation as a background task
-    try:
-        background_tasks.add_task(
-            generate_learning_path_task,
-            task_id=task_id,
-            topic=request.topic,
-            parallel_count=request.parallel_count,
-            search_parallel_count=request.search_parallel_count,
-            submodule_parallel_count=request.submodule_parallel_count,
-            progress_callback=progress_callback,
-            google_key_token=request.google_key_token,
-            pplx_key_token=request.pplx_key_token,
-            client_ip=client_ip,
-            desired_module_count=request.desired_module_count,
-            desired_submodule_count=request.desired_submodule_count,
-            language=request.language
-        )
+        await progress_queue.put(update)
         
-        logger.info(f"Started learning path generation for topic '{request.topic}' with task_id: {task_id} in language: {request.language}")
-        return {"task_id": task_id, "status": "started"}
-    except Exception as e:
-        # Clean up the queue and task entry if background task setup fails
-        async with progress_queues_lock:
-            if task_id in progress_queues:
-                del progress_queues[task_id]
-                
-        async with active_generations_lock:
-            if task_id in active_generations:
-                del active_generations[task_id]
-                
-        logger.exception(f"Failed to start learning path generation: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to start learning path generation task. Please try again later."
-        )
+    # Create key providers with server API keys (prioritized) 
+    # but accept user tokens for backward compatibility
+    google_provider = GoogleKeyProvider(
+        token_or_key=request.google_key_token, 
+        user_id=user_id
+    ).set_operation("generate_learning_path")
+    
+    pplx_provider = PerplexityKeyProvider(
+        token_or_key=request.pplx_key_token,
+        user_id=user_id
+    ).set_operation("generate_learning_path")
+    
+    # Start a background task to generate the learning path
+    background_tasks.add_task(
+        generate_learning_path_task,
+        task_id=task_id,
+        topic=request.topic,
+        parallelCount=request.parallel_count,
+        searchParallelCount=request.search_parallel_count,
+        submoduleParallelCount=request.submodule_parallel_count,
+        desiredModuleCount=request.desired_module_count,
+        desiredSubmoduleCount=request.desired_submodule_count,
+        googleKeyProvider=google_provider,
+        pplxKeyProvider=pplx_provider,
+        progressCallback=progress_callback,
+        language=request.language,
+        user_id=user_id
+    )
+    
+    # Include information that API keys are provided by the server now
+    return {
+        "task_id": task_id,
+        "status": "running",
+        "api_key_info": {
+            "server_provided": True,
+            "message": "API keys are now provided by the server. You don't need to provide your own keys."
+        }
+    }
 
 async def generate_learning_path_task(
     task_id: str,
     topic: str,
-    parallel_count: int = 2,
-    search_parallel_count: int = 3,
-    submodule_parallel_count: int = 2,
-    progress_callback = None,
-    google_key_token: Optional[str] = None,
-    pplx_key_token: Optional[str] = None,
-    client_ip: Optional[str] = None,
-    desired_module_count: Optional[int] = None,
-    desired_submodule_count: Optional[int] = None,
-    language: str = "en"
+    parallelCount: int = 2,
+    searchParallelCount: int = 3,
+    submoduleParallelCount: int = 2,
+    progressCallback = None,
+    googleKeyProvider = None,
+    pplxKeyProvider = None,
+    desiredModuleCount: Optional[int] = None,
+    desiredSubmoduleCount: Optional[int] = None,
+    language: str = "en",
+    user_id: Optional[int] = None
 ):
     """
     Execute the learning path generation task with comprehensive error handling.
     Ensures all exceptions are caught, logged, and reported through progress updates.
+    
+    Now using server-provided API keys by default, with backward compatibility
+    for user-provided keys.
     """
     # Define a wrapper progress callback to ensure messages are logged and structured
     async def enhanced_progress_callback(message: str, 
@@ -494,11 +541,8 @@ async def generate_learning_path_task(
         
         logging.info(f"Progress update for task {task_id}: {message} (Phase: {phase}, Progress: {phase_progress})")
         
-        if progress_callback:
-            await progress_callback(update)
-    
-    google_api_key = None
-    pplx_api_key = None
+        if progressCallback:
+            await progressCallback(update)
     
     try:
         logging.info(f"Starting learning path generation for: {topic} in language: {language}")
@@ -512,150 +556,23 @@ async def generate_learning_path_task(
             action="started"
         )
         
-        # Retrieve Google API key with proper error handling
-        try:
-            if google_key_token:
-                try:
-                    google_api_key = key_manager.get_key(google_key_token, key_manager.KEY_TYPE_GOOGLE, ip_address=client_ip)
-                    logging.info("Successfully retrieved Google API key from token")
-                    await enhanced_progress_callback(
-                        "Successfully retrieved Google API key",
-                        phase="initialization",
-                        phase_progress=0.3,
-                        overall_progress=0.05,
-                        action="processing"
-                    )
-                except Exception as e:
-                    logging.warning(f"Failed to retrieve Google API key from token: {str(e)}")
-                    await enhanced_progress_callback(
-                        "Using default Google API key from environment",
-                        phase="initialization",
-                        phase_progress=0.3,
-                        overall_progress=0.05,
-                        action="processing"
-                    )
-                    # Try fallback to environment variable
-                    google_api_key = key_manager.get_env_key(key_manager.KEY_TYPE_GOOGLE)
-                    
-                    if not google_api_key:
-                        raise LearningPathGenerationError(
-                            "Failed to retrieve Google API key and no fallback key available",
-                            {"source": "google_key_retrieval"}
-                        )
-            else:
-                # Try environment variable
-                google_api_key = key_manager.get_env_key(key_manager.KEY_TYPE_GOOGLE)
-                if google_api_key:
-                    await enhanced_progress_callback(
-                        "Using default Google API key from environment",
-                        phase="initialization",
-                        phase_progress=0.3,
-                        overall_progress=0.05,
-                        action="processing"
-                    )
-                else:
-                    raise LearningPathGenerationError(
-                        "No Google API key provided and no fallback key available",
-                        {"source": "google_key_retrieval"}
-                    )
-        except Exception as e:
-            # Log the detailed error but provide a sanitized message to the user
-            logging.exception(f"Error retrieving Google API key: {str(e)}")
-            error_msg = "Failed to retrieve Google API key. Please provide a valid key."
-            await enhanced_progress_callback(
-                f"Error: {error_msg}",
-                phase="initialization",
-                phase_progress=0.3,
-                overall_progress=0.05,
-                action="error"
-            )
-            raise LearningPathGenerationError(error_msg, {"source": "google_key_retrieval"})
+        # Verify that we have valid key providers
+        if not googleKeyProvider:
+            googleKeyProvider = GoogleKeyProvider()
             
-        # Retrieve Perplexity API key with proper error handling
-        try:
-            if pplx_key_token:
-                try:
-                    pplx_api_key = key_manager.get_key(pplx_key_token, key_manager.KEY_TYPE_PERPLEXITY, ip_address=client_ip)
-                    logging.info("Successfully retrieved Perplexity API key from token")
-                    await enhanced_progress_callback(
-                        "Successfully retrieved Perplexity API key",
-                        phase="initialization",
-                        phase_progress=0.6,
-                        overall_progress=0.1,
-                        action="processing"
-                    )
-                except Exception as e:
-                    logging.warning(f"Failed to retrieve Perplexity API key from token: {str(e)}")
-                    await enhanced_progress_callback(
-                        "Using default Perplexity API key from environment",
-                        phase="initialization",
-                        phase_progress=0.6,
-                        overall_progress=0.1,
-                        action="processing"
-                    )
-                    # Try fallback to environment variable
-                    pplx_api_key = key_manager.get_env_key(key_manager.KEY_TYPE_PERPLEXITY)
-                    
-                    if not pplx_api_key:
-                        raise LearningPathGenerationError(
-                            "Failed to retrieve Perplexity API key and no fallback key available",
-                            {"source": "perplexity_key_retrieval"}
-                        )
-            else:
-                # Try environment variable
-                pplx_api_key = key_manager.get_env_key(key_manager.KEY_TYPE_PERPLEXITY)
-                if pplx_api_key:
-                    await enhanced_progress_callback(
-                        "Using default Perplexity API key from environment",
-                        phase="initialization",
-                        phase_progress=0.6,
-                        overall_progress=0.1,
-                        action="processing"
-                    )
-                else:
-                    raise LearningPathGenerationError(
-                        "No Perplexity API key provided and no fallback key available",
-                        {"source": "perplexity_key_retrieval"}
-                    )
-        except Exception as e:
-            # Log the detailed error but provide a sanitized message to the user
-            logging.exception(f"Error retrieving Perplexity API key: {str(e)}")
-            error_msg = "Failed to retrieve Perplexity API key. Please provide a valid key."
-            await enhanced_progress_callback(
-                f"Error: {error_msg}",
-                phase="initialization",
-                phase_progress=0.6,
-                overall_progress=0.1,
-                action="error"
-            )
-            raise LearningPathGenerationError(error_msg, {"source": "perplexity_key_retrieval"})
-        
-        # Create key providers with direct keys instead of tokens
-        try:
-            google_provider = GoogleKeyProvider(google_api_key)
-            pplx_provider = PerplexityKeyProvider(pplx_api_key)
-            
-            await enhanced_progress_callback(
-                "API keys validated and ready. Preparing learning path pipeline...",
-                phase="initialization",
-                phase_progress=1.0,
-                overall_progress=0.15,
-                action="completed"
-            )
-        except Exception as e:
-            logging.exception(f"Error creating key providers: {str(e)}")
-            error_msg = "Failed to initialize API key providers. Please try again with valid keys."
-            await enhanced_progress_callback(
-                f"Error: {error_msg}",
-                phase="initialization",
-                phase_progress=0.6,
-                overall_progress=0.1,
-                action="error"
-            )
-            raise LearningPathGenerationError(error_msg, {"source": "key_provider_initialization"})
+        if not pplxKeyProvider:
+            pplxKeyProvider = PerplexityKeyProvider()
         
         await enhanced_progress_callback(
-            f"Preparing to generate learning path for '{topic}' with {parallel_count} modules in parallel",
+            "API keys ready. Using server-provided API keys.",
+            phase="initialization",
+            phase_progress=0.6,
+            overall_progress=0.1,
+            action="processing"
+        )
+        
+        await enhanced_progress_callback(
+            f"Preparing to generate learning path for '{topic}' with {parallelCount} modules in parallel",
             phase="search_queries",
             phase_progress=0.0,
             overall_progress=0.15,
@@ -666,14 +583,14 @@ async def generate_learning_path_task(
         try:
             result = await generate_learning_path(
                 topic,
-                parallel_count=parallel_count,
-                search_parallel_count=search_parallel_count, 
-                submodule_parallel_count=submodule_parallel_count,
+                parallel_count=parallelCount,
+                search_parallel_count=searchParallelCount, 
+                submodule_parallel_count=submoduleParallelCount,
                 progress_callback=enhanced_progress_callback,
-                google_key_provider=google_provider,
-                pplx_key_provider=pplx_provider,
-                desired_module_count=desired_module_count,
-                desired_submodule_count=desired_submodule_count,
+                google_key_provider=googleKeyProvider,
+                pplx_key_provider=pplxKeyProvider,
+                desired_module_count=desiredModuleCount,
+                desired_submodule_count=desiredSubmoduleCount,
                 language=language
             )
         except Exception as e:
@@ -691,6 +608,31 @@ async def generate_learning_path_task(
                 phase="unknown",
                 action="error"
             )
+            
+            # Restore credit to user if the generation failed and record the transaction
+            if user_id is not None:
+                try:
+                    # Get a new DB session
+                    from backend.config.database import get_db
+                    db = next(get_db())
+                    
+                    # Find the user and restore credit
+                    user = db.query(User).filter(User.id == user_id).first()
+                    if user is not None:
+                        user.credits += 1
+                        
+                        # Create credit transaction record for the refund
+                        transaction = CreditTransaction(
+                            user_id=user.id,
+                            amount=1,  # Positive amount for refund
+                            action_type="refund",
+                            notes=f"Refunded 1 credit due to failed generation for topic: {topic}"
+                        )
+                        db.add(transaction)
+                        db.commit()
+                        logger.info(f"Restored 1 credit to user {user_id} due to generation error")
+                except Exception as credit_error:
+                    logger.error(f"Failed to restore credit to user {user_id}: {str(credit_error)}")
             
             # Update task status with sanitized error info - this is an unexpected error
             async with active_generations_lock:
@@ -726,6 +668,31 @@ async def generate_learning_path_task(
                 "type": "learning_path_generation_error",
                 "details": e.details
             }
+            
+        # Restore credit to user if the generation failed and record the transaction
+        if user_id is not None:
+            try:
+                # Get a new DB session
+                from backend.config.database import get_db
+                db = next(get_db())
+                
+                # Find the user and restore credit
+                user = db.query(User).filter(User.id == user_id).first()
+                if user is not None:
+                    user.credits += 1
+                    
+                    # Create credit transaction record for the refund
+                    transaction = CreditTransaction(
+                        user_id=user.id,
+                        amount=1,  # Positive amount for refund
+                        action_type="refund",
+                        notes=f"Refunded 1 credit due to failed generation for topic: {topic}"
+                    )
+                    db.add(transaction)
+                    db.commit()
+                    logger.info(f"Restored 1 credit to user {user_id} due to generation error")
+            except Exception as credit_error:
+                logger.error(f"Failed to restore credit to user {user_id}: {str(credit_error)}")
     except Exception as e:
         # Catch any other unexpected exceptions
         error_message = f"Unexpected error during learning path generation: {str(e)}"
@@ -740,6 +707,31 @@ async def generate_learning_path_task(
             phase="unknown",
             action="error"
         )
+        
+        # Restore credit to user if the generation failed and record the transaction
+        if user_id is not None:
+            try:
+                # Get a new DB session
+                from backend.config.database import get_db
+                db = next(get_db())
+                
+                # Find the user and restore credit
+                user = db.query(User).filter(User.id == user_id).first()
+                if user is not None:
+                    user.credits += 1
+                    
+                    # Create credit transaction record for the refund
+                    transaction = CreditTransaction(
+                        user_id=user.id,
+                        amount=1,  # Positive amount for refund
+                        action_type="refund",
+                        notes=f"Refunded 1 credit due to failed generation for topic: {topic}"
+                    )
+                    db.add(transaction)
+                    db.commit()
+                    logger.info(f"Restored 1 credit to user {user_id} due to generation error")
+            except Exception as credit_error:
+                logger.error(f"Failed to restore credit to user {user_id}: {str(credit_error)}")
         
         # Update status to failed with sanitized error info
         async with active_generations_lock:
@@ -935,6 +927,53 @@ async def health_check():
         "status": "ok",
         "uptime": f"{time.time() - startup_time:.2f} seconds"
     }
+
+@app.get("/api/admin/api-usage", response_model=Dict[str, Any])
+async def get_api_usage_stats(request: Request):
+    """
+    Get API usage statistics.
+    This is an admin-only endpoint for monitoring API key usage.
+    In a production system, this would include authentication checks.
+    """
+    # In a real system, we would check authentication and authorization here
+    # For now, just check if the request seems to be coming from an admin IP
+    client_ip = request.client.host if request.client else None
+    
+    # This is a placeholder check and should be replaced with proper auth
+    if client_ip != "127.0.0.1" and not os.environ.get("ADMIN_MODE"):
+        # For security in production, we don't reveal this endpoint exists
+        raise HTTPException(
+            status_code=404,
+            detail="Resource not found"
+        )
+    
+    try:
+        from backend.services.usage_tracker import UsageTracker
+        
+        # Get usage summary
+        usage_summary = await UsageTracker.get_usage_summary()
+        
+        # Get per-user statistics (in production, this would be paginated)
+        user_stats = {}
+        for user_id in ["anonymous"]:  # In production, this would be a list of users
+            user_usage = await UsageTracker.get_user_usage(user_id)
+            if user_usage["total_calls"] > 0:
+                user_stats[user_id] = user_usage
+        
+        # Return all stats
+        return {
+            "summary": usage_summary,
+            "user_stats": user_stats,
+            "server_time": datetime.now().isoformat(),
+            "api_keys_mode": "server_provided",
+            "future_credits_system": "in_development"
+        }
+    except Exception as e:
+        logger.exception(f"Error retrieving API usage stats: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve API usage statistics"
+        )
 
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)

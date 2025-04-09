@@ -30,6 +30,9 @@ export const AuthProvider = ({ children }) => {
           if (parsedAuth.user && parsedAuth.accessToken) {
             setUser(parsedAuth.user);
             setupTokenRefresh(parsedAuth.expiresIn);
+            
+            // Fetch initial credit information
+            fetchUserCredits();
           }
         }
       } catch (err) {
@@ -72,6 +75,36 @@ export const AuthProvider = ({ children }) => {
       console.error('Token refresh failed:', err);
       // If refresh fails, log out the user
       logout();
+    }
+  };
+
+  // Fetch user credits
+  const fetchUserCredits = async () => {
+    if (!user) return;
+    
+    try {
+      const { credits } = await api.getUserCredits();
+      
+      // Only update if credits changed to prevent unnecessary renders
+      if (user.credits !== credits) {
+        setUser(prevUser => ({
+          ...prevUser,
+          credits
+        }));
+        
+        // Update localStorage
+        const authData = localStorage.getItem('auth');
+        if (authData) {
+          const parsedAuth = JSON.parse(authData);
+          parsedAuth.user = {
+            ...parsedAuth.user,
+            credits
+          };
+          localStorage.setItem('auth', JSON.stringify(parsedAuth));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch user credits:', err);
     }
   };
 
@@ -219,6 +252,7 @@ export const AuthProvider = ({ children }) => {
     migrateLearningPaths,
     checkPendingMigration,
     isAuthenticated: !!user,
+    fetchUserCredits // Export the function to allow manual refresh of credits
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

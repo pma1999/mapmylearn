@@ -17,7 +17,9 @@ import {
   Tooltip,
   Avatar,
   useScrollTrigger,
-  Divider
+  Divider,
+  Chip,
+  Badge
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import SchoolIcon from '@mui/icons-material/School';
@@ -25,6 +27,7 @@ import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import LogoutIcon from '@mui/icons-material/Logout';
 import LoginIcon from '@mui/icons-material/Login';
 import PersonIcon from '@mui/icons-material/Person';
+import TokenIcon from '@mui/icons-material/Token';
 import Fab from '@mui/material/Fab';
 import Zoom from '@mui/material/Zoom';
 import { useAuth } from '../services/authContext';
@@ -123,7 +126,7 @@ function Navbar() {
   const open = Boolean(anchorEl);
   const userMenuOpen = Boolean(userMenuAnchorEl);
   const [scrolled, setScrolled] = useState(false);
-  const { isAuthenticated, user, logout, loading } = useAuth();
+  const { isAuthenticated, user, logout, loading, fetchUserCredits } = useAuth();
   
   // Auth-aware navigation items
   const navItems = useMemo(() => {
@@ -172,7 +175,12 @@ function Navbar() {
   
   const handleUserMenuOpen = useCallback((event) => {
     setUserMenuAnchorEl(event.currentTarget);
-  }, []);
+    
+    // Refresh user credits when menu is opened
+    if (isAuthenticated && fetchUserCredits) {
+      fetchUserCredits();
+    }
+  }, [isAuthenticated, fetchUserCredits]);
 
   const handleUserMenuClose = useCallback(() => {
     setUserMenuAnchorEl(null);
@@ -268,9 +276,27 @@ function Navbar() {
               aria-haspopup="true"
               aria-expanded={userMenuOpen ? 'true' : undefined}
             >
-              <Avatar sx={{ width: 32, height: 32, bgcolor: theme.palette.secondary.main }}>
-                {user?.full_name?.charAt(0) || user?.email?.charAt(0) || 'U'}
-              </Avatar>
+              <Badge
+                overlap="circular"
+                anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+                badgeContent={
+                  user?.credits > 0 ? (
+                    <Box
+                      sx={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: '50%',
+                        backgroundColor: theme.palette.secondary.main,
+                        border: `2px solid ${theme.palette.background.paper}`,
+                      }}
+                    />
+                  ) : null
+                }
+              >
+                <Avatar sx={{ width: 32, height: 32, bgcolor: theme.palette.secondary.main }}>
+                  {user?.full_name?.charAt(0) || user?.email?.charAt(0) || 'U'}
+                </Avatar>
+              </Badge>
             </IconButton>
           </Tooltip>
           
@@ -293,6 +319,21 @@ function Navbar() {
                 <Typography variant="body2" color="text.secondary" noWrap>
                   {user.email}
                 </Typography>
+                <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Chip
+                    icon={<TokenIcon fontSize="small" />}
+                    label={`${user.credits || 0} credits`}
+                    size="small"
+                    color={user.credits > 0 ? "primary" : "default"}
+                    sx={{ 
+                      fontWeight: 500,
+                      transition: 'all 0.3s ease',
+                      '& .MuiChip-icon': {
+                        color: user.credits > 0 ? 'inherit' : theme.palette.text.secondary
+                      }
+                    }}
+                  />
+                </Box>
               </Box>
             )}
             <Divider />
@@ -409,6 +450,22 @@ function Navbar() {
                 <Typography variant="body2" color="text.secondary" noWrap sx={{ fontSize: '0.8rem' }}>
                   {user.email}
                 </Typography>
+                <Box sx={{ mt: 1, display: 'flex', alignItems: 'center' }}>
+                  <Chip
+                    icon={<TokenIcon fontSize="small" />}
+                    label={`${user.credits || 0} credits`}
+                    size="small"
+                    color={user.credits > 0 ? "primary" : "default"}
+                    sx={{ 
+                      fontWeight: 500,
+                      fontSize: '0.8rem',
+                      transition: 'all 0.3s ease',
+                      '& .MuiChip-icon': {
+                        color: user.credits > 0 ? 'inherit' : theme.palette.text.secondary
+                      }
+                    }}
+                  />
+                </Box>
               </Box>
             )}
             <MenuItem onClick={handleLogout}>

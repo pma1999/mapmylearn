@@ -13,7 +13,7 @@ import * as languageService from '../../../services/languageService';
  */
 const useGeneratorForm = (
   { googleKeyToken, pplxKeyToken, rememberApiKeys, hasValidApiKey },
-  { connectToProgressUpdates },
+  { connectToProgressUpdates, resetProgress, setTaskId },
   { savePreferencesToSessionStorage },
   showNotification
 ) => {
@@ -49,6 +49,21 @@ const useGeneratorForm = (
   };
 
   /**
+   * Setup progress tracking for a task
+   * @param {string} taskId - Task ID to track
+   */
+  const setupProgressTracking = useCallback((taskId) => {
+    // Connect to progress updates
+    connectToProgressUpdates(taskId);
+    
+    // Save preferences for the result page
+    savePreferencesToSessionStorage(topic);
+    
+    // Navigate to result page
+    navigate(`/result/${taskId}`);
+  }, [connectToProgressUpdates, navigate, savePreferencesToSessionStorage, topic]);
+
+  /**
    * Handle form submission
    * @param {Event} e - Form submit event
    */
@@ -56,71 +71,59 @@ const useGeneratorForm = (
     if (e) e.preventDefault();
     
     if (!topic.trim()) {
-      setError('Please enter a topic');
-      return;
-    }
-
-    // Check if API key tokens are available
-    if (!hasValidApiKey()) {
-      setError('API keys are required. Please authenticate your API keys in the API Key Settings section.');
-      setApiSettingsOpen(true); // Open the API settings accordion
+      setError('Please enter a topic to generate a learning path for.');
       return;
     }
     
-    setError('');
+    setError(null);
     setIsGenerating(true);
     
     try {
-      console.log("Using secure token-based API access for learning path generation");
+      // Reset progress state
+      resetProgress();
       
-      // Prepare the request data, including the new module and submodule count parameters
-      const requestData = {
+      const result = await apiService.generateLearningPath(topic, {
         parallelCount,
         searchParallelCount,
         submoduleParallelCount,
+        desiredModuleCount: autoModuleCount ? null : desiredModuleCount,
+        desiredSubmoduleCount: autoSubmoduleCount ? null : desiredSubmoduleCount,
         googleKeyToken,
         pplxKeyToken,
         rememberTokens: rememberApiKeys,
         language
-      };
+      });
       
-      // Only include module count if automatic mode is disabled
-      if (!autoModuleCount) {
-        requestData.desiredModuleCount = desiredModuleCount;
-      }
+      // Store task ID and set generating state
+      setTaskId(result.task_id);
       
-      // Only include submodule count if automatic mode is disabled
-      if (!autoSubmoduleCount) {
-        requestData.desiredSubmoduleCount = desiredSubmoduleCount;
-      }
+      // Set up polling/SSE for progress updates
+      setupProgressTracking(result.task_id);
       
-      const response = await apiService.generateLearningPath(topic, requestData);
-      
-      // Connect to progress updates
-      connectToProgressUpdates(response.task_id);
-      
-      // Save preferences for the result page
-      savePreferencesToSessionStorage(topic);
-      
-      // Navigate to result page
-      navigate(`/result/${response.task_id}`);
     } catch (err) {
-      console.error('Error generating learning path:', err);
+      console.error('Error starting generation:', err);
+      setIsGenerating(false);
       
-      // Check if this is an API key validation error
-      if (err.response && err.response.status === 400 && err.response.data.detail) {
-        if (err.response.data.detail.includes('API key tokens') || 
-            err.response.data.detail.includes('token')) {
-          setError(err.response.data.detail);
-          setApiSettingsOpen(true);
-        } else {
-          setError(err.response.data.detail);
-        }
-      } else {
-        setError('Failed to generate learning path. Please try again.');
+      // Check for network errors
+      if (!err.response) {
+        setError('Network error. Please check your internet connection and try again.');
+        return;
       }
       
-      setIsGenerating(false);
+      // Check for specific error types
+      if (err.response && err.response.data) {
+        // Check if this is an API key validation error
+        if (err.response.data.detail && 
+           (err.response.data.detail.includes('API key validation') || 
+            err.response.data.detail.includes('API key error'))) {
+          setError(`API key error: ${err.response.data.detail}`);
+          return;
+        }
+        
+        setError(err.response.data.detail || 'An error occurred while starting the generation. Please try again.');
+      } else {
+        setError(err.message || 'An unexpected error occurred. Please try again.');
+      }
     }
   };
 

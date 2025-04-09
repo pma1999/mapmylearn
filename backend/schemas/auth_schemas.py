@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from pydantic import field_validator
 
 
 class UserBase(BaseModel):
@@ -27,9 +28,12 @@ class UserResponse(UserBase):
     full_name: Optional[str] = None
     created_at: datetime
     last_login: Optional[datetime] = None
+    credits: int = 0
+    is_admin: bool = False
+    is_active: bool = True
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class Token(BaseModel):
@@ -69,7 +73,7 @@ class LearningPathResponse(LearningPathBase):
     last_modified_date: Optional[datetime] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class LearningPathList(BaseModel):
@@ -89,4 +93,82 @@ class MigrationResponse(BaseModel):
     """Schema for migration response."""
     success: bool
     migrated_count: int
-    errors: Optional[List[str]] = None 
+    errors: Optional[List[str]] = None
+
+
+# Admin schemas for user and credit management
+
+class AdminUserUpdate(BaseModel):
+    """Schema for admin to update user details."""
+    full_name: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_admin: Optional[bool] = None
+
+
+class UserListFilters(BaseModel):
+    """Schema for filtering user list."""
+    search: Optional[str] = None  # Search in email or full_name
+    is_admin: Optional[bool] = None
+    is_active: Optional[bool] = None
+    has_credits: Optional[bool] = None
+    created_after: Optional[datetime] = None
+    created_before: Optional[datetime] = None
+
+
+class UserListResponse(BaseModel):
+    """Schema for paginated user list response."""
+    users: List[UserResponse]
+    total: int
+    page: int
+    per_page: int
+
+
+class AddCreditsRequest(BaseModel):
+    """Schema for adding credits to a user."""
+    user_id: int
+    amount: int = Field(..., gt=0)
+    notes: Optional[str] = None  # Will be stored as 'description' in the database
+
+
+class CreditTransactionResponse(BaseModel):
+    """Schema for credit transaction in responses."""
+    id: int
+    user_id: int
+    admin_id: Optional[int] = None
+    amount: int
+    action_type: str
+    created_at: datetime
+    description: Optional[str] = None  # Actual field in database
+    notes: Optional[str] = None  # Alias for description used by frontend
+    user_email: Optional[str] = None
+    admin_email: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+        
+    @field_validator('notes', mode='before')
+    @classmethod
+    def set_notes_from_description(cls, v, info):
+        # If notes is None but description exists, use description
+        if v is None and 'description' in info.data:
+            return info.data.get('description')
+        return v
+
+
+class CreditTransactionListFilters(BaseModel):
+    """Schema for filtering credit transaction list."""
+    user_id: Optional[int] = None
+    admin_id: Optional[int] = None
+    action_type: Optional[str] = None
+    from_date: Optional[datetime] = None
+    to_date: Optional[datetime] = None
+    min_amount: Optional[int] = None
+    max_amount: Optional[int] = None
+
+
+class CreditTransactionListResponse(BaseModel):
+    """Schema for paginated credit transaction list response."""
+    transactions: List[CreditTransactionResponse]
+    total: int
+    page: int
+    per_page: int 

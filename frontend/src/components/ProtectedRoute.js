@@ -7,8 +7,8 @@ import { useAuth } from '../services/authContext';
  * A wrapper component for routes that require authentication.
  * Redirects to login page if user is not authenticated.
  */
-const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+const ProtectedRoute = ({ children, adminOnly = false }) => {
+  const { isAuthenticated, user, loading } = useAuth();
   const location = useLocation();
 
   // Show loading spinner while checking authentication
@@ -20,9 +20,14 @@ const ProtectedRoute = ({ children }) => {
     );
   }
 
-  // Redirect to login if not authenticated, preserving the intended destination
+  // Redirect to login if not authenticated
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (adminOnly && !user?.is_admin) {
+    // Redirect to home if not an admin but trying to access admin-only route
+    return <Navigate to="/" replace />;
   }
 
   // Render the protected content if authenticated

@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "@mui/x-date-pickers": "^7.28.3",
+    "date-fns": "^4.1.0",
+    "recharts": "^2.15.2"
+  }
+}

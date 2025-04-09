@@ -101,6 +101,23 @@ const GeneratorForm = ({
 
   return (
     <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
+      <Alert 
+        severity="success" 
+        sx={{ 
+          mb: 4, 
+          '& .MuiAlert-message': { 
+            width: '100%'
+          } 
+        }}
+      >
+        <Typography variant="subtitle1" fontWeight="bold">
+          🎉 New Feature: API Keys Now Provided By Server
+        </Typography>
+        <Typography variant="body2">
+          You no longer need to provide your own API keys! We now provide all required API keys directly from our server.
+        </Typography>
+      </Alert>
+
       <Typography
         variant="h4"
         component="h1"
@@ -182,22 +199,6 @@ const GeneratorForm = ({
       <ApiKeySettings 
         apiSettingsOpen={apiSettingsOpen}
         setApiSettingsOpen={setApiSettingsOpen}
-        googleApiKey={googleApiKey}
-        setGoogleApiKey={setGoogleApiKey}
-        pplxApiKey={pplxApiKey}
-        setPplxApiKey={setPplxApiKey}
-        showGoogleKey={showGoogleKey}
-        setShowGoogleKey={setShowGoogleKey}
-        showPplxKey={showPplxKey}
-        setShowPplxKey={setShowPplxKey}
-        rememberApiKeys={rememberApiKeys}
-        setRememberApiKeys={setRememberApiKeys}
-        googleKeyValid={googleKeyValid}
-        pplxKeyValid={pplxKeyValid}
-        validatingKeys={validatingKeys}
-        isGenerating={isGenerating}
-        handleValidateApiKeys={handleValidateApiKeys}
-        handleClearApiKeys={handleClearApiKeys}
         isMobile={isMobile}
       />
       
@@ -230,7 +231,7 @@ const GeneratorForm = ({
           variant="contained"
           color="primary"
           size={isMobile ? "medium" : "large"}
-          disabled={isGenerating || !topic.trim() || (!googleKeyToken && !pplxKeyToken)}
+          disabled={isGenerating || !topic.trim()}
           startIcon={isGenerating ? <CircularProgress size={20} color="inherit" /> : <BoltIcon />}
           sx={{ 
             py: { xs: 1, sm: 1.5 }, 
@@ -244,26 +245,6 @@ const GeneratorForm = ({
           {isGenerating ? 'Generating...' : 'Generate Learning Path'}
         </Button>
       </Box>
-      
-      {(!googleKeyToken && !pplxKeyToken) && !isGenerating && (
-        <Typography color="error" variant="body2" sx={{ 
-          mt: 2, 
-          textAlign: 'center',
-          fontSize: { xs: '0.75rem', sm: '0.875rem' }
-        }}>
-          Please authenticate at least one API key in the API Key Settings section to generate a learning path.
-        </Typography>
-      )}
-      
-      {(googleApiKey.trim() && pplxApiKey.trim() && (googleKeyValid !== true || pplxKeyValid !== true)) && !isGenerating && (
-        <Typography color="error" variant="body2" sx={{ 
-          mt: 2, 
-          textAlign: 'center',
-          fontSize: { xs: '0.75rem', sm: '0.875rem' } 
-        }}>
-          Please authenticate your API keys before generating a learning path.
-        </Typography>
-      )}
       
       {/* Progress display (shown when generating) */}
       {isGenerating && (

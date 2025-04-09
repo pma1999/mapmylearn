@@ -466,33 +466,11 @@ export const generateLearningPath = async (topic, options = {}) => {
     googleKeyToken = null,
     pplxKeyToken = null,
     rememberTokens = false,
-    language = 'en'  // New language parameter with English as default
+    language = 'en'  // Language parameter with English as default
   } = options;
   
-  // Get stored API tokens if not provided
-  let finalGoogleKeyToken = googleKeyToken;
-  let finalPplxKeyToken = pplxKeyToken;
-  
-  // If tokens not explicitly provided, try to get from session storage
-  if (!finalGoogleKeyToken || !finalPplxKeyToken) {
-    const savedTokens = getSavedApiTokens();
-    
-    if (!finalGoogleKeyToken && savedTokens.googleKeyToken) {
-      finalGoogleKeyToken = savedTokens.googleKeyToken;
-    }
-    
-    if (!finalPplxKeyToken && savedTokens.pplxKeyToken) {
-      finalPplxKeyToken = savedTokens.pplxKeyToken;
-    }
-  }
-  
-  // Validate that at least one token is present (backend will fall back to env vars if needed)
-  if (!finalGoogleKeyToken && !finalPplxKeyToken) {
-    throw new Error("At least one API key token is required. Please authenticate your API keys first.");
-  }
-  
   try {
-    console.log("Using token-based API key access for learning path generation");
+    console.log("Generating learning path with server-provided API keys");
     
     // Prepare request data
     const requestData = {
@@ -500,8 +478,6 @@ export const generateLearningPath = async (topic, options = {}) => {
       parallel_count: parallelCount,
       search_parallel_count: searchParallelCount,
       submodule_parallel_count: submoduleParallelCount,
-      google_key_token: finalGoogleKeyToken,
-      pplx_key_token: finalPplxKeyToken,
       language // Include the language parameter
     };
     
@@ -514,6 +490,10 @@ export const generateLearningPath = async (topic, options = {}) => {
     if (desiredSubmoduleCount !== null) {
       requestData.desired_submodule_count = desiredSubmoduleCount;
     }
+    
+    // For backward compatibility, include API key tokens if available
+    if (googleKeyToken) requestData.google_key_token = googleKeyToken;
+    if (pplxKeyToken) requestData.pplx_key_token = pplxKeyToken;
     
     const response = await api.post('/generate-learning-path', requestData);
     return response.data;
@@ -877,6 +857,137 @@ export const downloadLearningPathPDF = async (pathId) => {
   }
 };
 
+// Get user credits
+export const getUserCredits = async () => {
+  try {
+    if (!authToken) {
+      return { credits: 0 };
+    }
+    
+    const response = await api.get('/auth/credits');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching user credits:', error);
+    
+    // If unauthorized, clear the invalid token
+    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+      console.warn('Token validation failed during credits fetch, clearing auth data');
+      clearAuthToken();
+      localStorage.removeItem('auth');
+    }
+    
+    return { credits: 0 };
+  }
+};
+
+// Admin API functions
+
+// Get users with pagination and filtering
+export const getUsers = async (page = 1, perPage = 10, search = '', isAdmin = null, isActive = null, hasCredits = null) => {
+  try {
+    const params = { page, per_page: perPage };
+    
+    if (search) params.search = search;
+    if (isAdmin !== null) params.is_admin = isAdmin;
+    if (isActive !== null) params.is_active = isActive;
+    if (hasCredits !== null) params.has_credits = hasCredits;
+    
+    const response = await api.get('/admin/users', { params });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    throw error;
+  }
+};
+
+// Get a specific user by ID
+export const getUser = async (userId) => {
+  try {
+    const response = await api.get(`/admin/users/${userId}`);
+    return response.data;
+  } catch (error) {
+    console.error(`Error fetching user ${userId}:`, error);
+    throw error;
+  }
+};
+
+// Update a user's details
+export const updateUser = async (userId, userData) => {
+  try {
+    const response = await api.patch(`/admin/users/${userId}`, userData);
+    return response.data;
+  } catch (error) {
+    console.error(`Error updating user ${userId}:`, error);
+    throw error;
+  }
+};
+
+// Add credits to a user
+export const addCredits = async (userId, amount, notes = '') => {
+  try {
+    const response = await api.post('/admin/credits/add', {
+      user_id: userId,
+      amount,
+      notes
+    });
+    return response.data;
+  } catch (error) {
+    console.error(`Error adding credits to user ${userId}:`, error);
+    throw error;
+  }
+};
+
+// Get credit transactions with pagination and filtering
+export const getCreditTransactions = async (
+  page = 1,
+  perPage = 20,
+  actionType = '',
+  fromDate = null,
+  toDate = null,
+  userId = '',
+  adminId = ''
+) => {
+  try {
+    const params = { page, per_page: perPage };
+    
+    if (actionType) params.action_type = actionType;
+    if (fromDate) params.from_date = fromDate.toISOString();
+    if (toDate) params.to_date = toDate.toISOString();
+    if (userId) params.user_id = userId;
+    if (adminId) params.admin_id = adminId;
+    
+    const response = await api.get('/admin/credits/transactions', { params });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching credit transactions:', error);
+    throw error;
+  }
+};
+
+// Get credit transactions for a specific user
+export const getUserCreditTransactions = async (userId, page = 1, perPage = 20) => {
+  try {
+    const params = { page, per_page: perPage };
+    
+    const response = await api.get(`/admin/credits/transactions/${userId}`, { params });
+    return response.data;
+  } catch (error) {
+    console.error(`Error fetching credit transactions for user ${userId}:`, error);
+    throw error;
+  }
+};
+
+// Get admin dashboard statistics
+export const getAdminStats = async () => {
+  try {
+    const response = await api.get('/admin/stats');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching admin stats:', error);
+    throw error;
+  }
+};
+
 export default {
   generateLearningPath,
   getLearningPath,
@@ -904,5 +1015,14 @@ export default {
   deleteLearningPath,
   checkAuthStatus,
   downloadLearningPathPDF,
+  getUserCredits,
+  // Admin API functions
+  getUsers,
+  getUser,
+  updateUser,
+  addCredits,
+  getCreditTransactions,
+  getUserCreditTransactions,
+  getAdminStats,
 };
 

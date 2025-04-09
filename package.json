@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@mui/x-date-pickers": "^5.0.20",
+    "date-fns": "^2.29.3",
+    "recharts": "^2.15.2"
+  }
+}

@@ -18,12 +18,15 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     full_name = Column(String)
     is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)  # New field to identify admin users
     created_at = Column(DateTime, default=func.now(), nullable=False)
     last_login = Column(DateTime)
+    credits = Column(Integer, default=0, nullable=False)
 
     # Relationships
     learning_paths = relationship("LearningPath", back_populates="user", cascade="all, delete-orphan")
     sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
+    credit_transactions = relationship("CreditTransaction", foreign_keys="[CreditTransaction.user_id]", back_populates="user", cascade="all, delete-orphan")
 
     # Index for email lookups during authentication
     __table_args__ = (
@@ -67,6 +70,33 @@ class Session(Base):
             device_info=device_info,
             ip_address=ip_address
         )
+
+
+class CreditTransaction(Base):
+    """
+    Model for tracking credit transactions including admin assignments and usage.
+    """
+    __tablename__ = "credit_transactions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    admin_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    amount = Column(Integer, nullable=False)  # Positive for additions, negative for usage
+    transaction_type = Column(String, nullable=False)  # "admin_add", "system_add", "generation_use", "refund"
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    description = Column(String, nullable=True)  # Notes or description for the transaction
+    
+    # Relationships
+    user = relationship("User", foreign_keys=[user_id], back_populates="credit_transactions")
+    admin = relationship("User", foreign_keys=[admin_user_id])
+    
+    # Indexes for efficient querying
+    __table_args__ = (
+        Index('idx_credit_transaction_user_id', user_id),
+        Index('idx_credit_transaction_admin_id', admin_user_id),
+        Index('idx_credit_transaction_created_at', created_at.desc()),
+        Index('idx_credit_transaction_action_type', transaction_type),
+    )
 
 
 class LearningPath(Base):
