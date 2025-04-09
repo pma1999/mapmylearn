@@ -78,7 +78,8 @@ async def initialize_admin(request: Request, db: Session = Depends(get_db)):
         user_id=user.id,
         amount=50,
         transaction_type="system_add",
-        description="Initial admin user setup"
+        notes="Initial admin user setup",
+        balance_after=user.credits
     )
     
     db.add(transaction)
@@ -319,11 +320,14 @@ async def add_credits(
         admin_user_id=admin.id,
         amount=credit_request.amount,
         transaction_type="admin_add",
-        description=credit_request.notes
+        notes=credit_request.notes
     )
     
     # Update user's credit balance
     user.credits += credit_request.amount
+    
+    # Set the balance_after field
+    transaction.balance_after = user.credits
     
     # Save both changes in a transaction
     try:
@@ -344,8 +348,11 @@ async def add_credits(
     response_data.user_email = user.email
     response_data.admin_email = admin.email
     
-    # Ensure notes is set to description for frontend compatibility
-    response_data.notes = transaction.description
+    # Map transaction_type to action_type for frontend compatibility
+    response_data.action_type = transaction.transaction_type
+    
+    # Ensure notes is set correctly
+    response_data.notes = transaction.notes
     
     # Log the action with client IP
     client_ip = request.client.host if request.client else "unknown"
@@ -436,11 +443,11 @@ async def list_transactions(
         transaction_dict["admin_email"] = admin_email
         # Map transaction_type to action_type for frontend compatibility
         transaction_dict["action_type"] = transaction_dict["transaction_type"]
-        # Map description to notes for frontend compatibility
-        if "description" in transaction_dict:
-            transaction_dict["notes"] = transaction_dict["description"]
+        # Map notes to description for frontend compatibility
+        if "notes" in transaction_dict:
+            transaction_dict["description"] = transaction_dict["notes"]
         else:
-            transaction_dict["notes"] = ""  # Default empty string if description doesn't exist
+            transaction_dict["description"] = ""  # Default empty string if notes doesn't exist
         transactions.append(transaction_dict)
     
     logger.info(f"Admin {admin.email} listed credit transactions")
@@ -505,11 +512,11 @@ async def get_user_transactions(
         transaction_dict["admin_email"] = admin_email
         # Map transaction_type to action_type for frontend compatibility
         transaction_dict["action_type"] = transaction_dict["transaction_type"]
-        # Map description to notes for frontend compatibility
-        if "description" in transaction_dict:
-            transaction_dict["notes"] = transaction_dict["description"]
+        # Map notes to description for frontend compatibility
+        if "notes" in transaction_dict:
+            transaction_dict["description"] = transaction_dict["notes"]
         else:
-            transaction_dict["notes"] = ""  # Default empty string if description doesn't exist
+            transaction_dict["description"] = ""  # Default empty string if notes doesn't exist
         transactions.append(transaction_dict)
     
     logger.info(f"Admin {admin.email} viewed credit transactions for user {user.email}")

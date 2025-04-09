@@ -277,27 +277,30 @@ const CreditManagement = ({ setError }) => {
                         }}
                       />
                     )}
-                    renderOption={(props, option) => (
-                      <li {...props}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                          <Avatar sx={{ mr: 2, bgcolor: 'primary.main' }}>
-                            <PersonIcon />
-                          </Avatar>
-                          <Box sx={{ flexGrow: 1 }}>
-                            <Typography variant="body1">{option.email}</Typography>
-                            <Typography variant="body2" color="text.secondary">
-                              {option.full_name || 'No name provided'}
-                            </Typography>
+                    renderOption={(props, option) => {
+                      const { key, ...otherProps } = props;
+                      return (
+                        <li key={key} {...otherProps}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                            <Avatar sx={{ mr: 2, bgcolor: 'primary.main' }}>
+                              <PersonIcon />
+                            </Avatar>
+                            <Box sx={{ flexGrow: 1 }}>
+                              <Typography variant="body1">{option.email}</Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                {option.full_name || 'No name provided'}
+                              </Typography>
+                            </Box>
+                            <Chip
+                              icon={<TokenIcon />}
+                              label={`${option.credits} credits`}
+                              size="small"
+                              color={option.credits > 0 ? 'primary' : 'default'}
+                            />
                           </Box>
-                          <Chip
-                            icon={<TokenIcon />}
-                            label={`${option.credits} credits`}
-                            size="small"
-                            color={option.credits > 0 ? 'primary' : 'default'}
-                          />
-                        </Box>
-                      </li>
-                    )}
+                        </li>
+                      );
+                    }}
                     loading={usersLoading}
                     loadingText="Loading users..."
                     noOptionsText="No users found"

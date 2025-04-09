@@ -84,7 +84,16 @@ class CreditTransaction(Base):
     amount = Column(Integer, nullable=False)  # Positive for additions, negative for usage
     transaction_type = Column(String, nullable=False)  # "admin_add", "system_add", "generation_use", "refund"
     created_at = Column(DateTime, default=func.now(), nullable=False)
-    description = Column(String, nullable=True)  # Notes or description for the transaction
+    
+    # SQLite requires this column, used to store user's balance after the transaction
+    balance_after = Column(Integer, nullable=False, default=0)
+    
+    # We support both column names for compatibility
+    # Original database might have 'description' column (SQLite) while PostgreSQL has 'notes'
+    notes = Column("description", String, nullable=True)  # Use 'description' as the actual column name for SQLite compatibility
+    
+    # Optional field for tracking related learning paths
+    learning_path_id = Column(Integer, nullable=True)
     
     # Relationships
     user = relationship("User", foreign_keys=[user_id], back_populates="credit_transactions")

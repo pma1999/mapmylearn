@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 
 
 class UserBase(BaseModel):
@@ -127,7 +127,7 @@ class AddCreditsRequest(BaseModel):
     """Schema for adding credits to a user."""
     user_id: int
     amount: int = Field(..., gt=0)
-    notes: Optional[str] = None  # Will be stored as 'description' in the database
+    notes: Optional[str] = None  # Will be stored as 'notes' in the database
 
 
 class CreditTransactionResponse(BaseModel):
@@ -138,20 +138,55 @@ class CreditTransactionResponse(BaseModel):
     amount: int
     action_type: str
     created_at: datetime
-    description: Optional[str] = None  # Actual field in database
-    notes: Optional[str] = None  # Alias for description used by frontend
+    notes: Optional[str] = None  # Actual field in database
+    description: Optional[str] = None  # Alias for notes for backwards compatibility
     user_email: Optional[str] = None
     admin_email: Optional[str] = None
 
     class Config:
         from_attributes = True
-        
-    @field_validator('notes', mode='before')
+    
+    @model_validator(mode='before')
     @classmethod
-    def set_notes_from_description(cls, v, info):
-        # If notes is None but description exists, use description
-        if v is None and 'description' in info.data:
-            return info.data.get('description')
+    def map_db_fields(cls, data):
+        """Map database model fields to schema fields"""
+        if isinstance(data, dict):
+            return data
+            
+        # Handle SQLAlchemy model conversion
+        if hasattr(data, '__dict__'):
+            # Copy data to avoid modifying the original
+            model_dict = data.__dict__.copy()
+            
+            # Map transaction_type to action_type
+            if hasattr(data, 'transaction_type') and data.transaction_type is not None:
+                model_dict['action_type'] = data.transaction_type
+                
+            # Copy admin_user_id to admin_id if needed
+            if (
+                hasattr(data, 'admin_user_id') and data.admin_user_id is not None
+                and ('admin_id' not in model_dict or model_dict['admin_id'] is None)
+            ):
+                model_dict['admin_id'] = data.admin_user_id
+                
+            return model_dict
+            
+        return data
+        
+    @field_validator('action_type', mode='before')
+    @classmethod
+    def map_transaction_type_to_action_type(cls, v, info):
+        """Map transaction_type from the model to action_type in the schema"""
+        if v is None and hasattr(info.data, 'transaction_type'):
+            return info.data.transaction_type
+        return v
+        
+    @field_validator('description', mode='before')
+    @classmethod
+    def set_description_from_notes(cls, v, info):
+        # If description is None but notes exists, use notes
+        if v is None and 'notes' in info.data:
+            return info.data.get('notes')
         return v
 
 
