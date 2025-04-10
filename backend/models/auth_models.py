@@ -45,6 +45,7 @@ class Session(Base):
     refresh_token = Column(String, unique=True, index=True, nullable=False)
     expires_at = Column(DateTime, nullable=False)
     created_at = Column(DateTime, default=func.now(), nullable=False)
+    last_used_at = Column(DateTime, default=func.now(), nullable=False)
     device_info = Column(String)
     ip_address = Column(String)
 
@@ -54,6 +55,7 @@ class Session(Base):
     # Index for token lookups
     __table_args__ = (
         Index('idx_session_token', refresh_token),
+        Index('idx_session_user_id', user_id),
     )
 
     @classmethod
@@ -67,6 +69,7 @@ class Session(Base):
             user_id=user_id,
             refresh_token=refresh_token,
             expires_at=expires_at,
+            last_used_at=datetime.utcnow(),
             device_info=device_info,
             ip_address=ip_address
         )

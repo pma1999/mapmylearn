@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import * as api from './api';
 
 // Create authentication context
@@ -19,62 +19,205 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [tokenRefreshTimer, setTokenRefreshTimer] = useState(null);
+  const [refreshInProgress, setRefreshInProgress] = useState(false);
+  const refreshAttempts = useRef(0);
+  const MAX_REFRESH_ATTEMPTS = 3;
 
-  // Initialize auth state from localStorage
-  useEffect(() => {
-    const initAuth = () => {
-      try {
-        const authData = localStorage.getItem('auth');
-        if (authData) {
-          const parsedAuth = JSON.parse(authData);
-          if (parsedAuth.user && parsedAuth.accessToken) {
+  // Function to check if token is expired or about to expire
+  const isTokenExpiredOrExpiring = (expiresAt) => {
+    if (!expiresAt) return true;
+    
+    try {
+      // Check if within 5 minutes of expiration (300 seconds)
+      const currentTime = Math.floor(Date.now() / 1000);
+      const bufferTime = 300; // 5 minutes in seconds
+      return currentTime + bufferTime >= expiresAt;
+    } catch (err) {
+      console.error('Error checking token expiration:', err);
+      return true; // Assume expired on error
+    }
+  };
+
+  // Attempt to silently refresh the token if it exists but is expired
+  const attemptSilentRefresh = async () => {
+    try {
+      setRefreshInProgress(true);
+      
+      if (refreshAttempts.current >= MAX_REFRESH_ATTEMPTS) {
+        console.warn('Maximum refresh attempts reached, forcing logout');
+        logout();
+        return false;
+      }
+      
+      refreshAttempts.current += 1;
+      
+      console.log('Attempting silent token refresh');
+      const response = await api.refreshAuthToken();
+      const { access_token, expires_in, user: userData } = response;
+      
+      // Reset refresh attempts counter on success
+      refreshAttempts.current = 0;
+      
+      updateAuthState(access_token, expires_in, userData);
+      return true;
+    } catch (err) {
+      console.error('Silent refresh failed:', err);
+      return false;
+    } finally {
+      setRefreshInProgress(false);
+    }
+  };
+
+  // Initialize auth state
+  const initAuth = async () => {
+    try {
+      setLoading(true);
+      const authData = localStorage.getItem('auth');
+      
+      if (authData) {
+        const parsedAuth = JSON.parse(authData);
+        
+        if (parsedAuth.user && parsedAuth.accessToken) {
+          // Check if token is expired or about to expire
+          const isExpired = isTokenExpiredOrExpiring(parsedAuth.tokenExpiry);
+          
+          if (isExpired) {
+            console.log('Stored token is expired or about to expire, attempting refresh');
+            const refreshed = await attemptSilentRefresh();
+            
+            if (!refreshed) {
+              // If refresh failed but we have user data, set as logged out but keep user info
+              // This provides a smoother experience if they need to log back in
+              localStorage.removeItem('auth');
+              setUser(null);
+              api.clearAuthToken();
+            }
+          } else {
+            // Token is still valid
+            console.log('Using valid stored token');
             setUser(parsedAuth.user);
-            setupTokenRefresh(parsedAuth.expiresIn);
+            api.setAuthToken(parsedAuth.accessToken);
+            setupTokenRefresh(parsedAuth.expiresIn, parsedAuth.tokenExpiry);
             
             // Fetch initial credit information
             fetchUserCredits();
           }
         }
-      } catch (err) {
-        console.error('Error initializing auth:', err);
-      } finally {
-        setLoading(false);
+      }
+    } catch (err) {
+      console.error('Error initializing auth:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Initialize auth when component mounts
+  useEffect(() => {
+    initAuth();
+    
+    // Listen for visibility changes (user returning to tab)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && user) {
+        // Check if token needs refresh when user returns to tab
+        const authData = localStorage.getItem('auth');
+        if (authData) {
+          const parsedAuth = JSON.parse(authData);
+          if (isTokenExpiredOrExpiring(parsedAuth.tokenExpiry)) {
+            console.log('Token expired while page was inactive, refreshing');
+            refreshToken();
+          }
+        }
       }
     };
-
-    initAuth();
-
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Sync auth state across tabs
+    const handleStorageChange = (e) => {
+      if (e.key === 'auth') {
+        if (!e.newValue) {
+          // Auth was cleared in another tab
+          setUser(null);
+          api.clearAuthToken();
+        } else if (e.newValue !== e.oldValue) {
+          // Auth was updated in another tab
+          const parsedAuth = JSON.parse(e.newValue);
+          if (parsedAuth.user && parsedAuth.accessToken) {
+            setUser(parsedAuth.user);
+            api.setAuthToken(parsedAuth.accessToken);
+            setupTokenRefresh(parsedAuth.expiresIn, parsedAuth.tokenExpiry);
+          }
+        }
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
     // Cleanup on unmount
     return () => {
       if (tokenRefreshTimer) {
         clearTimeout(tokenRefreshTimer);
       }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
 
   // Set up token refresh
-  const setupTokenRefresh = (expiresInSeconds) => {
+  const setupTokenRefresh = (expiresInSeconds, tokenExpiry) => {
     if (tokenRefreshTimer) {
       clearTimeout(tokenRefreshTimer);
     }
 
-    // Refresh token 5 minutes before expiration
-    const refreshTime = (expiresInSeconds - 300) * 1000;
-    const timer = setTimeout(refreshToken, refreshTime > 0 ? refreshTime : 0);
+    // Calculate time to refresh (15% of token lifetime before expiration)
+    const refreshBuffer = Math.floor(expiresInSeconds * 0.15);
+    const refreshTime = (expiresInSeconds - refreshBuffer) * 1000;
+    
+    console.log(`Setting up token refresh in ${refreshTime/1000} seconds`);
+    
+    // Set minimum refresh time to avoid immediate refresh loops
+    const safeRefreshTime = Math.max(refreshTime, 10000); // At least 10 seconds
+    
+    const timer = setTimeout(refreshToken, safeRefreshTime > 0 ? safeRefreshTime : 0);
     setTokenRefreshTimer(timer);
   };
 
   // Refresh the access token
   const refreshToken = async () => {
+    // Prevent multiple simultaneous refresh attempts
+    if (refreshInProgress) {
+      console.log('Refresh already in progress, skipping');
+      return;
+    }
+    
     try {
+      setRefreshInProgress(true);
+      console.log('Refreshing authentication token');
+      
       const response = await api.refreshAuthToken();
       const { access_token, expires_in, user: userData } = response;
+      
+      console.log('Token successfully refreshed');
+      refreshAttempts.current = 0; // Reset counter on success
       
       updateAuthState(access_token, expires_in, userData);
     } catch (err) {
       console.error('Token refresh failed:', err);
-      // If refresh fails, log out the user
-      logout();
+      
+      // If refresh fails, try again with exponential backoff
+      if (refreshAttempts.current < MAX_REFRESH_ATTEMPTS) {
+        refreshAttempts.current += 1;
+        const backoffTime = Math.pow(2, refreshAttempts.current) * 1000; // Exponential backoff
+        console.log(`Scheduling retry attempt ${refreshAttempts.current} in ${backoffTime/1000} seconds`);
+        
+        setTimeout(refreshToken, backoffTime);
+      } else {
+        console.warn('Maximum refresh attempts reached, logging out');
+        // If all retries fail, log out the user
+        logout();
+      }
+    } finally {
+      setRefreshInProgress(false);
     }
   };
 
@@ -113,10 +256,14 @@ export const AuthProvider = ({ children }) => {
     // Update state
     setUser(userData);
     
+    // Calculate token expiry timestamp
+    const tokenExpiry = Math.floor(Date.now() / 1000) + expiresIn;
+    
     // Store in localStorage
     localStorage.setItem('auth', JSON.stringify({
       accessToken,
       expiresIn,
+      tokenExpiry,
       user: userData
     }));
 
@@ -124,7 +271,7 @@ export const AuthProvider = ({ children }) => {
     api.setAuthToken(accessToken);
 
     // Setup token refresh timer
-    setupTokenRefresh(expiresIn);
+    setupTokenRefresh(expiresIn, tokenExpiry);
 
     return userData;
   };
@@ -178,6 +325,9 @@ export const AuthProvider = ({ children }) => {
         clearTimeout(tokenRefreshTimer);
         setTokenRefreshTimer(null);
       }
+      
+      // Reset refresh attempts
+      refreshAttempts.current = 0;
       
       // Call logout API
       await api.logout();
@@ -252,7 +402,9 @@ export const AuthProvider = ({ children }) => {
     migrateLearningPaths,
     checkPendingMigration,
     isAuthenticated: !!user,
-    fetchUserCredits // Export the function to allow manual refresh of credits
+    fetchUserCredits, // Export the function to allow manual refresh of credits
+    refreshToken,     // Allow manual refresh if needed
+    initAuth          // Allow force re-initialization of auth
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

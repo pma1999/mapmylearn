@@ -19,6 +19,51 @@ const api = axios.create({
 api.interceptors.response.use(
   response => response, // Return successful responses as-is
   error => {
+    // Check if the error is due to an expired token (401 Unauthorized)
+    if (error.response && error.response.status === 401) {
+      console.log('Received 401 unauthorized, token may be expired');
+      
+      // Store the original request to retry later
+      const originalRequest = error.config;
+      
+      // Only attempt to refresh token if not already doing so and not in a refresh loop
+      if (!originalRequest._retry && !originalRequest.url.includes('/auth/refresh')) {
+        originalRequest._retry = true;
+        
+        console.log('Attempting to refresh token and retry request');
+        
+        // Return a promise that will resolve when the token is refreshed and request retried
+        return refreshAuthToken()
+          .then(response => {
+            // Token refreshed successfully
+            const { access_token } = response;
+            
+            // Update the auth header with the new token
+            originalRequest.headers['Authorization'] = `Bearer ${access_token}`;
+            
+            // Set the new token for future requests
+            setAuthToken(access_token);
+            
+            // Retry the original request
+            return axios(originalRequest);
+          })
+          .catch(refreshError => {
+            console.error('Token refresh failed, cannot retry request:', refreshError);
+            
+            // Clear auth data on refresh failure
+            clearAuthToken();
+            localStorage.removeItem('auth');
+            
+            // Redirect to login page if in browser environment
+            if (typeof window !== 'undefined') {
+              window.location.href = '/login?session_expired=true';
+            }
+            
+            return Promise.reject(error);
+          });
+      }
+    }
+    
     // Format error consistently based on our new API error format
     if (error.response && error.response.data) {
       // Extract the error details from the standardized format
@@ -64,6 +109,19 @@ api.interceptors.response.use(
 
 // Auth token handling
 let authToken = null;
+let isRefreshingToken = false;
+let refreshSubscribers = [];
+
+// Function to subscribe to token refresh
+const subscribeTokenRefresh = (callback) => {
+  refreshSubscribers.push(callback);
+};
+
+// Function to notify subscribers that token is refreshed
+const onTokenRefreshed = (token) => {
+  refreshSubscribers.forEach(callback => callback(token));
+  refreshSubscribers = [];
+};
 
 // Set auth token for API requests
 export const setAuthToken = (token) => {
@@ -101,7 +159,7 @@ export const initAuthFromStorage = () => {
   return false;
 };
 
-// Add a function to check if the current auth token is valid
+// Enhanced function to check auth status
 export const checkAuthStatus = async () => {
   try {
     if (!authToken) {
@@ -114,11 +172,22 @@ export const checkAuthStatus = async () => {
   } catch (error) {
     console.error('Auth status check failed:', error);
     
-    // If unauthorized, clear the invalid token
-    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-      console.warn('Token validation failed, clearing auth data');
-      clearAuthToken();
-      localStorage.removeItem('auth');
+    // If unauthorized, try to refresh the token once
+    if (error.response && error.response.status === 401) {
+      try {
+        // Attempt to refresh the token
+        const refreshResponse = await refreshAuthToken();
+        if (refreshResponse && refreshResponse.access_token) {
+          // Token refreshed successfully, try status check again
+          const newResponse = await api.get('/auth/status');
+          return { isAuthenticated: true, user: newResponse.data };
+        }
+      } catch (refreshError) {
+        console.error('Token refresh during status check failed:', refreshError);
+        // Clear auth data on refresh failure
+        clearAuthToken();
+        localStorage.removeItem('auth');
+      }
     }
     
     return { isAuthenticated: false, error };
@@ -306,13 +375,58 @@ export const login = async (email, password, rememberMe = false) => {
   }
 };
 
+// Enhanced refresh auth token function with concurrency control
 export const refreshAuthToken = async () => {
+  // If already refreshing token, wait for that to complete instead of making multiple calls
+  if (isRefreshingToken) {
+    return new Promise((resolve, reject) => {
+      subscribeTokenRefresh(token => {
+        if (token) {
+          resolve({ access_token: token });
+        } else {
+          reject(new Error('Token refresh failed'));
+        }
+      });
+    });
+  }
+  
   try {
+    isRefreshingToken = true;
     const response = await api.post('/auth/refresh');
+    
+    // Update token in API instance and localStorage
+    const { access_token } = response.data;
+    setAuthToken(access_token);
+    
+    // Update auth data in localStorage if it exists
+    const authData = localStorage.getItem('auth');
+    if (authData) {
+      const parsedAuth = JSON.parse(authData);
+      parsedAuth.accessToken = access_token;
+      parsedAuth.expiresIn = response.data.expires_in;
+      parsedAuth.tokenExpiry = Math.floor(Date.now() / 1000) + response.data.expires_in;
+      
+      // Update user data if provided
+      if (response.data.user) {
+        parsedAuth.user = response.data.user;
+      }
+      
+      localStorage.setItem('auth', JSON.stringify(parsedAuth));
+    }
+    
+    // Notify subscribers that token has been refreshed
+    onTokenRefreshed(access_token);
+    
     return response.data;
   } catch (error) {
     console.error('Token refresh error:', error);
+    
+    // Notify subscribers of failure
+    onTokenRefreshed(null);
+    
     throw error;
+  } finally {
+    isRefreshingToken = false;
   }
 };
 

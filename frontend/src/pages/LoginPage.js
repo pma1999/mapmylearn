@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useNavigate, Link as RouterLink, useLocation } from 'react-router-dom';
 import {
   Container,
   Paper,
@@ -19,13 +19,28 @@ import { useAuth } from '../services/authContext';
 
 const LoginPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login, error, loading, isAuthenticated, checkPendingMigration } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true); // Default to true for better UX
   const [showError, setShowError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  // Check if redirected due to session expiration
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('session_expired') === 'true') {
+      setSessionExpired(true);
+      setShowError(true);
+      setErrorMessage('Your session has expired. Please sign in again to continue.');
+    }
+  }, [location]);
+
+  // Get return path from state if available
+  const from = location.state?.from?.pathname || '/generator';
 
   // Redirect to generator page if already authenticated
   useEffect(() => {
@@ -34,14 +49,16 @@ const LoginPage = () => {
       if (pendingMigration) {
         navigate('/migrate');
       } else {
-        navigate('/generator');
+        // Navigate to the page they were trying to access, or default to generator
+        navigate(from);
       }
     }
-  }, [isAuthenticated, navigate, checkPendingMigration]);
+  }, [isAuthenticated, navigate, checkPendingMigration, from]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setShowError(false);
+    setSessionExpired(false);
 
     try {
       await login(email, password, rememberMe);
@@ -74,7 +91,10 @@ const LoginPage = () => {
           </Typography>
           
           {showError && (
-            <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
+            <Alert 
+              severity={sessionExpired ? "info" : "error"} 
+              sx={{ width: '100%', mb: 2 }}
+            >
               {errorMessage}
             </Alert>
           )}
@@ -118,7 +138,7 @@ const LoginPage = () => {
                   disabled={loading}
                 />
               }
-              label="Remember me"
+              label="Remember me for 30 days"
             />
             
             <Button

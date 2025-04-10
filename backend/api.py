@@ -79,10 +79,17 @@ app = FastAPI(
 async def startup_db_client():
     logger.info("Creating database tables if they don't exist...")
     try:
+        # Create base tables
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables initialized successfully")
+        
+        # Apply migrations for schema updates
+        from backend.config.database import apply_migrations
+        logger.info("Applying database migrations...")
+        apply_migrations()
+        logger.info("Database migrations applied successfully")
     except Exception as e:
-        logger.error(f"Error initializing database tables: {str(e)}")
+        logger.error(f"Error initializing database: {str(e)}")
         # Don't raise the exception - we'll let the app start anyway and fail on actual db operations
         # This allows the app to run without a database for development
 

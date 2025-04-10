@@ -66,7 +66,7 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-async def login(response: Response, user_credentials: UserLogin, db: Session = Depends(get_db)):
+async def login(response: Response, request: Request, user_credentials: UserLogin, db: Session = Depends(get_db)):
     """
     Authenticate a user and return a JWT token.
     """
@@ -105,9 +105,12 @@ async def login(response: Response, user_credentials: UserLogin, db: Session = D
         ).delete()
         
         # Create new session with refresh token
+        refresh_days = 30  # 30 days for remember me
         session = UserSession.create_refresh_token(
             user_id=user.id,
-            expiry_days=30,  # 30 days for remember me
+            expiry_days=refresh_days,
+            device_info=request.headers.get("User-Agent"),
+            ip_address=request.client.host if hasattr(request, 'client') else None
         )
         
         db.add(session)
@@ -123,9 +126,13 @@ async def login(response: Response, user_credentials: UserLogin, db: Session = D
             httponly=True,
             secure=is_production,  # Only secure in production
             samesite="strict" if is_production else "lax",  # Strict in production, lax in development
-            max_age=30 * 24 * 3600,  # 30 days in seconds
+            max_age=refresh_days * 24 * 3600,  # 30 days in seconds
             path="/",
         )
+        
+        print(f"User {user.email} logged in with remember-me enabled")
+    else:
+        print(f"User {user.email} logged in without remember-me")
     
     return {
         "access_token": access_token,
@@ -182,9 +189,22 @@ async def refresh_token(response: Response, request: Request, db: Session = Depe
     
     access_token = create_access_token(token_data)
     
-    # Update last login
+    # Update last login and session timestamp
     user.last_login = datetime.utcnow()
+    
+    # If session is nearing expiration (less than 7 days), extend it
+    if session.expires_at < datetime.utcnow() + timedelta(days=7):
+        print(f"Extending session for user {user.email}")
+        session.expires_at = datetime.utcnow() + timedelta(days=30)
+        
+    # Update additional session metadata
+    session.last_used_at = datetime.utcnow()
+    session.ip_address = request.client.host if hasattr(request, 'client') else None
+    
+    # Save changes
     db.commit()
+    
+    print(f"Token refreshed for user {user.email}")
     
     return {
         "access_token": access_token,
