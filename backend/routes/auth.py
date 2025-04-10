@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timedelta
 import os
 from typing import Optional
+import uuid
 
 from backend.config.database import get_db
 from backend.models.auth_models import User, Session as UserSession
@@ -105,32 +106,57 @@ async def login(response: Response, request: Request, user_credentials: UserLogi
         ).delete()
         
         # Create new session with refresh token
-        refresh_days = 30  # 30 days for remember me
-        session = UserSession.create_refresh_token(
-            user_id=user.id,
-            expiry_days=refresh_days,
-            device_info=request.headers.get("User-Agent"),
-            ip_address=request.client.host if hasattr(request, 'client') else None
-        )
-        
-        db.add(session)
-        db.commit()
-        
-        # Determine environment to set proper cookie settings
-        is_production = os.getenv("ENVIRONMENT", "development") == "production"
-        
-        # Set refresh token cookie with appropriate security settings
-        response.set_cookie(
-            key="refresh_token",
-            value=session.refresh_token,
-            httponly=True,
-            secure=is_production,  # Only secure in production
-            samesite="strict" if is_production else "lax",  # Strict in production, lax in development
-            max_age=refresh_days * 24 * 3600,  # 30 days in seconds
-            path="/",
-        )
-        
-        print(f"User {user.email} logged in with remember-me enabled")
+        try:
+            refresh_days = 30  # 30 days for remember me
+            
+            # Get device info and IP address
+            device_info = request.headers.get("User-Agent")
+            ip_address = request.client.host if hasattr(request, 'client') else None
+            
+            # Try creating the session with all fields
+            try:
+                session = UserSession.create_refresh_token(
+                    user_id=user.id,
+                    expiry_days=refresh_days,
+                    device_info=device_info,
+                    ip_address=ip_address
+                )
+            except Exception as e:
+                # If that fails, try without last_used_at in case it's the problem
+                print(f"Warning: Creating full session failed: {e}")
+                # Create without explicit last_used_at field
+                session = UserSession(
+                    user_id=user.id,
+                    refresh_token=str(uuid.uuid4()),
+                    expires_at=datetime.utcnow() + timedelta(days=refresh_days),
+                    device_info=device_info,
+                    ip_address=ip_address
+                )
+            
+            db.add(session)
+            db.commit()
+            
+            # Determine environment to set proper cookie settings
+            is_production = os.getenv("ENVIRONMENT", "development") == "production"
+            
+            # Set refresh token cookie with appropriate security settings
+            response.set_cookie(
+                key="refresh_token",
+                value=session.refresh_token,
+                httponly=True,
+                secure=is_production,  # Only secure in production
+                samesite="strict" if is_production else "lax",  # Strict in production, lax in development
+                max_age=refresh_days * 24 * 3600,  # 30 days in seconds
+                path="/",
+            )
+            
+            print(f"User {user.email} logged in with remember-me enabled")
+        except Exception as e:
+            # If session creation fails, log error but continue
+            print(f"Warning: Error creating session: {e}")
+            # Rollback the session creation, but not the user login update
+            db.rollback()
+            print(f"User {user.email} logged in without persistent session due to error")
     else:
         print(f"User {user.email} logged in without remember-me")
     
@@ -192,17 +218,31 @@ async def refresh_token(response: Response, request: Request, db: Session = Depe
     # Update last login and session timestamp
     user.last_login = datetime.utcnow()
     
-    # If session is nearing expiration (less than 7 days), extend it
-    if session.expires_at < datetime.utcnow() + timedelta(days=7):
-        print(f"Extending session for user {user.email}")
-        session.expires_at = datetime.utcnow() + timedelta(days=30)
+    try:
+        # If session is nearing expiration (less than 7 days), extend it
+        if session.expires_at < datetime.utcnow() + timedelta(days=7):
+            print(f"Extending session for user {user.email}")
+            session.expires_at = datetime.utcnow() + timedelta(days=30)
+            
+        # Try to update additional session metadata
+        # Use try/except in case the last_used_at column doesn't exist yet
+        try:
+            session.last_used_at = datetime.utcnow()
+        except Exception as e:
+            print(f"Warning: Could not update last_used_at: {e}")
+            
+        # Update ip_address if possible
+        session.ip_address = request.client.host if hasattr(request, 'client') else None
         
-    # Update additional session metadata
-    session.last_used_at = datetime.utcnow()
-    session.ip_address = request.client.host if hasattr(request, 'client') else None
-    
-    # Save changes
-    db.commit()
+        # Save changes
+        db.commit()
+    except Exception as e:
+        print(f"Warning: Error updating session data: {e}")
+        # Try to commit just the user update
+        try:
+            db.commit()
+        except:
+            db.rollback()
     
     print(f"Token refreshed for user {user.email}")
     

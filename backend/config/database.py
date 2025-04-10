@@ -58,9 +58,12 @@ Base = declarative_base()
 
 def apply_migrations():
     """Apply any necessary database migrations during startup."""
+    import sqlalchemy
+    from sqlalchemy.sql import text
     
-    # Check if using SQLite
+    # Check database type from connection URL
     if DATABASE_URL.startswith("sqlite:///"):
+        # SQLite migration
         db_path = DATABASE_URL.replace("sqlite:///", "")
         
         # Connect to SQLite database
@@ -78,7 +81,7 @@ def apply_migrations():
                 
                 # Add last_used_at column if it doesn't exist
                 if "last_used_at" not in column_names:
-                    print("Adding last_used_at column to sessions table...")
+                    print("Adding last_used_at column to sessions table (SQLite)...")
                     cursor.execute("ALTER TABLE sessions ADD COLUMN last_used_at TIMESTAMP")
                     
                     # Set default values for existing records
@@ -88,22 +91,58 @@ def apply_migrations():
                     # Create index on user_id if it doesn't exist
                     cursor.execute("CREATE INDEX IF NOT EXISTS idx_session_user_id ON sessions (user_id)")
                     
-                    print("Migration completed successfully")
+                    print("Migration completed successfully (SQLite)")
                 else:
-                    print("Column last_used_at already exists")
+                    print("Column last_used_at already exists (SQLite)")
             
             # Commit changes
             conn.commit()
             
         except Exception as e:
-            print(f"Error during migration: {e}")
+            print(f"Error during SQLite migration: {e}")
             conn.rollback()
         finally:
             conn.close()
+            
+    elif DATABASE_URL.startswith("postgresql://") or "postgres" in DATABASE_URL:
+        # PostgreSQL migration using SQLAlchemy
+        try:
+            # Create a connection to use with raw SQL
+            with engine.begin() as connection:
+                # Check if the table exists
+                result = connection.execute(text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'sessions')"))
+                table_exists = result.scalar()
+                
+                if table_exists:
+                    # Check if the column exists
+                    result = connection.execute(text("SELECT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'sessions' AND column_name = 'last_used_at')"))
+                    column_exists = result.scalar()
+                    
+                    if not column_exists:
+                        print("Adding last_used_at column to sessions table (PostgreSQL)...")
+                        
+                        # Add the column
+                        connection.execute(text("ALTER TABLE sessions ADD COLUMN last_used_at TIMESTAMP"))
+                        
+                        # Set default values for existing records
+                        connection.execute(text("UPDATE sessions SET last_used_at = NOW()"))
+                        
+                        # Create index on user_id if it doesn't exist
+                        connection.execute(text(
+                            "CREATE INDEX IF NOT EXISTS idx_session_user_id ON sessions (user_id)"
+                        ))
+                        
+                        print("Migration completed successfully (PostgreSQL)")
+                    else:
+                        print("Column last_used_at already exists (PostgreSQL)")
+                        
+        except Exception as e:
+            print(f"Error during PostgreSQL migration: {e}")
+            raise
     
-    # Add migrations for other database types if needed
-    # elif DATABASE_URL.startswith("postgresql://"):
-    #    # PostgreSQL migrations
+    else:
+        print(f"Unsupported database type for automatic migrations: {DATABASE_URL}")
+        print("Manual database migration may be required")
 
 # Dependency to get the database session
 def get_db():
