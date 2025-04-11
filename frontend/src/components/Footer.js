@@ -83,7 +83,7 @@ function Footer() {
                   textAlign: { xs: 'center', md: 'left' }
                 }}
               >
-                LEARNY
+                LEARNCOMPASS
               </Typography>
             </Box>
             <Typography 
@@ -207,7 +207,7 @@ function Footer() {
             {new Date().getFullYear()}
             {' '}
             <Link color="inherit" component={RouterLink} to="/" underline="hover">
-              Learny
+              LearnCompass
             </Link>
             {' - AI-Powered Learning Path Generator'}
           </Typography>

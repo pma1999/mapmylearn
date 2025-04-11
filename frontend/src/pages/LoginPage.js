@@ -87,7 +87,7 @@ const LoginPage = () => {
           </Box>
           
           <Typography component="h1" variant="h5" sx={{ mb: 3 }}>
-            Sign in to Learny
+            Sign in to LearnCompass
           </Typography>
           
           {showError && (

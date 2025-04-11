@@ -57,4 +57,4 @@ yarn-error.log*
 # Application data
 learning_path_history.json
 learni.db
-learny.db
+learncompass.db

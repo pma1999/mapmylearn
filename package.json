@@ -9,9 +9,9 @@
     "react-markdown": "^10.1.0",
     "recharts": "^2.15.2"
   },
-  "name": "learni",
+  "name": "learncompass",
   "version": "1.0.0",
-  "description": "Learny is an AI-powered application designed to create personalized learning paths based on your interests and goals. The platform leverages advanced language models and web search capabilities to generate comprehensive, structured learning content tailored to any topic you wish to explore.",
+  "description": "LearnCompass is an AI-powered application designed to create personalized learning paths based on your interests and goals. The platform leverages advanced language models and web search capabilities to generate comprehensive, structured learning content tailored to any topic you wish to explore.",
   "main": "migrate-db.js",
   "directories": {
     "test": "tests"
@@ -21,14 +21,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pma1999/learny.git"
+    "url": "git+https://github.com/pma1999/learncompass.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/pma1999/learny/issues"
+    "url": "https://github.com/pma1999/learncompass/issues"
   },
-  "homepage": "https://github.com/pma1999/learny#readme"
+  "homepage": "https://github.com/pma1999/learncompass#readme"
 }

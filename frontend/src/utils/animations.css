@@ -78,7 +78,7 @@
   animation: progressAnimation 30s linear forwards;
 }
 
-/* Animations for Learny UI components */
+/* Animations for LearnCompass UI components */
 
 @keyframes slideUp {
   from {

@@ -1,8 +1,8 @@
-# Learny - Personalized Learning Path Generator
+# LearnCompass - Personalized Learning Path Generator
 
 ## Description
 
-Learny is an AI-powered application designed to create personalized learning paths based on your interests and goals. The platform leverages advanced language models and web search capabilities to generate comprehensive, structured learning content tailored to any topic you wish to explore.
+LearnCompass is an AI-powered application designed to create personalized learning paths based on your interests and goals. The platform leverages advanced language models and web search capabilities to generate comprehensive, structured learning content tailored to any topic you wish to explore.
 
 ## Features
 
@@ -28,8 +28,8 @@ Learny is an AI-powered application designed to create personalized learning pat
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/pma1999/learny.git
-cd learny
+git clone https://github.com/pma1999/learncompass.git
+cd learncompass
 ```
 
 2. Create and activate a virtual environment:
@@ -127,7 +127,7 @@ python bootstrap.py
 
 ## Architecture
 
-Learny is built with a modern stack and architecture:
+LearnCompass is built with a modern stack and architecture:
 
 ### Backend
 - **Framework**: FastAPI for a high-performance API server
@@ -156,7 +156,7 @@ Learny is built with a modern stack and architecture:
 ### Project Structure
 
 ```
-learny/
+learncompass/
 ├── backend/             # Backend FastAPI application
 │   ├── api.py           # Main API endpoints
 │   ├── main.py          # Core learning path generation logic
@@ -204,10 +204,10 @@ A Dockerfile is provided for containerized deployment:
 
 ```bash
 # Build the Docker image
-docker build -t learny .
+docker build -t learncompass .
 
 # Run the container
-docker run -p 8000:8000 learny
+docker run -p 8000:8000 learncompass
 ```
 
 ## License

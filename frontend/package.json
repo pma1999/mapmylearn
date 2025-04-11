@@ -1,7 +1,7 @@
 {
-  "name": "learny-frontend",
+  "name": "learncompass-frontend",
   "version": "1.0.0",
-  "description": "Frontend for Learny - Learning Path Generator",
+  "description": "Frontend for LearnCompass - Learning Path Generator",
   "main": "index.js",
   "scripts": {
     "start": "react-scripts start",

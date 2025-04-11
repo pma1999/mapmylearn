@@ -190,7 +190,7 @@ def apply_database_structure():
         cursor.execute("""
         SELECT EXISTS (
             SELECT 1 FROM users 
-            WHERE email = 'admin@learny.app'
+            WHERE email = 'admin@learncompass.app'
         );
         """)
         
@@ -205,7 +205,7 @@ def apply_database_structure():
             cursor.execute("""
             INSERT INTO users (email, hashed_password, full_name, is_active, is_admin, created_at, credits)
             VALUES (%s, %s, %s, %s, %s, %s, %s);
-            """, ('admin@learny.app', hashed_password, 'Admin User', True, True, current_time, 1000))
+            """, ('admin@learncompass.app', hashed_password, 'Admin User', True, True, current_time, 1000))
             print("Usuario admin creado correctamente")
         
         cursor.close()

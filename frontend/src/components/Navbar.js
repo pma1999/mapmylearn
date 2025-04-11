@@ -109,9 +109,9 @@ const NavLogo = React.memo(() => (
         WebkitTextFillColor: 'transparent',
         textShadow: '0px 2px 3px rgba(0,0,0,0.1)',
       }}
-      aria-label="Learny homepage"
+      aria-label="LearnCompass homepage"
     >
-      LEARNY
+      LEARNCOMPASS
     </Typography>
   </Box>
 ));
