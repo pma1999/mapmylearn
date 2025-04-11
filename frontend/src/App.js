@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { Container, Box } from '@mui/material';
+import { Analytics } from "@vercel/analytics/react";
 
 // Import pages
 import HomePage from './pages/HomePage';
@@ -49,6 +50,7 @@ const theme = createTheme({
 function App() {
   return (
     <AuthProvider>
+      <Analytics />
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <Box sx={{ 
