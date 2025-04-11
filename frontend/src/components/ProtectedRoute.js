@@ -9,7 +9,7 @@ import { useAuth } from '../services/authContext';
  * Handles session rehydration for expired tokens.
  */
 const ProtectedRoute = ({ children, adminOnly = false }) => {
-  const { isAuthenticated, user, loading, initAuth } = useAuth();
+  const { isAuthenticated, user, loading, initAuth, isLoggingOut } = useAuth();
   const location = useLocation();
   const [authChecked, setAuthChecked] = useState(false);
   const [isRehydrating, setIsRehydrating] = useState(false);
@@ -18,6 +18,12 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
   // Effect to handle session rehydration
   useEffect(() => {
     const checkAndRehydrateSession = async () => {
+      // Skip rehydration if logout is in progress
+      if (isLoggingOut) { 
+        console.log('Logout in progress, skipping rehydration check.');
+        return; 
+      }
+
       // Only attempt rehydration if not authenticated and not already attempted
       if (!isAuthenticated && !rehydrationAttempted && !loading) {
         try {
@@ -42,7 +48,7 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
     };
 
     checkAndRehydrateSession();
-  }, [isAuthenticated, rehydrationAttempted, loading, initAuth, authChecked]);
+  }, [isAuthenticated, rehydrationAttempted, loading, initAuth, authChecked, isLoggingOut]);
 
   // Show loading spinner while checking authentication or rehydrating
   if (loading || isRehydrating) {

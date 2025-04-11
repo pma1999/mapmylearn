@@ -1102,6 +1102,67 @@ export const getAdminStats = async () => {
   }
 };
 
+// --------------------------------------------------------------------------------
+// Chatbot API Calls
+// --------------------------------------------------------------------------------
+
+/**
+ * Sends a message to the submodule chatbot.
+ * @param {object} data - The chat request data.
+ * @param {string} data.path_id - The ID of the learning path.
+ * @param {number} data.module_index - The index of the current module.
+ * @param {number} data.submodule_index - The index of the current submodule.
+ * @param {string} data.user_message - The user's message.
+ * @param {string} data.thread_id - The unique conversation thread ID.
+ * @returns {Promise<object>} The API response containing the AI's response.
+ */
+export const sendMessage = async (data) => {
+  try {
+    console.log('Sending chat message:', data);
+    // Ensure auth token is set before making the request
+    if (!authToken) {
+      // Attempt to initialize from storage if token is missing
+      if (!initAuthFromStorage()) {
+          console.error('sendMessage Error: No auth token available.');
+          throw new Error('Authentication required. Please log in.');
+      }
+    }
+    const response = await api.post('/chatbot/chat', data);
+    console.log('Chat response received:', response.data);
+    return response.data; // Should contain { ai_response: string, thread_id: string }
+  } catch (error) {
+    console.error('Error sending chat message:', error);
+    // The interceptor should have already formatted the error
+    throw error;
+  }
+};
+
+/**
+ * Clears the chat history for a specific thread on the backend.
+ * Note: With MemorySaver, this might be a no-op on the backend,
+ * but it's included for potential future use with persistent storage.
+ * @param {object} data - The clear chat request data.
+ * @param {string} data.thread_id - The unique conversation thread ID.
+ * @returns {Promise<void>} A promise that resolves on success.
+ */
+export const clearChatHistory = async (data) => {
+  try {
+    console.log('Clearing chat history for thread:', data.thread_id);
+    // Ensure auth token is set
+    if (!authToken) {
+      if (!initAuthFromStorage()) {
+        console.error('clearChatHistory Error: No auth token available.');
+        throw new Error('Authentication required.');
+      }
+    }
+    await api.post('/chatbot/clear', data);
+    console.log('Chat history clear request successful for thread:', data.thread_id);
+  } catch (error) {
+    console.error('Error clearing chat history:', error);
+    throw error;
+  }
+};
+
 export default {
   generateLearningPath,
   getLearningPath,
@@ -1138,5 +1199,7 @@ export default {
   getCreditTransactions,
   getUserCreditTransactions,
   getAdminStats,
+  sendMessage,
+  clearChatHistory,
 };
 

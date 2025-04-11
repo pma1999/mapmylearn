@@ -11,9 +11,10 @@ import ModuleCard from '../../../components/organisms/ModuleCard';
  * 
  * @param {Object} props Component props
  * @param {Array} props.modules Array of module objects
+ * @param {string} props.pathId ID of the parent learning path
  * @returns {JSX.Element} Module section component
  */
-const ModuleSection = ({ modules }) => {
+const ModuleSection = ({ modules, pathId }) => {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   
@@ -51,14 +52,23 @@ const ModuleSection = ({ modules }) => {
         <Grid container spacing={3}>
           {modules.map((module, index) => (
             <Grid item xs={12} md={6} key={index}>
-              <ModuleCard module={module} index={index} />
+              <ModuleCard 
+                module={module} 
+                index={index} 
+                pathId={pathId}
+              />
             </Grid>
           ))}
         </Grid>
       ) : (
         <Box>
           {modules.map((module, index) => (
-            <ModuleCard key={index} module={module} index={index} />
+            <ModuleCard 
+              key={index} 
+              module={module} 
+              index={index} 
+              pathId={pathId}
+            />
           ))}
         </Box>
       )}
@@ -79,7 +89,8 @@ ModuleSection.propTypes = {
         })
       )
     })
-  ).isRequired
+  ).isRequired,
+  pathId: PropTypes.string.isRequired
 };
 
 export default ModuleSection; 

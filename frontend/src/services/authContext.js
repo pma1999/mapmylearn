@@ -20,6 +20,7 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null);
   const [tokenRefreshTimer, setTokenRefreshTimer] = useState(null);
   const [refreshInProgress, setRefreshInProgress] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const refreshAttempts = useRef(0);
   const MAX_REFRESH_ATTEMPTS = 3;
   const refreshPromise = useRef(null); // To store the promise during refresh
@@ -58,6 +59,7 @@ export const AuthProvider = ({ children }) => {
   
   // Logout function
   const logout = async () => {
+    setIsLoggingOut(true);
     console.log('Logging out user...');
     if (tokenRefreshTimer) {
       clearTimeout(tokenRefreshTimer);
@@ -412,6 +414,7 @@ export const AuthProvider = ({ children }) => {
     loading,
     error,
     isAuthenticated: !!user && !loading, // More accurate isAuthenticated check
+    isLoggingOut,
     login,
     logout,
     register,

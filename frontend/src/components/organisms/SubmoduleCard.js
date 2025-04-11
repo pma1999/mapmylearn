@@ -22,6 +22,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
 import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
+import QuestionAnswerIcon from '@mui/icons-material/QuestionAnswer';
 import MarkdownRenderer from '../MarkdownRenderer';
 import { motion } from 'framer-motion';
 import ResourcesSection from '../shared/ResourcesSection';
@@ -31,6 +32,12 @@ import { QuizContainer } from '../quiz';
 
 // Import placeholders for future content types
 import PlaceholderContent from '../shared/PlaceholderContent';
+
+// Import the new Chat component
+import SubmoduleChat from '../chat/SubmoduleChat';
+
+// Import useAuth hook instead of AuthContext
+import { useAuth } from '../../services/authContext';
 
 // TabPanel component for the tabbed interface
 const TabPanel = (props) => {
@@ -45,7 +52,9 @@ const TabPanel = (props) => {
       {...other}
     >
       {value === index && (
-        <Box sx={{ p: { xs: 1, sm: 2 } }}>
+        <Box sx={{ 
+          p: index === 3 ? 0 : { xs: 1, sm: 2 } 
+        }}>
           {children}
         </Box>
       )}
@@ -53,12 +62,15 @@ const TabPanel = (props) => {
   );
 };
 
-const SubmoduleCard = ({ submodule, index, moduleIndex }) => {
+const SubmoduleCard = ({ submodule, index, moduleIndex, pathId }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const fullScreen = useMediaQuery(theme.breakpoints.down('md'));
+  
+  // Use the useAuth hook to get user information
+  const { user } = useAuth();
   
   // Check if this submodule has quiz questions
   const hasQuizQuestions = submodule.quiz_questions && submodule.quiz_questions.length > 0;
@@ -87,6 +99,13 @@ const SubmoduleCard = ({ submodule, index, moduleIndex }) => {
       }
     }
   };
+
+  // Ensure pathId is passed; provide a fallback or handle error if missing
+  if (!pathId) {
+    console.error("Error: pathId prop is missing in SubmoduleCard");
+    // Optionally return null or an error message component
+    return null; 
+  }
 
   return (
     <motion.div
@@ -250,7 +269,7 @@ const SubmoduleCard = ({ submodule, index, moduleIndex }) => {
           </Box>
           
           {/* Tabbed interface */}
-          <Box sx={{ width: '100%' }}>
+          <Box sx={{ width: '100%', flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
             {/* Tabs navigation */}
             <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
               <Tabs 
@@ -291,6 +310,13 @@ const SubmoduleCard = ({ submodule, index, moduleIndex }) => {
                   iconPosition="start" 
                   id="tab-2"
                   aria-controls="tabpanel-2"
+                />
+                <Tab 
+                  label="Chatbot" 
+                  icon={<QuestionAnswerIcon />} 
+                  iconPosition="start" 
+                  id="tab-3"
+                  aria-controls="tabpanel-3"
                 />
               </Tabs>
             </Box>
@@ -339,6 +365,16 @@ const SubmoduleCard = ({ submodule, index, moduleIndex }) => {
                 title="Additional Resources"
                 type="submodule"
                 compact={isMobile}
+              />
+            </TabPanel>
+
+            {/* Chatbot tab panel */}
+            <TabPanel value={activeTab} index={3}>
+              <SubmoduleChat 
+                pathId={pathId} 
+                moduleIndex={moduleIndex} 
+                submoduleIndex={index} 
+                userId={user?.id}
               />
             </TabPanel>
           </Box>

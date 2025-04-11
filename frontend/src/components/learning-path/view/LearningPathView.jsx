@@ -183,8 +183,11 @@ const LearningPathView = ({ source }) => {
             onNewLearningPath={handleNewLearningPathClick}
           />
           
-          {/* Modules Section */}
-          <ModuleSection modules={currentLearningPath.modules} />
+          {/* Modules Section - Pass entryId as pathId */}
+          <ModuleSection 
+            modules={currentLearningPath.modules} 
+            pathId={entryId}
+          />
           
           {/* Learning Path Resources Section - UPDATED to use ResourcesSection */}
           <Box sx={{ mt: 6, mb: 4 }}>
