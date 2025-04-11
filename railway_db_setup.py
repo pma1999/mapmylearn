@@ -147,7 +147,7 @@ def setup_database():
             print("Versión de alembic actualizada correctamente")
         
         # 7. Verificar si existe el usuario admin
-        cursor.execute("SELECT EXISTS (SELECT 1 FROM users WHERE email = 'admin@learncompass.app');")
+        cursor.execute("SELECT EXISTS (SELECT 1 FROM users WHERE email = 'admin@mapmylearn.app');")
         admin_exists = cursor.fetchone()[0]
         
         if not admin_exists:
@@ -158,7 +158,7 @@ def setup_database():
             cursor.execute("""
             INSERT INTO users (email, hashed_password, full_name, is_active, is_admin, credits, created_at)
             VALUES (%s, %s, %s, %s, %s, %s, %s);
-            """, ('admin@learncompass.app', hashed_password, 'Admin User', True, True, 1000, datetime.now()))
+            """, ('admin@mapmylearn.app', hashed_password, 'Admin User', True, True, 1000, datetime.now()))
             print("Usuario admin creado correctamente")
         else:
             print("El usuario admin ya existe")

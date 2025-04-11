@@ -69,8 +69,8 @@ key_manager = ApiKeyManager()
 
 # Create FastAPI app
 app = FastAPI(
-    title="LearnCompass API",
-    description="API for LearnCompass Learning Path Generator",
+    title="MapMyLearn API",
+    description="API for MapMyLearn Learning Path Generator",
     version="0.1.0"
 )
 
@@ -211,9 +211,9 @@ is_production = environment == "production"
 if is_production:
     # Entorno de producción - usar lista explícita de dominios permitidos
     allowed_origins = [
-        "https://learncompass.vercel.app",               # Producción principal
-        "https://learncompass-pablos-projects-d80d0b2f.vercel.app",       # Despliegue específico
-        "https://learncompass-git-main-pablos-projects-d80d0b2f.vercel.app",  # Rama principal
+        "https://mapmylearn.vercel.app",               # Producción principal
+        "https://mapmylearn-pablos-projects-d80d0b2f.vercel.app",       # Despliegue específico
+        "https://mapmylearn-git-main-pablos-projects-d80d0b2f.vercel.app",  # Rama principal
         "https://web-production-62f88.up.railway.app"     # Backend (para posibles solicitudes cross-origin)
     ]
     

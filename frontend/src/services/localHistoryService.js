@@ -6,8 +6,8 @@
  * Uses a unique identifier for each browser to isolate histories.
  */
 
-const BASE_STORAGE_KEY = 'learncompass_history';
-const USER_ID_KEY = 'learncompass_user_id';
+const BASE_STORAGE_KEY = 'mapmylearn_history';
+const USER_ID_KEY = 'mapmylearn_user_id';
 
 /**
  * Gets or creates a unique user ID for the current browser

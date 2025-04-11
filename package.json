@@ -9,9 +9,9 @@
     "react-markdown": "^10.1.0",
     "recharts": "^2.15.2"
   },
-  "name": "learncompass",
+  "name": "mapmylearn",
   "version": "1.0.0",
-  "description": "LearnCompass is an AI-powered application designed to create personalized learning paths based on your interests and goals. The platform leverages advanced language models and web search capabilities to generate comprehensive, structured learning content tailored to any topic you wish to explore.",
+  "description": "MapMyLearn is an AI-powered application designed to create personalized learning paths based on your interests and goals. The platform leverages advanced language models and web search capabilities to generate comprehensive, structured learning content tailored to any topic you wish to explore.",
   "main": "migrate-db.js",
   "directories": {
     "test": "tests"
@@ -21,14 +21,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pma1999/learncompass.git"
+    "url": "git+https://github.com/pma1999/mapmylearn.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/pma1999/learncompass/issues"
+    "url": "https://github.com/pma1999/mapmylearn/issues"
   },
-  "homepage": "https://github.com/pma1999/learncompass#readme"
+  "homepage": "https://github.com/pma1999/mapmylearn#readme"
 }

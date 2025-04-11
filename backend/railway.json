@@ -16,6 +16,6 @@
     "RATE_LIMIT_BURST": "20",
     "LOG_LEVEL": "INFO",
     "TRUSTED_HOSTS": "web-production-62f88.up.railway.app",
-    "ALLOWED_ORIGINS": "https://learncompass.vercel.app,https://learncompass-pablos-projects-d80d0b2f.vercel.app,https://learncompass-git-main-pablos-projects-d80d0b2f.vercel.app"
+    "ALLOWED_ORIGINS": "https://mapmylearn.vercel.app,https://mapmylearn-pablos-projects-d80d0b2f.vercel.app,https://mapmylearn-git-main-pablos-projects-d80d0b2f.vercel.app"
   }
 } 

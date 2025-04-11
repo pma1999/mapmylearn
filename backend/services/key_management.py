@@ -67,7 +67,7 @@ class ApiKeyManager:
                            "This will cause tokens to invalidate on server restart.")
         
         # Use the server secret to derive an encryption key
-        salt = b'learncompass_api_key_manager'
+        salt = b'mapmylearn_api_key_manager'
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,

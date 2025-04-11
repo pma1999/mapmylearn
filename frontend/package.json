@@ -1,7 +1,7 @@
 {
-  "name": "learncompass-frontend",
+  "name": "mapmylearn-frontend",
   "version": "1.0.0",
-  "description": "Frontend for LearnCompass - Learning Path Generator",
+  "description": "Frontend for MapMyLearn - Learning Path Generator",
   "main": "index.js",
   "scripts": {
     "start": "react-scripts start",

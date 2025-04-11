@@ -267,7 +267,7 @@ function HomePage() {
               fontSize: { xs: '1.8rem', md: '2.5rem' }
             }}
           >
-            Why Choose LearnCompass?
+            Why Choose MapMyLearn?
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 700, mx: 'auto' }}>
             Our AI-powered platform creates personalized learning experiences that adapt to your specific needs and goals.

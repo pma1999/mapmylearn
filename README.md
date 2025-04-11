@@ -1,8 +1,8 @@
-# LearnCompass - Personalized Learning Path Generator
+# MapMyLearn - Personalized Learning Path Generator
 
 ## Description
 
-LearnCompass is an AI-powered application designed to create personalized learning paths based on your interests and goals. The platform leverages advanced language models and web search capabilities to generate comprehensive, structured learning content tailored to any topic you wish to explore.
+MapMyLearn is an AI-powered application designed to create personalized learning paths based on your interests and goals. The platform leverages advanced language models and web search capabilities to generate comprehensive, structured learning content tailored to any topic you wish to explore.
 
 ## Features
 
@@ -28,8 +28,8 @@ LearnCompass is an AI-powered application designed to create personalized learni
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/pma1999/learncompass.git
-cd learncompass
+git clone https://github.com/pma1999/mapmylearn.git
+cd mapmylearn
 ```
 
 2. Create and activate a virtual environment:
@@ -127,7 +127,7 @@ python bootstrap.py
 
 ## Architecture
 
-LearnCompass is built with a modern stack and architecture:
+MapMyLearn is built with a modern stack and architecture:
 
 ### Backend
 - **Framework**: FastAPI for a high-performance API server
@@ -156,7 +156,7 @@ LearnCompass is built with a modern stack and architecture:
 ### Project Structure
 
 ```
-learncompass/
+mapmylearn/
 ├── backend/             # Backend FastAPI application
 │   ├── api.py           # Main API endpoints
 │   ├── main.py          # Core learning path generation logic
@@ -204,10 +204,10 @@ A Dockerfile is provided for containerized deployment:
 
 ```bash
 # Build the Docker image
-docker build -t learncompass .
+docker build -t mapmylearn .
 
 # Run the container
-docker run -p 8000:8000 learncompass
+docker run -p 8000:8000 mapmylearn
 ```
 
 ## License

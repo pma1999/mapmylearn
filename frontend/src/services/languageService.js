@@ -1,7 +1,7 @@
 import { detectBrowserLanguage } from '../components/LanguageSelector';
 
 // Storage key
-const LANGUAGE_PREFERENCE_KEY = 'learncompass_language_preference';
+const LANGUAGE_PREFERENCE_KEY = 'mapmylearn_language_preference';
 
 /**
  * Save user's language preference to localStorage

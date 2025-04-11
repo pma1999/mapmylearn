@@ -162,7 +162,7 @@ def apply_database_structure():
     
     # 8. Verificar si existe el usuario admin
     check_admin_user = """
-    SELECT EXISTS (SELECT 1 FROM users WHERE email = 'admin@learncompass.app');
+    SELECT EXISTS (SELECT 1 FROM users WHERE email = 'admin@mapmylearn.app');
     """
     
     success, output = run_railway_command(check_admin_user)
@@ -173,7 +173,7 @@ def apply_database_structure():
         if "f" in output:  # PostgreSQL devuelve 't' para true y 'f' para false
             create_admin_user = """
             INSERT INTO users (email, hashed_password, full_name, is_active, is_admin, credits, created_at)
-            VALUES ('admin@learncompass.app', '$2b$12$8VK5NL.wBV.LD9kx9Ulhme/R/M.QyD1m9F/FA8qSh5CH3kB3CzKJi', 'Admin User', true, true, 1000, CURRENT_TIMESTAMP);
+            VALUES ('admin@mapmylearn.app', '$2b$12$8VK5NL.wBV.LD9kx9Ulhme/R/M.QyD1m9F/FA8qSh5CH3kB3CzKJi', 'Admin User', true, true, 1000, CURRENT_TIMESTAMP);
             """
             
             success, output = run_railway_command(create_admin_user)
