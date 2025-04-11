@@ -25,9 +25,9 @@ const useGeneratorForm = (
   const [error, setError] = useState('');
   
   // Generator configuration
-  const [parallelCount, setParallelCount] = useState(2);
-  const [searchParallelCount, setSearchParallelCount] = useState(3);
-  const [submoduleParallelCount, setSubmoduleParallelCount] = useState(2);
+  const [parallelCount, setParallelCount] = useState(5);
+  const [searchParallelCount, setSearchParallelCount] = useState(5);
+  const [submoduleParallelCount, setSubmoduleParallelCount] = useState(5);
   
   // Module and Submodule count states
   const [autoModuleCount, setAutoModuleCount] = useState(true);

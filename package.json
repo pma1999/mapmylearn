@@ -3,7 +3,31 @@
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@mui/x-date-pickers": "^5.0.20",
+    "@prisma/client": "^6.6.0",
     "date-fns": "^2.29.3",
+    "pg": "^8.14.1",
     "recharts": "^2.15.2"
-  }
+  },
+  "name": "learni",
+  "version": "1.0.0",
+  "description": "Learny is an AI-powered application designed to create personalized learning paths based on your interests and goals. The platform leverages advanced language models and web search capabilities to generate comprehensive, structured learning content tailored to any topic you wish to explore.",
+  "main": "migrate-db.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pma1999/learny.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/pma1999/learny/issues"
+  },
+  "homepage": "https://github.com/pma1999/learny#readme"
 }
