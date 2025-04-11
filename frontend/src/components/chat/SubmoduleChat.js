@@ -11,15 +11,82 @@ import {
   CircularProgress,
   Alert,
   Button,
-  Divider
+  Divider,
+  Link,
+  ListItemIcon
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
+import ReactMarkdown from 'react-markdown';
 
 // Correct the import path for the API service again
 import { sendMessage, clearChatHistory } from '../../services/api'; 
+
+// Define the component map for react-markdown -> MUI integration
+const markdownComponents = {
+  p: ({ node, ...props }) => <Typography variant="body1" paragraph {...props} />,
+  h1: ({ node, ...props }) => <Typography variant="h1" component="h1" gutterBottom {...props} />,
+  h2: ({ node, ...props }) => <Typography variant="h2" component="h2" gutterBottom {...props} />,
+  h3: ({ node, ...props }) => <Typography variant="h3" component="h3" gutterBottom {...props} />,
+  h4: ({ node, ...props }) => <Typography variant="h4" component="h4" gutterBottom {...props} />,
+  h5: ({ node, ...props }) => <Typography variant="h5" component="h5" gutterBottom {...props} />,
+  h6: ({ node, ...props }) => <Typography variant="h6" component="h6" gutterBottom {...props} />,
+  ul: ({ node, ...props }) => <List dense sx={{ pt: 0, mt: 0, listStyleType: 'disc' }} {...props} />,
+  ol: ({ node, ...props }) => <List dense component="ol" sx={{ pt: 0, mt: 0, listStyleType: 'decimal', pl: 4 }} {...props} />,
+  li: ({ node, ordered, ...props }) => (
+     ordered ?
+     <ListItem sx={{ display: 'list-item', pt: 0, pb: 0.5 }} dense {...props} />
+     :
+     <ListItem sx={{ pt: 0, pb: 0.5 }} dense>
+        <ListItemIcon sx={{ minWidth: 'auto', mr: 1, alignSelf: 'flex-start', mt: '6px' }}>
+            <FiberManualRecordIcon sx={{ fontSize: '0.6em' }} />
+        </ListItemIcon>
+        {/* Wrap children in Typography for consistent styling within list items */}
+        <Typography component="span" variant="body1">{props.children}</Typography>
+     </ListItem>
+  ),
+  strong: ({ node, ...props }) => <Typography component="span" sx={{ fontWeight: 'bold' }} {...props} />,
+  em: ({ node, ...props }) => <Typography component="span" sx={{ fontStyle: 'italic' }} {...props} />,
+  a: ({ node, ...props }) => <Link target="_blank" rel="noopener noreferrer" {...props} />,
+  code: ({ node, inline, className, children, ...props }) => {
+    const match = /language-(\w+)/.exec(className || '');
+    return !inline ? (
+      <Paper component="pre" sx={{ p: 1.5, my: 1, overflowX: 'auto', bgcolor: 'grey.100', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }} {...props}>
+        <code>{children}</code>
+      </Paper>
+    ) : (
+      <Typography
+        component="code"
+        sx={{
+          px: '5px',
+          py: '2px',
+          borderRadius: '4px',
+          bgcolor: 'rgba(0,0,0,0.08)',
+          fontFamily: 'monospace',
+          fontSize: '0.875rem'
+        }}
+        {...props}
+      >
+        {children}
+      </Typography>
+    );
+  },
+  blockquote: ({ node, ...props }) => (
+    <Paper
+      component="blockquote" // Use blockquote for semantics
+      sx={{ pl: 2, my: 1, borderLeft: '4px solid', borderColor: 'divider', fontStyle: 'italic' }}
+      {...props}
+    >
+      {props.children} {/* Explicitly render children */}
+    </Paper>
+  ),
+  hr: ({ node, ...props }) => <Divider sx={{ my: 2 }} {...props} />,
+  img: ({ node, ...props }) => <Box component="img" sx={{ maxWidth: '100%', height: 'auto' }} {...props} />,
+  // table elements omitted as per spec
+};
 
 const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId }) => {
   const [messages, setMessages] = useState([]);
@@ -140,16 +207,30 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId }) => {
                   mr: msg.sender === 'ai' ? 1 : 0,
                 }}
               >
-                <ListItemText 
-                  primary={msg.text}
-                  secondary={msg.timestamp?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  secondaryTypographyProps={{
+                {/* Conditionally render Markdown for AI, plain text for user */}
+                {msg.sender === 'ai' ? (
+                  <ReactMarkdown components={markdownComponents}>
+                    {msg.text}
+                  </ReactMarkdown>
+                ) : (
+                  <ListItemText
+                    primary={msg.text}
+                    sx={{ margin: 0 }} // Ensure no extra margin from ListItemText
+                  />
+                )}
+                {/* Display timestamp separately for both message types */}
+                <Typography
+                  variant="caption"
+                  display="block"
+                  sx={{
                     color: msg.sender === 'user' ? 'rgba(255, 255, 255, 0.7)' : 'text.secondary',
                     textAlign: msg.sender === 'user' ? 'right' : 'left',
                     fontSize: '0.75rem',
                     mt: 0.5
                   }}
-                />
+                >
+                  {msg.timestamp?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </Typography>
               </Paper>
             </ListItem>
           ))}

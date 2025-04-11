@@ -44,6 +44,7 @@ async def get_learning_paths(
             LearningPath.path_id,
             LearningPath.user_id,
             LearningPath.topic,
+            LearningPath.language,
             LearningPath.creation_date,
             LearningPath.last_modified_date,
             LearningPath.favorite,
@@ -120,6 +121,7 @@ async def get_learning_paths(
                     path_id=row.path_id,
                     user_id=row.user_id,
                     topic=row.topic,
+                    language=row.language,
                     creation_date=row.creation_date,
                     last_modified_date=row.last_modified_date,
                     favorite=row.favorite,
@@ -149,6 +151,7 @@ async def get_learning_paths(
                         path_id=row.path_id,
                         user_id=row.user_id,
                         topic=row.topic,
+                        language=row.language,
                         creation_date=row.creation_date,
                         last_modified_date=row.last_modified_date,
                         favorite=row.favorite,
@@ -159,11 +162,12 @@ async def get_learning_paths(
                     for row in results
                 ]
             else:
+                # This branch likely handles full LearningPath objects already,
+                # but we'll ensure language is present if accessed later.
+                # If 'results' contains full objects, language is already there.
                 learning_paths = results
-                # Remove path_data to reduce payload size
-                for path in learning_paths:
-                    if not include_full_data:
-                        path.path_data = {}
+                # Ensure path_data is empty if not requested (already handled by schema)
+                # No specific action needed for language here if full objects are fetched
         else:
             learning_paths = results
     
@@ -220,6 +224,7 @@ async def create_learning_path(
         user_id=user.id,
         path_id=path_id,
         topic=learning_path.topic,
+        language=learning_path.language,
         path_data=learning_path.path_data,
         favorite=learning_path.favorite,
         tags=learning_path.tags,

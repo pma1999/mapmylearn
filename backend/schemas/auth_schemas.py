@@ -47,6 +47,7 @@ class Token(BaseModel):
 class LearningPathBase(BaseModel):
     """Base schema for learning path."""
     topic: str
+    language: str = Field(..., min_length=2, max_length=10, description="ISO 639-1 language code")
     path_data: Dict[str, Any]
     favorite: bool = False
     tags: List[str] = []

@@ -24,6 +24,54 @@ router = APIRouter(prefix="/chatbot", tags=["chatbot"])
 
 logger = logging.getLogger(__name__)
 
+# --- Helper function to convert language code to full language name --- #
+def get_full_language_name(language_code):
+    """
+    Convert an ISO 639-1 language code to its full language name.
+    """
+    language_map = {
+        "en": "English",
+        "es": "Spanish",
+        "fr": "French",
+        "de": "German",
+        "it": "Italian",
+        "pt": "Portuguese",
+        "ru": "Russian",
+        "zh": "Chinese",
+        "ja": "Japanese",
+        "ko": "Korean",
+        "ar": "Arabic",
+        "hi": "Hindi",
+        "bn": "Bengali",
+        "pa": "Punjabi",
+        "jv": "Javanese",
+        "id": "Indonesian",
+        "tr": "Turkish",
+        "vi": "Vietnamese",
+        "pl": "Polish",
+        "uk": "Ukrainian",
+        "nl": "Dutch",
+        "el": "Greek",
+        "cs": "Czech",
+        "sv": "Swedish",
+        "hu": "Hungarian",
+        "fi": "Finnish",
+        "no": "Norwegian",
+        "da": "Danish",
+        "th": "Thai",
+        "he": "Hebrew",
+        "ca": "Catalan"
+    }
+    
+    # Handle more specific language codes with regions (e.g., "pt-BR")
+    if "-" in language_code:
+        base_code = language_code.split("-")[0]
+        if base_code in language_map:
+            return language_map[base_code]
+    
+    # Return the full name if found in the map, otherwise return the original code
+    return language_map.get(language_code, language_code)
+
 # --- Helper function to format path structure --- #
 def format_path_structure(path_data):
     structure = []
@@ -104,7 +152,16 @@ async def handle_chat(
         submodule_content = submodule.get('content', 'No content available for this submodule.') # Crucial knowledge base
         module_title = module.get('title', 'N/A')
         user_topic = path_data.get('topic', 'N/A')
-        language = user.language if hasattr(user, 'language') and user.language else "English"
+        
+        # Get language from learning path and convert code to full name
+        if not hasattr(learning_path, 'language') or not learning_path.language:
+            logger.error(f"Learning path {learning_path.path_id} is missing the language attribute. Defaulting to English.")
+            language_code = "en"
+            language_name = "English"
+        else:
+            language_code = learning_path.language
+            language_name = get_full_language_name(language_code)
+            logger.info(f"Using language '{language_name}' (from code '{language_code}') for path {request.path_id}")
 
         # 3. Format Path Structure & Prompt
         learning_path_structure = format_path_structure(path_data)
@@ -120,7 +177,7 @@ async def handle_chat(
             submodule_description=submodule_description,
             learning_path_structure=learning_path_structure,
             submodule_content=submodule_content,
-            language=language
+            language=language_name  # Use the full language name instead of the code
         )
 
         # 4. Initialize LLM and Prompt Template for this request

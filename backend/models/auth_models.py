@@ -121,6 +121,7 @@ class LearningPath(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     path_id = Column(String, index=True, nullable=False)  # UUID string for path identification
     topic = Column(String, nullable=False)
+    language = Column(String(10), nullable=False, comment="ISO 639-1 language code for the learning path content")
     path_data = Column(JSON, nullable=False)  # Store the entire learning path data as JSON
     creation_date = Column(DateTime, default=func.now(), nullable=False)
     last_modified_date = Column(DateTime, default=func.now(), onupdate=func.now())
