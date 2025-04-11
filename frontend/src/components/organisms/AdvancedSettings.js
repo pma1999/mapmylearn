@@ -228,7 +228,7 @@ const AdvancedSettings = ({
         </Grid>
         
         <Typography variant="body2" color="warning.main" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
-          Note: Higher parallelism values will make generation faster but may increase API usage costs.
+          Note: Higher parallelism values will make generation faster but may lead to hitting API rate limits.
         </Typography>
       </AccordionDetails>
     </Accordion>
