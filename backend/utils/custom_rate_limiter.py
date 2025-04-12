@@ -34,15 +34,15 @@ class OptionalRateLimiter:
         if self.redis_available:
             self.limiter = OriginalRateLimiter(
                 times=times, 
-                seconds=seconds, 
-                minutes=minutes, 
-                hours=hours
+                seconds=seconds or 0, 
+                minutes=minutes or 0, 
+                hours=hours or 0
             )
         else:
             self.limiter = None
             logger.warning(
                 f"Rate limiting disabled for endpoint (would have been limited to {times} requests per "
-                f"{seconds or minutes*60 or hours*3600} seconds). Set REDIS_URL to enable rate limiting."
+                f"{(seconds or 0) + (minutes or 0)*60 + (hours or 0)*3600} seconds). Set REDIS_URL to enable rate limiting."
             )
     
     async def __call__(self, request: Request):
