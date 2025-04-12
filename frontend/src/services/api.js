@@ -34,7 +34,7 @@ api.interceptors.response.use(
         console.log('Attempting to refresh token and retry request...');
         
         // Return promise for token refresh and retry logic
-        return api.refreshAuthToken() // Use the function defined later in this file
+        return refreshAuthToken() 
           .then(response => {
             // Token refreshed successfully
             console.log('Token refreshed successfully via interceptor.');
@@ -56,7 +56,7 @@ api.interceptors.response.use(
           .catch(refreshError => {
             console.error('Token refresh failed during interceptor:', refreshError);
             // Clear potentially invalid auth data and redirect
-            api.clearAuthToken();
+            clearAuthToken();
             localStorage.removeItem('auth');
             if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
               window.location.href = '/login?session_expired=true';
@@ -671,7 +671,9 @@ export const getHistoryPreview = async (sortBy = 'creation_date', filterSource =
     // If no auth token is present, fall back to local storage
     if (!authToken) {
       console.log('No auth token present, using local storage for history');
-      return localHistoryService.getHistoryPreview(sortBy, filterSource, searchTerm);
+      const localEntries = localHistoryService.getHistoryPreview(sortBy, filterSource, searchTerm);
+      // Wrap the local entries array in the expected object structure
+      return { entries: localEntries, total: localEntries.length };
     }
     
     // Prepare request with optimized parameters
@@ -706,7 +708,9 @@ export const getHistoryPreview = async (sortBy = 'creation_date', filterSource =
     }
     
     // Fall back to local storage
-    return localHistoryService.getHistoryPreview(sortBy, filterSource, searchTerm);
+    const localEntries = localHistoryService.getHistoryPreview(sortBy, filterSource, searchTerm);
+    // Wrap the local entries array in the expected object structure
+    return { entries: localEntries, total: localEntries.length };
   }
 };
 

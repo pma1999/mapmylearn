@@ -140,12 +140,10 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm }, showNotificatio
       console.error('Error loading history:', error);
       
       // Only set error state if no cached data is available
-      if (!initialLoadComplete) {
-        setEntries([]); // Ensure we set an empty array on error
-        setLoading(false);
-        setError(error.message || 'Unknown error');
-        showNotification('Error loading history: ' + (error.message || 'Unknown error'), 'error');
-      }
+      setEntries([]); // Ensure we set an empty array on error
+      setLoading(false);
+      setError(error.message || 'Unknown error');
+      showNotification('Error loading history: ' + (error.message || 'Unknown error'), 'error');
     }
   }, [sortBy, filterSource, searchTerm, initialLoadComplete, getCacheKey, showNotification, entries]);
   

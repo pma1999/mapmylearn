@@ -6,6 +6,8 @@ import uuid
 import os
 from datetime import datetime
 from fastapi.responses import FileResponse
+import logging
+import traceback
 
 from backend.config.database import get_db
 from backend.models.auth_models import User, LearningPath
@@ -14,6 +16,7 @@ from backend.utils.auth_middleware import get_current_user
 from backend.utils.pdf_generator import generate_pdf, create_filename
 
 router = APIRouter(prefix="/learning-paths", tags=["learning-paths"])
+logger = logging.getLogger(__name__) # Add logger instance
 
 
 @router.get("", response_model=LearningPathList)
@@ -236,13 +239,28 @@ async def create_learning_path(
         db.add(db_learning_path)
         db.commit()
         db.refresh(db_learning_path)
-    except IntegrityError:
+    except IntegrityError as e:
         db.rollback()
+        # Log the detailed error
+        error_details = f"Original Exception Type: {type(e.orig).__name__}\n" if hasattr(e, 'orig') and e.orig else "Original Exception Type: N/A\n"
+        error_details += f"Original Exception Args: {e.orig.args}\n" if hasattr(e, 'orig') and e.orig else "Original Exception Args: N/A\n"
+        error_details += f"SQLAlchemy Exception: {repr(e)}\n"
+        error_details += f"Traceback: {traceback.format_exc()}"
+        logger.error(f"Database integrity error creating learning path: {error_details}")
+
+        # Raise the user-facing exception
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Could not create learning path"
+            detail=f"Could not create learning path. Database integrity constraint violated." # More informative detail
         )
-    
+    except Exception as e: # Catch other potential errors during commit
+         db.rollback()
+         logger.error(f"Unexpected error creating learning path: {repr(e)}\n{traceback.format_exc()}")
+         raise HTTPException(
+             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+             detail="An unexpected error occurred while saving the learning path."
+         )
+
     return db_learning_path
 
 
