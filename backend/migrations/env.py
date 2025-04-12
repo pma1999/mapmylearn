@@ -14,17 +14,25 @@ load_dotenv()
 # access to the values within the .ini file in use.
 config = context.config
 
-# Override the sqlalchemy.url in the config with the one from environment
-sqlalchemy_url = os.getenv("DATABASE_URL")
-if not sqlalchemy_url:
-    db_user = os.getenv("DB_USER", "postgres")
-    db_password = os.getenv("DB_PASSWORD", "password")
-    db_host = os.getenv("DB_HOST", "localhost")
-    db_port = os.getenv("DB_PORT", "5432")
-    db_name = os.getenv("DB_NAME", "mapmylearn")
-    sqlalchemy_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
-
-config.set_main_option("sqlalchemy.url", sqlalchemy_url)
+# Check if running via the dedicated script
+# If so, assume sqlalchemy.url is already set correctly in the Config object
+# and env.py should NOT override it.
+if not os.getenv('RUNNING_VIA_SCRIPT') == 'true':
+    # Override the sqlalchemy.url in the config with the one from environment
+    sqlalchemy_url = os.getenv("DATABASE_URL")
+    if not sqlalchemy_url:
+        # Fallback logic (kept for direct alembic CLI usage if needed)
+        db_user = os.getenv("DB_USER", "postgres")
+        db_password = os.getenv("DB_PASSWORD", "password")
+        db_host = os.getenv("DB_HOST", "localhost")
+        db_port = os.getenv("DB_PORT", "5432")
+        db_name = os.getenv("DB_NAME", "mapmylearn")
+        sqlalchemy_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+    
+    # Only set the option if not running via script
+    config.set_main_option("sqlalchemy.url", sqlalchemy_url)
+else:
+    print("Detected RUNNING_VIA_SCRIPT flag: env.py will not override sqlalchemy.url.")
 
 # Interpret the config file for Python logging.
 if config.config_file_name is not None:

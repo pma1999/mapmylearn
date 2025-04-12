@@ -19,10 +19,10 @@ class User(Base):
     full_name = Column(String)
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)  # New field to identify admin users
-    is_email_verified = Column(Boolean, nullable=False, default=False, server_default='false') # Added for email verification status
-    created_at = Column(DateTime, default=func.now(), nullable=False)
+    is_email_verified = Column(Boolean, nullable=False, server_default='false') # Added for email verification status
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
     last_login = Column(DateTime)
-    credits = Column(Integer, default=0, nullable=False)
+    credits = Column(Integer, nullable=False, server_default='0')
 
     # Relationships
     learning_paths = relationship("LearningPath", back_populates="user", cascade="all, delete-orphan")

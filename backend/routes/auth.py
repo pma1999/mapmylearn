@@ -39,8 +39,8 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
         email=user.email,
         hashed_password=hashed_password,
         full_name=user.full_name,
-        created_at=datetime.utcnow(),
-        # is_email_verified is False by default
+        # is_email_verified defaults to False (via server_default)
+        # credits defaults to 0 (via server_default)
     )
     
     try:
