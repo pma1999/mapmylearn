@@ -20,6 +20,8 @@
     "LOG_LEVEL": "INFO",
     "PYTHONPATH": ".",
     "TRUSTED_HOSTS": "web-production-62f88.up.railway.app",
-    "ALLOWED_ORIGINS": "https://mapmylearn.vercel.app,https://mapmylearn-pablos-projects-d80d0b2f.vercel.app,https://mapmylearn-git-main-pablos-projects-d80d0b2f.vercel.app"
+    "ALLOWED_ORIGINS": "https://mapmylearn.vercel.app,https://mapmylearn-pablos-projects-d80d0b2f.vercel.app,https://mapmylearn-git-main-pablos-projects-d80d0b2f.vercel.app,https://mapmylearn.com/",
+    "CSRF_TRUSTED_ORIGINS": "https://mapmylearn-production.up.railway.app,https://mapmylearn.com/",
+    "DEBUG": "False"
   }
 } 
