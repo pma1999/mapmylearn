@@ -28,6 +28,8 @@ const RegisterPage = () => {
   const [errors, setErrors] = useState({});
   const [showError, setShowError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -80,16 +82,19 @@ const RegisterPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setShowError(false);
+    setShowSuccessMessage(false);
     
     if (!validateForm()) {
       return;
     }
     
-    try {
-      await register(formData.email, formData.password, formData.fullName);
-      // Navigation handled by useEffect
-    } catch (err) {
-      setErrorMessage(err.message || 'Registration failed. Please try again.');
+    const result = await register(formData.email, formData.password, formData.fullName);
+
+    if (result.success) {
+      setSuccessMessage(result.message);
+      setShowSuccessMessage(true);
+    } else {
+      setErrorMessage(result.message || 'Registration failed. Please try again.');
       setShowError(true);
     }
   };
@@ -114,13 +119,19 @@ const RegisterPage = () => {
             Create an Account
           </Typography>
           
+          {showSuccessMessage && (
+            <Alert severity="success" sx={{ width: '100%', mb: 2 }}>
+              {successMessage}
+            </Alert>
+          )}
+          
           {showError && (
             <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
               {errorMessage}
             </Alert>
           )}
           
-          <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%' }}>
+          <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%', pointerEvents: showSuccessMessage ? 'none' : 'auto', opacity: showSuccessMessage ? 0.7 : 1 }}>
             <TextField
               margin="normal"
               required

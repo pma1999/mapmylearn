@@ -17,6 +17,7 @@ import uuid
 import time
 import httpx
 import traceback
+import redis.asyncio as redis
 
 # Database imports
 from backend.config.database import engine, Base, get_db
@@ -27,8 +28,9 @@ from backend.routes.chatbot import router as chatbot_router
 from backend.models.auth_models import User, CreditTransaction
 from backend.utils.auth import decode_access_token
 
-# Import rate limiter
+# Import rate limiter and backend
 from backend.utils.rate_limiter import rate_limiting_middleware
+from fastapi_limiter import FastAPILimiter
 
 # Initialize startup time for health check and uptime reporting
 startup_time = time.time()
@@ -77,7 +79,7 @@ app = FastAPI(
 # Create the database tables if they don't exist
 # We'll use alembic for proper migrations in production
 @app.on_event("startup")
-async def startup_db_client():
+async def startup_db_and_limiter():
     logger.info("Creating database tables if they don't exist...")
     try:
         # Create base tables
@@ -93,6 +95,27 @@ async def startup_db_client():
         logger.error(f"Error initializing database: {str(e)}")
         # Don't raise the exception - we'll let the app start anyway and fail on actual db operations
         # This allows the app to run without a database for development
+
+    # Initialize Rate Limiter
+    logger.info("Initializing Rate Limiter...")
+    try:
+        # Configure Redis connection for rate limiting
+        # Use environment variable or default to "redis://localhost"
+        redis_url = os.getenv("REDIS_URL", None)
+        
+        if redis_url:
+            # Si hay REDIS_URL configurada, usamos Redis
+            redis_connection = redis.from_url(redis_url, encoding="utf-8", decode_responses=True)
+            await FastAPILimiter.init(redis_connection)
+            logger.info(f"FastAPI Limiter initialized with Redis backend: {redis_url}")
+        else:
+            # Si no hay Redis, logueamos un aviso pero no inicializamos FastAPILimiter
+            # Esto deshabilita el rate limiting pero permite que la app funcione sin error
+            logger.warning("REDIS_URL not set - rate limiting is DISABLED. Set REDIS_URL for production environments.")
+    except Exception as e:
+        logger.error(f"Failed to initialize FastAPI Limiter: {e}")
+        logger.warning("Rate limiting will be DISABLED")
+        # La aplicación seguirá funcionando, pero sin rate limiting
 
 # Include the auth, learning path, and admin routers
 app.include_router(auth_router, prefix="/api")

@@ -360,26 +360,35 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Register function (unchanged)
+  // Register function - MODIFIED: Now only returns the API result (success/message)
   const register = async (email, password, fullName) => {
+    setLoading(true);
+    setError(null);
     try {
-      setError(null);
-      const response = await api.register(email, password, fullName);
-      const { access_token, expires_in, user: userData } = response;
-      updateAuthState(access_token, expires_in, userData);
-      fetchUserCredits(); // Fetch credits after registration
-      return userData;
+      // Call the API - it now returns { success: bool, message: str }
+      const result = await api.register(email, password, fullName);
+      
+      // No automatic login after registration
+      // No call to updateAuthState or fetchUserCredits here
+      
+      setLoading(false);
+      // Return the result object from the API call directly
+      return result; 
     } catch (err) {
-      console.error('Registration failed:', err);
-      setError(err.message || 'Registration failed');
-      throw err;
+      // api.register should format the error, but catch generic errors too
+      const errorMessage = err.message || 'Registration failed';
+      console.error('Registration failed in context:', errorMessage);
+      setError(errorMessage);
+      setLoading(false);
+      // Return an error object consistent with the success object
+      return { success: false, message: errorMessage };
     }
   };
 
-  // Login function (mostly unchanged, ensure updateAuthState is called)
+  // Login function
   const login = async (email, password, rememberMe) => {
+    setLoading(true); // Ensure loading state is set
     try {
-      setError(null);
       const response = await api.login(email, password, rememberMe);
       const { access_token, expires_in, user: userData } = response;
       updateAuthState(access_token, expires_in, userData);
@@ -388,8 +397,9 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       console.error('Login failed:', err);
       setError(err.message || 'Login failed');
-      await logout(); // Logout fully on login failure
-      throw err;
+      throw err; // Propagate the error so the UI can display it
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -421,6 +431,7 @@ export const AuthProvider = ({ children }) => {
     fetchUserCredits, // Expose credit fetching if needed by components
     migrateLearningPaths,
     checkPendingMigration,
+    resendVerificationEmail: api.resendVerificationEmail,
     // Don't expose internal functions like refreshToken directly if not needed
   };
 

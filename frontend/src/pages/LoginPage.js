@@ -20,7 +20,7 @@ import { useAuth } from '../services/authContext';
 const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, error, loading, isAuthenticated, checkPendingMigration } = useAuth();
+  const { login, error, loading, isAuthenticated, checkPendingMigration, resendVerificationEmail } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,6 +28,9 @@ const LoginPage = () => {
   const [showError, setShowError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false); // State for verification error
+  const [isResending, setIsResending] = useState(false); // State for resend button
+  const [resendMessage, setResendMessage] = useState(''); // State for resend feedback
 
   // Check if redirected due to session expiration
   useEffect(() => {
@@ -59,14 +62,36 @@ const LoginPage = () => {
     e.preventDefault();
     setShowError(false);
     setSessionExpired(false);
+    setNeedsVerification(false); // Reset verification state
+    setResendMessage(''); // Reset resend message
 
     try {
       await login(email, password, rememberMe);
-      
       // Navigate handled by the useEffect
     } catch (err) {
-      setErrorMessage(err.message || 'Login failed. Please check your credentials.');
+      // Check for specific verification error message
+      if (err.message && err.message.toLowerCase().includes('account not verified')) {
+        setNeedsVerification(true);
+        setErrorMessage(err.message + ' Would you like to resend the verification email?');
+      } else {
+        setErrorMessage(err.message || 'Login failed. Please check your credentials.');
+      }
       setShowError(true);
+    }
+  };
+
+  // Handler for resending verification email
+  const handleResendVerification = async () => {
+    setIsResending(true);
+    setResendMessage('');
+    try {
+      const result = await resendVerificationEmail(email);
+      setResendMessage(result.message); // Show success/info message from backend
+    } catch (err) {
+      // api.js should handle formatting, show a generic message here
+      setResendMessage('Failed to resend verification email. Please try again later.'); 
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -96,6 +121,24 @@ const LoginPage = () => {
               sx={{ width: '100%', mb: 2 }}
             >
               {errorMessage}
+              {/* Add Resend button if verification needed */}
+              {needsVerification && (
+                <Button 
+                  variant="text" 
+                  size="small" 
+                  onClick={handleResendVerification}
+                  disabled={isResending || !email}
+                  sx={{ ml: 1, textTransform: 'none' }}
+                >
+                  {isResending ? <CircularProgress size={16} /> : 'Resend Email'}
+                </Button>
+              )}
+              {/* Show feedback from resend attempt */} 
+              {resendMessage && (
+                <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                  {resendMessage}
+                </Typography>
+              )}
             </Alert>
           )}
           

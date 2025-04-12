@@ -17,6 +17,11 @@ from backend.services.key_provider import KeyProvider, GoogleKeyProvider, Perple
 # Importa el decorador traceable de LangSmith
 from langsmith import traceable
 
+# Import FastAPI and Rate Limiter
+from fastapi import FastAPI, Request
+from fastapi_limiter import FastAPILimiter
+from fastapi_limiter.depends import RateLimiter
+
 # Configuration from environment variables
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 LOG_FILE = os.environ.get("LOG_FILE", "learning_path.log")

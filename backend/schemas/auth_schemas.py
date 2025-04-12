@@ -44,6 +44,11 @@ class Token(BaseModel):
     user: UserResponse
 
 
+class MessageResponse(BaseModel):
+    """Generic message response schema."""
+    message: str
+
+
 class LearningPathBase(BaseModel):
     """Base schema for learning path."""
     topic: str

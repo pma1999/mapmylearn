@@ -19,48 +19,53 @@ const api = axios.create({
 api.interceptors.response.use(
   response => response, // Return successful responses as-is
   error => {
-    // Check if the error is due to an expired token (401 Unauthorized)
+    const originalRequest = error.config;
+    
+    // Check if the error is 401 and needs token refresh
     if (error.response && error.response.status === 401) {
-      console.log('Received 401 unauthorized, token may be expired');
+      console.log(`Received 401 for ${originalRequest.url}`);
       
-      // Store the original request to retry later
-      const originalRequest = error.config;
+      // IMPORTANT: Check if the original request was NOT to /login or /refresh
+      const isLoginOrRefresh = originalRequest.url.includes('/auth/login') || originalRequest.url.includes('/auth/refresh');
       
-      // Only attempt to refresh token if not already doing so and not in a refresh loop
-      if (!originalRequest._retry && !originalRequest.url.includes('/auth/refresh')) {
+      // Only attempt refresh if it's not a login/refresh failure and not already retrying
+      if (!isLoginOrRefresh && !originalRequest._retry) {
         originalRequest._retry = true;
+        console.log('Attempting to refresh token and retry request...');
         
-        console.log('Attempting to refresh token and retry request');
-        
-        // Return a promise that will resolve when the token is refreshed and request retried
-        return refreshAuthToken()
+        // Return promise for token refresh and retry logic
+        return api.refreshAuthToken() // Use the function defined later in this file
           .then(response => {
             // Token refreshed successfully
-            const { access_token } = response;
+            console.log('Token refreshed successfully via interceptor.');
+            const { access_token, expires_in, user: userData } = response; 
+            // Note: Your refreshAuthToken might need to return the user data too
+            // If not, you might need another way to update the user state
             
-            // Update the auth header with the new token
+            // Save new token and user data (this should ideally be handled by authContext)
+            // Let's call a function (you might need to import/pass it) or rely on authContext
+            // For now, just update the header and retry
+            api.setAuthToken(access_token); // Update the header in the api instance
             originalRequest.headers['Authorization'] = `Bearer ${access_token}`;
+
+            // Ideally, update context/localStorage here too
+            // updateLocalStorageAndContext(access_token, expires_in, userData); 
             
-            // Set the new token for future requests
-            setAuthToken(access_token);
-            
-            // Retry the original request
-            return axios(originalRequest);
+            return api(originalRequest); // Retry with the original config + new token
           })
           .catch(refreshError => {
-            console.error('Token refresh failed, cannot retry request:', refreshError);
-            
-            // Clear auth data on refresh failure
-            clearAuthToken();
+            console.error('Token refresh failed during interceptor:', refreshError);
+            // Clear potentially invalid auth data and redirect
+            api.clearAuthToken();
             localStorage.removeItem('auth');
-            
-            // Redirect to login page if in browser environment
-            if (typeof window !== 'undefined') {
+            if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
               window.location.href = '/login?session_expired=true';
             }
-            
-            return Promise.reject(error);
+            return Promise.reject(error); // Reject with the original error after cleanup
           });
+      } else if (isLoginOrRefresh) {
+        console.log('401 received for login/refresh request, skipping token refresh attempt.');
+        // Do not attempt refresh for login/refresh failures
       }
     }
     
@@ -346,18 +351,20 @@ export const clearSavedApiTokens = () => {
   }
 };
 
-// Authentication API functions
+// Register user (now expects message, not token)
 export const register = async (email, password, fullName) => {
   try {
     const response = await api.post('/auth/register', {
       email,
       password,
-      full_name: fullName
+      full_name: fullName,
     });
-    return response.data;
+    // Return the success message from backend
+    return { success: true, message: response.data.message };
   } catch (error) {
-    console.error('Registration error:', error);
-    throw error;
+    console.error('Registration failed:', error);
+    // Return the formatted error message
+    return { success: false, message: error.message || 'Registration failed' };
   }
 };
 
@@ -1102,6 +1109,29 @@ export const getAdminStats = async () => {
   }
 };
 
+// Verify email address using token
+export const verifyEmail = async (token) => {
+  try {
+    const response = await api.get(`/auth/verify-email?token=${token}`);
+    return { success: true, message: response.data.message };
+  } catch (error) {
+    console.error('Email verification failed:', error);
+    return { success: false, message: error.message || 'Email verification failed' };
+  }
+};
+
+// Resend verification email
+export const resendVerificationEmail = async (email) => {
+  try {
+    const response = await api.post('/auth/resend-verification', { email });
+    return { success: true, message: response.data.message };
+  } catch (error) {
+    console.error('Resend verification email failed:', error);
+    // Return generic message even on specific errors for security
+    return { success: false, message: 'Failed to resend verification email. Please try again later.' };
+  }
+};
+
 // --------------------------------------------------------------------------------
 // Chatbot API Calls
 // --------------------------------------------------------------------------------
@@ -1201,5 +1231,7 @@ export default {
   getAdminStats,
   sendMessage,
   clearChatHistory,
+  verifyEmail,
+  resendVerificationEmail,
 };
 
