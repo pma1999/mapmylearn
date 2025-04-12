@@ -7,7 +7,6 @@ import os
 from datetime import datetime
 from fastapi.responses import FileResponse
 import logging
-import traceback
 
 from backend.config.database import get_db
 from backend.models.auth_models import User, LearningPath
@@ -241,21 +240,17 @@ async def create_learning_path(
         db.refresh(db_learning_path)
     except IntegrityError as e:
         db.rollback()
-        # Log the detailed error
-        error_details = f"Original Exception Type: {type(e.orig).__name__}\n" if hasattr(e, 'orig') and e.orig else "Original Exception Type: N/A\n"
-        error_details += f"Original Exception Args: {e.orig.args}\n" if hasattr(e, 'orig') and e.orig else "Original Exception Args: N/A\n"
-        error_details += f"SQLAlchemy Exception: {repr(e)}\n"
-        error_details += f"Traceback: {traceback.format_exc()}"
-        logger.error(f"Database integrity error creating learning path: {error_details}")
-
+        # Log a concise error message for IntegrityError
+        logger.error(f"Database integrity error for user {user.id} creating learning path '{learning_path.topic}': {e}")
         # Raise the user-facing exception
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Could not create learning path. Database integrity constraint violated." # More informative detail
+            detail=f"Could not create learning path. Database integrity constraint violated." # Keep informative detail
         )
     except Exception as e: # Catch other potential errors during commit
          db.rollback()
-         logger.error(f"Unexpected error creating learning path: {repr(e)}\n{traceback.format_exc()}")
+         # Log unexpected errors with full traceback using exc_info=True
+         logger.error(f"Unexpected error for user {user.id} creating learning path '{learning_path.topic}'.", exc_info=True)
          raise HTTPException(
              status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
              detail="An unexpected error occurred while saving the learning path."
