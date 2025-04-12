@@ -215,7 +215,7 @@ if is_production:
         "https://mapmylearn-pablos-projects-d80d0b2f.vercel.app",       # Despliegue específico
         "https://mapmylearn-git-main-pablos-projects-d80d0b2f.vercel.app",  # Rama principal
         "https://web-production-62f88.up.railway.app",     # Backend (para posibles solicitudes cross-origin)
-        "https://mapmylearn.com/"                     # Nuevo front
+        "https://mapmylearn.com"                     # Nuevo front (Removed trailing slash)
     ]
     
     # Añadir orígenes adicionales desde la variable de entorno si existe
