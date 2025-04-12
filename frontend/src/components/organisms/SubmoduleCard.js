@@ -149,18 +149,6 @@ const SubmoduleCard = ({ submodule, index, moduleIndex, pathId }) => {
                 }}
               >
                 {submodule.title}
-                <Badge 
-                  badgeContent="+" 
-                  color="secondary" 
-                  sx={{ 
-                    '& .MuiBadge-badge': {
-                      fontSize: '0.7rem',
-                      height: 18,
-                      minWidth: 18,
-                    }
-                  }}
-                  title="Contains additional sections"
-                />
               </Typography>
               
               <Typography 
