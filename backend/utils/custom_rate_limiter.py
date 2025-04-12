@@ -1,5 +1,6 @@
 from typing import Callable, Optional
 from fastapi import Request, Depends
+from starlette.responses import Response
 from fastapi_limiter.depends import RateLimiter as OriginalRateLimiter
 import os
 import logging
@@ -45,15 +46,13 @@ class OptionalRateLimiter:
                 f"{(seconds or 0) + (minutes or 0)*60 + (hours or 0)*3600} seconds). Set REDIS_URL to enable rate limiting."
             )
     
-    async def __call__(self, request: Request):
+    async def __call__(self, request: Request, response: Response):
         """
         Apply rate limiting if Redis is available, otherwise just pass through.
         """
         if self.redis_available and self.limiter:
-            # Apply the actual rate limiting
-            await self.limiter(request)
-        
-        return True  # Always allow if Redis is not configured
+            # Apply the actual rate limiting, passing response
+            await self.limiter(request, response)
 
 # Helper function for cleaner usage
 def rate_limit(times: int = 1, seconds: Optional[int] = None, minutes: Optional[int] = None, hours: Optional[int] = None):
