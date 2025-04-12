@@ -7,6 +7,7 @@ import os
 from typing import Optional
 import uuid
 from pydantic import BaseModel, EmailStr
+import logging
 
 from backend.config.database import get_db
 from backend.models.auth_models import User, Session as UserSession
@@ -47,11 +48,17 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
         db.add(db_user)
         db.commit()
         db.refresh(db_user)
-    except IntegrityError:
+    except IntegrityError as e:
         db.rollback()
+        # Log the detailed IntegrityError
+        logging.error(f"IntegrityError during user registration: {e}", exc_info=True) # Add exc_info for traceback
+        # Also log the original exception if available
+        if hasattr(e, 'orig') and e.orig:
+             logging.error(f"Original DBAPIError: {e.orig}")
+
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Could not register user",
+            detail="Could not register user", # Keep generic message for frontend
         )
     
     # Send verification email instead of creating token
