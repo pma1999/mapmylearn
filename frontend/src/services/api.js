@@ -790,7 +790,8 @@ export const saveToHistory = async (learningPath, source = 'generated') => {
         path_data: learningPath,
         favorite: false,
         tags: [],
-        source: source
+        source: source,
+        language: learningPath.language || 'es'
       });
       
       // The server returns the path_id which we should use for all future operations
@@ -880,7 +881,8 @@ export const importLearningPath = async (jsonData) => {
         path_data: learningPath,
         favorite: false,
         tags: [],
-        source: 'imported'
+        source: 'imported',
+        language: learningPath.language || 'es'
       });
       
       console.log('Learning path imported with path_id:', response.data.path_id);
