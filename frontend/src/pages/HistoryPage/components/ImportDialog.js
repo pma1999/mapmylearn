@@ -36,6 +36,41 @@ const ImportDialog = ({ open, onClose, onImport }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
+  // Helper function for parsing and validation
+  const parseAndValidateJson = (jsonString) => {
+    try {
+      const parsedData = JSON.parse(jsonString);
+      
+      // Basic structural validation based on learning_path.json
+      if (!parsedData || typeof parsedData !== 'object') {
+        throw new Error("Invalid JSON structure: Must be an object.");
+      }
+      if (typeof parsedData.topic !== 'string' || !parsedData.topic.trim()) {
+        throw new Error("Import failed: JSON is missing a valid 'topic' field (must be a non-empty string).");
+      }
+      if (typeof parsedData.language !== 'string' || !parsedData.language.trim()) {
+        // Optional: Add language check if it's strictly required
+        // throw new Error("Import failed: JSON is missing a valid 'language' field (must be a non-empty string).");
+      }
+      // Check for the 'modules' array instead of 'nodes'
+      if (!Array.isArray(parsedData.modules)) {
+        throw new Error("Import failed: JSON is missing a valid 'modules' field (must be an array).");
+      }
+      // Optional: Add a check if modules array should not be empty
+      // if (parsedData.modules.length === 0) {
+      //   throw new Error("Import failed: 'modules' array cannot be empty.");
+      // }
+      
+      return parsedData; // Return the validated object
+    } catch (parseError) {
+      // Rethrow specific errors or a generic one if JSON.parse fails
+      if (parseError.message.startsWith('Import failed:')) {
+        throw parseError;
+      }
+      throw new Error(`Invalid JSON format: ${parseError.message}`);
+    }
+  };
+
   const handleImport = async () => {
     if (!jsonInput.trim()) {
       setError('Please enter JSON data or upload a file');
@@ -45,10 +80,11 @@ const ImportDialog = ({ open, onClose, onImport }) => {
     try {
       setLoading(true);
       setError('');
-      // Validate JSON
-      JSON.parse(jsonInput);
-      await onImport(jsonInput);
-      onClose();
+      // Parse and validate JSON
+      const learningPathObject = parseAndValidateJson(jsonInput);
+      
+      await onImport(learningPathObject); // Pass the object
+      onClose(); // Close dialog on success
     } catch (err) {
       setError(err.message || 'Invalid JSON format');
     } finally {
@@ -70,12 +106,13 @@ const ImportDialog = ({ open, onClose, onImport }) => {
     reader.onload = (e) => {
       try {
         const content = e.target.result;
-        // Validate JSON
-        JSON.parse(content);
-        setJsonInput(content);
+        // Validate JSON content directly, no need to parse twice
+        parseAndValidateJson(content); // Validate structure
+        setJsonInput(content); // Keep the raw string in the input field for display
         setError('');
       } catch (err) {
-        setError('The uploaded file contains invalid JSON');
+        // Use the error message from validation
+        setError(err.message || 'The uploaded file contains invalid JSON or structure.');
       }
     };
 
@@ -106,11 +143,12 @@ const ImportDialog = ({ open, onClose, onImport }) => {
       reader.onload = (e) => {
         try {
           const content = e.target.result;
-          JSON.parse(content); // Validate JSON
-          setJsonInput(content);
+          parseAndValidateJson(content); // Validate structure
+          setJsonInput(content); // Keep the raw string in the input field
           setError('');
         } catch (err) {
-          setError('The uploaded file contains invalid JSON');
+          // Use the error message from validation
+          setError(err.message || 'The uploaded file contains invalid JSON or structure.');
         }
       };
       

@@ -665,30 +665,13 @@ export const getLearningPath = async (taskId) => {
 
 // History API functions (now using server-side API)
 export const getHistoryPreview = async (sortBy = 'creation_date', filterSource = null, searchTerm = null) => {
-  // Create a cache key based on filter parameters
-  const cacheKey = `history_preview_${sortBy}_${filterSource || 'null'}_${searchTerm || 'null'}`;
-  const cacheTimeMs = 60000; // 1 minute cache
+  // REMOVED sessionStorage cache logic here - caching handled by useHistoryEntries hook
   
   try {
     // If no auth token is present, fall back to local storage
     if (!authToken) {
       console.log('No auth token present, using local storage for history');
       return localHistoryService.getHistoryPreview(sortBy, filterSource, searchTerm);
-    }
-    
-    // Check browser cache first for faster repeat loads
-    const cachedData = sessionStorage.getItem(cacheKey);
-    if (cachedData) {
-      const { data, timestamp } = JSON.parse(cachedData);
-      const age = Date.now() - timestamp;
-      
-      // Use cached data if it's fresh enough (less than cacheTimeMs old)
-      if (age < cacheTimeMs) {
-        console.log(`Using cached history data (${Math.round(age / 1000)}s old)`);
-        return data;
-      } else {
-        console.log('Cached history data expired, fetching fresh data');
-      }
     }
     
     // Prepare request with optimized parameters
@@ -710,17 +693,6 @@ export const getHistoryPreview = async (sortBy = 'creation_date', filterSource =
     if (!response.data || !response.data.entries) {
       console.warn('API response missing entries property, using empty array');
       return { entries: [], total: 0 };
-    }
-    
-    // Cache the successful response
-    try {
-      sessionStorage.setItem(cacheKey, JSON.stringify({
-        data: response.data,
-        timestamp: Date.now()
-      }));
-    } catch (cacheError) {
-      console.warn('Failed to cache history data:', cacheError);
-      // Non-critical error, continue without caching
     }
     
     return response.data;
@@ -867,42 +839,62 @@ export const deleteHistoryEntry = async (entryId) => {
   }
 };
 
-export const importLearningPath = async (jsonData) => {
+/**
+ * Imports a learning path from a parsed JSON object
+ * @param {object} learningPathObject - Parsed learning path data
+ * @returns {Promise<object>} - Object indicating success and entry ID
+ */
+export const importLearningPath = async (learningPathObject) => {
   try {
-    // Parse the JSON data
-    const learningPath = JSON.parse(jsonData);
+    // Assume learningPathObject is a validated object from the caller
     
     // If authenticated, use the API
     if (authToken) {
-      console.log('Importing learning path to server database:', learningPath.topic);
+      console.log('Importing learning path to server database:', learningPathObject.topic);
       
-      const response = await api.post('/learning-paths', {
-        topic: learningPath.topic || 'Untitled',
-        path_data: learningPath,
-        favorite: false,
-        tags: [],
+      // Construct payload using the object properties
+      const payload = {
+        topic: learningPathObject.topic || 'Untitled', // Use topic from object
+        path_data: learningPathObject, // Send the full object
+        favorite: learningPathObject.favorite || false, // Use favorite from object if exists, else default
+        tags: learningPathObject.tags || [], // Use tags from object if exists, else default
         source: 'imported',
-        language: learningPath.language || 'es'
-      });
+        language: learningPathObject.language || 'es' // Use language from object if exists, else default
+      };
+      
+      const response = await api.post('/learning-paths', payload);
       
       console.log('Learning path imported with path_id:', response.data.path_id);
       
       return {
         success: true,
         entry_id: response.data.path_id,
-        topic: learningPath.topic
+        topic: learningPathObject.topic // Return topic from the imported object
       };
     } else {
-      // Otherwise use local storage
-      console.log('User not authenticated, importing to local storage');
-      return localHistoryService.importLearningPath(jsonData);
+      // Otherwise use local storage (needs object now)
+      console.log('User not authenticated, attempting to import to local storage');
+      // Local storage service might need adaptation to accept an object or a stringified version
+      // For now, let's assume it might need stringification, but this needs verification
+      // return localHistoryService.importLearningPath(JSON.stringify(learningPathObject));
+      // OR if it handles objects directly:
+      return localHistoryService.importLearningPath(learningPathObject);
     }
   } catch (error) {
     console.error('Error importing learning path:', error);
     
-    // Fall back to local storage if server fails or user is not authenticated
-    console.warn('Falling back to local storage due to error');
-    return localHistoryService.importLearningPath(jsonData);
+    // Fallback logic is problematic as localHistoryService might also fail (quota) or expect different input.
+    // Temporarily commenting out the fallback to clearly isolate API errors.
+    // A separate task should address robust offline/fallback handling.
+    console.warn('Fallback to local storage during import error is currently disabled.');
+    // // Fall back to local storage if server fails or user is not authenticated
+    // console.warn('Falling back to local storage due to error');
+    // // The fallback needs the original jsonData string, which is not available here anymore.
+    // // Needs refactoring if fallback is desired.
+    // // return localHistoryService.importLearningPath(jsonData); // jsonData is not defined here
+    
+    // Re-throw the error so the calling function (useHistoryActions) can handle it
+    throw error;
   }
 };
 

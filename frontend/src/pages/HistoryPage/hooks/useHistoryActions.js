@@ -165,10 +165,12 @@ const useHistoryActions = (showNotification, refreshEntries) => {
   /**
    * Import a learning path from JSON data
    * @param {string} jsonData - JSON string to import
+   * @param {object} learningPathObject - Parsed learning path object to import
    */
-  const handleImportLearningPath = async (jsonData) => {
+  const handleImportLearningPath = async (learningPathObject) => {
     try {
-      const response = await api.importLearningPath(jsonData);
+      // Pass the object directly to the API service
+      const response = await api.importLearningPath(learningPathObject);
       showNotification(`Learning path "${response.topic}" imported successfully`, 'success');
       refreshEntries();
       return true;
