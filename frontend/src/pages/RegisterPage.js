@@ -98,6 +98,7 @@ const RegisterPage = () => {
     if (result.success) {
       setSuccessMessage(result.message);
       setShowSuccessMessage(true);
+      setIsSubmitting(false);
     } else {
       setErrorMessage(result.message || 'Registration failed. Please try again.');
       setShowError(true);
@@ -207,7 +208,7 @@ const RegisterPage = () => {
               fullWidth
               variant="contained"
               sx={{ mt: 3, mb: 2 }}
-              disabled={isLoading}
+              disabled={isLoading || showSuccessMessage}
             >
               {isLoading ? <CircularProgress size={24} /> : 'Create Account'}
             </Button>
