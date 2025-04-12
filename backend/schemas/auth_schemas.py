@@ -1,7 +1,18 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List, Dict, Any
-from datetime import datetime
-from pydantic import field_validator, model_validator
+from datetime import datetime, timezone
+from pydantic import field_validator, model_validator, field_serializer
+
+
+# Helper function to format datetime to ISO 8601 UTC with 'Z'
+def serialize_datetime_to_iso_z(dt: Optional[datetime]) -> Optional[str]:
+    if dt:
+        # Assume naive datetime is UTC, make it aware, then format
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        # Format to ISO string and ensure 'Z' for UTC
+        return dt.isoformat().replace('+00:00', 'Z')
+    return None
 
 
 class UserBase(BaseModel):
@@ -31,6 +42,10 @@ class UserResponse(UserBase):
     credits: int = 0
     is_admin: bool = False
     is_active: bool = True
+
+    @field_serializer('created_at', 'last_login')
+    def serialize_dates(self, dt: Optional[datetime]) -> Optional[str]:
+        return serialize_datetime_to_iso_z(dt)
 
     class Config:
         from_attributes = True
@@ -77,6 +92,10 @@ class LearningPathResponse(LearningPathBase):
     user_id: int
     creation_date: datetime
     last_modified_date: Optional[datetime] = None
+
+    @field_serializer('creation_date', 'last_modified_date')
+    def serialize_dates(self, dt: Optional[datetime]) -> Optional[str]:
+        return serialize_datetime_to_iso_z(dt)
 
     class Config:
         from_attributes = True
@@ -148,6 +167,10 @@ class CreditTransactionResponse(BaseModel):
     description: Optional[str] = None  # Alias for notes for backwards compatibility
     user_email: Optional[str] = None
     admin_email: Optional[str] = None
+
+    @field_serializer('created_at')
+    def serialize_created_at(self, dt: Optional[datetime]) -> Optional[str]:
+        return serialize_datetime_to_iso_z(dt)
 
     class Config:
         from_attributes = True
