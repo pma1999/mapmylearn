@@ -17,7 +17,7 @@ import { useAuth } from '../services/authContext';
 
 const RegisterPage = () => {
   const navigate = useNavigate();
-  const { register, loading, isAuthenticated } = useAuth();
+  const { register, loading: contextLoading, isAuthenticated } = useAuth();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -30,6 +30,7 @@ const RegisterPage = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -81,12 +82,16 @@ const RegisterPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     setShowError(false);
     setShowSuccessMessage(false);
     
     if (!validateForm()) {
       return;
     }
+    
+    setIsSubmitting(true);
     
     const result = await register(formData.email, formData.password, formData.fullName);
 
@@ -96,8 +101,11 @@ const RegisterPage = () => {
     } else {
       setErrorMessage(result.message || 'Registration failed. Please try again.');
       setShowError(true);
+      setIsSubmitting(false);
     }
   };
+
+  const isLoading = contextLoading || isSubmitting;
 
   return (
     <Container maxWidth="sm">
@@ -145,7 +153,7 @@ const RegisterPage = () => {
               onChange={handleChange}
               error={!!errors.fullName}
               helperText={errors.fullName}
-              disabled={loading}
+              disabled={isLoading}
             />
             
             <TextField
@@ -160,7 +168,7 @@ const RegisterPage = () => {
               onChange={handleChange}
               error={!!errors.email}
               helperText={errors.email}
-              disabled={loading}
+              disabled={isLoading}
             />
             
             <TextField
@@ -176,7 +184,7 @@ const RegisterPage = () => {
               onChange={handleChange}
               error={!!errors.password}
               helperText={errors.password}
-              disabled={loading}
+              disabled={isLoading}
             />
             
             <TextField
@@ -191,7 +199,7 @@ const RegisterPage = () => {
               onChange={handleChange}
               error={!!errors.confirmPassword}
               helperText={errors.confirmPassword}
-              disabled={loading}
+              disabled={isLoading}
             />
             
             <Button
@@ -199,9 +207,9 @@ const RegisterPage = () => {
               fullWidth
               variant="contained"
               sx={{ mt: 3, mb: 2 }}
-              disabled={loading}
+              disabled={isLoading}
             >
-              {loading ? <CircularProgress size={24} /> : 'Create Account'}
+              {isLoading ? <CircularProgress size={24} /> : 'Create Account'}
             </Button>
             
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
