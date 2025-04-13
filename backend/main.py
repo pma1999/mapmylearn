@@ -6,6 +6,10 @@ from typing import Optional, Callable, Dict, Any
 from pathlib import Path
 from dotenv import load_dotenv
 
+# Import APScheduler
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from backend.tasks.credit_tasks import grant_monthly_credits # Import the task
+
 # Load environment variables from .env file
 env_path = Path(__file__).parent / '.env'
 load_dotenv(dotenv_path=env_path)
@@ -38,6 +42,34 @@ setup_logging(
 )
 
 logger = logging.getLogger("learning_path_generator")
+
+# Initialize Scheduler
+scheduler = AsyncIOScheduler(timezone="UTC") # Use UTC
+
+# Define FastAPI app (assuming it's defined elsewhere or needs to be added)
+# If 'app' is defined in api.py or another file, this part needs adjustment
+# For now, assuming 'app' is defined here or imported
+# from backend.api import app # Example if defined in api.py
+
+# --- TEMPORARY Placeholder for FastAPI app instance ---
+# Replace this with the actual FastAPI app instance from your project structure
+app = FastAPI()
+# --- END TEMPORARY Placeholder ---
+
+@app.on_event("startup")
+async def startup_event():
+    # Schedule the job
+    # Run daily at 1:00 UTC
+    scheduler.add_job(grant_monthly_credits, 'cron', hour=1, minute=0, misfire_grace_time=3600) # Added grace time
+    # Start the scheduler
+    scheduler.start()
+    logger.info("APScheduler started and 'grant_monthly_credits' job scheduled.")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    # Shut down the scheduler
+    scheduler.shutdown()
+    logger.info("APScheduler shut down.")
 
 # Define a function to run the graph
 async def run_graph(initial_state):

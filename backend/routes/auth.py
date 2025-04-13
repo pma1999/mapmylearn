@@ -36,12 +36,18 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
     
     # Create new user (is_email_verified defaults to False in model)
     hashed_password = get_password_hash(user.password)
+    # TODO: Read INITIAL_USER_CREDITS from config/settings if implemented
+    initial_credits = 3
+    current_time_utc = datetime.utcnow() # Get current time
     db_user = User(
         email=user.email,
         hashed_password=hashed_password,
         full_name=user.full_name,
+        credits=initial_credits, # Assign initial credits
+        created_at=current_time_utc, # Explicitly set created_at
         # is_email_verified defaults to False (via server_default)
-        # credits defaults to 0 (via server_default)
+        # last_login is nullable
+        # last_monthly_credit_granted_at is nullable
     )
     
     try:

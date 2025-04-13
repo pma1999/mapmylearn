@@ -23,6 +23,7 @@ class User(Base):
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     last_login = Column(DateTime)
     credits = Column(Integer, nullable=False, server_default='0')
+    last_monthly_credit_granted_at = Column(DateTime, nullable=True) # Added for monthly credit tracking
 
     # Relationships
     learning_paths = relationship("LearningPath", back_populates="user", cascade="all, delete-orphan")
