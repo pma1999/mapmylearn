@@ -55,6 +55,22 @@ const LearningPathView = ({ source }) => {
   const isLoading = localLoading !== false && loading;
   const currentError = localError || error;
   
+  // Determine the correct pathId to use
+  // Priority: localEntryId (after save) > entryId (from URL) > learningPath.path_id (intrinsic)
+  let derivedPathId = null;
+  const currentEntryId = localEntryId || entryId; // Use localEntryId if path was just saved
+  if (!isLoading && currentLearningPath) {
+    if (currentEntryId) {
+      derivedPathId = currentEntryId;
+    } else if (!isFromHistory && currentLearningPath.path_id) {
+      // Use intrinsic ID if loaded from task result and ID exists
+      derivedPathId = currentLearningPath.path_id;
+    } else {
+      // Log if we somehow can't determine an ID after loading is complete
+      console.warn('Could not determine pathId for LearningPathView');
+    }
+  }
+  
   // Callback for when a task completes
   const handleTaskComplete = useCallback((response) => {
     console.log('Task completed with status:', response.status);
@@ -183,11 +199,13 @@ const LearningPathView = ({ source }) => {
             onNewLearningPath={handleNewLearningPathClick}
           />
           
-          {/* Modules Section - Pass entryId as pathId */}
-          <ModuleSection 
-            modules={currentLearningPath.modules} 
-            pathId={entryId}
-          />
+          {/* Modules Section - Pass derivedPathId and render conditionally */}
+          {derivedPathId && (
+            <ModuleSection
+              modules={currentLearningPath.modules}
+              pathId={derivedPathId}
+            />
+          )}
           
           {/* Learning Path Resources Section - UPDATED to use ResourcesSection */}
           <Box sx={{ mt: 6, mb: 4 }}>

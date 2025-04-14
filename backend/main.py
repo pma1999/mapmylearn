@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import json
+import uuid
 from typing import Optional, Callable, Dict, Any
 from pathlib import Path
 from dotenv import load_dotenv
@@ -95,6 +96,10 @@ async def run_graph(initial_state):
                 "modules": result.get("modules", []),
                 "execution_steps": result.get("steps", [])
             }
+        
+        # Add a unique, persistent path_id to the result
+        if formatted_output: # Only add if we have a valid path structure
+            formatted_output["path_id"] = str(uuid.uuid4())
         
         return formatted_output
     except Exception as e:
