@@ -6,19 +6,27 @@ from datetime import datetime, timedelta
 import os
 from typing import Optional
 import uuid
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 import logging
 
 from backend.config.database import get_db
 from backend.models.auth_models import User, Session as UserSession
-from backend.schemas.auth_schemas import UserCreate, UserLogin, UserResponse, Token, MessageResponse
+from backend.schemas.auth_schemas import UserCreate, UserLogin, UserResponse, Token, MessageResponse, ForgotPasswordRequest, ResetPasswordRequest
 from backend.utils.auth import get_password_hash, verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
 from backend.utils.auth_middleware import get_current_user
-from backend.utils.token_manager import generate_verification_token, get_verification_link, verify_verification_token
-from backend.services.email_service import send_verification_email
+from backend.utils.token_manager import (
+    generate_verification_token, get_verification_link, verify_verification_token,
+    generate_password_reset_token, hash_token, get_password_reset_link, PASSWORD_RESET_TOKEN_EXPIRY_MINUTES
+)
+from backend.services.email_service import send_verification_email, send_password_reset_email, send_password_reset_confirmation_email
 from backend.utils.custom_rate_limiter import rate_limit
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
+
+# Rate limit: 5 requests per 15 minutes per IP
+FORGOT_PASSWORD_LIMIT = rate_limit(times=5, minutes=15)
+# Rate limit: 10 requests per hour per IP (slightly more lenient for actual resets)
+RESET_PASSWORD_LIMIT = rate_limit(times=10, minutes=60)
 
 
 @router.post("/register", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
@@ -391,3 +399,103 @@ async def resend_verification_email(request: ResendRequest, db: Session = Depend
 
     # Always return a generic message to prevent email enumeration
     return MessageResponse(message="If an account with that email exists and requires verification, a new email has been sent.") 
+
+@router.post("/forgot-password", response_model=MessageResponse, dependencies=[Depends(FORGOT_PASSWORD_LIMIT)])
+async def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Initiates the password reset process for a user.
+    Generates a reset token, saves its hash, and sends a reset link via email.
+    Always returns a generic success message to prevent email enumeration.
+    """
+    user = db.query(User).filter(User.email == request.email).first()
+
+    # Security: Only proceed if user exists AND email is verified
+    if user and user.is_email_verified:
+        try:
+            raw_token, token_hash = generate_password_reset_token()
+            expiry_time = datetime.utcnow() + timedelta(minutes=PASSWORD_RESET_TOKEN_EXPIRY_MINUTES)
+            
+            user.password_reset_token_hash = token_hash
+            user.password_reset_token_expires_at = expiry_time
+            db.commit()
+            
+            reset_link = get_password_reset_link(raw_token)
+            email_sent = send_password_reset_email(user.email, reset_link)
+            if not email_sent:
+                # Log failure but don't expose error to user
+                logging.error(f"Failed to send password reset email to {user.email}")
+                # Note: DB changes are already committed, user can try again later.
+
+        except Exception as e:
+            db.rollback() # Rollback DB changes if anything fails during token/email process
+            logging.error(f"Error during forgot password process for {request.email}: {e}", exc_info=True)
+            # Fall through to generic response to avoid leaking info
+
+    # Generic success response regardless of user existence or errors
+    return MessageResponse(message="If an account with that email exists and is verified, a password reset link has been sent.")
+
+
+@router.post("/reset-password", response_model=MessageResponse, dependencies=[Depends(RESET_PASSWORD_LIMIT)])
+async def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Resets the user's password using a valid reset token.
+    Verifies the token, updates the password, invalidates the token, and logs out other sessions.
+    """
+    if not request.token or not request.new_password:
+         raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token and new password are required.",
+         )
+    
+    hashed_token = hash_token(request.token)
+    
+    # Find user by the hashed token
+    user = db.query(User).filter(User.password_reset_token_hash == hashed_token).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired password reset link.",
+        )
+
+    # Check if the token has expired
+    if user.password_reset_token_expires_at is None or user.password_reset_token_expires_at < datetime.utcnow():
+        # Optionally clear the expired token fields here
+        # user.password_reset_token_hash = None
+        # user.password_reset_token_expires_at = None
+        # db.commit() # Commit separately or as part of the main transaction later
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired password reset link.",
+        )
+        
+    # --- Token is valid, proceed with password reset --- 
+    try:
+        new_hashed_password = get_password_hash(request.new_password)
+        
+        # Start transaction
+        user.hashed_password = new_hashed_password
+        user.password_reset_token_hash = None # Invalidate the token
+        user.password_reset_token_expires_at = None # Invalidate the token expiry
+        
+        # Invalidate all existing refresh token sessions for this user
+        db.query(UserSession).filter(UserSession.user_id == user.id).delete()
+        
+        db.commit() # Commit all changes
+        
+        # Send confirmation email
+        try:
+             send_password_reset_confirmation_email(user.email)
+        except Exception as e:
+            logging.error(f"Failed to send password reset confirmation email to {user.email}: {e}")
+            # Don't fail the request if confirmation email fails
+            
+        return MessageResponse(message="Password has been reset successfully.")
+
+    except Exception as e:
+        db.rollback()
+        logging.error(f"Error during password reset for user {user.email}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while resetting the password. Please try again.",
+        ) 

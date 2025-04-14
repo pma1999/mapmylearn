@@ -417,6 +417,37 @@ export const AuthProvider = ({ children }) => {
      return false;
   };
 
+  // --- NEW: Password Reset Functions ---
+  const forgotPassword = async (email) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await api.forgotPassword(email);
+      setLoading(false);
+      return response; // Contains the generic message
+    } catch (err) {
+      console.error('Forgot password error in context:', err);
+      setError(err); // Store the formatted error from the interceptor
+      setLoading(false);
+      throw err; // Re-throw for the component to handle
+    }
+  };
+
+  const resetPassword = async (token, newPassword) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await api.resetPassword(token, newPassword);
+      setLoading(false);
+      return response; // Contains success message
+    } catch (err) {
+      console.error('Reset password error in context:', err);
+      setError(err);
+      setLoading(false);
+      throw err;
+    }
+  };
+  // -------------------------------------
 
   // Provide auth context value
   const authContextValue = {
@@ -432,6 +463,9 @@ export const AuthProvider = ({ children }) => {
     migrateLearningPaths,
     checkPendingMigration,
     resendVerificationEmail: api.resendVerificationEmail,
+    // NEW:
+    forgotPassword,
+    resetPassword,
     // Don't expose internal functions like refreshToken directly if not needed
   };
 

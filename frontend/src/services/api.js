@@ -1130,6 +1130,18 @@ export const resendVerificationEmail = async (email) => {
   }
 };
 
+// --- Password Reset --- 
+
+export const forgotPassword = async (email) => {
+  const response = await api.post('/auth/forgot-password', { email });
+  return response.data; // Returns { message: "..." }
+};
+
+export const resetPassword = async (token, new_password) => {
+  const response = await api.post('/auth/reset-password', { token, new_password });
+  return response.data; // Returns { message: "..." }
+};
+
 // --------------------------------------------------------------------------------
 // Chatbot API Calls
 // --------------------------------------------------------------------------------
@@ -1231,5 +1243,7 @@ export default {
   clearChatHistory,
   verifyEmail,
   resendVerificationEmail,
+  forgotPassword,
+  resetPassword,
 };
 

@@ -15,6 +15,8 @@ import RegisterPage from './pages/RegisterPage';
 import AdminPage from './pages/AdminPage';
 import MigrationPage from './pages/MigrationPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 
 // Import components
 import Navbar from './components/Navbar';
@@ -84,6 +86,8 @@ function App() {
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/migrate" element={<MigrationPage />} />
               <Route path="/verify-email" element={<VerifyEmailPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
               <Route 
                 path="/admin" 
                 element={

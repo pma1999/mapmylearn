@@ -194,7 +194,11 @@ const LoginPage = () => {
               {loading ? <CircularProgress size={24} /> : 'Sign In'}
             </Button>
             
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+            {/* Changed Box layout and added Forgot Password link */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
+              <Link component={RouterLink} to="/forgot-password" variant="body2">
+                Forgot password?
+              </Link>
               <Link component={RouterLink} to="/register" variant="body2">
                 Don't have an account? Sign up
               </Link>

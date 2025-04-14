@@ -24,6 +24,9 @@ class User(Base):
     last_login = Column(DateTime)
     credits = Column(Integer, nullable=False, server_default='0')
     last_monthly_credit_granted_at = Column(DateTime, nullable=True) # Added for monthly credit tracking
+    # Password reset fields
+    password_reset_token_hash = Column(String, nullable=True, index=True)
+    password_reset_token_expires_at = Column(DateTime, nullable=True)
 
     # Relationships
     learning_paths = relationship("LearningPath", back_populates="user", cascade="all, delete-orphan")
@@ -33,6 +36,8 @@ class User(Base):
     # Index for email lookups during authentication
     __table_args__ = (
         Index('idx_user_email', email),
+        # Index for password reset token hash
+        Index('idx_user_reset_token', password_reset_token_hash),
     )
 
 

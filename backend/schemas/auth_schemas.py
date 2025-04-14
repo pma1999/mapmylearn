@@ -235,4 +235,15 @@ class CreditTransactionListResponse(BaseModel):
     transactions: List[CreditTransactionResponse]
     total: int
     page: int
-    per_page: int 
+    per_page: int
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Schema for requesting a password reset."""
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    """Schema for resetting password with a token."""
+    token: str
+    new_password: str = Field(..., min_length=8) 
