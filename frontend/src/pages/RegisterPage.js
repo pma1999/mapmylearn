@@ -196,6 +196,7 @@ const RegisterPage = () => {
               label="Confirm Password"
               type="password"
               id="confirmPassword"
+              autoComplete="new-password"
               value={formData.confirmPassword}
               onChange={handleChange}
               error={!!errors.confirmPassword}
