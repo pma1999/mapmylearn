@@ -1027,12 +1027,13 @@ Your task is to create a SINGLE OPTIMAL search query for in-depth research on a 
 
 ## SEARCH QUERY REQUIREMENTS
 
-### 1. Keyword-Focused Format
-Your query MUST be optimized for a search engine API like Google or Tavily:
-- Use concise keywords and key phrases.
-- Combine terms logically (e.g., use quotes for exact phrases, potentially AND/OR if needed).
-- Avoid full sentences or conversational language.
-- Focus on the most important nouns, concepts, and technical terms.
+### 1. Keyword-Focused Format for Information Gathering
+Your query MUST be optimized for retrieving detailed information via a search engine API (like Google or Tavily) to be used for WRITING educational content:
+- Use the most relevant and specific keywords and technical terms from the submodule title and description.
+- Combine core concepts logically (e.g., use quotes for exact technical phrases if needed).
+- Focus on terms that will find explanations, examples, processes, methodologies, case studies, or data related to the submodule topic.
+- Avoid conversational language, questions, or instructions to the search engine.
+- Aim for a concise yet comprehensive set of keywords for effective information retrieval.
 
 ### 2. Information Gathering Focus
 Your query must target information that will be used to DEVELOP educational content:
@@ -1061,7 +1062,7 @@ Create ONE exceptionally well-crafted search engine query (keywords, phrases) th
 
 Provide:
 1. The optimal search engine query string
-2. A brief but comprehensive rationale explaining why this is the ideal query for this submodule
+2. A brief but comprehensive rationale explaining why this is the ideal query for finding information to develop this submodule
 
 {format_instructions}
 """
@@ -1597,7 +1598,8 @@ async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str,
                     "order": sub.submodule_id + 1,
                     "summary": summary,
                     "connections": getattr(sub, 'connections', {}),
-                    "quiz_questions": quiz_data
+                    "quiz_questions": quiz_data,
+                    "resources": getattr(sub, 'resources', [])
                 })
                 
             # Build module data

@@ -174,6 +174,14 @@ async def perform_search_and_scrape(
         tavily_response = await tavily_search.ainvoke({"query": query})
         logger.debug(f"Received Tavily response for: '{query}'")
 
+        # Check if the response is a dictionary before proceeding
+        if not isinstance(tavily_response, dict):
+            error_msg = f"Tavily search returned non-dict response: {tavily_response}"
+            logger.error(error_msg)
+            service_result.search_provider_error = error_msg
+            return service_result # Return early as we cannot process results
+
+        # Prepare scraping tasks
         scrape_tasks = []
         tavily_results = tavily_response.get("results", [])
 
