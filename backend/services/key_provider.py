@@ -42,7 +42,7 @@ class KeyProvider:
         Initialize a key provider.
         
         Args:
-            key_type: Type of key ('google' or 'perplexity')
+            key_type: Type of key ('google', 'perplexity', 'tavily')
             token_or_key: Optional token for retrieving the key or direct API key
                          (if None, uses server-provided keys)
             user_id: Optional user identifier for usage tracking
@@ -50,11 +50,17 @@ class KeyProvider:
         self.key_type = key_type
         self.token_or_key = token_or_key
         self.user_id = user_id
-        self._is_direct_key = token_or_key is not None and (
-            (key_type == "google" and token_or_key.startswith("AIza")) or
-            (key_type == "perplexity" and token_or_key.startswith("pplx-"))
-        )
-        self.use_server_keys = True  # New flag to indicate server-provided keys
+        # Check if the provided token_or_key looks like a direct API key for the given type
+        self._is_direct_key = False
+        if token_or_key:
+            if key_type == "google" and token_or_key.startswith("AIza"):
+                self._is_direct_key = True
+            elif key_type == "perplexity" and token_or_key.startswith("pplx-"):
+                self._is_direct_key = True # Keep for legacy
+            elif key_type == "tavily" and token_or_key.startswith("tvly-"):
+                self._is_direct_key = True
+
+        self.use_server_keys = True  # Assume server keys unless overridden (logic in get_key checks env first)
         self.operation = "api_call"  # Default operation, can be updated
         
     async def get_key(self) -> str:
@@ -159,4 +165,12 @@ class PerplexityKeyProvider(KeyProvider):
     
     def __init__(self, token_or_key: Optional[str] = None, user_id: Optional[str] = None):
         """Initialize with perplexity key type."""
-        super().__init__("perplexity", token_or_key, user_id) 
+        super().__init__("perplexity", token_or_key, user_id)
+
+
+class TavilyKeyProvider(KeyProvider):
+    """Key provider specialized for Tavily API keys."""
+    
+    def __init__(self, token_or_key: Optional[str] = None, user_id: Optional[str] = None):
+        """Initialize with tavily key type."""
+        super().__init__("tavily", token_or_key, user_id) 

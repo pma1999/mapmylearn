@@ -9,7 +9,6 @@ from .initial_flow import (
     generate_search_queries,
     execute_web_searches,
     create_learning_path,
-    execute_single_search
 )
 from .submodules import (
     plan_submodules,

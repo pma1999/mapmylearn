@@ -2,14 +2,15 @@ import asyncio
 import logging
 import re
 import json
+import os
 from typing import Dict, Any, List, Tuple, Optional
 
-from backend.core.graph_nodes.initial_flow import execute_single_search
-from backend.models.models import SearchQuery, EnhancedModule, Submodule, SubmoduleContent, LearningPathState, QuizQuestion, QuizQuestionList
+from backend.models.models import SearchQuery, EnhancedModule, Submodule, SubmoduleContent, LearningPathState, QuizQuestion, QuizQuestionList, SearchServiceResult, ScrapedResult
 from backend.parsers.parsers import submodule_parser, module_queries_parser, quiz_questions_parser
-from backend.services.services import get_llm, get_search_tool
+from backend.services.services import get_llm, perform_search_and_scrape
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from pydantic import BaseModel, Field
 
 # Import the extracted prompts
 from backend.prompts.learning_path_prompts import (
@@ -636,6 +637,22 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
         if data.get("status") == "completed" and module_id < len(enhanced_modules):
             module = enhanced_modules[module_id]
             if sub_id < len(module.submodules):
+                # Convert SearchServiceResult objects to dictionaries
+                search_results_raw = data.get("search_results", [])
+                search_results_dicts = []
+                if isinstance(search_results_raw, list):
+                    for res in search_results_raw:
+                        if hasattr(res, 'model_dump'): # Check if it's a Pydantic model (v2)
+                           search_results_dicts.append(res.model_dump())
+                        elif isinstance(res, dict): # Keep dicts as is (fallback)
+                            search_results_dicts.append(res)
+                        # else: log warning? skip?
+                elif search_results_raw: # Handle case where it might be a single object?
+                     if hasattr(search_results_raw, 'model_dump'):
+                          search_results_dicts.append(search_results_raw.model_dump())
+                     elif isinstance(search_results_raw, dict):
+                          search_results_dicts.append(search_results_raw)
+
                 # Create a SubmoduleContent object for the completed submodule
                 developed_submodules.append(SubmoduleContent(
                     module_id=module_id,
@@ -643,7 +660,7 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
                     title=module.submodules[sub_id].title,
                     description=module.submodules[sub_id].description,
                     search_queries=data.get("search_queries", []),
-                    search_results=data.get("search_results", []),
+                    search_results=search_results_dicts, # Use the converted list of dicts
                     content=data.get("content", ""),
                     quiz_questions=data.get("quiz_questions", None)
                 ))
@@ -989,7 +1006,7 @@ Other Modules in Learning Path:
     single_query_prompt = """
 # EXPERT RESEARCHER INSTRUCTIONS
 
-You are tasked with creating a SINGLE OPTIMAL search query for in-depth research on a specific educational submodule.
+Your task is to create a SINGLE OPTIMAL search query for in-depth research on a specific educational submodule.
 
 ## SUBMODULE CONTEXT
 - Topic: {user_topic}
@@ -1005,17 +1022,17 @@ You are tasked with creating a SINGLE OPTIMAL search query for in-depth research
 
 ## LANGUAGE STRATEGY
 - Final content will be presented to the user in {output_language}.
-- For search queries, use {search_language} to maximize information quality and quantity.
+- For search queries, use {search_language} to maximize information quality.
 - If the topic is highly specialized or regional/cultural, consider whether the search language should be adjusted for optimal results.
 
 ## SEARCH QUERY REQUIREMENTS
 
-### 1. Natural Language Format
-Your query MUST be written in natural language:
-- Use complete sentences or questions
-- Make it readable and conversational
-- Clearly state what you're looking for (e.g., "I need comprehensive information about [submodule topic] for creating educational content...")
-- Explicitly describe the expected results (e.g., "Please show me detailed explanations, processes, techniques, and examples related to...")
+### 1. Keyword-Focused Format
+Your query MUST be optimized for a search engine API like Google or Tavily:
+- Use concise keywords and key phrases.
+- Combine terms logically (e.g., use quotes for exact phrases, potentially AND/OR if needed).
+- Avoid full sentences or conversational language.
+- Focus on the most important nouns, concepts, and technical terms.
 
 ### 2. Information Gathering Focus
 Your query must target information that will be used to DEVELOP educational content:
@@ -1026,16 +1043,16 @@ Your query must target information that will be used to DEVELOP educational cont
 - Request content that covers both theoretical foundations and practical applications
 
 ### 3. Content Development Needs
-The query should explicitly request the kind of information needed to write educational content:
-- Seek explanatory content rather than just basic definitions
-- Request in-depth material that explains mechanisms and processes
-- Look for content that addresses common misconceptions or challenges
-- Ask for varied perspectives and approaches to the subject matter
-- Target information that would help create comprehensive teaching materials
+The query keywords should help find:
+- Explanatory content rather than just basic definitions
+- In-depth material that explains mechanisms and processes
+- Content that addresses common misconceptions or challenges
+- Varied perspectives and approaches to the subject matter
+- Information helpful for creating comprehensive teaching materials
 
 ## YOUR TASK
 
-Create ONE exceptionally well-crafted natural language search query that will:
+Create ONE exceptionally well-crafted search engine query (keywords, phrases) that will:
 1. Target the most critical information needed for this specific submodule
 2. Be comprehensive enough to gather essential educational content
 3. Retrieve detailed, accurate, and authoritative information
@@ -1043,7 +1060,7 @@ Create ONE exceptionally well-crafted natural language search query that will:
 5. Balance breadth and depth to maximize learning value
 
 Provide:
-1. The optimal natural language search query
+1. The optimal search engine query string
 2. A brief but comprehensive rationale explaining why this is the ideal query for this submodule
 
 {format_instructions}
@@ -1095,328 +1112,225 @@ Provide:
         )
         return [fallback_query]
 
-async def execute_single_search_for_submodule(query: SearchQuery, key_provider=None) -> Dict[str, Any]:
-    """
-    Executes a single web search for a submodule using the Perplexity LLM.
-    
-    Args:
-        query: A SearchQuery instance with keywords and rationale.
-        key_provider: Optional key provider for Perplexity search.
-        
-    Returns:
-        A dictionary with the query, rationale, and search results.
-    """
-    try:
-        # Properly await the search_model coroutine
-        search_model = await get_search_tool(key_provider=key_provider)
-        logging.info(f"Searching for: {query.keywords}")
-        
-        # Create a prompt that asks for web search results
-        search_prompt = f"{query.keywords}"
-        
-        # Invoke the Perplexity model with the search prompt as a string
-        # Use ainvoke instead of invoke to properly leverage async execution
-        result = await search_model.ainvoke(search_prompt)
-        
-        # Process the response into the expected format
-        formatted_result = [
-            {
-                "source": f"Perplexity Search Result for '{query.keywords}'",
-                "content": result.content
-            }
-        ]
-        
-        return {
-            "query": query.keywords,
-            "rationale": query.rationale,
-            "results": formatted_result
-        }
-    except Exception as e:
-        logging.error(f"Error searching for '{query.keywords}': {str(e)}")
-        return {
-            "query": query.keywords,
-            "rationale": query.rationale,
-            "results": [{"source": "Error", "content": f"Error performing search: {str(e)}"}]
-        }
-
 async def execute_submodule_specific_searches(
-    state: LearningPathState, 
-    module_id: int, 
-    sub_id: int, 
-    module: EnhancedModule, 
+    state: LearningPathState,
+    module_id: int,
+    sub_id: int,
+    module: EnhancedModule,
     submodule: Submodule,
     sub_queries: List[SearchQuery]
-) -> List[Dict[str, Any]]:
+) -> List[SearchServiceResult]:
     """
-    Execute a single web search for a submodule.
-    
-    Args:
-        state: The current LearningPathState.
-        module_id: Index of the parent module.
-        sub_id: Index of the submodule.
-        module: The EnhancedModule instance.
-        submodule: The Submodule instance.
-        sub_queries: List containing the single search query for the submodule.
-        
-    Returns:
-        A list containing a single search result dictionary.
+    Execute web searches (Tavily+Scrape) for submodule-specific queries in parallel.
     """
-    logging.info(f"Executing search for submodule {sub_id+1} of module {module_id+1}: {submodule.title}")
-    
-    progress_callback = state.get("progress_callback")
-    if progress_callback:
-        await progress_callback(
-            f"Searching for information on {module.title} > {submodule.title}",
-            phase="submodule_research",
-            phase_progress=0.5,
-            overall_progress=0.63,
-            action="processing"
-        )
-    
-    if not sub_queries or len(sub_queries) == 0:
-        logging.warning("No search query available for submodule")
-        return []
-    
-    # Take only the first query even if multiple are provided (for robustness)
-    query = sub_queries[0]
-    
-    try:
-        # Execute a single search
-        result = await execute_single_search_for_submodule(query, key_provider=state.get("pplx_key_provider"))
-        logging.info(f"Completed search for submodule {sub_id+1} with query: {query.keywords}")
-        
-        if progress_callback:
-            await progress_callback(
-                f"Retrieved search results for {module.title} > {submodule.title}",
-                phase="submodule_research",
-                phase_progress=0.7,
-                overall_progress=0.64,
-                action="processing"
-            )
-        
-        return [result]
-    except Exception as e:
-        logging.error(f"Error executing submodule search: {str(e)}")
-        
-        if progress_callback:
-            await progress_callback(
-                f"Error searching for {module.title} > {submodule.title}: {str(e)}",
-                phase="submodule_research",
-                phase_progress=0.5,
-                overall_progress=0.63,
-                action="error"
-            )
-        
+    logger = logging.getLogger("learning_path.search_executor")
+    logger.info(f"Executing {len(sub_queries)} searches for submodule {module_id}.{sub_id}")
+    if not sub_queries:
         return []
 
+    # Get the Tavily key provider from state
+    tavily_key_provider = state.get("tavily_key_provider")
+    if not tavily_key_provider:
+        logger.error("Tavily key provider not found in state for submodule search.")
+        # Return empty list with error indication (or handle differently)
+        return [SearchServiceResult(query=q.keywords, results=[], search_provider_error="Tavily key provider not found") for q in sub_queries]
+
+    # Use a smaller parallelism count for submodule searches maybe?
+    # Or use the main search_parallel_count
+    search_parallel_count = state.get("search_parallel_count", 2)
+    scrape_timeout = int(os.environ.get("SCRAPE_TIMEOUT", 10))
+    # Potentially fewer results needed for submodule context
+    max_results_per_query = int(os.environ.get("SEARCH_MAX_RESULTS_SUBMODULE", 3))
+
+    sem = asyncio.Semaphore(search_parallel_count)
+    all_search_service_results: List[SearchServiceResult] = []
+
+    async def bounded_search_and_scrape(query_obj: SearchQuery):
+        async with sem:
+            # Set operation name for tracking
+            op_name = f"submodule_{module_id}_{sub_id}_search"
+            provider = tavily_key_provider.set_operation(op_name)
+            return await perform_search_and_scrape(
+                query_obj.keywords,
+                provider,
+                max_results=max_results_per_query,
+                scrape_timeout=scrape_timeout
+            )
+
+    tasks = [bounded_search_and_scrape(query) for query in sub_queries]
+
+    # Run tasks concurrently
+    results_or_exceptions = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Process results
+    for i, res_or_exc in enumerate(results_or_exceptions):
+        query_keywords = sub_queries[i].keywords
+        if isinstance(res_or_exc, Exception):
+            logger.error(f"Error executing search task for submodule query '{query_keywords}': {res_or_exc}")
+            all_search_service_results.append(
+                SearchServiceResult(
+                    query=query_keywords,
+                    results=[],
+                    search_provider_error=f"Task execution error: {type(res_or_exc).__name__} - {str(res_or_exc)}"
+                )
+            )
+        elif isinstance(res_or_exc, SearchServiceResult):
+            all_search_service_results.append(res_or_exc)
+            # Log errors from the result object
+            if res_or_exc.search_provider_error:
+                 logger.error(f"Search provider error for submodule query '{query_keywords}': {res_or_exc.search_provider_error}")
+            scrape_errors = [r.scrape_error for r in res_or_exc.results if r.scrape_error]
+            if scrape_errors:
+                logger.warning(f"Scraping issues for submodule query '{query_keywords}': {len(scrape_errors)}/{len(res_or_exc.results)} URLs failed.")
+        else:
+            logger.error(f"Unexpected result type for submodule query '{query_keywords}': {type(res_or_exc)}")
+            all_search_service_results.append(
+                 SearchServiceResult(query=query_keywords, results=[], search_provider_error="Unexpected result type from gather")
+             )
+
+    logger.info(f"Completed {len(all_search_service_results)} searches for submodule {module_id}.{sub_id}")
+    return all_search_service_results
+
 async def develop_submodule_specific_content(
-    state: LearningPathState, 
-    module_id: int, 
-    sub_id: int, 
-    module: EnhancedModule, 
+    state: LearningPathState,
+    module_id: int,
+    sub_id: int,
+    module: EnhancedModule,
     submodule: Submodule,
     sub_queries: List[SearchQuery],
-    sub_search_results: List[Dict[str, Any]]
+    sub_search_results: List[SearchServiceResult]
 ) -> str:
     """
-    Develops comprehensive content for a submodule using a single search result.
-    
-    Args:
-        state: The current LearningPathState.
-        module_id: Index of the parent module.
-        sub_id: Index of the submodule.
-        module: The EnhancedModule instance.
-        submodule: The Submodule instance.
-        sub_queries: List containing the single search query used.
-        sub_search_results: List containing the single search result obtained.
-        
-    Returns:
-        A string containing the developed submodule content.
+    Develops the specific content for a submodule using LLM, informed by search results.
     """
     logger = logging.getLogger("learning_path.content_developer")
-    logger.info(f"Developing content for submodule {sub_id+1} of module {module_id+1}: {submodule.title}")
-    
-    progress_callback = state.get("progress_callback")
-    if progress_callback:
-        await progress_callback(
-            f"Creating educational content for {module.title} > {submodule.title}",
-            phase="content_development",
-            phase_progress=0.4,
-            overall_progress=0.75,
-            action="processing"
-        )
-        
-    if not sub_search_results:
-        logger.warning("No search results available for content development")
-        return "No content generated due to missing search results."
-    
-    # Get language information from state
+    logger.info(f"Developing content for submodule: {submodule.title}")
+
+    # Get language settings
     output_language = state.get('language', 'en')
-    
-    # Import escape function from helpers
-    from backend.core.graph_nodes.helpers import escape_curly_braces, run_chain
-    
-    # Process the single search result
-    formatted_results = ""
-    result = sub_search_results[0]  # We expect only one result
-    
-    # Escapar las llaves en query y rationale
-    query = escape_curly_braces(result.get('query', ''))
-    rationale = escape_curly_braces(result.get('rationale', ''))
-    
-    formatted_results += f"Query: {query}\n"
-    formatted_results += f"Rationale: {rationale}\nResults:\n"
-    
-    results = result.get("results", "")
-    if isinstance(results, str):
-        # Escapar las llaves en el contenido del resultado
-        escaped_content = escape_curly_braces(results)
-        formatted_results += f"  {escaped_content}\n\n"
-    else:
-        for item in results:
-            # Escapar las llaves en cada campo del resultado
-            title = escape_curly_braces(item.get("title", "No title"))
-            content = escape_curly_braces(item.get("content", "No content"))
-            url = escape_curly_braces(item.get("url", "No URL"))
-            
-            formatted_results += f"  - {title}: {content}\n    URL: {url}\n"
-        formatted_results += "\n"
-    
-    # Continue with context building and content generation as before
+
+    # Build context from various sources
+    # 1. Learning Path Context
     learning_path_context = ""
-    for i, mod in enumerate(state.get("enhanced_modules") or []):
-        indicator = " (CURRENT)" if i == module_id else ""
-        # Escapar las llaves en la descripción
+    modules = state.get("enhanced_modules", [])
+    for i, mod in enumerate(modules):
+        indicator = " (CURRENT MODULE)" if i == module_id else ""
         mod_title = escape_curly_braces(mod.title)
         mod_desc = escape_curly_braces(mod.description)
-        learning_path_context += f"Module {i+1}: {mod_title}{indicator}\n{mod_desc}\n"
-    
-    # Escapar las llaves en la información del módulo
+        learning_path_context += f"Module {i+1}: {mod_title}{indicator}\n{mod_desc}\n\n"
+
+    # 2. Current Module Context
     module_title = escape_curly_braces(module.title)
-    module_desc = escape_curly_braces(module.description)
-    module_context = f"Current Module: {module_title}\nDescription: {module_desc}\nAll Submodules:\n"
-    
+    module_context = f"Current Module ({module_id+1}): {module_title}\nSubmodules:\n"
     for i, s in enumerate(module.submodules):
-        indicator = " (CURRENT)" if i == sub_id else ""
-        # Escapar las llaves en la información del submódulo
+        indicator = " (CURRENT SUBMODULE)" if i == sub_id else ""
         sub_title = escape_curly_braces(s.title)
         sub_desc = escape_curly_braces(s.description)
         module_context += f"  {i+1}. {sub_title}{indicator}\n  {sub_desc}\n"
-    
+
+    # 3. Adjacent Submodules Context
     adjacent_context = "Adjacent Submodules:\n"
     if sub_id > 0:
         prev = module.submodules[sub_id-1]
-        # Escapar las llaves en la información del submódulo previo
-        prev_title = escape_curly_braces(prev.title)
-        prev_desc = escape_curly_braces(prev.description)
-        adjacent_context += f"Previous: {prev_title}\n{prev_desc}\n"
-    else:
-        adjacent_context += "No previous submodule.\n"
-    
+        prev_title = escape_curly_braces(prev.title); prev_desc = escape_curly_braces(prev.description)
+        adjacent_context += f"Previous ({sub_id}): {prev_title}\n{prev_desc}\n"
+    else: adjacent_context += "No previous submodule.\n"
     if sub_id < len(module.submodules) - 1:
         nxt = module.submodules[sub_id+1]
-        # Escapar las llaves en la información del submódulo siguiente
-        nxt_title = escape_curly_braces(nxt.title)
-        nxt_desc = escape_curly_braces(nxt.description)
-        adjacent_context += f"Next: {nxt_title}\n{nxt_desc}\n"
-    else:
-        adjacent_context += "No next submodule.\n"
-    
-    # Modificar el prompt para enfatizar trabajar con un solo resultado de búsqueda
-    single_result_prompt = """
-# EXPERT EDUCATIONAL CONTENT DEVELOPER INSTRUCTIONS
+        nxt_title = escape_curly_braces(nxt.title); nxt_desc = escape_curly_braces(nxt.description)
+        adjacent_context += f"Next ({sub_id+2}): {nxt_title}\n{nxt_desc}\n"
+    else: adjacent_context += "No next submodule.\n"
 
-You are tasked with developing comprehensive educational content for a specific submodule based on a focused search result.
+    # 4. Search Results Context (Using new structure)
+    search_context_parts = []
+    max_context_per_query_llm = 3
+    max_chars_per_result_llm = 3000
 
-## SUBMODULE CONTEXT
-- Learning Topic: {user_topic}
-- Module: {module_title} (Module {module_order} of {module_count})
-- Submodule: {submodule_title} (Submodule {submodule_order} of {submodule_count})
-- Description: {submodule_description}
+    for report in sub_search_results:
+        query = escape_curly_braces(report.query)
+        search_context_parts.append(f"\n## Research for Query: \"{query}\"\n")
+        results_included_llm = 0
+        for res in report.results:
+            if results_included_llm >= max_context_per_query_llm:
+                break
+            title = escape_curly_braces(res.title or 'N/A')
+            url = res.url
+            search_context_parts.append(f"### Source: {url} (Title: {title})")
+            if res.scraped_content:
+                content = escape_curly_braces(res.scraped_content)
+                truncated_content = content[:max_chars_per_result_llm]
+                if len(content) > max_chars_per_result_llm:
+                    truncated_content += "... (truncated)"
+                search_context_parts.append(f"Content Snippet:\n{truncated_content}")
+                results_included_llm += 1
+            elif res.tavily_snippet:
+                snippet = escape_curly_braces(res.tavily_snippet)
+                error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
+                search_context_parts.append(f"Tavily Snippet:{error_info}\n{snippet}")
+                results_included_llm += 1
+            else:
+                 error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
+                 search_context_parts.append(f"Content: Not available.{error_info}")
+            search_context_parts.append("---")
+        if results_included_llm == 0:
+             search_context_parts.append("(No usable content found for this query)")
+    search_results_context = "\n".join(search_context_parts)
 
-## MODULE CONTEXT
-{module_context}
-
-## ADJACENT CONTEXT
-{adjacent_context}
-
-## LEARNING PATH CONTEXT
-{learning_path_context}
-
-## LANGUAGE INSTRUCTIONS
-Generate all content in {language}. This is the language selected by the user for learning the material.
-
-## RESEARCH MATERIAL
-The following is your research material from a single focused search:
-
-{search_results}
+    # Prepare prompt for content development
+    # Using an f-string for dynamic prompt construction based on available context
+    prompt_text = f"""
+# EXPERT CONTENT DEVELOPER & EDUCATOR
 
 ## YOUR TASK
+Develop comprehensive, engaging, and educational content for a specific submodule within a larger learning path. The content should be based on the provided context, including the submodule's description, its place within the module/path, and relevant information gathered from web searches.
 
-Based on this research material, develop comprehensive educational content for this submodule that:
+## CONTEXT
 
-1. Thoroughly covers the specific topic of the submodule
-2. Aligns with the overall learning objectives of the module
-3. Builds logically on previous submodules and prepares for subsequent ones
-4. Includes relevant examples, explanations, and educational activities
-5. Provides practical applications and theoretical foundations
-6. Organizes information in a clear, structured learning progression
+### Overall Topic: {escape_curly_braces(state["user_topic"])}
 
-Your content should be:
-- Comprehensive (1500-2000 words)
-- Well-organized with clear headings and subheadings
-- Rich in examples and explanations
-- Written in an educational and engaging style
-- Suitable for the specified depth level of the submodule
+### Learning Path Structure:
+{learning_path_context}
+### Current Module Context:
+{module_context}
+### Adjacent Submodules:
+{adjacent_context}
+### Submodule to Develop:
+Title: {escape_curly_braces(submodule.title)}
+Description: {escape_curly_braces(submodule.description)}
+Core Concept: {escape_curly_braces(submodule.core_concept)}
+Learning Objective: {escape_curly_braces(submodule.learning_objective)}
+Key Components: {escape_curly_braces(', '.join(submodule.key_components))}
+Depth Level: {escape_curly_braces(submodule.depth_level)}
 
-Format your response using Markdown, with clear section headings, code examples if relevant, and proper formatting for educational content.
+### Relevant Research & Scraped Content:
+{search_results_context}
+
+## INSTRUCTIONS
+1.  **Synthesize Information:** Combine the submodule description, objectives, and key components with the insights from the provided research/scraped content.
+2.  **Develop Content:** Write detailed, clear, and accurate content explaining the key components and addressing the learning objective. Aim for approximately 500-1000 words, adjusting based on the complexity and depth level required.
+3.  **Structure:** Organize the content logically with clear headings (use Markdown ## or ###), paragraphs, bullet points, or numbered lists as appropriate.
+4.  **Engagement:** Make the content engaging and easy to understand for the target learner (assume the specified depth level).
+5.  **Accuracy:** Ensure the technical information presented is accurate based on the provided research.
+6.  **Language:** Write ALL content in {output_language}.
+7.  **Focus:** Strictly focus on the content for THIS submodule. Do not repeat content from other submodules unless necessary for context.
+8.  **Output Format:** Provide ONLY the developed content for the submodule in well-formatted Markdown. Do NOT include introductions like "Here is the content..." or summaries unless requested as part of the content itself.
+
+## DEVELOPED CONTENT FOR "{escape_curly_braces(submodule.title)}":
 """
-    
-    prompt = ChatPromptTemplate.from_template(single_result_prompt)
-    try:
-        # Use the run_chain function with retry mechanism instead of direct chain invocation
-        from langchain.schema.output_parser import StrOutputParser
-        
-        # Escapar las llaves en los campos de texto (restore these important variable assignments)
-        user_topic = escape_curly_braces(state["user_topic"])
-        submodule_title = escape_curly_braces(submodule.title)
-        submodule_description = escape_curly_braces(submodule.description)
-        
-        sub_content = await run_chain(
-            prompt, 
-            lambda: get_llm(key_provider=state.get("google_key_provider")),
-            StrOutputParser(),
-            {
-                "user_topic": user_topic,
-                "module_title": module_title,
-                "module_description": module_desc,
-                "submodule_title": submodule_title,
-                "submodule_description": submodule_description,
-                "module_order": module_id + 1,
-                "module_count": len(state.get("enhanced_modules") or []),
-                "submodule_order": sub_id + 1,
-                "submodule_count": len(module.submodules),
-                "module_context": module_context,
-                "adjacent_context": adjacent_context,
-                "learning_path_context": learning_path_context,
-                "search_results": formatted_results,
-                "format_instructions": "",
-                "language": output_language
-            },
-            max_retries=3,
-            initial_retry_delay=1.0
-        )
-        
-        if not sub_content:
-            logger.error("LLM returned empty content")
-            sub_content = f"Error: No content generated for {submodule.title}"
-        elif not isinstance(sub_content, str):
-            logger.warning("Content not a string; converting")
-            sub_content = str(sub_content)
-        return sub_content
-    except Exception as e:
-        logger.exception(f"Error developing submodule content: {str(e)}")
-        return f"Error developing content: {str(e)}"
+
+    prompt = ChatPromptTemplate.from_template(prompt_text)
+
+    # Use the standard LLM (e.g., Gemini) for content generation
+    llm = await get_llm(key_provider=state.get("google_key_provider"))
+
+    # Simple chain for content generation
+    chain = prompt | llm | StrOutputParser()
+
+    # Execute the chain
+    developed_content = await chain.ainvoke({})
+
+    logger.info(f"Developed content for submodule: {submodule.title} (Length: {len(developed_content)})")
+    return developed_content
 
 async def generate_submodule_quiz(
     state: LearningPathState,

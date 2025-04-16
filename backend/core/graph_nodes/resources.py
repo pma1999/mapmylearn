@@ -8,19 +8,22 @@ at various levels (topic, module, submodule) of the learning path.
 import asyncio
 import logging
 import re
+import os
 from typing import Dict, Any, List, Optional
 
 from backend.models.models import (
-    SearchQuery, 
-    ResourceQuery, 
-    Resource, 
-    ResourceList, 
-    LearningPathState, 
-    EnhancedModule, 
-    Submodule
+    SearchQuery,
+    ResourceQuery,
+    Resource,
+    ResourceList,
+    LearningPathState,
+    EnhancedModule,
+    Submodule,
+    SearchServiceResult,
+    ScrapedResult
 )
 from backend.parsers.parsers import resource_list_parser, resource_query_parser
-from backend.services.services import get_llm, get_search_tool
+from backend.services.services import get_llm, perform_search_and_scrape
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
@@ -36,68 +39,17 @@ from backend.core.graph_nodes.helpers import run_chain, escape_curly_braces
 # Configure logger
 logger = logging.getLogger("learning_path.resources")
 
-def extract_citations_from_content(content: str) -> List[str]:
-    """
-    Extract citation links from Perplexity response content.
-    
-    This function uses multiple strategies to find all citation URLs in the content:
-    1. Look for a References/Sources section at the end
-    2. Find citation brackets with URLs 
-    3. Extract direct URLs as a fallback
-    
-    Args:
-        content: The text content from the Perplexity response
-        
-    Returns:
-        List of URLs extracted from the content
-    """
-    urls = []
-    
-    # Strategy 1: Look for a References or Sources section with URLs
-    references_section = re.search(r'(?:References|Sources)(?::|)\s*((?:.|\n)+)$', content)
-    if references_section:
-        section_text = references_section.group(1)
-        reference_urls = re.findall(r'https?://[^\s\]]+', section_text)
-        urls.extend(reference_urls)
-    
-    # Strategy 2: Look for citation brackets with URLs
-    citation_links = re.findall(r'\[(\d+)\]\s*\(?([^)]*https?://[^)\s]+)[^)]*\)?', content)
-    for num, url in citation_links:
-        url_clean = re.search(r'(https?://[^\s\]]+)', url)
-        if url_clean:
-            urls.append(url_clean.group(1))
-    
-    # Strategy 3: Direct URLs as backup
-    direct_urls = re.findall(r'https?://\S+', content)
-    urls.extend(direct_urls)
-    
-    # Deduplicate while preserving order
-    seen = set()
-    unique_urls = []
-    for url in urls:
-        if url not in seen:
-            seen.add(url)
-            unique_urls.append(url)
-    
-    return unique_urls
-
 async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
     """
-    Generates high-quality resources for the entire learning path topic.
-    
-    Args:
-        state: The current LearningPathState with user_topic and learning_path info.
-        
-    Returns:
-        A dictionary containing the generated resources and related data.
+    Generates high-quality resources for the entire learning path topic using Tavily+Scraper.
     """
     logger.info(f"Generating topic-level resources for: {state['user_topic']}")
-    
+
     # Check if resource generation is enabled
     if state.get("resource_generation_enabled") is False:
         logger.info("Resource generation is disabled, skipping topic resources")
-        return {"topic_resources": [], "steps": ["Resource generation is disabled"]}
-    
+        return {"topic_resources": [], "topic_resource_query": None, "topic_resource_search_results": [], "steps": ["Resource generation is disabled"]}
+
     # Get progress callback
     progress_callback = state.get('progress_callback')
     if progress_callback:
@@ -105,59 +57,47 @@ async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
             f"Generating resources for topic: {state['user_topic']}",
             phase="topic_resources",
             phase_progress=0.0,
-            overall_progress=0.45,
+            overall_progress=0.45, # Keep overall progress estimate
             action="started"
         )
-    
+
+    resource_query: Optional[ResourceQuery] = None
+    search_service_result: Optional[SearchServiceResult] = None
+
     try:
         # Get language information
         output_language = state.get('language', 'en')
         search_language = state.get('search_language', 'en')
-        
-        # Build learning path context
+        escaped_topic = escape_curly_braces(state["user_topic"])
+
+        # Build learning path context (same logic as before)
         learning_path_context = ""
         if state.get("final_learning_path") and "modules" in state["final_learning_path"]:
             modules = state["final_learning_path"]["modules"]
             for i, module in enumerate(modules):
-                # Handle both dictionary and object module types
                 if hasattr(module, 'title') and isinstance(module.title, str):
-                    # It's an object with attributes
                     module_title = escape_curly_braces(module.title)
                     module_desc = escape_curly_braces(module.description)
                 elif isinstance(module, dict) and "title" in module:
-                    # It's a dictionary
                     module_title = escape_curly_braces(module["title"])
                     module_desc = escape_curly_braces(module.get("description", "No description"))
                 else:
-                    # Fallback for any other case
                     module_title = escape_curly_braces(f"Module {i+1}")
                     module_desc = escape_curly_braces("No description available")
-                
                 learning_path_context += f"Module {i+1}: {module_title}\n{module_desc}\n\n"
-        
-        # If we also have enhanced_modules in the state, use those as well to build context
         elif state.get("enhanced_modules"):
-            modules = state["enhanced_modules"]
-            for i, module in enumerate(modules):
-                module_title = escape_curly_braces(module.title)
-                module_desc = escape_curly_braces(module.description)
-                learning_path_context += f"Module {i+1}: {module_title}\n{module_desc}\n\n"
-        
-        # 1. Generate search query for topic resources
+             modules = state["enhanced_modules"]
+             for i, module in enumerate(modules):
+                 module_title = escape_curly_braces(module.title)
+                 module_desc = escape_curly_braces(module.description)
+                 learning_path_context += f"Module {i+1}: {module_title}\n{module_desc}\n\n"
+
+        # 1. Generate search query for topic resources (using Google LLM)
         prompt = ChatPromptTemplate.from_template(TOPIC_RESOURCE_QUERY_GENERATION_PROMPT)
-        
-        logger.info(f"Generating resource search query for topic: {state['user_topic']}")
+        logger.info(f"Generating resource search query for topic: {escaped_topic}")
         if progress_callback:
-            await progress_callback(
-                f"Analyzing topic to find optimal resource search query...",
-                phase="topic_resources",
-                phase_progress=0.2,
-                overall_progress=0.46,
-                action="processing"
-            )
-        
-        escaped_topic = escape_curly_braces(state["user_topic"])
-        
+            await progress_callback("Analyzing topic to find optimal resource search query...", phase="topic_resources", phase_progress=0.2, overall_progress=0.46, action="processing")
+
         query_result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider")), resource_query_parser, {
             "user_topic": escaped_topic,
             "learning_path_context": learning_path_context,
@@ -165,233 +105,195 @@ async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
             "search_language": search_language,
             "format_instructions": resource_query_parser.get_format_instructions()
         })
-        
-        resource_query = query_result
-        
+        resource_query = query_result # ResourceQuery object
+
         # Update progress
         if progress_callback:
+            await progress_callback(f"Searching & scraping for high-quality resources on {escaped_topic}...", phase="topic_resources", phase_progress=0.4, overall_progress=0.47, action="processing")
+
+        # 2. Execute search and scrape using the new service
+        tavily_key_provider = state.get("tavily_key_provider")
+        if not tavily_key_provider:
+             raise ValueError("Tavily key provider not found in state for topic resource search.")
+
+        scrape_timeout = int(os.environ.get("SCRAPE_TIMEOUT", 10))
+        max_results_per_query = int(os.environ.get("SEARCH_MAX_RESULTS", 5))
+
+        # Set operation name for tracking
+        provider = tavily_key_provider.set_operation("topic_resource_search")
+        search_service_result = await perform_search_and_scrape(
+            resource_query.query,
+            provider,
+            max_results=max_results_per_query,
+            scrape_timeout=scrape_timeout
+        )
+
+        # Check for search provider errors
+        if search_service_result.search_provider_error:
+            raise Exception(f"Search provider error: {search_service_result.search_provider_error}")
+
+        # Log scraping success/failure summary
+        scrape_errors = [r.scrape_error for r in search_service_result.results if r.scrape_error]
+        successful_scrapes = len(search_service_result.results) - len(scrape_errors)
+        logger.info(f"Scraping completed for topic resources query '{resource_query.query}'. Successful: {successful_scrapes}/{len(search_service_result.results)}.")
+        if scrape_errors:
+            logger.warning(f"Scraping errors encountered: {scrape_errors[:3]}...") # Log first few errors
+
+        # Update progress
+        if progress_callback:
+            await progress_callback("Processing search results into curated resources...", phase="topic_resources", phase_progress=0.6, overall_progress=0.48, action="processing")
+
+        # 3. Extract and format resources from scraped content (using Google LLM)
+        resource_extractor_prompt = ChatPromptTemplate.from_template(RESOURCE_EXTRACTION_PROMPT)
+        additional_context = f"This is the top-level topic of the learning path. Resources should provide comprehensive coverage of {escaped_topic}."
+
+        # Prepare context from scraped results
+        scraped_context_parts = []
+        max_context_per_query_llm = 5 # Limit results used for LLM context
+        max_chars_per_result_llm = 4000 # Limit chars per result for LLM context
+        results_included_llm = 0
+        for res in search_service_result.results:
+             if results_included_llm >= max_context_per_query_llm:
+                 break
+             title = escape_curly_braces(res.title or 'N/A')
+             url = res.url
+             scraped_context_parts.append(f"### Source: {url} (Title: {title})")
+             if res.scraped_content:
+                 content = escape_curly_braces(res.scraped_content)
+                 truncated_content = content[:max_chars_per_result_llm]
+                 if len(content) > max_chars_per_result_llm:
+                      truncated_content += "... (truncated)"
+                 scraped_context_parts.append(f"Content Snippet:\n{truncated_content}")
+                 results_included_llm += 1
+             elif res.tavily_snippet: # Fallback to snippet
+                 snippet = escape_curly_braces(res.tavily_snippet)
+                 error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
+                 scraped_context_parts.append(f"Tavily Snippet:{error_info}\n{snippet}")
+                 results_included_llm += 1
+             else:
+                 error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
+                 scraped_context_parts.append(f"Content: Not available.{error_info}")
+                 # Don't increment results_included_llm if no content/snippet
+             scraped_context_parts.append("---")
+        search_results_context_for_llm = "\n".join(scraped_context_parts)
+        # Provide URLs as separate context in case LLM needs them
+        source_urls_for_llm = [res.url for res in search_service_result.results[:max_context_per_query_llm]]
+
+
+        extraction_result = await run_chain(
+            resource_extractor_prompt,
+            lambda: get_llm(key_provider=state.get("google_key_provider")),
+            resource_list_parser,
+            {
+                "search_query": resource_query.query,
+                "target_level": "topic",
+                "user_topic": escaped_topic,
+                "additional_context": additional_context,
+                # Use the processed scraped content/snippets as primary context
+                "search_results": search_results_context_for_llm,
+                # Provide URLs separately for potential reference by the LLM
+                "search_citations": source_urls_for_llm,
+                "resource_count": 6,  # Number of desired resources
+                "format_instructions": resource_list_parser.get_format_instructions()
+            }
+        )
+
+        topic_resources = extraction_result.resources
+        logger.info(f"Generated {len(topic_resources)} topic-level resources")
+
+        # Update progress with completion message
+        if progress_callback:
+            preview_data = {
+                "resource_count": len(topic_resources),
+                "resource_types": [resource.type for resource in topic_resources]
+            }
             await progress_callback(
-                f"Searching for high-quality resources on {state['user_topic']}...",
+                f"Generated {len(topic_resources)} high-quality resources for {escaped_topic}",
                 phase="topic_resources",
-                phase_progress=0.4,
-                overall_progress=0.47,
-                action="processing"
+                phase_progress=1.0,
+                overall_progress=0.49, # Keep overall progress estimate
+                preview_data=preview_data,
+                action="completed"
             )
-        
-        # 2. Execute search for topic resources
-        try:
-            # Get the Perplexity key provider from state
-            pplx_key_provider = state.get("pplx_key_provider")
-            search_model = await get_search_tool(key_provider=pplx_key_provider)
-            
-            logger.info(f"Executing search for topic resources with query: {resource_query.query}")
-            
-            # Add a system message to request citation links
-            system_message = """
-            Additional Rules:
-            - Always print the full URL instead of just the Citation Number
-            - Include a List of References with the full URL in your answer
-            - Always cite the sources of your web search
-            """
-            
-            # Execute search with system message
-            try:
-                search_results = await search_model.ainvoke([
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": resource_query.query}
-                ])
-            except Exception as e:
-                logger.warning(f"Error using system message approach: {str(e)}. Falling back to standard query.")
-                search_results = await search_model.ainvoke(resource_query.query)
-            
-            # Extract citation links using three approaches in order of preference:
-            
-            # 1. Try to get citations from additional_kwargs if present
-            citation_links = []
-            if hasattr(search_results, 'additional_kwargs'):
-                citations = search_results.additional_kwargs.get('citations', [])
-                if citations:
-                    logger.info(f"Found {len(citations)} citations in additional_kwargs")
-                    citation_links.extend(citations)
-            
-            # 2. If no citations found in additional_kwargs, extract from content
-            if not citation_links:
-                content_citations = extract_citations_from_content(search_results.content)
-                logger.info(f"Extracted {len(content_citations)} citation links from content")
-                citation_links.extend(content_citations)
-            
-            # Format the search results for processing
-            formatted_results = [
-                {
-                    "source": f"Perplexity Search Result for '{resource_query.query}'",
-                    "content": search_results.content,
-                    "citations": citation_links
-                }
-            ]
-            
-            # Update progress
-            if progress_callback:
-                await progress_callback(
-                    f"Processing search results into curated resources...",
-                    phase="topic_resources",
-                    phase_progress=0.6,
-                    overall_progress=0.48,
-                    action="processing"
-                )
-            
-            # 3. Extract and format resources from search results
-            resource_extractor_prompt = ChatPromptTemplate.from_template(RESOURCE_EXTRACTION_PROMPT)
-            
-            additional_context = f"This is the top-level topic of the learning path. Resources should provide comprehensive coverage of {state['user_topic']}."
-            
-            extraction_result = await run_chain(
-                resource_extractor_prompt, 
-                lambda: get_llm(key_provider=state.get("google_key_provider")), 
-                resource_list_parser, 
-                {
-                    "search_query": resource_query.query,
-                    "target_level": "topic",
-                    "user_topic": escaped_topic,
-                    "additional_context": additional_context,
-                    "search_results": search_results.content,
-                    "search_citations": citation_links,  # Add extracted citations
-                    "resource_count": 6,  # We want 6 resources for the topic level
-                    "format_instructions": resource_list_parser.get_format_instructions()
-                }
-            )
-            
-            topic_resources = extraction_result.resources
-            
-            # Log the results
-            logger.info(f"Generated {len(topic_resources)} topic-level resources")
-            
-            # Update progress with completion message
-            if progress_callback:
-                # Create preview data for the frontend
-                preview_data = {
-                    "resource_count": len(topic_resources),
-                    "resource_types": [resource.type for resource in topic_resources]
-                }
-                
-                await progress_callback(
-                    f"Generated {len(topic_resources)} high-quality resources for {state['user_topic']}",
-                    phase="topic_resources",
-                    phase_progress=1.0,
-                    overall_progress=0.49,
-                    preview_data=preview_data,
-                    action="completed"
-                )
-            
-            return {
-                "topic_resources": topic_resources,
-                "topic_resource_query": resource_query,
-                "topic_resource_search_results": formatted_results,
-                "steps": [f"Generated {len(topic_resources)} resources for topic: {state['user_topic']}"]
-            }
-            
-        except Exception as search_error:
-            logger.error(f"Error executing search for topic resources: {str(search_error)}")
-            if progress_callback:
-                await progress_callback(
-                    f"Error searching for topic resources: {str(search_error)}",
-                    phase="topic_resources",
-                    phase_progress=0.5,
-                    overall_progress=0.47,
-                    action="error"
-                )
-            
-            return {
-                "topic_resources": [],
-                "topic_resource_query": resource_query,
-                "topic_resource_search_results": [],
-                "steps": [f"Error searching for topic resources: {str(search_error)}"]
-            }
-            
+
+        return {
+            "topic_resources": topic_resources,
+            "topic_resource_query": resource_query,
+            # Store the detailed search/scrape result object instead of the old formatted string
+            "topic_resource_search_results": search_service_result.model_dump() if search_service_result else None,
+            "steps": state.get("steps", []) + [f"Generated {len(topic_resources)} resources for topic: {escaped_topic}"]
+        }
+
     except Exception as e:
         logger.exception(f"Error generating topic resources: {str(e)}")
         if progress_callback:
-            await progress_callback(
-                f"Error generating topic resources: {str(e)}",
-                phase="topic_resources",
-                phase_progress=0.5,
-                overall_progress=0.47,
-                action="error"
-            )
-        
+            await progress_callback(f"Error generating topic resources: {str(e)}", phase="topic_resources", phase_progress=0.5, overall_progress=0.47, action="error")
+
+        # Return partial results if available
         return {
             "topic_resources": [],
-            "steps": [f"Error generating topic resources: {str(e)}"]
+            "topic_resource_query": resource_query, # Return query if generated
+            "topic_resource_search_results": search_service_result.model_dump() if search_service_result else None, # Return search results if obtained
+            "steps": state.get("steps", []) + [f"Error generating topic resources: {str(e)}"]
         }
+
 
 async def generate_module_resources(state: LearningPathState, module_id: int, module: EnhancedModule) -> Dict[str, Any]:
     """
-    Generates resources for a specific module.
-    
-    Args:
-        state: The current LearningPathState.
-        module_id: Index of the module.
-        module: The EnhancedModule to generate resources for.
-        
-    Returns:
-        A dictionary with generated resources and related data.
+    Generates resources for a specific module using Tavily+Scraper.
     """
     logger.info(f"Generating resources for module {module_id+1}: {module.title}")
-    
+
     # Check if resource generation is enabled
     if state.get("resource_generation_enabled") is False:
         logger.info("Resource generation is disabled, skipping module resources")
         return {"resources": [], "status": "skipped"}
-    
-    # Get progress callback
+
     progress_callback = state.get('progress_callback')
     if progress_callback:
         await progress_callback(
             f"Generating resources for module: {module.title}",
             phase="module_resources",
-            phase_progress=(module_id + 0.5) / max(1, len(state.get("enhanced_modules", []))),
-            overall_progress=0.65,
+            phase_progress=(module_id + 0.1) / max(1, len(state.get("enhanced_modules", []))), # Adjusted progress slightly
+            overall_progress=0.65, # Keep estimate
             action="processing"
         )
-    
+
+    resource_query: Optional[ResourceQuery] = None
+    search_service_result: Optional[SearchServiceResult] = None
+
     try:
         # Get language information
         output_language = state.get('language', 'en')
         search_language = state.get('search_language', 'en')
-        
-        # Build learning path context
+        escaped_topic = escape_curly_braces(state["user_topic"])
+
+        # Build learning path context (same as before)
         learning_path_context = ""
         modules = state.get("enhanced_modules", [])
         for i, mod in enumerate(modules):
-            # Ensure we handle different module types
-            if hasattr(mod, 'title') and isinstance(mod.title, str):
-                # It's an object with attributes
-                indicator = " (CURRENT)" if i == module_id else ""
-                mod_title = escape_curly_braces(mod.title)
-                mod_desc = escape_curly_braces(mod.description)
-                learning_path_context += f"Module {i+1}: {mod_title}{indicator}\n{mod_desc}\n\n"
-            elif isinstance(mod, dict) and "title" in mod:
-                # It's a dictionary
-                indicator = " (CURRENT)" if i == module_id else ""
-                mod_title = escape_curly_braces(mod["title"])
-                mod_desc = escape_curly_braces(mod.get("description", "No description"))
-                learning_path_context += f"Module {i+1}: {mod_title}{indicator}\n{mod_desc}\n\n"
-            else:
-                # Fallback for any other case
-                indicator = " (CURRENT)" if i == module_id else ""
-                mod_title = escape_curly_braces(f"Module {i+1}")
-                mod_desc = escape_curly_braces("No description available")
-                learning_path_context += f"Module {i+1}: {mod_title}{indicator}\n{mod_desc}\n\n"
-        
+             indicator = " (CURRENT)" if i == module_id else ""
+             if hasattr(mod, 'title') and isinstance(mod.title, str):
+                 mod_title = escape_curly_braces(mod.title)
+                 mod_desc = escape_curly_braces(mod.description)
+             elif isinstance(mod, dict) and "title" in mod:
+                 mod_title = escape_curly_braces(mod["title"])
+                 mod_desc = escape_curly_braces(mod.get("description", "No description"))
+             else:
+                 mod_title = escape_curly_braces(f"Module {i+1}")
+                 mod_desc = escape_curly_braces("No description available")
+             learning_path_context += f"Module {i+1}: {mod_title}{indicator}\n{mod_desc}\n\n"
+
         # 1. Generate search query for module resources
         prompt = ChatPromptTemplate.from_template(MODULE_RESOURCE_QUERY_GENERATION_PROMPT)
-        
         logger.info(f"Generating resource search query for module: {module.title}")
-        
-        # Ensure we're using the correct attribute access for the module
-        escaped_topic = escape_curly_braces(state["user_topic"])
+        if progress_callback:
+             await progress_callback(f"Analyzing module '{module.title}' to find resource query...", phase="module_resources", phase_progress=(module_id + 0.2) / max(1, len(modules)), overall_progress=0.65, action="processing")
+
+
         module_title = escape_curly_braces(module.title if hasattr(module, 'title') else module.get("title", f"Module {module_id+1}"))
         module_description = escape_curly_braces(module.description if hasattr(module, 'description') else module.get("description", "No description"))
-        
+
         query_result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider")), resource_query_parser, {
             "user_topic": escaped_topic,
             "module_title": module_title,
@@ -401,156 +303,146 @@ async def generate_module_resources(state: LearningPathState, module_id: int, mo
             "search_language": search_language,
             "format_instructions": resource_query_parser.get_format_instructions()
         })
-        
         resource_query = query_result
-        
-        # 2. Execute search for module resources
-        try:
-            # Get the Perplexity key provider from state
-            pplx_key_provider = state.get("pplx_key_provider")
-            search_model = await get_search_tool(key_provider=pplx_key_provider)
-            
-            logger.info(f"Executing search for module resources with query: {resource_query.query}")
-            
-            # Add a system message to request citation links
-            system_message = """
-            Additional Rules:
-            - Always print the full URL instead of just the Citation Number
-            - Include a List of References with the full URL in your answer
-            - Always cite the sources of your web search
-            """
-            
-            # Execute search with system message
-            try:
-                search_results = await search_model.ainvoke([
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": resource_query.query}
-                ])
-            except Exception as e:
-                logger.warning(f"Error using system message approach: {str(e)}. Falling back to standard query.")
-                search_results = await search_model.ainvoke(resource_query.query)
-            
-            # Extract citation links using three approaches in order of preference:
-            
-            # 1. Try to get citations from additional_kwargs if present
-            citation_links = []
-            if hasattr(search_results, 'additional_kwargs'):
-                citations = search_results.additional_kwargs.get('citations', [])
-                if citations:
-                    logger.info(f"Found {len(citations)} citations in additional_kwargs")
-                    citation_links.extend(citations)
-            
-            # 2. If no citations found in additional_kwargs, extract from content
-            if not citation_links:
-                content_citations = extract_citations_from_content(search_results.content)
-                logger.info(f"Extracted {len(content_citations)} citation links from content")
-                citation_links.extend(content_citations)
-            
-            # Format the search results for processing
-            formatted_results = [
-                {
-                    "source": f"Perplexity Search Result for '{resource_query.query}'",
-                    "content": search_results.content,
-                    "citations": citation_links
-                }
-            ]
-            
-            # 3. Extract and format resources from search results
-            resource_extractor_prompt = ChatPromptTemplate.from_template(RESOURCE_EXTRACTION_PROMPT)
-            
-            additional_context = f"This is module {module_id+1} of the learning path focused on {module_title}. Resources should be specific to this module's content."
-            
-            extraction_result = await run_chain(
-                resource_extractor_prompt, 
-                lambda: get_llm(key_provider=state.get("google_key_provider")), 
-                resource_list_parser, 
-                {
-                    "search_query": resource_query.query,
-                    "target_level": "module",
-                    "user_topic": escaped_topic,
-                    "additional_context": additional_context,
-                    "search_results": search_results.content,
-                    "search_citations": citation_links,  # Add extracted citations
-                    "resource_count": 4,  # We want 4 resources for module level
-                    "format_instructions": resource_list_parser.get_format_instructions()
-                }
+
+        # Update progress
+        if progress_callback:
+             await progress_callback(f"Searching & scraping resources for module '{module.title}'...", phase="module_resources", phase_progress=(module_id + 0.4) / max(1, len(modules)), overall_progress=0.65, action="processing")
+
+        # 2. Execute search and scrape using the new service
+        tavily_key_provider = state.get("tavily_key_provider")
+        if not tavily_key_provider:
+             raise ValueError("Tavily key provider not found in state for module resource search.")
+
+        scrape_timeout = int(os.environ.get("SCRAPE_TIMEOUT", 10))
+        max_results_per_query = int(os.environ.get("SEARCH_MAX_RESULTS", 5))
+
+        # Set operation name for tracking
+        provider = tavily_key_provider.set_operation("module_resource_search")
+        search_service_result = await perform_search_and_scrape(
+            resource_query.query,
+            provider,
+            max_results=max_results_per_query,
+            scrape_timeout=scrape_timeout
+        )
+
+        # Check for search provider errors
+        if search_service_result.search_provider_error:
+            raise Exception(f"Search provider error: {search_service_result.search_provider_error}")
+
+        # Log scraping success/failure summary
+        scrape_errors = [r.scrape_error for r in search_service_result.results if r.scrape_error]
+        successful_scrapes = len(search_service_result.results) - len(scrape_errors)
+        logger.info(f"Scraping completed for module '{module.title}' query '{resource_query.query}'. Successful: {successful_scrapes}/{len(search_service_result.results)}.")
+        if scrape_errors:
+            logger.warning(f"Scraping errors encountered: {scrape_errors[:3]}...")
+
+
+        # Update progress
+        if progress_callback:
+            await progress_callback(f"Processing results for module '{module.title}'...", phase="module_resources", phase_progress=(module_id + 0.6) / max(1, len(modules)), overall_progress=0.66, action="processing")
+
+
+        # 3. Extract and format resources from scraped content
+        resource_extractor_prompt = ChatPromptTemplate.from_template(RESOURCE_EXTRACTION_PROMPT)
+        additional_context = f"This is module {module_id+1} of the learning path focused on {module_title}. Resources should be specific to this module's content."
+
+        # Prepare context from scraped results
+        scraped_context_parts = []
+        max_context_per_query_llm = 5 # Limit results used for LLM context
+        max_chars_per_result_llm = 4000 # Limit chars per result for LLM context
+        results_included_llm = 0
+        for res in search_service_result.results:
+             if results_included_llm >= max_context_per_query_llm:
+                 break
+             title = escape_curly_braces(res.title or 'N/A')
+             url = res.url
+             scraped_context_parts.append(f"### Source: {url} (Title: {title})")
+             if res.scraped_content:
+                 content = escape_curly_braces(res.scraped_content)
+                 truncated_content = content[:max_chars_per_result_llm]
+                 if len(content) > max_chars_per_result_llm:
+                      truncated_content += "... (truncated)"
+                 scraped_context_parts.append(f"Content Snippet:\n{truncated_content}")
+                 results_included_llm += 1
+             elif res.tavily_snippet: # Fallback to snippet
+                 snippet = escape_curly_braces(res.tavily_snippet)
+                 error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
+                 scraped_context_parts.append(f"Tavily Snippet:{error_info}\n{snippet}")
+                 results_included_llm += 1
+             else:
+                 error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
+                 scraped_context_parts.append(f"Content: Not available.{error_info}")
+             scraped_context_parts.append("---")
+        search_results_context_for_llm = "\n".join(scraped_context_parts)
+        source_urls_for_llm = [res.url for res in search_service_result.results[:max_context_per_query_llm]]
+
+        extraction_result = await run_chain(
+            resource_extractor_prompt,
+            lambda: get_llm(key_provider=state.get("google_key_provider")),
+            resource_list_parser,
+            {
+                "search_query": resource_query.query,
+                "target_level": "module",
+                "user_topic": escaped_topic,
+                "additional_context": additional_context,
+                "search_results": search_results_context_for_llm,
+                "search_citations": source_urls_for_llm,
+                "resource_count": 4,  # Desired resource count for modules
+                "format_instructions": resource_list_parser.get_format_instructions()
+            }
+        )
+
+        module_resources = extraction_result.resources
+        logger.info(f"Generated {len(module_resources)} resources for module: {module_title}")
+
+        # Update the module's resources if it's an object
+        if hasattr(module, 'resources') and isinstance(module.resources, list):
+            module.resources = module_resources
+
+        if progress_callback:
+            preview_data = {
+                "module": {"id": module_id, "title": module_title},
+                "resource_count": len(module_resources),
+                "resource_types": [resource.type for resource in module_resources]
+            }
+            await progress_callback(
+                f"Generated {len(module_resources)} resources for module: {module_title}",
+                phase="module_resources",
+                phase_progress=(module_id + 1) / max(1, len(modules)), # Mark as complete for this module
+                overall_progress=0.66, # Keep estimate
+                preview_data=preview_data,
+                action="completed" # Changed from processing
             )
-            
-            module_resources = extraction_result.resources
-            
-            # Log the results
-            logger.info(f"Generated {len(module_resources)} resources for module: {module_title}")
-            
-            # Update the module's resources if it's an object
-            if hasattr(module, 'resources') and isinstance(module.resources, list):
-                module.resources = module_resources
-            
-            # Update progress with completion message
-            if progress_callback:
-                # Create preview data for the frontend
-                preview_data = {
-                    "module": {
-                        "id": module_id,
-                        "title": module_title
-                    },
-                    "resource_count": len(module_resources),
-                    "resource_types": [resource.type for resource in module_resources]
-                }
-                
-                await progress_callback(
-                    f"Generated {len(module_resources)} resources for module: {module_title}",
-                    phase="module_resources",
-                    phase_progress=(module_id + 1) / max(1, len(state.get("enhanced_modules", []))),
-                    overall_progress=0.66,
-                    preview_data=preview_data,
-                    action="processing"
-                )
-            
-            return {
-                "module_id": module_id,
-                "resources": module_resources,
-                "resource_query": resource_query,
-                "search_results": formatted_results,
-                "status": "completed"
-            }
-            
-        except Exception as search_error:
-            logger.error(f"Error executing search for module resources: {str(search_error)}")
-            if progress_callback:
-                await progress_callback(
-                    f"Error searching for module resources: {str(search_error)}",
-                    phase="module_resources",
-                    phase_progress=(module_id + 0.5) / max(1, len(state.get("enhanced_modules", []))),
-                    overall_progress=0.65,
-                    action="error"
-                )
-            
-            return {
-                "module_id": module_id,
-                "resources": [],
-                "resource_query": resource_query,
-                "search_results": [],
-                "status": "error",
-                "error": str(search_error)
-            }
-            
+
+        return {
+            "module_id": module_id,
+            "resources": module_resources,
+            "resource_query": resource_query,
+            "search_results": search_service_result.model_dump() if search_service_result else None,
+            "status": "completed"
+        }
+
     except Exception as e:
-        logger.exception(f"Error generating module resources: {str(e)}")
+        logger.exception(f"Error generating module resources for '{module.title}': {str(e)}")
         if progress_callback:
             await progress_callback(
-                f"Error generating module resources: {str(e)}",
+                f"Error generating resources for module {module.title}: {str(e)}",
                 phase="module_resources",
                 phase_progress=(module_id + 0.5) / max(1, len(state.get("enhanced_modules", []))),
                 overall_progress=0.65,
                 action="error"
             )
-        
+
         return {
             "module_id": module_id,
             "resources": [],
+            "resource_query": resource_query,
+            "search_results": search_service_result.model_dump() if search_service_result else None,
             "status": "error",
             "error": str(e)
         }
+
 
 async def generate_submodule_resources(
     state: LearningPathState,
@@ -558,104 +450,85 @@ async def generate_submodule_resources(
     sub_id: int,
     module: EnhancedModule,
     submodule: Submodule,
-    submodule_content: str
+    submodule_content: str # Assuming content generation happens before resource finding
 ) -> Dict[str, Any]:
     """
-    Generates resources for a specific submodule.
-    
-    Args:
-        state: The current LearningPathState.
-        module_id: Index of the parent module.
-        sub_id: Index of the submodule.
-        module: The EnhancedModule instance.
-        submodule: The Submodule instance.
-        submodule_content: The content of the submodule.
-        
-    Returns:
-        A dictionary with generated resources and related data.
+    Generates resources for a specific submodule using Tavily+Scraper.
     """
     logger.info(f"Generating resources for submodule {sub_id+1} in module {module_id+1}: {submodule.title}")
-    
-    # Check if resource generation is enabled
+
     if state.get("resource_generation_enabled") is False:
         logger.info("Resource generation is disabled, skipping submodule resources")
         return {"resources": [], "status": "skipped"}
-    
-    # Get progress callback
+
     progress_callback = state.get('progress_callback')
+    # Note: Progress reporting for submodules needs careful calculation based on total submodules
+    total_submodules = sum(len(m.submodules) for m in state.get("enhanced_modules", []))
+    completed_submodules_before = sum(len(m.submodules) for i, m in enumerate(state.get("enhanced_modules", [])) if i < module_id)
+    current_submodule_index = completed_submodules_before + sub_id
+
     if progress_callback:
         await progress_callback(
             f"Generating resources for {module.title} > {submodule.title}",
             phase="submodule_resources",
-            phase_progress=0.0,
-            overall_progress=0.75,
-            action="started"
+            phase_progress=(current_submodule_index + 0.1) / max(1, total_submodules),
+            overall_progress=0.75, # Keep estimate
+            action="started" # Changed from processing
         )
-    
+
+    resource_query: Optional[ResourceQuery] = None
+    search_service_result: Optional[SearchServiceResult] = None
+
     try:
         # Get language information
         output_language = state.get('language', 'en')
         search_language = state.get('search_language', 'en')
-        
-        # Build learning path context
+        escaped_topic = escape_curly_braces(state["user_topic"])
+
+        # Build context (similar logic as before)
         learning_path_context = ""
         for i, mod in enumerate(state.get("enhanced_modules") or []):
-            indicator = " (CURRENT)" if i == module_id else ""
-            mod_title = escape_curly_braces(mod.title)
-            mod_desc = escape_curly_braces(mod.description)
-            learning_path_context += f"Module {i+1}: {mod_title}{indicator}\n{mod_desc}\n\n"
-        
-        # Build module context
+             indicator = " (CURRENT MODULE)" if i == module_id else ""
+             mod_title = escape_curly_braces(mod.title)
+             mod_desc = escape_curly_braces(mod.description)
+             learning_path_context += f"Module {i+1}: {mod_title}{indicator}\n{mod_desc}\n\n"
+
         module_title = escape_curly_braces(module.title)
-        module_desc = escape_curly_braces(module.description)
-        module_context = f"Current Module: {module_title}\nDescription: {module_desc}\nAll Submodules:\n"
-        
+        module_context = f"Current Module: {module_title}\nSubmodules:\n"
         for i, s in enumerate(module.submodules):
-            indicator = " (CURRENT)" if i == sub_id else ""
+            indicator = " (CURRENT SUBMODULE)" if i == sub_id else ""
             sub_title = escape_curly_braces(s.title)
             sub_desc = escape_curly_braces(s.description)
             module_context += f"  {i+1}. {sub_title}{indicator}\n  {sub_desc}\n"
-        
-        # Build adjacent submodules context
+
         adjacent_context = "Adjacent Submodules:\n"
         if sub_id > 0:
             prev = module.submodules[sub_id-1]
-            prev_title = escape_curly_braces(prev.title)
-            prev_desc = escape_curly_braces(prev.description)
+            prev_title = escape_curly_braces(prev.title); prev_desc = escape_curly_braces(prev.description)
             adjacent_context += f"Previous: {prev_title}\n{prev_desc}\n"
-        else:
-            adjacent_context += "No previous submodule.\n"
-        
+        else: adjacent_context += "No previous submodule.\n"
         if sub_id < len(module.submodules) - 1:
             nxt = module.submodules[sub_id+1]
-            nxt_title = escape_curly_braces(nxt.title)
-            nxt_desc = escape_curly_braces(nxt.description)
+            nxt_title = escape_curly_braces(nxt.title); nxt_desc = escape_curly_braces(nxt.description)
             adjacent_context += f"Next: {nxt_title}\n{nxt_desc}\n"
-        else:
-            adjacent_context += "No next submodule.\n"
-        
+        else: adjacent_context += "No next submodule.\n"
+
+
         # 1. Generate search query for submodule resources
         prompt = ChatPromptTemplate.from_template(SUBMODULE_RESOURCE_QUERY_GENERATION_PROMPT)
-        
         logger.info(f"Generating resource search query for submodule: {submodule.title}")
         if progress_callback:
-            await progress_callback(
-                f"Analyzing content to find optimal resources for {submodule.title}...",
-                phase="submodule_resources",
-                phase_progress=0.2,
-                overall_progress=0.76,
-                action="processing"
-            )
-        
-        escaped_topic = escape_curly_braces(state["user_topic"])
+             await progress_callback(f"Analyzing content to find optimal resources for {submodule.title}...", phase="submodule_resources", phase_progress=(current_submodule_index + 0.2) / max(1, total_submodules), overall_progress=0.76, action="processing")
+
         submodule_title = escape_curly_braces(submodule.title)
         submodule_description = escape_curly_braces(submodule.description)
-        
+
         query_result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider")), resource_query_parser, {
             "user_topic": escaped_topic,
             "module_title": module_title,
             "submodule_title": submodule_title,
             "submodule_description": submodule_description,
+            "submodule_content": escape_curly_braces(submodule_content[:2000]), # Use generated content for context, truncated
             "submodule_order": sub_id + 1,
             "submodule_count": len(module.submodules),
             "module_order": module_id + 1,
@@ -666,349 +539,263 @@ async def generate_submodule_resources(
             "search_language": search_language,
             "format_instructions": resource_query_parser.get_format_instructions()
         })
-        
         resource_query = query_result
-        
+
         # Update progress
         if progress_callback:
-            await progress_callback(
-                f"Searching for high-quality resources for {submodule.title}...",
-                phase="submodule_resources",
-                phase_progress=0.4,
-                overall_progress=0.78,
-                action="processing"
-            )
-        
-        # 2. Execute search for submodule resources
-        try:
-            # Get the Perplexity key provider from state
-            pplx_key_provider = state.get("pplx_key_provider")
-            search_model = await get_search_tool(key_provider=pplx_key_provider)
-            
-            logger.info(f"Executing search for submodule resources with query: {resource_query.query}")
-            
-            # Add a system message to request citation links
-            system_message = """
-            Additional Rules:
-            - Always print the full URL instead of just the Citation Number
-            - Include a List of References with the full URL in your answer
-            - Always cite the sources of your web search
-            """
-            
-            # Execute search with system message
-            try:
-                search_results = await search_model.ainvoke([
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": resource_query.query}
-                ])
-            except Exception as e:
-                logger.warning(f"Error using system message approach: {str(e)}. Falling back to standard query.")
-                search_results = await search_model.ainvoke(resource_query.query)
-            
-            # Extract citation links using three approaches in order of preference:
-            
-            # 1. Try to get citations from additional_kwargs if present
-            citation_links = []
-            if hasattr(search_results, 'additional_kwargs'):
-                citations = search_results.additional_kwargs.get('citations', [])
-                if citations:
-                    logger.info(f"Found {len(citations)} citations in additional_kwargs")
-                    citation_links.extend(citations)
-            
-            # 2. If no citations found in additional_kwargs, extract from content
-            if not citation_links:
-                content_citations = extract_citations_from_content(search_results.content)
-                logger.info(f"Extracted {len(content_citations)} citation links from content")
-                citation_links.extend(content_citations)
-            
-            # Format the search results for processing
-            formatted_results = [
-                {
-                    "source": f"Perplexity Search Result for '{resource_query.query}'",
-                    "content": search_results.content,
-                    "citations": citation_links
-                }
-            ]
-            
-            # Update progress
-            if progress_callback:
-                await progress_callback(
-                    f"Processing search results into curated resources...",
-                    phase="submodule_resources",
-                    phase_progress=0.6,
-                    overall_progress=0.8,
-                    action="processing"
-                )
-            
-            # 3. Extract and format resources from search results
-            resource_extractor_prompt = ChatPromptTemplate.from_template(RESOURCE_EXTRACTION_PROMPT)
-            
-            additional_context = (
-                f"This is submodule {sub_id+1} of module {module_id+1} focused specifically on {submodule.title}. "
-                f"Resources should be highly targeted to this specific submodule's content and learning objectives."
-            )
-            
-            # Use a condensed version of the submodule content as additional context
-            content_excerpt = submodule_content[:2000] + "..." if len(submodule_content) > 2000 else submodule_content
-            additional_context += f"\n\nSubmodule Content Excerpt:\n{escape_curly_braces(content_excerpt)}"
-            
-            extraction_result = await run_chain(
-                resource_extractor_prompt, 
-                lambda: get_llm(key_provider=state.get("google_key_provider")), 
-                resource_list_parser, 
-                {
-                    "search_query": resource_query.query,
-                    "target_level": "submodule",
-                    "user_topic": escaped_topic,
-                    "additional_context": additional_context,
-                    "search_results": search_results.content,
-                    "search_citations": citation_links,  # Add extracted citations
-                    "resource_count": 3,  # We want 3 resources for the submodule level
-                    "format_instructions": resource_list_parser.get_format_instructions()
-                }
-            )
-            
-            submodule_resources = extraction_result.resources
-            
-            # Log the results
-            logger.info(f"Generated {len(submodule_resources)} resources for submodule: {submodule.title}")
-            
-            # Update progress with completion message
-            if progress_callback:
-                # Create preview data for the frontend
-                preview_data = {
-                    "module": {
-                        "id": module_id,
-                        "title": module.title
-                    },
-                    "submodule": {
-                        "id": sub_id,
-                        "title": submodule.title
-                    },
-                    "resource_count": len(submodule_resources),
-                    "resource_types": [resource.type for resource in submodule_resources]
-                }
-                
-                await progress_callback(
-                    f"Generated {len(submodule_resources)} resources for {submodule.title}",
-                    phase="submodule_resources",
-                    phase_progress=1.0,
-                    overall_progress=0.82,
-                    preview_data=preview_data,
-                    action="completed"
-                )
-            
-            return {
-                "module_id": module_id,
-                "sub_id": sub_id,
-                "resources": submodule_resources,
-                "resource_query": resource_query,
-                "search_results": formatted_results,
-                "status": "completed"
-            }
-            
-        except Exception as search_error:
-            logger.error(f"Error executing search for submodule resources: {str(search_error)}")
-            if progress_callback:
-                await progress_callback(
-                    f"Error searching for submodule resources: {str(search_error)}",
-                    phase="submodule_resources",
-                    phase_progress=0.5,
-                    overall_progress=0.79,
-                    action="error"
-                )
-            
-            return {
-                "module_id": module_id,
-                "sub_id": sub_id,
-                "resources": [],
-                "resource_query": resource_query,
-                "search_results": [],
-                "status": "error",
-                "error": str(search_error)
-            }
-            
-    except Exception as e:
-        logger.exception(f"Error generating submodule resources: {str(e)}")
+            await progress_callback(f"Searching & scraping resources for {submodule.title}...", phase="submodule_resources", phase_progress=(current_submodule_index + 0.4) / max(1, total_submodules), overall_progress=0.78, action="processing")
+
+
+        # 2. Execute search and scrape using the new service
+        tavily_key_provider = state.get("tavily_key_provider")
+        if not tavily_key_provider:
+             raise ValueError("Tavily key provider not found in state for submodule resource search.")
+
+        scrape_timeout = int(os.environ.get("SCRAPE_TIMEOUT", 10))
+        # Fewer results for submodules usually
+        max_results_per_query = int(os.environ.get("SEARCH_MAX_RESULTS_SUBMODULE", 3))
+
+        # Set operation name for tracking
+        provider = tavily_key_provider.set_operation("submodule_resource_search")
+        search_service_result = await perform_search_and_scrape(
+            resource_query.query,
+            provider,
+            max_results=max_results_per_query,
+            scrape_timeout=scrape_timeout
+        )
+
+        # Check for search provider errors
+        if search_service_result.search_provider_error:
+            raise Exception(f"Search provider error: {search_service_result.search_provider_error}")
+
+        # Log scraping success/failure summary
+        scrape_errors = [r.scrape_error for r in search_service_result.results if r.scrape_error]
+        successful_scrapes = len(search_service_result.results) - len(scrape_errors)
+        logger.info(f"Scraping completed for submodule '{submodule.title}' query '{resource_query.query}'. Successful: {successful_scrapes}/{len(search_service_result.results)}.")
+        if scrape_errors:
+            logger.warning(f"Scraping errors encountered: {scrape_errors[:3]}...")
+
+
+        # Update progress
         if progress_callback:
+            await progress_callback(f"Processing results for {submodule.title}...", phase="submodule_resources", phase_progress=(current_submodule_index + 0.6) / max(1, total_submodules), overall_progress=0.8, action="processing")
+
+
+        # 3. Extract and format resources from scraped content
+        resource_extractor_prompt = ChatPromptTemplate.from_template(RESOURCE_EXTRACTION_PROMPT)
+        additional_context = (
+            f"This is submodule {sub_id+1} ('{submodule.title}') of module {module_id+1} ('{module_title}'). "
+            f"Resources should be highly targeted to this specific submodule's content and learning objectives. "
+            f"Submodule Content Summary:\n{submodule_content[:500]}..." # Include summary of content
+        )
+
+        # Prepare context from scraped results
+        scraped_context_parts = []
+        max_context_per_query_llm = 3 # Limit results used for LLM context
+        max_chars_per_result_llm = 3000 # Limit chars per result for LLM context
+        results_included_llm = 0
+        for res in search_service_result.results:
+             if results_included_llm >= max_context_per_query_llm:
+                 break
+             title = escape_curly_braces(res.title or 'N/A')
+             url = res.url
+             scraped_context_parts.append(f"### Source: {url} (Title: {title})")
+             if res.scraped_content:
+                 content = escape_curly_braces(res.scraped_content)
+                 truncated_content = content[:max_chars_per_result_llm]
+                 if len(content) > max_chars_per_result_llm:
+                      truncated_content += "... (truncated)"
+                 scraped_context_parts.append(f"Content Snippet:\n{truncated_content}")
+                 results_included_llm += 1
+             elif res.tavily_snippet: # Fallback to snippet
+                 snippet = escape_curly_braces(res.tavily_snippet)
+                 error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
+                 scraped_context_parts.append(f"Tavily Snippet:{error_info}\n{snippet}")
+                 results_included_llm += 1
+             else:
+                 error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
+                 scraped_context_parts.append(f"Content: Not available.{error_info}")
+             scraped_context_parts.append("---")
+        search_results_context_for_llm = "\n".join(scraped_context_parts)
+        source_urls_for_llm = [res.url for res in search_service_result.results[:max_context_per_query_llm]]
+
+
+        extraction_result = await run_chain(
+            resource_extractor_prompt,
+            lambda: get_llm(key_provider=state.get("google_key_provider")),
+            resource_list_parser,
+            {
+                "search_query": resource_query.query,
+                "target_level": "submodule",
+                "user_topic": escaped_topic,
+                "additional_context": additional_context,
+                "search_results": search_results_context_for_llm,
+                "search_citations": source_urls_for_llm,
+                "resource_count": 3,  # Desired resource count for submodules
+                "format_instructions": resource_list_parser.get_format_instructions()
+            }
+        )
+
+        submodule_resources = extraction_result.resources
+        logger.info(f"Generated {len(submodule_resources)} resources for submodule: {submodule_title}")
+
+        # Update the submodule's resources
+        submodule.resources = submodule_resources
+
+        # Update progress
+        if progress_callback:
+            preview_data = {
+                 "module": {"id": module_id, "title": module_title},
+                 "submodule": {"id": sub_id, "title": submodule_title},
+                 "resource_count": len(submodule_resources),
+                 "resource_types": [resource.type for resource in submodule_resources]
+             }
             await progress_callback(
-                f"Error generating submodule resources: {str(e)}",
-                phase="submodule_resources",
-                phase_progress=0.5,
-                overall_progress=0.78,
-                action="error"
-            )
-        
+                 f"Generated {len(submodule_resources)} resources for {submodule_title}",
+                 phase="submodule_resources",
+                 phase_progress=(current_submodule_index + 1) / max(1, total_submodules),
+                 overall_progress=0.8, # Keep estimate
+                 preview_data=preview_data,
+                 action="completed"
+             )
+
         return {
             "module_id": module_id,
-            "sub_id": sub_id,
+            "submodule_id": sub_id,
+            "resources": submodule_resources,
+            "resource_query": resource_query,
+            "search_results": search_service_result.model_dump() if search_service_result else None,
+            "status": "completed"
+        }
+
+    except Exception as e:
+        logger.exception(f"Error generating submodule resources for '{submodule.title}': {str(e)}")
+        if progress_callback:
+             await progress_callback(
+                 f"Error generating resources for {submodule.title}: {str(e)}",
+                 phase="submodule_resources",
+                 phase_progress=(current_submodule_index + 0.5) / max(1, total_submodules),
+                 overall_progress=0.78,
+                 action="error"
+             )
+
+        return {
+            "module_id": module_id,
+            "submodule_id": sub_id,
             "resources": [],
+            "resource_query": resource_query,
+            "search_results": search_service_result.model_dump() if search_service_result else None,
             "status": "error",
             "error": str(e)
         }
 
+# Functions to manage the resource generation process within the graph
+
 async def initialize_resource_generation(state: LearningPathState) -> Dict[str, Any]:
     """
-    Initializes resource generation by setting up tracking variables and defaults.
-    
-    Args:
-        state: The current LearningPathState.
-        
-    Returns:
-        Updated state with resource generation tracking variables.
+    Initializes tracking for resource generation across modules and submodules.
     """
-    logger.info("Initializing resource generation")
-    
-    # Default to enabling resource generation unless explicitly disabled
-    resource_generation_enabled = state.get("resource_generation_enabled", True)
-    
-    # Get progress callback
-    progress_callback = state.get('progress_callback')
-    if progress_callback:
-        await progress_callback(
-            "Preparing to generate additional learning resources...",
-            phase="resources_init",
-            phase_progress=0.0,
-            overall_progress=0.4,
-            action="started"
-        )
-    
-    if not resource_generation_enabled:
-        logger.info("Resource generation is disabled by user configuration")
-        if progress_callback:
-            await progress_callback(
-                "Resource generation has been disabled in the settings",
-                phase="resources_init",
-                phase_progress=1.0,
-                overall_progress=0.4,
-                action="skipped"
-            )
-        
+    logger.info("Initializing resource generation tracking.")
+    if state.get("resource_generation_enabled") is False:
+        logger.info("Resource generation is disabled globally.")
         return {
-            "resource_generation_enabled": False,
-            "topic_resources": [],
             "module_resources_in_process": {},
             "submodule_resources_in_process": {},
-            "steps": ["Resource generation is disabled"]
+            "topic_resources": [], # Ensure initialized
+            "steps": state.get("steps", []) + ["Resource generation disabled"]
         }
-    
-    # Initialize tracking dictionaries
-    module_resources_in_process = {}
+
+    module_count = len(state.get("enhanced_modules", []))
+    module_resources_in_process = {mod_id: {"status": "pending"} for mod_id in range(module_count)}
+
     submodule_resources_in_process = {}
-    
-    if progress_callback:
-        await progress_callback(
-            "Resource generation initialized and ready to begin",
-            phase="resources_init",
-            phase_progress=1.0,
-            overall_progress=0.4,
-            action="completed"
-        )
-    
+    for mod_id, module in enumerate(state.get("enhanced_modules", [])):
+        for sub_id, _ in enumerate(module.submodules):
+            submodule_key = f"{mod_id}_{sub_id}"
+            submodule_resources_in_process[submodule_key] = {"status": "pending"}
+
     return {
-        "resource_generation_enabled": True,
-        "topic_resources": [],
         "module_resources_in_process": module_resources_in_process,
         "submodule_resources_in_process": submodule_resources_in_process,
-        "steps": ["Initialized resource generation"]
+        "topic_resources": [], # Ensure initialized
+        "steps": state.get("steps", []) + ["Initialized resource generation tracking"]
     }
+
 
 async def process_module_resources(state: LearningPathState) -> Dict[str, Any]:
     """
-    Processes resource generation for all modules in parallel.
-    
-    Args:
-        state: The current LearningPathState with enhanced_modules.
-        
-    Returns:
-        Updated state with module resources.
+    Generates resources for all modules concurrently.
+    This node runs AFTER submodules are processed.
     """
-    logger.info("Processing resources for all modules")
-    
-    # Check if resource generation is enabled
+    logger.info("Starting concurrent generation of resources for all modules.")
     if state.get("resource_generation_enabled") is False:
-        logger.info("Resource generation is disabled, skipping module resources")
-        return {"steps": ["Resource generation is disabled"]}
-    
-    # Get enhanced modules
-    enhanced_modules = state.get("enhanced_modules")
-    if not enhanced_modules:
-        logger.warning("No enhanced modules available for resource generation")
-        return {"steps": ["No modules available for resource generation"]}
-    
-    # Get parallelism configuration
-    parallel_count = state.get("parallel_count", 2)
-    
-    # Get progress callback
-    progress_callback = state.get('progress_callback')
-    if progress_callback:
-        await progress_callback(
-            f"Generating resources for {len(enhanced_modules)} modules with parallelism of {parallel_count}",
-            phase="module_resources",
-            phase_progress=0.0,
-            overall_progress=0.6,
-            action="started"
-        )
-    
-    # Create semaphore to control concurrency
-    sem = asyncio.Semaphore(parallel_count)
-    
-    # Helper function to process module resources with semaphore
-    async def process_module_resources_bounded(module_id, module):
-        async with sem:  # Limits concurrency
-            return await generate_module_resources(state, module_id, module)
-    
-    # Create tasks for all modules
-    tasks = [process_module_resources_bounded(idx, module) 
-             for idx, module in enumerate(enhanced_modules)]
-    
-    # Execute tasks in parallel and collect results
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    
-    # Process results and update modules with resources
+        logger.info("Resource generation is disabled, skipping module resource processing.")
+        # Update status for all modules
+        module_resources_in_process = state.get("module_resources_in_process", {})
+        for mod_id in module_resources_in_process:
+             module_resources_in_process[mod_id]["status"] = "skipped"
+        return {"module_resources_in_process": module_resources_in_process}
+
+
+    modules: List[EnhancedModule] = state.get("enhanced_modules", [])
+    if not modules:
+        logger.warning("No enhanced modules found in state to generate resources for.")
+        return {}
+
+    tasks = []
     module_resources_in_process = state.get("module_resources_in_process", {})
-    
+
+    # Create tasks only for modules not already processed or skipped
+    for module_id, module in enumerate(modules):
+        if module_resources_in_process.get(module_id, {}).get("status") == "pending":
+             tasks.append(generate_module_resources(state, module_id, module))
+        else:
+             logger.debug(f"Skipping resource generation for module {module_id+1}, status: {module_resources_in_process.get(module_id, {}).get('status')}")
+
+
+    if not tasks:
+         logger.info("No pending modules found for resource generation.")
+         return {"module_resources_in_process": module_resources_in_process} # Return current state
+
+
+    logger.info(f"Executing resource generation for {len(tasks)} modules concurrently.")
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Update module_resources_in_process based on results
+    processed_count = 0
     for result in results:
         if isinstance(result, Exception):
-            logger.error(f"Error processing module resources: {str(result)}")
-            continue
-        
-        if isinstance(result, dict) and "module_id" in result and "status" in result:
+            logger.error(f"Error during concurrent module resource generation task: {result}")
+            # Need to find which module failed - requires more complex tracking or assumptions
+            # For now, log the error but don't update state accurately for the failed one
+        elif isinstance(result, dict) and "module_id" in result:
             module_id = result["module_id"]
-            status = result["status"]
-            
-            # Store the result in the tracking dictionary
-            module_resources_in_process[module_id] = result
-            
-            # If successful, update the module with resources
-            if status == "completed" and "resources" in result:
-                resources = result["resources"]
-                module = enhanced_modules[module_id]
-                module.resources = resources
-                
-                logger.info(f"Added {len(resources)} resources to module {module_id+1}: {module.title}")
-    
-    # Log completion
-    logger.info(f"Completed resource generation for {len(enhanced_modules)} modules")
-    
-    # Send completion update
-    if progress_callback:
-        # Count successful modules
-        completed_count = sum(1 for result in results 
-                              if isinstance(result, dict) and result.get("status") == "completed")
-        
-        await progress_callback(
-            f"Generated resources for {completed_count} out of {len(enhanced_modules)} modules",
-            phase="module_resources",
-            phase_progress=1.0,
-            overall_progress=0.7,
-            action="completed"
-        )
-    
+            module_resources_in_process[module_id] = {
+                "status": result.get("status", "error"),
+                "error": result.get("error"),
+                "resource_count": len(result.get("resources", [])),
+                "query": result.get("resource_query").query if result.get("resource_query") else None,
+                # Avoid storing full search results in state if possible
+                # "search_results": result.get("search_results")
+            }
+            if result.get("status") == "completed":
+                processed_count += 1
+        else:
+             logger.warning(f"Unexpected result type from generate_module_resources: {type(result)}")
+
+    logger.info(f"Completed processing resources for {processed_count}/{len(tasks)} pending modules.")
+
+    # Update overall state (this might be redundant if modules were updated in place)
+    # The 'enhanced_modules' list in the state should now have updated resources
+    # due to the in-place update within generate_module_resources.
+
     return {
         "module_resources_in_process": module_resources_in_process,
-        "steps": [f"Generated resources for {len(enhanced_modules)} modules"]
+        "steps": state.get("steps", []) + [f"Processed resources for {processed_count} modules"]
     }
+
+
 
 async def integrate_resources_with_submodule_processing(
     state: LearningPathState,
@@ -1016,292 +803,125 @@ async def integrate_resources_with_submodule_processing(
     sub_id: int,
     module: EnhancedModule,
     submodule: Submodule,
-    submodule_content: str,
-    original_result: Dict[str, Any]
+    submodule_content: str, # Content generated in the previous step
+    original_result: Dict[str, Any] # Result from process_single_submodule
 ) -> Dict[str, Any]:
     """
-    Integrates resource generation with submodule content processing.
-    This function is meant to be called during submodule content development.
-    
-    Args:
-        state: The current LearningPathState.
-        module_id: Index of the parent module.
-        sub_id: Index of the submodule.
-        module: The EnhancedModule instance.
-        submodule: The Submodule instance.
-        submodule_content: The content of the submodule.
-        original_result: The original result from submodule content processing.
-        
-    Returns:
-        Updated result dictionary with resources added.
+    Generates resources for a submodule and integrates them into the original result.
+
+    This function acts as a wrapper or subsequent step after submodule content
+    is generated, allowing resource generation to happen alongside or after
+    content development within the submodule processing loop.
     """
-    # Check if resource generation is enabled
+    logger.debug(f"Integrating resources for submodule {module_id+1}.{sub_id+1}: {submodule.title}")
+
+    submodule_key = f"{module_id}_{sub_id}"
+    submodule_resources_in_process = state.get("submodule_resources_in_process", {})
+
     if state.get("resource_generation_enabled") is False:
-        logger.info(f"Resource generation is disabled, skipping for submodule {module_id}.{sub_id}")
-        return original_result  # Return the original result unchanged
-    
-    logger.info(f"Integrating resources for submodule {sub_id+1} in module {module_id+1}: {submodule.title}")
-    
-    try:
-        # Generate resources for this submodule
-        resource_result = await generate_submodule_resources(
-            state, 
-            module_id, 
-            sub_id, 
-            module, 
-            submodule, 
-            submodule_content
-        )
-        
-        # Update the tracking dictionary in the state
-        submodule_resources_in_process = state.get("submodule_resources_in_process", {})
-        key = f"{module_id}:{sub_id}"
-        submodule_resources_in_process[key] = resource_result
-        state["submodule_resources_in_process"] = submodule_resources_in_process
-        
-        # Add resources to the original result
-        if resource_result.get("status") == "completed" and "resources" in resource_result:
-            original_result["resources"] = resource_result["resources"]
-            
-            # Also update the submodule itself to ensure resources are reflected in the final output
-            submodule.resources = resource_result["resources"]
-            
-            logger.info(f"Added {len(resource_result['resources'])} resources to submodule {sub_id+1}")
-        else:
-            # If resource generation failed, still return the original result
-            logger.warning(f"Resource generation for submodule {module_id}.{sub_id} did not complete successfully")
-        
-        return original_result
-    
-    except Exception as e:
-        logger.exception(f"Error integrating resources for submodule {module_id}.{sub_id}: {str(e)}")
-        # Still return the original result to ensure content is preserved even if resource generation fails
-        return original_result
+        logger.debug(f"Resource generation disabled, skipping integration for {submodule_key}")
+        submodule_resources_in_process[submodule_key] = {"status": "skipped"}
+        original_result["resources"] = [] # Ensure resources list is empty
+        original_result["resource_query"] = None
+        original_result["resource_search_results"] = None
+        return {**original_result, "submodule_resources_in_process": submodule_resources_in_process}
+
+
+    # Check if already processed
+    if submodule_resources_in_process.get(submodule_key, {}).get("status") != "pending":
+        logger.debug(f"Resource generation already processed for {submodule_key}, status: {submodule_resources_in_process.get(submodule_key, {}).get('status')}")
+        # Ensure the original result reflects the previously generated resources
+        # This assumes the 'submodule' object passed in already has the resources if completed previously
+        original_result["resources"] = submodule.resources
+        # We might not have stored query/results in state, so set to None
+        original_result["resource_query"] = None
+        original_result["resource_search_results"] = None
+        return {**original_result, "submodule_resources_in_process": submodule_resources_in_process}
+
+    # Generate resources for this submodule
+    resource_result = await generate_submodule_resources(
+        state, module_id, sub_id, module, submodule, submodule_content
+    )
+
+    # Update tracking state
+    submodule_resources_in_process[submodule_key] = {
+        "status": resource_result.get("status", "error"),
+        "error": resource_result.get("error"),
+        "resource_count": len(resource_result.get("resources", [])),
+        "query": resource_result.get("resource_query").query if resource_result.get("resource_query") else None,
+    }
+
+    # Integrate results into the original submodule processing result
+    # The 'submodule' object was updated in-place by generate_submodule_resources
+    original_result["resources"] = resource_result.get("resources", [])
+    original_result["resource_query"] = resource_result.get("resource_query")
+    original_result["resource_search_results"] = resource_result.get("search_results") # Store the SearchServiceResult dict
+
+    logger.debug(f"Finished integrating resources for submodule {module_id+1}.{sub_id+1}. Status: {resource_result.get('status')}")
+
+    # Return the combined result, including updated tracking state
+    return {**original_result, "submodule_resources_in_process": submodule_resources_in_process}
+
+
 
 async def add_resources_to_final_learning_path(state: LearningPathState) -> Dict[str, Any]:
     """
-    Adds generated resources to the final learning path structure.
-    
-    Args:
-        state: The current LearningPathState with final_learning_path and resources.
-        
-    Returns:
-        Updated state with resources added to final_learning_path.
+    Adds the generated topic resources to the final learning path structure.
+    Module/submodule resources should already be attached to their respective objects.
     """
-    logger.info("Adding resources to final learning path")
-    
-    # Check if resource generation was enabled
+    logger.info("Adding generated topic resources to the final learning path structure.")
+    final_path = state.get("final_learning_path")
+    topic_resources = state.get("topic_resources", [])
+
+    if not final_path:
+        logger.warning("Final learning path not found in state. Cannot add topic resources.")
+        return {} # Or raise error?
+
     if state.get("resource_generation_enabled") is False:
-        logger.info("Resource generation was disabled, skipping resource integration")
-        return {"steps": ["Resource generation was disabled"]}
-    
-    # Get the final learning path
-    final_learning_path = state.get("final_learning_path")
-    if not final_learning_path:
-        logger.warning("No final learning path available")
-        return {"steps": ["No final learning path available"]}
-    
-    # Get progress callback
-    progress_callback = state.get('progress_callback')
-    if progress_callback:
-        await progress_callback(
-            "Finalizing resources for learning path...",
-            phase="resources_finalize",
-            phase_progress=0.0,
-            overall_progress=0.95,
-            action="started"
-        )
-    
-    try:
-        # Get topic resources
-        topic_resources = state.get("topic_resources") or []
-        
-        # Convert topic resources to dictionary format for the final learning path
-        topic_resources_dicts = []
-        for resource in topic_resources:
-            topic_resources_dicts.append({
-                "title": resource.title,
-                "description": resource.description,
-                "url": resource.url,
-                "type": resource.type
-            })
-        
-        # Add topic resources to the final learning path
-        final_learning_path["topic_resources"] = topic_resources_dicts
-        
-        # Get module resources from the tracker
-        module_resources_in_process = state.get("module_resources_in_process") or {}
-        
-        # Process each module in the final learning path
-        if "modules" in final_learning_path:
-            modules_array = final_learning_path["modules"]
-            
-            # Check if modules_array contains dictionaries or EnhancedModule objects
-            for module_idx, module in enumerate(modules_array):
-                # Handle different module types
-                is_dict_module = isinstance(module, dict)
-                
-                # Initialize resources array if not present
-                if is_dict_module:
-                    if "resources" not in module:
-                        module["resources"] = []
-                else:
-                    # For object-style modules, we need to ensure resources is initialized
-                    # but this should be handled by the model defaults
-                    pass
-                
-                # Add module resources if available
-                if module_idx in module_resources_in_process:
-                    result = module_resources_in_process[module_idx]
-                    if result.get("status") == "completed" and "resources" in result:
-                        module_resources = []
-                        for resource in result["resources"]:
-                            resource_dict = {
-                                "title": resource.title,
-                                "description": resource.description,
-                                "url": resource.url,
-                                "type": resource.type
-                            }
-                            module_resources.append(resource_dict)
-                        
-                        # Add resources to module based on its type
-                        if is_dict_module:
-                            module["resources"] = module_resources
-                        else:
-                            # For object modules, we'd need to update the object's resources
-                            # But in final_learning_path it should be a dictionary
-                            logger.warning(f"Module {module_idx} is not a dictionary, may not store resources properly")
-                            # Try to convert the module's resources to the expected format
-                            module_resources_attr = getattr(module, "resources", [])
-                            if module_resources_attr:
-                                dict_resources = []
-                                for res in module_resources_attr:
-                                    dict_resources.append({
-                                        "title": res.title,
-                                        "description": res.description,
-                                        "url": res.url,
-                                        "type": res.type
-                                    })
-                                # Update the object's resources dictionary
-                                setattr(module, "resources", dict_resources)
-                
-                # Process submodules
-                submodule_resources_in_process = state.get("submodule_resources_in_process") or {}
-                
-                # Handle submodules based on module type
-                if is_dict_module and "submodules" in module:
-                    submodules_array = module["submodules"]
-                    for sub_idx, submodule in enumerate(submodules_array):
-                        # Initialize resources array if not present
-                        if "resources" not in submodule:
-                            submodule["resources"] = []
-                        
-                        # Add submodule resources if available
-                        key = f"{module_idx}:{sub_idx}"
-                        if key in submodule_resources_in_process:
-                            result = submodule_resources_in_process[key]
-                            if result.get("status") == "completed" and "resources" in result:
-                                sub_resources = []
-                                for resource in result["resources"]:
-                                    sub_resources.append({
-                                        "title": resource.title,
-                                        "description": resource.description,
-                                        "url": resource.url,
-                                        "type": resource.type
-                                    })
-                                submodule["resources"] = sub_resources
-                elif hasattr(module, "submodules") and module.submodules:
-                    # For object-style modules with submodules
-                    for sub_idx, submodule in enumerate(module.submodules):
-                        # Add submodule resources if available
-                        key = f"{module_idx}:{sub_idx}"
-                        if key in submodule_resources_in_process:
-                            result = submodule_resources_in_process[key]
-                            if result.get("status") == "completed" and "resources" in result:
-                                sub_resources = []
-                                for resource in result["resources"]:
-                                    sub_resources.append({
-                                        "title": resource.title,
-                                        "description": resource.description,
-                                        "url": resource.url,
-                                        "type": resource.type
-                                    })
-                                # Update object's resources
-                                submodule.resources = result["resources"]
-                                
-                                # Also update dictionary representation if it exists
-                                if isinstance(module, dict) and "submodules" in module and isinstance(module["submodules"], list) and sub_idx < len(module["submodules"]):
-                                    # Update dictionary representation
-                                    module["submodules"][sub_idx]["resources"] = sub_resources
-        
-        # Update metadata to include resource counts
-        if "metadata" not in final_learning_path:
-            final_learning_path["metadata"] = {}
-        
-        # Count the resources
-        topic_resource_count = len(topic_resources)
-        
+        logger.info("Resource generation was disabled, ensuring no resources are added.")
+        final_path["topic_resources"] = []
+        # Ensure module/submodule resources are also empty if added previously
+        if "modules" in final_path and isinstance(final_path["modules"], list):
+             for module_data in final_path["modules"]:
+                  if isinstance(module_data, dict):
+                       module_data["resources"] = []
+                       if "submodules" in module_data and isinstance(module_data["submodules"], list):
+                            for sub_data in module_data["submodules"]:
+                                 if isinstance(sub_data, dict):
+                                      sub_data["resources"] = []
+                  elif hasattr(module_data, 'resources'): # Handle object case if needed
+                       module_data.resources = []
+                       if hasattr(module_data, 'submodules'):
+                            for sub_data in module_data.submodules:
+                                 if hasattr(sub_data, 'resources'):
+                                      sub_data.resources = []
+
+    else:
+        # Add topic resources
+        final_path["topic_resources"] = topic_resources
+        logger.info(f"Added {len(topic_resources)} topic resources to the final learning path.")
+
+        # Module/Submodule resources should have been added in-place to the
+        # EnhancedModule/Submodule objects during their processing steps.
+        # We just log a confirmation here.
         module_resource_count = 0
-        for module in final_learning_path.get("modules", []):
-            if isinstance(module, dict):
-                module_resource_count += len(module.get("resources", []))
-            else:
-                module_resource_count += len(getattr(module, "resources", []))
-        
         submodule_resource_count = 0
-        for module in final_learning_path.get("modules", []):
-            if isinstance(module, dict) and "submodules" in module:
-                for submodule in module.get("submodules", []):
-                    submodule_resource_count += len(submodule.get("resources", []))
-            elif hasattr(module, "submodules"):
-                for submodule in module.submodules:
-                    submodule_resource_count += len(getattr(submodule, "resources", []))
-        
-        total_resource_count = topic_resource_count + module_resource_count + submodule_resource_count
-        
-        # Add resource counts to metadata
-        final_learning_path["metadata"]["topic_resource_count"] = topic_resource_count
-        final_learning_path["metadata"]["module_resource_count"] = module_resource_count
-        final_learning_path["metadata"]["submodule_resource_count"] = submodule_resource_count
-        final_learning_path["metadata"]["total_resource_count"] = total_resource_count
-        final_learning_path["metadata"]["has_resources"] = total_resource_count > 0
-        
-        logger.info(f"Added {total_resource_count} resources to the final learning path")
-        
-        # Update progress with completion message
-        if progress_callback:
-            await progress_callback(
-                f"Added {total_resource_count} resources to the learning path",
-                phase="resources_finalize",
-                phase_progress=1.0,
-                overall_progress=0.98,
-                preview_data={
-                    "topic_resources": topic_resource_count,
-                    "module_resources": module_resource_count,
-                    "submodule_resources": submodule_resource_count,
-                    "total_resources": total_resource_count
-                },
-                action="completed"
-            )
-        
-        return {
-            "final_learning_path": final_learning_path,
-            "steps": [f"Added {total_resource_count} resources to the final learning path"]
-        }
-    
-    except Exception as e:
-        logger.exception(f"Error adding resources to final learning path: {str(e)}")
-        
-        if progress_callback:
-            await progress_callback(
-                f"Error finalizing resources: {str(e)}",
-                phase="resources_finalize",
-                phase_progress=0.5,
-                overall_progress=0.96,
-                action="error"
-            )
-        
-        return {
-            "final_learning_path": final_learning_path,
-            "steps": [f"Error adding resources to final learning path: {str(e)}"]
-        } 
+        if "modules" in final_path and isinstance(final_path["modules"], list):
+             for module_data in final_path["modules"]:
+                  if isinstance(module_data, dict):
+                       module_resource_count += len(module_data.get("resources", []))
+                       if "submodules" in module_data and isinstance(module_data["submodules"], list):
+                            for sub_data in module_data["submodules"]:
+                                 if isinstance(sub_data, dict):
+                                      submodule_resource_count += len(sub_data.get("resources", []))
+                  elif hasattr(module_data, 'resources'): # Handle object case
+                       module_resource_count += len(module_data.resources)
+                       if hasattr(module_data, 'submodules'):
+                            for sub_data in module_data.submodules:
+                                 if hasattr(sub_data, 'resources'):
+                                      submodule_resource_count += len(sub_data.resources)
+
+        logger.info(f"Final path includes {module_resource_count} module resources and {submodule_resource_count} submodule resources (added previously).")
+
+
+    return {"final_learning_path": final_path} 

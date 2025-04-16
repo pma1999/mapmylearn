@@ -43,15 +43,15 @@ try:
     # Import the backend functionality - try both approaches
     try:
         from main import generate_learning_path
-        from services.services import validate_google_key, validate_perplexity_key
+        from services.services import validate_google_key, validate_tavily_key
         from services.key_management import ApiKeyManager
-        from services.key_provider import GoogleKeyProvider, PerplexityKeyProvider
+        from services.key_provider import GoogleKeyProvider, PerplexityKeyProvider, TavilyKeyProvider
     except ImportError:
         # If that fails, try with backend prefix (when run as a package)
         from backend.main import generate_learning_path
-        from backend.services.services import validate_google_key, validate_perplexity_key
+        from backend.services.services import validate_google_key, validate_tavily_key
         from backend.services.key_management import ApiKeyManager
-        from backend.services.key_provider import GoogleKeyProvider, PerplexityKeyProvider
+        from backend.services.key_provider import GoogleKeyProvider, PerplexityKeyProvider, TavilyKeyProvider
 except ImportError as e:
     # If all import approaches fail, log the error
     logging.error(f"Import error: {str(e)}")
@@ -291,24 +291,24 @@ class LearningPathRequest(BaseModel):
     desired_module_count: Optional[int] = None
     desired_submodule_count: Optional[int] = None
     google_key_token: Optional[str] = Field(None, description="Token for Google API key")
-    pplx_key_token: Optional[str] = Field(None, description="Token for Perplexity API key")
+    tavily_key_token: Optional[str] = Field(None, description="Token for Tavily Search API key")
     language: Optional[str] = Field("en", description="ISO language code for content generation (e.g., 'en', 'es')")
 
 class ApiKeyAuthRequest(BaseModel):
     google_api_key: Optional[str] = Field(None, description="Google API key for LLM operations")
-    pplx_api_key: Optional[str] = Field(None, description="Perplexity API key for search operations")
+    tavily_api_key: Optional[str] = Field(None, description="Tavily Search API key for search operations")
     
 class ApiKeyAuthResponse(BaseModel):
     google_key_token: Optional[str] = None
-    pplx_key_token: Optional[str] = None
+    tavily_key_token: Optional[str] = None
     google_key_valid: bool = False
-    pplx_key_valid: bool = False
+    tavily_key_valid: bool = False
     google_key_error: Optional[str] = None
-    pplx_key_error: Optional[str] = None
+    tavily_key_error: Optional[str] = None
 
 class ApiKeyValidationRequest(BaseModel):
     google_api_key: Optional[str] = None
-    pplx_api_key: Optional[str] = None
+    tavily_api_key: Optional[str] = None
 
 # Enhanced structured progress update model
 class PreviewData(BaseModel):
@@ -377,27 +377,27 @@ async def authenticate_api_keys(request: ApiKeyAuthRequest, req: Request):
             response.google_key_error = error_message
             logger.info(f"Invalid Google API key from {client_ip}: {error_message}")
     
-    # Validate and store Perplexity API key if provided
-    if request.pplx_api_key:
-        is_valid, error_message = validate_perplexity_key(request.pplx_api_key)
-        response.pplx_key_valid = is_valid
+    # Validate and store Tavily API key if provided
+    if request.tavily_api_key:
+        is_valid, error_message = validate_tavily_key(request.tavily_api_key)
+        response.tavily_key_valid = is_valid
         if is_valid:
             try:
                 # Only store the key if validation passed
-                response.pplx_key_token = key_manager.store_key(
-                    key_manager.KEY_TYPE_PERPLEXITY, 
-                    request.pplx_api_key,
+                response.tavily_key_token = key_manager.store_key(
+                    key_manager.KEY_TYPE_TAVILY, 
+                    request.tavily_api_key,
                     ip_address=client_ip
                 )
-                logger.info(f"Generated token for Perplexity API key from {client_ip}")
+                logger.info(f"Generated token for Tavily API key from {client_ip}")
             except Exception as e:
                 # In case of storage error
-                response.pplx_key_valid = False
-                response.pplx_key_error = "Error generating token: " + str(e)
-                logger.error(f"Error storing Perplexity API key: {str(e)}")
+                response.tavily_key_valid = False
+                response.tavily_key_error = "Error generating token: " + str(e)
+                logger.error(f"Error storing Tavily API key: {str(e)}")
         else:
-            response.pplx_key_error = error_message
-            logger.info(f"Invalid Perplexity API key from {client_ip}: {error_message}")
+            response.tavily_key_error = error_message
+            logger.info(f"Invalid Tavily API key from {client_ip}: {error_message}")
     
     return response
 
@@ -445,7 +445,7 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
                         transaction = CreditTransaction(
                             user_id=user.id,
                             amount=-1,  # Negative amount for usage
-                            action_type="generation_use",
+                            transaction_type="generation_use",
                             notes=f"Used 1 credit to generate learning path for topic: {request.topic}"
                         )
                         db.add(transaction)
@@ -484,8 +484,8 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
         user_id=user_id
     ).set_operation("generate_learning_path")
     
-    pplx_provider = PerplexityKeyProvider(
-        token_or_key=request.pplx_key_token,
+    tavily_provider = TavilyKeyProvider(
+        token_or_key=request.tavily_key_token,
         user_id=user_id
     ).set_operation("generate_learning_path")
     
@@ -500,7 +500,7 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
         desiredModuleCount=request.desired_module_count,
         desiredSubmoduleCount=request.desired_submodule_count,
         googleKeyProvider=google_provider,
-        pplxKeyProvider=pplx_provider,
+        tavilyKeyProvider=tavily_provider,
         progressCallback=progress_callback,
         language=request.language,
         user_id=user_id
@@ -524,7 +524,7 @@ async def generate_learning_path_task(
     submoduleParallelCount: int = 2,
     progressCallback = None,
     googleKeyProvider = None,
-    pplxKeyProvider = None,
+    tavilyKeyProvider = None,
     desiredModuleCount: Optional[int] = None,
     desiredSubmoduleCount: Optional[int] = None,
     language: str = "en",
@@ -593,8 +593,8 @@ async def generate_learning_path_task(
         if not googleKeyProvider:
             googleKeyProvider = GoogleKeyProvider()
             
-        if not pplxKeyProvider:
-            pplxKeyProvider = PerplexityKeyProvider()
+        if not tavilyKeyProvider:
+            tavilyKeyProvider = TavilyKeyProvider()
         
         await enhanced_progress_callback(
             "API keys ready. Using server-provided API keys.",
@@ -621,7 +621,7 @@ async def generate_learning_path_task(
                 submodule_parallel_count=submoduleParallelCount,
                 progress_callback=enhanced_progress_callback,
                 google_key_provider=googleKeyProvider,
-                pplx_key_provider=pplxKeyProvider,
+                tavily_key_provider=tavilyKeyProvider,
                 desired_module_count=desiredModuleCount,
                 desired_submodule_count=desiredSubmoduleCount,
                 language=language
@@ -658,7 +658,7 @@ async def generate_learning_path_task(
                         transaction = CreditTransaction(
                             user_id=user.id,
                             amount=1,  # Positive amount for refund
-                            action_type="refund",
+                            transaction_type="refund",
                             notes=f"Refunded 1 credit due to failed generation for topic: {topic}"
                         )
                         db.add(transaction)
@@ -718,7 +718,7 @@ async def generate_learning_path_task(
                     transaction = CreditTransaction(
                         user_id=user.id,
                         amount=1,  # Positive amount for refund
-                        action_type="refund",
+                        transaction_type="refund",
                         notes=f"Refunded 1 credit due to failed generation for topic: {topic}"
                     )
                     db.add(transaction)
@@ -757,7 +757,7 @@ async def generate_learning_path_task(
                     transaction = CreditTransaction(
                         user_id=user.id,
                         amount=1,  # Positive amount for refund
-                        action_type="refund",
+                        transaction_type="refund",
                         notes=f"Refunded 1 credit due to failed generation for topic: {topic}"
                     )
                     db.add(transaction)
@@ -782,9 +782,9 @@ async def validate_api_keys(request: ApiKeyValidationRequest):
     """
     response = {
         "google_key_valid": False, 
-        "pplx_key_valid": False,
+        "tavily_key_valid": False,
         "google_key_error": None,
-        "pplx_key_error": None
+        "tavily_key_error": None
     }
     
     # Validate Google API key if provided
@@ -795,13 +795,13 @@ async def validate_api_keys(request: ApiKeyValidationRequest):
             response["google_key_error"] = error_message
             logger.info(f"Google API key validation failed: {error_message}")
     
-    # Validate Perplexity API key if provided
-    if request.pplx_api_key:
-        is_valid, error_message = validate_perplexity_key(request.pplx_api_key)
-        response["pplx_key_valid"] = is_valid
+    # Validate Tavily API key if provided
+    if request.tavily_api_key:
+        is_valid, error_message = validate_tavily_key(request.tavily_api_key)
+        response["tavily_key_valid"] = is_valid
         if not is_valid:
-            response["pplx_key_error"] = error_message
-            logger.info(f"Perplexity API key validation failed: {error_message}")
+            response["tavily_key_error"] = error_message
+            logger.info(f"Tavily API key validation failed: {error_message}")
     
     return response
 

@@ -87,6 +87,7 @@ class ApiKeyManager:
         # Key types
         self.KEY_TYPE_GOOGLE = "google"
         self.KEY_TYPE_PERPLEXITY = "perplexity"
+        self.KEY_TYPE_TAVILY = "tavily"
         
         logger.info("API Key Manager initialized")
 
@@ -128,7 +129,7 @@ class ApiKeyManager:
         Validate the format of an API key using regex patterns.
         
         Args:
-            key_type: Type of key ('google' or 'perplexity')
+            key_type: Type of key ('google', 'perplexity', 'tavily')
             key_value: The API key to validate
             
         Returns:
@@ -144,9 +145,15 @@ class ApiKeyManager:
         
         elif key_type == self.KEY_TYPE_PERPLEXITY:
             # Perplexity API keys start with 'pplx-' followed by alphanumeric characters
+            # Kept for potential legacy validation if needed
             pattern = r'^pplx-[0-9A-Za-z]{32,}$'
             return bool(re.match(pattern, key_value))
-            
+        
+        elif key_type == self.KEY_TYPE_TAVILY:
+            # Tavily API keys start with 'tvly-' followed by alphanumeric chars/hyphens
+            pattern = r'^tvly-[0-9A-Za-z-]+$'
+            return bool(re.match(pattern, key_value))
+        
         return False
     
     def store_key(self, key_type: str, key_value: str, ip_address: Optional[str] = None) -> str:
@@ -154,7 +161,7 @@ class ApiKeyManager:
         Securely store an API key and return a token for future access.
         
         Args:
-            key_type: Type of key ('google' or 'perplexity')
+            key_type: Type of key ('google', 'perplexity', 'tavily')
             key_value: The API key to store
             ip_address: Optional IP address for additional security
             
@@ -311,26 +318,34 @@ class ApiKeyManager:
         Get an API key from environment variables.
         
         Args:
-            key_type: Type of key ('google' or 'perplexity')
+            key_type: Type of key ('google', 'perplexity', 'tavily')
             
         Returns:
             Optional[str]: The API key if found and valid, None otherwise
         """
+        env_var_name = None
         if key_type == self.KEY_TYPE_GOOGLE:
-            key = os.environ.get("GOOGLE_API_KEY")
+            env_var_name = "GOOGLE_API_KEY"
         elif key_type == self.KEY_TYPE_PERPLEXITY:
-            key = os.environ.get("PPLX_API_KEY")
+            # Kept for potential legacy checks if needed
+            env_var_name = "PPLX_API_KEY"
+        elif key_type == self.KEY_TYPE_TAVILY:
+            env_var_name = "TAVILY_API_KEY"
         else:
-            logger.warning(f"Unknown key type: {key_type}")
+            logger.warning(f"Unknown key type for env check: {key_type}")
             return None
-        
+
+        key = os.environ.get(env_var_name)
+
         if key and self.validate_key_format(key_type, key):
-            logger.debug(f"Retrieved {key_type} API key from environment variables")
+            logger.debug(f"Retrieved {key_type} API key from environment variable {env_var_name}")
             return key
-        
+
         if key:
-            logger.warning(f"Invalid {key_type} API key format in environment variables")
+            logger.warning(f"Invalid {key_type} API key format found in environment variable {env_var_name}")
         else:
-            logger.warning(f"No {key_type} API key found in environment variables")
-        
+            # Log slightly differently if the env var wasn't set vs invalid format
+            # logger.debug(f"No {key_type} API key found in environment variable {env_var_name}") # Lower severity
+            pass # Avoid log spam if env var is simply not set
+
         return None 

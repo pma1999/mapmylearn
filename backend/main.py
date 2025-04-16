@@ -18,7 +18,7 @@ load_dotenv(dotenv_path=env_path)
 from backend.core.graph_builder import build_graph
 from backend.models.models import LearningPathState
 from backend.config.log_config import setup_logging, log_debug_data, log_info_data, get_log_level
-from backend.services.key_provider import KeyProvider, GoogleKeyProvider, PerplexityKeyProvider
+from backend.services.key_provider import KeyProvider, GoogleKeyProvider, PerplexityKeyProvider, TavilyKeyProvider
 # Importa el decorador traceable de LangSmith
 from langsmith import traceable
 
@@ -119,7 +119,7 @@ async def generate_learning_path(
     submodule_parallel_count: int = 2,
     progress_callback = None,
     google_key_provider: Optional[GoogleKeyProvider] = None,
-    pplx_key_provider: Optional[PerplexityKeyProvider] = None,
+    tavily_key_provider: Optional[TavilyKeyProvider] = None,
     desired_module_count: Optional[int] = None,
     desired_submodule_count: Optional[int] = None,
     language: str = "en"
@@ -134,7 +134,7 @@ async def generate_learning_path(
         submodule_parallel_count: Number of submodules to process in parallel
         progress_callback: Callback function for progress updates
         google_key_provider: Provider for Google API key
-        pplx_key_provider: Provider for Perplexity API key
+        tavily_key_provider: Provider for Tavily API key
         desired_module_count: Desired number of modules
         desired_submodule_count: Desired number of submodules per module
         language: ISO language code for content generation (e.g., 'en', 'es')
@@ -153,11 +153,12 @@ async def generate_learning_path(
     else:
         logger.info("Using provided Google key provider")
         
-    if not pplx_key_provider:
-        pplx_key_provider = PerplexityKeyProvider()
-        logger.info("Using default Perplexity key provider (from environment)")
+    # Use Tavily provider
+    if not tavily_key_provider:
+        tavily_key_provider = TavilyKeyProvider()
+        logger.info("Using default Tavily key provider (from environment)")
     else:
-        logger.info("Using provided Perplexity key provider")
+        logger.info("Using provided Tavily key provider")
     
     # Initialize with English as the search language by default
     search_language = "en"
@@ -173,7 +174,7 @@ async def generate_learning_path(
     initial_state: LearningPathState = {
         "user_topic": topic,
         "google_key_provider": google_key_provider,
-        "pplx_key_provider": pplx_key_provider,
+        "tavily_key_provider": tavily_key_provider,
         "search_parallel_count": search_parallel_count,
         "parallel_count": parallel_count,
         "submodule_parallel_count": submodule_parallel_count,
@@ -201,7 +202,7 @@ def build_learning_path(
     submodule_parallel_count: int = 2,
     progress_callback = None,
     google_key_token: Optional[str] = None,
-    pplx_key_token: Optional[str] = None,
+    tavily_key_token: Optional[str] = None,
     desired_module_count: Optional[int] = None,
     desired_submodule_count: Optional[int] = None,
     language: str = "en"
@@ -216,7 +217,7 @@ def build_learning_path(
         submodule_parallel_count: Number of submodules to process in parallel
         progress_callback: Optional callback for reporting progress
         google_key_token: Optional token for Google API key
-        pplx_key_token: Optional token for Perplexity API key 
+        tavily_key_token: Optional token for Tavily API key 
         desired_module_count: Optional desired number of modules
         desired_submodule_count: Optional desired number of submodules per module
         language: ISO language code for content generation (e.g., 'en', 'es')
@@ -230,7 +231,7 @@ def build_learning_path(
     
     # Create key providers
     google_provider = GoogleKeyProvider(google_key_token)
-    pplx_provider = PerplexityKeyProvider(pplx_key_token)
+    tavily_provider = TavilyKeyProvider(tavily_key_token)
     
     # Run async version
     result = asyncio.run(generate_learning_path(
@@ -240,7 +241,7 @@ def build_learning_path(
         submodule_parallel_count=submodule_parallel_count,
         progress_callback=progress_callback,
         google_key_provider=google_provider,
-        pplx_key_provider=pplx_provider,
+        tavily_key_provider=tavily_provider,
         desired_module_count=desired_module_count,
         desired_submodule_count=desired_submodule_count,
         language=language
@@ -256,7 +257,7 @@ if __name__ == "__main__":
     parser.add_argument("--search-parallel", type=int, default=3, help="Number of search queries to execute in parallel")
     parser.add_argument("--submodule-parallel", type=int, default=2, help="Number of submodules to process in parallel")
     parser.add_argument("--google-key-token", type=str, help="Google API key token")
-    parser.add_argument("--pplx-key-token", type=str, help="Perplexity API key token")
+    parser.add_argument("--tavily-key-token", type=str, help="Tavily Search API key token")
     parser.add_argument("--modules", type=int, help="Desired number of modules")
     parser.add_argument("--submodules", type=int, help="Desired number of submodules per module")
     parser.add_argument("--language", type=str, default="en", help="ISO language code for content generation (e.g., 'en', 'es')")
@@ -268,7 +269,7 @@ if __name__ == "__main__":
         search_parallel_count=args.search_parallel,
         submodule_parallel_count=args.submodule_parallel,
         google_key_token=args.google_key_token,
-        pplx_key_token=args.pplx_key_token,
+        tavily_key_token=args.tavily_key_token,
         desired_module_count=args.modules,
         desired_submodule_count=args.submodules,
         language=args.language

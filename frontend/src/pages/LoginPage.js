@@ -20,7 +20,7 @@ import { useAuth } from '../services/authContext';
 const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, error, loading, isAuthenticated, checkPendingMigration, resendVerificationEmail } = useAuth();
+  const { login, error, loading, isAuthenticated, resendVerificationEmail } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -48,15 +48,20 @@ const LoginPage = () => {
   // Redirect to generator page if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      const pendingMigration = checkPendingMigration();
-      if (pendingMigration) {
-        navigate('/migrate');
-      } else {
-        // Navigate to the page they were trying to access, or default to generator
-        navigate(from);
-      }
+      // Check for pending migration before navigating
+      // const pendingMigration = checkPendingMigration(); // Removed call
+      // console.log("Pending Migration Check on Login:", pendingMigration);
+      // if (pendingMigration) {
+      //   // Optional: Show a message or redirect to a migration status page
+      //   console.log("Pending migration detected, handling...");
+      //   // Example: navigate('/migration-status'); 
+      //   // For now, just navigate to dashboard after check
+      // }
+      
+      // Navigate to the intended destination or dashboard
+      navigate(from, { replace: true });
     }
-  }, [isAuthenticated, navigate, checkPendingMigration, from]);
+  }, [isAuthenticated, navigate, from]); // Removed checkPendingMigration from dependencies
 
   const handleSubmit = async (e) => {
     e.preventDefault();

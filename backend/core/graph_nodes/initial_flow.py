@@ -1,59 +1,16 @@
 import asyncio
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List
 from datetime import datetime
 from langchain_core.messages import HumanMessage
+import os
 
-from backend.models.models import SearchQuery, LearningPathState
+from backend.models.models import SearchQuery, LearningPathState, SearchServiceResult, ScrapedResult
 from backend.parsers.parsers import search_queries_parser, enhanced_modules_parser
-from backend.services.services import get_llm, get_search_tool
+from backend.services.services import get_llm, perform_search_and_scrape
 from langchain_core.prompts import ChatPromptTemplate
 
 from backend.core.graph_nodes.helpers import run_chain, batch_items, format_search_results, escape_curly_braces
-
-async def execute_single_search(query: SearchQuery, key_provider = None) -> Dict[str, Any]:
-    """
-    Executes a single web search using the Perplexity LLM.
-    
-    Args:
-        query: A SearchQuery instance with keywords and rationale.
-        key_provider: Optional key provider for Perplexity search.
-        
-    Returns:
-        A dictionary with the query, rationale, and search results.
-    """
-    try:
-        # Properly await the async function
-        search_model = await get_search_tool(key_provider=key_provider)
-        logging.info(f"Searching for: {query.keywords}")
-        
-        # Create a prompt that asks for web search results
-        search_prompt = f"{query.keywords}"
-        
-        # Invoke the Perplexity model with the search prompt as a string
-        # Use ainvoke instead of invoke to properly leverage async execution
-        result = await search_model.ainvoke(search_prompt)
-        
-        # Process the response into the expected format
-        formatted_result = [
-            {
-                "source": f"Perplexity Search Result for '{query.keywords}'",
-                "content": result.content
-            }
-        ]
-        
-        return {
-            "query": query.keywords,
-            "rationale": query.rationale,
-            "results": formatted_result
-        }
-    except Exception as e:
-        logging.error(f"Error searching for '{query.keywords}': {str(e)}")
-        return {
-            "query": query.keywords,
-            "rationale": query.rationale,
-            "results": [{"source": "Error", "content": f"Error performing search: {str(e)}"}]
-        }
 
 async def generate_search_queries(state: LearningPathState) -> Dict[str, Any]:
     """
@@ -205,7 +162,7 @@ Your response should be exactly 5 search queries, each with a detailed rationale
 
 async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
     """
-    Execute web searches for each search query in parallel.
+    Execute web searches using Tavily and scrape results for each search query in parallel.
     """
     if not state.get("search_queries"):
         logging.info("No search queries to execute")
@@ -214,23 +171,38 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
             "steps": state.get("steps", []) + ["No search queries to execute"]
         }
     
-    search_queries = state["search_queries"]
+    search_queries: List[SearchQuery] = state["search_queries"]
     
-    # Get the Perplexity key provider from state
-    pplx_key_provider = state.get("pplx_key_provider")
-    if not pplx_key_provider:
-        logging.warning("Perplexity key provider not found in state, this may cause errors")
+    # Get the Tavily key provider from state
+    tavily_key_provider = state.get("tavily_key_provider")
+    if not tavily_key_provider:
+        # Critical error if no key provider is found for searching
+        error_msg = "Tavily key provider not found in state. Cannot execute web searches."
+        logging.error(error_msg)
+        # Optionally send error progress update
+        progress_callback = state.get('progress_callback')
+        if progress_callback:
+             await progress_callback(error_msg, phase="web_searches", action="error")
+        # Return empty results or raise an exception depending on desired graph behavior
+        return { 
+            "search_results": [], 
+            "steps": state.get("steps", []) + [error_msg] 
+        } 
     else:
-        logging.debug("Found Perplexity key provider in state, using for web searches")
+        logging.debug("Found Tavily key provider in state, using for web searches")
     
     # Set up parallel processing based on user configuration
     search_parallel_count = state.get("search_parallel_count", 3)
-    logging.info(f"Executing {len(search_queries)} web searches with parallelism of {search_parallel_count}")
+    # Get scrape timeout from env or default
+    scrape_timeout = int(os.environ.get("SCRAPE_TIMEOUT", 10))
+    # Get max results from env or default
+    max_results_per_query = int(os.environ.get("SEARCH_MAX_RESULTS", 5))
+    
+    logging.info(f"Executing {len(search_queries)} web searches (Tavily+Scrape) with parallelism={search_parallel_count}, max_results={max_results_per_query}, scrape_timeout={scrape_timeout}")
     
     # Send progress update if callback is available
     progress_callback = state.get('progress_callback')
     if progress_callback:
-        # Enhanced progress update with phase information
         await progress_callback(
             f"Executing {len(search_queries)} web searches in parallel (max {search_parallel_count} at a time)...",
             phase="web_searches",
@@ -240,61 +212,95 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
             action="started"
         )
     
-    all_results = []
+    all_search_service_results: List[SearchServiceResult] = [] # Store results of the new type
     
     try:
-        # Create a semaphore to limit concurrency based on search_parallel_count
+        # Create a semaphore to limit concurrency
         sem = asyncio.Semaphore(search_parallel_count)
         
-        async def bounded_search(query):
-            async with sem:  # This ensures we only run search_parallel_count queries at a time
-                return await execute_single_search(query, key_provider=pplx_key_provider)
+        async def bounded_search_and_scrape(query_obj: SearchQuery):
+            async with sem:
+                # Set operation name for tracking
+                provider = tavily_key_provider.set_operation("initial_web_search")
+                # Call the new centralized service function
+                return await perform_search_and_scrape(
+                    query_obj.keywords, 
+                    provider,
+                    max_results=max_results_per_query,
+                    scrape_timeout=scrape_timeout
+                )
         
-        # Create tasks for all searches but bounded by the semaphore
-        tasks = [bounded_search(query) for query in search_queries]
+        # Create tasks for all searches
+        tasks = [bounded_search_and_scrape(query) for query in search_queries]
         
-        # Send additional progress update
         if progress_callback and len(tasks) > 0:
             await progress_callback(
-                f"Searching for information on '{search_queries[0].keywords}'...",
+                f"Searching & scraping for: '{search_queries[0].keywords}'...",
                 phase="web_searches",
                 phase_progress=0.1,
                 overall_progress=0.27,
                 action="processing"
             )
         
-        # Run all the searches in parallel with bounded concurrency
+        # Run all tasks in parallel with bounded concurrency
         completed = 0
         total = len(tasks)
         
         for i, future in enumerate(asyncio.as_completed(tasks)):
-            result = await future
-            all_results.append(result)
-            completed += 1
+            scrape_errors = [] # Initialize scrape_errors before try block
+            try:
+                # Get the result (SearchServiceResult object)
+                result: SearchServiceResult = await future
+                all_search_service_results.append(result)
+                completed += 1
+                current_query_keywords = search_queries[i].keywords # Get keywords from original list by index
+                
+                # Log search provider errors if any
+                if result.search_provider_error:
+                    logging.error(f"Search provider error for query '{current_query_keywords}': {result.search_provider_error}")
+                # Log summary of scrape errors
+                scrape_errors = [r.scrape_error for r in result.results if r.scrape_error]
+                if scrape_errors:
+                    logging.warning(f"Scraping issues for query '{current_query_keywords}': {len(scrape_errors)}/{len(result.results)} URLs failed. Errors: {scrape_errors[:2]}...") # Log first few errors
+                
+            except Exception as e:
+                # Handle potential errors from the await future itself (e.g., task cancellation)
+                query_keywords = search_queries[i].keywords
+                logging.exception(f"Error processing search task for query '{query_keywords}': {e}")
+                # Append a placeholder result indicating the task error
+                all_search_service_results.append(
+                    SearchServiceResult(
+                        query=query_keywords,
+                        results=[],
+                        search_provider_error=f"Task execution error: {type(e).__name__} - {str(e)}"
+                    )
+                )
+                # We count it as completed for progress purposes, even though it failed
+                completed += 1
             
             # Send incremental progress updates
             if progress_callback and i < len(search_queries):
                 phase_progress = min(1.0, completed / total)
-                overall_progress = 0.25 + (phase_progress * 0.15)  # web searches are 15% of overall process
+                overall_progress = 0.25 + (phase_progress * 0.15) # web searches are 15% of overall process
                 
-                # Create preview data from the first result
-                preview_data = {}
-                if result and "query" in result:
-                    preview_data = {
-                        "search_queries": [q.keywords for q in search_queries[:i+1]],
-                        "current_search": {
-                            "query": result.get("query", ""),
-                            "completed": completed,
-                            "total": total
-                        }
+                # Create preview data (show completed query)
+                preview_data = {
+                    "search_queries": [q.keywords for q in search_queries[:i+1]],
+                    "current_search": {
+                        "query": search_queries[i].keywords,
+                        "completed": completed,
+                        "total": total,
+                        # Add info about scrape success/failure?
+                        "scrape_status": f"{len(all_search_service_results[-1].results) - len(scrape_errors)}/{len(all_search_service_results[-1].results)} scraped" if all_search_service_results else "N/A"
                     }
+                }
                 
-                # Only send detailed updates for every other completion to avoid flooding
+                # Throttle detailed updates
                 if i % 2 == 0 or i == len(search_queries) - 1:
                     next_idx = min(i + 1, len(search_queries) - 1)
                     next_message = f"Completed {completed}/{total} searches. "
-                    if next_idx < len(search_queries):
-                        next_message += f"Searching for '{search_queries[next_idx].keywords}'..."
+                    if completed < total and next_idx < len(search_queries):
+                         next_message += f"Searching & scraping for '{search_queries[next_idx].keywords}'..."
                     
                     await progress_callback(
                         next_message,
@@ -305,24 +311,11 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
                         action="processing"
                     )
         
-        # Process results and handle any exceptions
-        for i, result in enumerate(all_results):
-            if isinstance(result, Exception):
-                logging.error(f"Error executing search: {str(result)}")
-                # Add a placeholder for failed searches
-                all_results[i] = {
-                    "query": search_queries[i].keywords,
-                    "rationale": search_queries[i].rationale,
-                    "results": [{"source": "Error", "content": f"Error executing search: {str(result)}"}],
-                    "error": str(result)
-                }
+        logging.info(f"Completed {len(all_search_service_results)} web searches (Tavily+Scrape)")
         
-        logging.info(f"Completed {len(all_results)} web searches in parallel")
-        
-        # Send progress update with completion information
         if progress_callback:
             await progress_callback(
-                f"Completed all {len(all_results)} web searches in parallel",
+                f"Completed all {len(all_search_service_results)} web searches",
                 phase="web_searches",
                 phase_progress=1.0,
                 overall_progress=0.4,
@@ -331,56 +324,55 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
             )
         
         return {
-            "search_results": all_results,
-            "steps": state.get("steps", []) + [f"Executed {len(all_results)} web searches in parallel"]
+            "search_results": all_search_service_results, # Return the list of SearchServiceResult objects
+            "steps": state.get("steps", []) + [f"Executed {len(all_search_service_results)} web searches (Tavily+Scrape)"]
         }
     except Exception as e:
-        logging.exception(f"Error executing web searches: {str(e)}")
-        
-        # Send error progress update
+        # Catch errors during task setup or semaphore handling
+        logging.exception(f"Error setting up or running web search tasks: {str(e)}")
         if progress_callback:
             await progress_callback(
-                f"Error executing web searches: {str(e)}",
+                f"Error during web searches setup: {str(e)}",
                 phase="web_searches",
-                phase_progress=0.5,  # partial progress
+                phase_progress=0.5,
                 overall_progress=0.3,
                 action="error"
             )
-            
         return {
-            "search_results": all_results,
-            "steps": state.get("steps", []) + [f"Error executing web searches: {str(e)}"]
+            "search_results": all_search_service_results, # Return whatever was collected
+            "steps": state.get("steps", []) + [f"Error executing web searches setup: {str(e)}"]
         }
 
 async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
     """
-    Create a structured learning path from search results.
+    Create a structured learning path from the scraped search results.
     """
-    if not state.get("search_results") or len(state["search_results"]) == 0:
-        logging.info("No search results available")
+    # Type hint for clarity
+    search_service_results: Optional[List[SearchServiceResult]] = state.get("search_results")
+
+    if not search_service_results or len(search_service_results) == 0:
+        logging.info("No search results available to create learning path")
         return {
             "modules": [],
             "final_learning_path": {
                 "topic": state["user_topic"],
                 "modules": []
             },
-            "steps": state.get("steps", []) + ["No search results available"]
+            "steps": state.get("steps", []) + ["No search results available to create learning path"]
         }
-    
-    # Get the Google key provider from state
+
+    # Get Google key provider from state
     google_key_provider = state.get("google_key_provider")
     if not google_key_provider:
-        logging.warning("Google key provider not found in state, this may cause errors")
+        logging.warning("Google key provider not found in state, using env fallback if available for LLM")
     else:
         logging.debug("Found Google key provider in state, using for learning path creation")
-    
+
     # Get language information from state
     output_language = state.get('language', 'en')
-    
-    # Send progress update if callback is available
+
     progress_callback = state.get('progress_callback')
     if progress_callback:
-        # Enhanced progress update with phase information
         await progress_callback(
             f"Creating initial learning path structure for '{state['user_topic']}'...",
             phase="modules",
@@ -388,95 +380,92 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
             overall_progress=0.4,
             action="started"
         )
-    
+
     try:
-        # Procesar los resultados de búsqueda para generar módulos
-        processed_results = []
-        for result in state["search_results"]:
-            # Escapar las llaves en la consulta
-            query = escape_curly_braces(result.get("query", "Unknown query"))
-            raw_results = result.get("results", [])
-            # Comprobar que raw_results es una lista
-            if not isinstance(raw_results, list):
-                logging.warning(f"Search results for query '{query}' is not a list; skipping this result.")
-                continue
-            if not raw_results:
-                continue
-                
-            relevant_info = []
-            for item in raw_results[:3]:  # Limitar a los 3 mejores resultados por búsqueda
-                # Escapar las llaves en la fuente y el contenido
-                source = escape_curly_braces(item.get('source', 'Unknown'))
-                content = escape_curly_braces(item.get('content', 'No content'))
-                relevant_info.append(f"Source: {source}\n{content}")
-            
-            processed_results.append({
-                "query": query,
-                "relevant_information": "\n\n".join(relevant_info)
-            })
-        
-        # Update progress after processing search results
-        if progress_callback:
-            await progress_callback(
-                "Analyzing search results to identify key concepts and learning structure...",
-                phase="modules",
-                phase_progress=0.3,
-                overall_progress=0.45,
-                action="processing"
-            )
-            
-        # Convertir los resultados procesados a texto para incluir en el prompt
-        results_text = ""
-        for i, result in enumerate(processed_results, 1):
-            results_text += f"""
-Search {i}: "{result['query']}"
-{result['relevant_information']}
----
-"""
+        # Process the new search results structure for the LLM prompt
+        context_parts = []
+        max_context_per_query = 5 # Limit number of results per query used in context
+        max_chars_per_result = 4000 # Limit characters per scraped result
+
+        for report in search_service_results:
+            query = escape_curly_braces(report.query)
+            context_parts.append(f"\n## Search Results for Query: \"{query}\"\n")
+
+            results_included = 0
+            for res in report.results:
+                if results_included >= max_context_per_query:
+                    break
+
+                title = escape_curly_braces(res.title or 'N/A')
+                url = res.url # URLs are usually safe
+                context_parts.append(f"### Result from: {url} (Title: {title})")
+
+                if res.scraped_content:
+                    content = escape_curly_braces(res.scraped_content)
+                    truncated_content = content[:max_chars_per_result]
+                    if len(content) > max_chars_per_result:
+                        truncated_content += "... (truncated)"
+                    context_parts.append(f"Scraped Content Snippet:\n{truncated_content}")
+                    results_included += 1
+                elif res.tavily_snippet:
+                    # Fallback to Tavily snippet if scraping failed
+                    snippet = escape_curly_braces(res.tavily_snippet)
+                    error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
+                    context_parts.append(f"Tavily Snippet:{error_info}\n{snippet}")
+                    results_included += 1 # Count even if scrape failed but snippet exists
+                else:
+                     # If scrape failed and no snippet, mention the failure
+                     error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
+                     context_parts.append(f"Content: Not available.{error_info}")
+                     # Optionally decide if this counts towards max_context_per_query
+
+                context_parts.append("---")
+            if results_included == 0:
+                 context_parts.append("(No usable content found for this query)")
+
+        results_text = "\n".join(context_parts)
+
         # Check if a specific number of modules was requested
         module_count_instruction = ""
         if state.get("desired_module_count"):
             module_count_instruction = f"\nIMPORTANT: Create EXACTLY {state['desired_module_count']} modules for this learning path. Not more, not less."
         else:
             module_count_instruction = "\nCreate a structured learning path with 3-7 modules."
-        
+
         # Add language instruction
         language_instruction = f"\nIMPORTANT: Create all content in {output_language}. All titles, descriptions, and content must be written in {output_language}."
-        
-        # Update progress with AI generation status
+
         if progress_callback:
             await progress_callback(
-                "Designing logical learning progression and module structure based on topic analysis...",
+                "Analyzing search results and scraped content to identify key concepts and learning structure...",
                 phase="modules",
-                phase_progress=0.6,
-                overall_progress=0.5,
+                phase_progress=0.3,
+                overall_progress=0.45,
                 action="processing"
             )
-        
-        # Escapar las llaves en el tema del usuario
+
         escaped_topic = escape_curly_braces(state["user_topic"])
-        
-        # Preparar el prompt con un placeholder para format_instructions
+
+        # Update prompt to mention scraped content
         prompt_text = f"""
 You are an expert curriculum designer. Create a comprehensive learning path for the topic: {escaped_topic}.
 
-Based on the following search results, organize the learning into logical modules:
-
+Based on the following search results and scraped web content snippets, organize the learning into logical modules:
 {results_text}
-{module_count_instruction}{language_instruction} For each module:
-1. Give it a clear, descriptive title
-2. Write a comprehensive overview (100-200 words)
-3. Identify 3-5 key learning objectives
-4. Explain why this module is important in the overall learning journey
+{module_count_instruction}{language_instruction}
 
-Format your response as a structured curriculum. Each module should build on previous knowledge.
+For each module:
+1. Give it a clear, descriptive title.
+2. Write a comprehensive overview (100-200 words) summarizing the module's purpose and content.
+3. Identify 3-5 key learning objectives (action-oriented).
+4. Explain why this module is important in the overall learning journey and how it connects to other modules.
+
+Format your response as a structured curriculum. Each module should build logically on previous knowledge.
 
 {{format_instructions}}
 """
-        # Crear la plantilla de prompt
         prompt = ChatPromptTemplate.from_template(prompt_text)
-        
-        # Llamar a la cadena LLM proporcionando el valor para 'format_instructions'
+
         result = await run_chain(
             prompt,
             lambda: get_llm(key_provider=google_key_provider),
@@ -484,16 +473,13 @@ Format your response as a structured curriculum. Each module should build on pre
             { "format_instructions": enhanced_modules_parser.get_format_instructions() }
         )
         modules = result.modules
-        
-        # If a specific number of modules was requested but not achieved, log a warning
+
         if state.get("desired_module_count") and len(modules) != state["desired_module_count"]:
-            logging.warning(f"Requested {state['desired_module_count']} modules but got {len(modules)}")
+            logging.warning(f"Requested {state['desired_module_count']} modules but got {len(modules)}. Trimming/padding may occur.")
             if len(modules) > state["desired_module_count"]:
-                # Trim excess modules if we got too many
                 modules = modules[:state["desired_module_count"]]
-                logging.info(f"Trimmed modules to match requested count of {state['desired_module_count']}")
-        
-        # Crear la estructura final del learning path
+            # Padding is harder, let the LLM handle it ideally
+
         final_learning_path = {
             "topic": state["user_topic"],
             "modules": modules,
@@ -502,22 +488,20 @@ Format your response as a structured curriculum. Each module should build on pre
                 "num_modules": len(modules)
             }
         }
-        
-        logging.info(f"Created learning path with {len(modules)} modules")
-        
-        # Prepare preview data for frontend display
+
+        logging.info(f"Created learning path structure with {len(modules)} modules")
+
         preview_modules = []
         for module in modules:
             preview_modules.append({
                 "title": module.title,
                 "description": module.description[:150] + "..." if len(module.description) > 150 else module.description
             })
-            
+
         preview_data = {
             "modules": preview_modules
         }
-        
-        # Send progress update with information about the created modules and preview data
+
         if progress_callback and 'modules' in final_learning_path:
             module_count = len(final_learning_path['modules'])
             await progress_callback(
@@ -528,16 +512,14 @@ Format your response as a structured curriculum. Each module should build on pre
                 preview_data=preview_data,
                 action="completed"
             )
-        
+
         return {
             "modules": modules,
             "final_learning_path": final_learning_path,
-            "steps": state.get("steps", []) + [f"Created learning path with {len(modules)} modules"]
+            "steps": state.get("steps", []) + [f"Created learning path structure with {len(modules)} modules"]
         }
     except Exception as e:
         logging.exception(f"Error creating learning path: {str(e)}")
-        
-        # Send error progress update
         if progress_callback:
             await progress_callback(
                 f"Error creating learning path: {str(e)}",
@@ -546,7 +528,6 @@ Format your response as a structured curriculum. Each module should build on pre
                 overall_progress=0.45,
                 action="error"
             )
-        
         return {
             "modules": [],
             "final_learning_path": {

@@ -276,10 +276,10 @@ Your 10 questions should assess comprehensively the submodule's content.
 TOPIC_RESOURCE_QUERY_GENERATION_PROMPT = """
 # EXPERT RESEARCHER INSTRUCTIONS
 
-Your task is to create the SINGLE MOST EFFECTIVE search query to find high-quality, comprehensive resources for a learning path on "{user_topic}".
+Your task is to create the SINGLE MOST EFFECTIVE search query to find **external, high-quality, comprehensive learning resources** (like books, articles, online courses, tutorials, videos) for a learning path on "{user_topic}".
 
 ## LEARNING PATH OVERVIEW
-This search query will be used to find top-tier resources that provide broad, authoritative coverage of the entire learning path topic.
+This search query will be used to find top-tier **external learning materials** that provide broad, authoritative coverage of the entire learning path topic.
 
 ## LEARNING PATH STRUCTURE
 {learning_path_context}
@@ -291,15 +291,16 @@ This search query will be used to find top-tier resources that provide broad, au
 
 ## SEARCH QUERY REQUIREMENTS
 
-### 1. Natural Language Format
-Your query MUST be written in natural language:
-- Use complete sentences or questions
-- Make it readable and conversational
-- Clearly state what you're looking for (e.g., "I need comprehensive learning resources about...")
-- Explicitly describe the expected results (e.g., "Please show me authoritative guides, courses, and books that cover...")
+### 1. Keyword-Focused Format
+Your query MUST be optimized for a search engine API like Google or Tavily:
+- Use concise keywords and key phrases related to "{user_topic}".
+- Combine terms logically (e.g., use quotes for exact phrases).
+- Include terms like **"learning resources", "tutorial", "guide", "course", "book", "video lecture", "article", "documentation", "best practices"**.
+- Avoid full sentences or overly conversational language.
+- Focus on terms representing the core concepts and scope of the topic.
 
 ### 2. Comprehensive Coverage
-Your query must target resources that provide broad coverage of "{user_topic}" as a whole, addressing:
+Your query must target **external learning resources** that provide broad coverage of "{user_topic}" as a whole, addressing:
 - Foundational concepts
 - Key principles
 - Typical progression paths
@@ -307,16 +308,16 @@ Your query must target resources that provide broad coverage of "{user_topic}" a
 - Both theoretical and practical aspects
 
 ### 3. Resource Quality and Authority
-The query should explicitly request:
+The query keywords should imply a search for:
 - High-quality, authoritative sources
-- Educational resources from experts
+- Educational resources from experts (universities, known practitioners, reputable platforms)
 - Comprehensive guides, courses, or books
 - Well-structured learning materials
 - Resources that offer big-picture understanding
 
 ### 4. Educational Focus
-The query must emphasize:
-- Learning resources specifically (not just information)
+The query keywords must emphasize:
+- **External learning resources** specifically (not just general web pages or blog posts)
 - Materials designed for educational purposes
 - Content that explains rather than just describes
 - Resources with depth and completeness
@@ -324,8 +325,8 @@ The query must emphasize:
 
 ## OUTPUT REQUIREMENTS
 Provide:
-1. A single, powerful natural language search query optimized to return the best comprehensive resources
-2. A detailed explanation of your search strategy and why it will be effective
+1. A single, powerful search engine query string (keywords, phrases) optimized to return the best **comprehensive external learning resources**
+2. A detailed explanation of your search strategy and why this query will be effective
 
 {format_instructions}
 """
@@ -333,7 +334,7 @@ Provide:
 MODULE_RESOURCE_QUERY_GENERATION_PROMPT = """
 # EXPERT RESEARCHER INSTRUCTIONS
 
-Your task is to create the SINGLE MOST EFFECTIVE search query to find high-quality, comprehensive resources for a specific module in a learning path.
+Your task is to create the SINGLE MOST EFFECTIVE search query to find **external, high-quality, comprehensive learning resources** for a specific module in a learning path.
 
 ## MODULE DETAILS
 Title: "{module_title}"
@@ -351,15 +352,16 @@ This module is part of a larger learning path:
 
 ## SEARCH QUERY REQUIREMENTS
 
-### 1. Natural Language Format
-Your query MUST be written in natural language:
-- Use complete sentences or questions
-- Make it readable and conversational
-- Clearly state what you're looking for (e.g., "I need learning resources about [module topic]...")
-- Explicitly describe the expected results (e.g., "Please show me tutorials, guides, and examples that teach...")
+### 1. Keyword-Focused Format
+Your query MUST be optimized for a search engine API like Google or Tavily:
+- Use concise keywords and key phrases related to "{module_title}".
+- Combine terms logically (e.g., use quotes for exact phrases).
+- Include terms like **"tutorial", "guide", "examples", "exercises", "course module", "video lecture", "article", "documentation", "deep dive"**.
+- Avoid full sentences or overly conversational language.
+- Focus on the most important technical terms and concepts from the module description.
 
 ### 2. Module-Specific Focus
-Your query must target resources specifically relevant to {module_title}, addressing:
+Your query must target **external learning resources** specifically relevant to {module_title}, addressing:
 - The core concepts of this specific module
 - Appropriate depth for this module's position in the learning path
 - Key components identified in the module description
@@ -367,16 +369,16 @@ Your query must target resources specifically relevant to {module_title}, addres
 - Both theoretical foundations and practical applications
 
 ### 3. Resource Quality and Authority
-The query should explicitly request:
+The query keywords should imply a search for:
 - High-quality, authoritative sources on this specific topic
-- Educational resources from subject matter experts
+- Educational resources from subject matter experts (universities, known practitioners, reputable platforms)
 - Well-structured learning materials on this module's focus
 - Resources with appropriate depth and coverage
 - Content that provides both explanations and examples
 
 ### 4. Educational Value
-The query must emphasize:
-- Learning resources rather than just information
+The query keywords must emphasize:
+- **External learning resources** rather than just general web pages or blog posts
 - Materials that explain concepts thoroughly
 - Content that builds understanding progressively
 - Resources with appropriate exercises or applications
@@ -384,8 +386,8 @@ The query must emphasize:
 
 ## OUTPUT REQUIREMENTS
 Provide:
-1. A single, powerful natural language search query optimized to return the best module-specific resources
-2. A detailed explanation of your search strategy and why it will be effective for this specific module
+1. A single, powerful search engine query string (keywords, phrases) optimized to return the best **module-specific external learning resources**
+2. A detailed explanation of your search strategy and why this query will be effective for this specific module
 
 {format_instructions}
 """
@@ -393,7 +395,7 @@ Provide:
 SUBMODULE_RESOURCE_QUERY_GENERATION_PROMPT = """
 # EXPERT RESEARCHER INSTRUCTIONS
 
-Your task is to create the SINGLE MOST EFFECTIVE search query to find highly targeted resources for a specific submodule.
+Your task is to create the SINGLE MOST EFFECTIVE search query to find **highly targeted external learning resources** for a specific submodule.
 
 ## SUBMODULE DETAILS
 Title: "{submodule_title}"
@@ -413,15 +415,16 @@ Adjacent submodules: {adjacent_context}
 
 ## SEARCH QUERY REQUIREMENTS
 
-### 1. Natural Language Format
-Your query MUST be written in natural language:
-- Use complete sentences or questions
-- Make it readable and conversational
-- Clearly state what you're looking for (e.g., "I need specific learning resources about [submodule topic]...")
-- Explicitly describe the expected results (e.g., "Please show me tutorials, videos, and exercises that teach...")
+### 1. Keyword-Focused Format
+Your query MUST be optimized for a search engine API like Google or Tavily:
+- Use very specific keywords and technical terms related to "{submodule_title}".
+- Use quotes for exact phrases or essential technical terms.
+- Include terms like **"tutorial", "example code", "deep dive", "explanation", "case study", "how to", "video", "article", "documentation", "exercise"**.
+- Avoid full sentences or conversational language.
+- Focus strictly on the concepts and skills mentioned in the submodule description.
 
 ### 2. Laser-Focused Targeting
-Your query must target resources that specifically address the content of this submodule:
+Your query must target **external learning resources** that specifically address the content of this submodule:
 - The exact concepts covered in this submodule (not the broader module)
 - The specific knowledge level appropriate for this submodule
 - The particular skills or techniques this submodule teaches
@@ -429,7 +432,7 @@ Your query must target resources that specifically address the content of this s
 - Resources that provide appropriate depth for this specific topic
 
 ### 3. Resource Quality and Diversity
-The query should explicitly request a mix of high-quality resources:
+The query keywords should help find a mix of high-quality **external learning resources**:
 - Tutorials or guides on this specific topic
 - Video content explaining these exact concepts
 - Interactive exercises relevant to this submodule
@@ -437,16 +440,15 @@ The query should explicitly request a mix of high-quality resources:
 - Examples that demonstrate these particular concepts
 
 ### 4. Contextual Relevance
-The query must consider:
-- How this submodule fits within its module
-- The prerequisite knowledge from previous submodules
+The query keywords should reflect:
+- The specific focus of this submodule within its module and its need for **external learning materials**
+- The prerequisite knowledge assumed
 - The specific applications of this knowledge
-- The progression of learning within the module
-- How this content connects to the broader learning path
+- The learning progression point within the module
 
 ## OUTPUT REQUIREMENTS
 Provide:
-1. A single, powerful natural language search query optimized to return perfect resources for this specific submodule
+1. A single, powerful search engine query string (keywords, phrases) optimized to return perfect **external learning resources** for this specific submodule
 2. A detailed explanation of your search strategy and why it's ideal for this particular submodule
 
 {format_instructions}
