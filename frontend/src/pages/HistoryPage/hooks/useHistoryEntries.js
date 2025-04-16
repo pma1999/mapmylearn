@@ -2,20 +2,24 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import * as api from '../../../services/api';
 
 /**
- * Custom hook for managing history entries data with optimized loading
+ * Custom hook for managing history entries data with optimized loading and pagination
  * @param {Object} filterOptions - Options for filtering history entries
  * @param {string} filterOptions.sortBy - Sort criteria
  * @param {string|null} filterOptions.filterSource - Filter by source
  * @param {string} filterOptions.searchTerm - Search term
+ * @param {number} filterOptions.page - Current page number
+ * @param {number} filterOptions.perPage - Items per page
  * @param {Function} showNotification - Function to show notifications
- * @returns {Object} History entries state and loading status
+ * @returns {Object} History entries state, pagination info, and loading status
  */
-const useHistoryEntries = ({ sortBy, filterSource, searchTerm }, showNotification) => {
+const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, showNotification) => {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [error, setError] = useState(null);
-  const [stats, setStats] = useState({ total: 0, loadTime: 0 });
+  // Store full pagination state
+  const [pagination, setPagination] = useState({ total: 0, page: 1, perPage: 10 });
+  const [stats, setStats] = useState({ loadTime: 0 }); // Remove total from here
   
   // Cache previous results for stale-while-revalidate pattern
   const previousEntriesRef = useRef({});
@@ -25,15 +29,15 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm }, showNotificatio
   const loadCountRef = useRef(0);
   
   /**
-   * Generate a cache key from the filter options
+   * Generate a cache key from the filter options including pagination
    * @returns {string} Cache key
    */
   const getCacheKey = useCallback(() => {
-    return `${sortBy}:${filterSource || 'all'}:${searchTerm || 'none'}`;
-  }, [sortBy, filterSource, searchTerm]);
+    return `${sortBy}:${filterSource || 'all'}:${searchTerm || 'none'}:${page}:${perPage}`;
+  }, [sortBy, filterSource, searchTerm, page, perPage]);
   
   /**
-   * Load history entries from API with current filter settings
+   * Load history entries from API with current filter and pagination settings
    * Implements stale-while-revalidate pattern and aborts ongoing requests
    */
   const loadHistory = useCallback(async (forceRefresh = false) => {
@@ -68,11 +72,16 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm }, showNotificatio
         // Immediately show cached data (stale-while-revalidate pattern)
         if (!initialLoadComplete) {
           setEntries(cachedData.entries);
+          setPagination({ 
+            total: cachedData.total || 0, 
+            page: cachedData.page || page, 
+            perPage: cachedData.perPage || perPage 
+          });
           setStats({
-            total: cachedData.total || 0,
             loadTime: 0,
             fromCache: true,
-            initialLoad: true
+            initialLoad: true,
+            serverTime: cachedData.serverTime
           });
           setInitialLoadComplete(true);
           setLoading(false);
@@ -85,8 +94,8 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm }, showNotificatio
       // Check auth status first to handle invalid tokens
       await api.checkAuthStatus();
       
-      // Make the API call without waiting for the previous ones to return
-      requestRef.current = api.getHistoryPreview(sortBy, filterSource, searchTerm);
+      // Make the API call with pagination
+      requestRef.current = api.getHistoryPreview(sortBy, filterSource, searchTerm, page, perPage);
       const response = await requestRef.current;
       
       // If this is a stale request (a newer one has started), ignore the results
@@ -98,15 +107,15 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm }, showNotificatio
       // Calculate load time
       const loadTime = performance.now() - startTime;
       
-      // Update cache
+      // Update cache with full response including pagination
       previousEntriesRef.current[cacheKey] = response;
       
-      // Ensure entries is always an array, even if response is invalid
-      if (!response || !response.entries) {
-        console.warn('History response missing entries array, using empty array');
+      // Ensure response format is valid
+      if (!response || !response.entries || !Array.isArray(response.entries)) {
+        console.warn('History response missing or invalid entries array, using empty array');
         setEntries([]);
+        setPagination({ total: 0, page: 1, perPage: perPage }); // Reset pagination
         setStats({ 
-          total: 0, 
           loadTime, 
           fromCache: false,
           initialLoad: !initialLoadComplete 
@@ -114,11 +123,16 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm }, showNotificatio
       } else {
         // Only update state if the data has actually changed
         const entriesChanged = JSON.stringify(entries) !== JSON.stringify(response.entries);
-        
-        if (entriesChanged || forceRefresh) {
+        const paginationChanged = pagination.total !== response.total || pagination.page !== response.page || pagination.perPage !== response.perPage;
+
+        if (entriesChanged || paginationChanged || forceRefresh) {
           setEntries(response.entries);
+          setPagination({ 
+            total: response.total || 0, 
+            page: response.page || page, 
+            perPage: response.perPage || perPage 
+          });
           setStats({
-            total: response.total || 0,
             loadTime, 
             fromCache: false,
             serverTime: response.request_time_ms,
@@ -141,35 +155,38 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm }, showNotificatio
       
       // Only set error state if no cached data is available
       setEntries([]); // Ensure we set an empty array on error
+      setPagination({ total: 0, page: 1, perPage: perPage }); // Reset pagination
       setLoading(false);
       setError(error.message || 'Unknown error');
       showNotification('Error loading history: ' + (error.message || 'Unknown error'), 'error');
     }
-  }, [sortBy, filterSource, searchTerm, initialLoadComplete, getCacheKey, showNotification, entries]);
+  }, [sortBy, filterSource, searchTerm, page, perPage, initialLoadComplete, getCacheKey, showNotification, entries, pagination]);
   
-  // Load history when filter options change
+  // Load history when filter or pagination options change
   useEffect(() => {
     loadHistory();
     
-    // Set up polling for background updates (every 30 seconds)
+    // Remove polling logic - refresh should be triggered explicitly or by cache invalidation
+    /*
     const pollingInterval = setInterval(() => {
-      // Only poll if the page is visible to save resources
       if (document.visibilityState === 'visible') {
         loadHistory(false);
       }
-    }, 30000); // 30 seconds
+    }, 30000);
+    */
     
-    // Cleanup function to abort any pending requests on unmount or filter change
+    // Cleanup function
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
-      clearInterval(pollingInterval);
+      // clearInterval(pollingInterval);
     };
-  }, [sortBy, filterSource, searchTerm, loadHistory]);
+  }, [sortBy, filterSource, searchTerm, page, perPage, loadHistory]);
   
   /**
-   * Force reload the history entries
+   * Force reload the history entries (resets to page 1 potentially, or current page?)
+   * Let's keep it simple: reloads current view.
    */
   const refreshEntries = useCallback(() => {
     setLoading(true);
@@ -178,6 +195,7 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm }, showNotificatio
   
   return {
     entries,
+    pagination, // Return pagination state
     loading,
     error,
     stats,

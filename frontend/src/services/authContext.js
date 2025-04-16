@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import * as api from './api';
+import { getLocalHistoryRaw, clearLocalHistory } from './api';
 
 // Create authentication context
 const AuthContext = createContext(null);
@@ -24,6 +25,7 @@ export const AuthProvider = ({ children }) => {
   const refreshAttempts = useRef(0);
   const MAX_REFRESH_ATTEMPTS = 3;
   const refreshPromise = useRef(null); // To store the promise during refresh
+  const MIGRATION_FLAG_KEY = 'mapmylearn_migration_attempted'; // Define key for flag
 
   // Function to check if token is expired or about to expire
   const isTokenExpiredOrExpiring = (expiresAt) => {
@@ -165,54 +167,92 @@ export const AuthProvider = ({ children }) => {
   };
 
 
-  // Initialize auth state
+  // Initialize auth state and trigger migration check
   const initAuth = async () => {
     try {
       setLoading(true);
       setError(null); // Clear errors on init
       const authData = localStorage.getItem('auth');
+      let isAuthenticated = false; // Track if user is authenticated after init
       
       if (authData) {
         const parsedAuth = JSON.parse(authData);
         
         if (parsedAuth.user && parsedAuth.accessToken && parsedAuth.tokenExpiry) {
-           // Check if token is expired or about to expire
-          const isExpired = isTokenExpiredOrExpiring(parsedAuth.tokenExpiry);
+           const isExpired = isTokenExpiredOrExpiring(parsedAuth.tokenExpiry);
           
           if (isExpired) {
             console.log('Stored token is expired or needs refresh, attempting silent refresh...');
             try {
-              // Await the result of the robust refresh process
               await attemptSilentRefresh(); 
               console.log("Silent refresh successful during init.");
-              // State is updated within refreshToken/updateAuthState
-              // Fetch credits if user is now set
-              if (user) fetchUserCredits(); 
+              isAuthenticated = true; // User is authenticated after successful refresh
             } catch (refreshError) {
-               // refreshToken handles logout on permanent failure
               console.error("Silent refresh failed during init:", refreshError.message);
-              // Ensure loading is false even if refresh fails and logout occurs
+              // Logout is handled within refreshToken
               setLoading(false);
-              return; // Stop further initialization as user is logged out
+              return; 
             }
           } else {
-            // Token is still valid
             console.log('Using valid stored token.');
-            // Use updateAuthState to ensure consistency
             updateAuthState(parsedAuth.accessToken, parsedAuth.expiresIn, parsedAuth.user);
-            
-            // Fetch initial credit information
+            isAuthenticated = true; // User is authenticated with existing token
             fetchUserCredits();
           }
         } else {
            console.log("Stored auth data incomplete, clearing.");
-           logout(); // Clean up incomplete data
+           await logout(); // Ensure logout completes
         }
       } else {
          console.log("No stored auth data found.");
-         // Ensure user is null if no auth data
          setUser(null); 
       }
+
+      // --- Automatic Local History Migration --- 
+      // Run migration check *after* authentication status is determined
+      if (isAuthenticated) {
+        console.log("User is authenticated, checking for pending local history migration...");
+        try {
+            const migrationAttempted = localStorage.getItem(MIGRATION_FLAG_KEY);
+
+            if (!migrationAttempted) {
+                console.log("Migration not attempted yet. Checking local history...");
+                const localHistory = getLocalHistoryRaw(); // Use the function from api.js
+
+                if (localHistory && localHistory.entries && localHistory.entries.length > 0) {
+                    console.log(`Found ${localHistory.entries.length} entries in local history. Attempting migration...`);
+                    // Call the migrateLearningPaths function from api.js
+                    const migrationResult = await api.migrateLearningPaths(localHistory.entries); 
+
+                    if (migrationResult.success) {
+                        console.log(`Successfully migrated ${migrationResult.migrated_count} learning paths. Clearing local history.`);
+                        clearLocalHistory(); // Use the function from api.js
+                        localStorage.setItem(MIGRATION_FLAG_KEY, 'true');
+                    } else {
+                        console.error("Local history migration failed:", migrationResult.errors);
+                        // Still set the flag to avoid retrying on persistent errors
+                        localStorage.setItem(MIGRATION_FLAG_KEY, 'true'); 
+                        // Optionally notify user about migration failure
+                    }
+                } else {
+                    console.log("No local history entries found to migrate.");
+                    localStorage.setItem(MIGRATION_FLAG_KEY, 'true');
+                }
+            } else {
+                console.log("Local history migration already attempted.");
+            }
+        } catch (migrationError) {
+            console.error("An error occurred during the migration check:", migrationError);
+            // Set flag even if check fails to prevent loops
+             if (!localStorage.getItem(MIGRATION_FLAG_KEY)) { 
+                localStorage.setItem(MIGRATION_FLAG_KEY, 'true');
+             }
+        }
+      } else {
+        console.log("User is not authenticated, skipping migration check.");
+      }
+      // --- End Migration Logic --- 
+
     } catch (err) {
       console.error('Error initializing auth:', err);
       setError('Failed to initialize authentication state.');
@@ -403,20 +443,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // (logout function moved higher up for clarity)
-
-  // Placeholder for migrateLearningPaths (unchanged)
-  const migrateLearningPaths = async () => {
-     // Existing implementation...
-     console.warn("migrateLearningPaths not implemented yet.");
-  };
-
-  // Placeholder for checkPendingMigration (unchanged)
-  const checkPendingMigration = () => {
-     // Existing implementation...
-     return false;
-  };
-
   // --- NEW: Password Reset Functions ---
   const forgotPassword = async (email) => {
     setLoading(true);
@@ -460,8 +486,6 @@ export const AuthProvider = ({ children }) => {
     logout,
     register,
     fetchUserCredits, // Expose credit fetching if needed by components
-    migrateLearningPaths,
-    checkPendingMigration,
     resendVerificationEmail: api.resendVerificationEmail,
     // NEW:
     forgotPassword,

@@ -15,14 +15,12 @@ import HistoryFilters from './components/HistoryFilters';
 import HistoryEntryCard from './components/HistoryEntryCard';
 import HistoryEntrySkeleton from './components/HistoryEntrySkeleton';
 import EmptyState from './components/EmptyState';
-import ImportDialog from './components/ImportDialog';
-import ConfirmationDialog from './components/ConfirmationDialog';
 
 /**
  * Virtualized grid cell renderer for history entries
  */
 const EntryCell = ({ columnIndex, rowIndex, style, data }) => {
-  const { entries, columnCount, onView, onDelete, onToggleFavorite, onUpdateTags, onExport, onDownloadPDF } = data;
+  const { entries, columnCount, onView, onDelete, onToggleFavorite, onUpdateTags, onDownloadPDF } = data;
   const index = rowIndex * columnCount + columnIndex;
   
   if (index >= entries.length) {
@@ -43,7 +41,6 @@ const EntryCell = ({ columnIndex, rowIndex, style, data }) => {
         onDelete={onDelete}
         onToggleFavorite={onToggleFavorite}
         onUpdateTags={onUpdateTags}
-        onExport={onExport}
         onDownloadPDF={onDownloadPDF}
         virtualized={true}
       />
@@ -114,19 +111,11 @@ const HistoryPage = () => {
   
   // Initialize history actions hook
   const {
-    importDialogOpen,
-    setImportDialogOpen,
-    clearHistoryDialog,
-    setClearHistoryDialog,
     handleViewLearningPath,
     handleDeleteLearningPath,
     handleToggleFavorite,
     handleUpdateTags,
-    handleExportLearningPath,
     handleDownloadPDF,
-    handleExportAllHistory,
-    handleImportLearningPath,
-    handleClearHistory
   } = useHistoryActions(showNotification, refreshEntries);
   
   // Calculate grid dimensions based on screen size
@@ -163,7 +152,6 @@ const HistoryPage = () => {
     onDelete: handleDeleteLearningPath,
     onToggleFavorite: handleToggleFavorite,
     onUpdateTags: handleUpdateTags,
-    onExport: handleExportLearningPath,
     onDownloadPDF: handleDownloadPDF
   }), [
     entries, 
@@ -172,7 +160,6 @@ const HistoryPage = () => {
     handleDeleteLearningPath, 
     handleToggleFavorite, 
     handleUpdateTags, 
-    handleExportLearningPath, 
     handleDownloadPDF
   ]);
   
@@ -197,9 +184,6 @@ const HistoryPage = () => {
       <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, borderRadius: 2, mb: 4 }}>
         <PageHeader 
           hasEntries={entries.length > 0}
-          onImport={() => setImportDialogOpen(true)}
-          onExport={handleExportAllHistory}
-          onClear={() => setClearHistoryDialog(true)}
           isLoading={loading && !initialLoadComplete}
         />
         
@@ -262,22 +246,6 @@ const HistoryPage = () => {
           />
         )}
       </Paper>
-      
-      {/* Import Dialog */}
-      <ImportDialog
-        open={importDialogOpen}
-        onClose={() => setImportDialogOpen(false)}
-        onImport={handleImportLearningPath}
-      />
-      
-      {/* Clear History Confirmation Dialog */}
-      <ConfirmationDialog
-        open={clearHistoryDialog}
-        title="Clear All History"
-        message="Are you sure you want to delete all learning paths? This action cannot be undone."
-        onConfirm={handleClearHistory}
-        onCancel={() => setClearHistoryDialog(false)}
-      />
       
       {/* Notification Snackbar */}
       <Snackbar

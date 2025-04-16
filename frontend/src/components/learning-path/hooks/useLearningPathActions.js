@@ -91,35 +91,24 @@ const useLearningPathActions = (
    */
   const handleDownloadPDF = async () => {
     if (!learningPath) return;
-    
+
+    // Ensure we have the correct ID. Priority: history entryId
+    // The entryId prop passed to this hook IS the correct one after saving
+    const targetId = entryId; 
+
+    if (!targetId) {
+      // This should ideally not happen if the button is correctly disabled
+      // when !isPersisted, but as a safeguard:
+      console.error("PDF Download Error: Cannot download PDF without a valid History Entry ID.");
+      showNotification('Please save the learning path to history first', 'error');
+      return { savedToHistory: false }; 
+    }
+
     try {
       // Show loading notification
       showNotification('Generating PDF...', 'info');
-      
-      // Get the entry ID from either the URL params or from the saved history entry
-      const id = isFromHistory ? entryId : taskId;
-      
-      // If the path is not saved to history yet, save it first
-      let targetId = id;
-      if (!isFromHistory && !savedToHistory) {
-        try {
-          const result = await saveToHistory(learningPath, 'generated');
-          if (result.success) {
-            targetId = result.entry_id;
-            // Signal that the learning path is now saved
-            return {
-              savedToHistory: true,
-              entryId: result.entry_id
-            };
-          }
-        } catch (error) {
-          console.error('Error saving to history before PDF download:', error);
-          showNotification('Please save the learning path to history first', 'error');
-          return { savedToHistory: false };
-        }
-      }
-      
-      // Download the PDF
+
+      // Download the PDF using the history entry ID
       const pdfBlob = await downloadLearningPathPDF(targetId);
       
       // Create a download link

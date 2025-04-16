@@ -98,40 +98,66 @@ const useHistoryManagement = (showNotification) => {
   };
 
   /**
-   * Save the generated path to history
+   * Save the generated path to history via the API
    * @param {Object} learningPath - Learning path object to save
-   * @param {Array} tags - Tags to apply to the saved path
-   * @param {boolean} favorite - Whether the path should be marked as favorite
-   * @returns {Promise<boolean>} Success status
+   * @param {Array} tags - Initial tags for the saved path
+   * @param {boolean} favorite - Initial favorite status
+   * @returns {Promise<{success: boolean, pathId: string | null}>} Result with success status and the new path ID
    */
-  const saveToHistory = async (learningPath, tags = [], favorite = false) => {
+  const saveToHistoryAPI = async (learningPath, tags = [], favorite = false) => {
     try {
-      await apiService.saveToHistory(learningPath, 'generated');
+      // Include initial favorite/tags in the creation payload if desired
+      // This depends on whether the LearningPathCreate schema and backend logic support it.
+      // Assuming for now it does NOT, and we need a separate update call.
+      // If it DOES support it, we can pass tags/favorite here.
+      const createPayload = {
+        topic: learningPath.topic || 'Untitled',
+        path_data: learningPath,
+        source: 'generated',
+        language: learningPath.language || 'en',
+        // Pass initial favorite/tags ONLY if API supports it on creation:
+        // favorite: favorite,
+        // tags: tags,
+      };
+
+      const saveResponse = await apiService.saveToHistory(createPayload);
+      const pathId = saveResponse.path_id;
+
+      if (!pathId) {
+          throw new Error("Save operation did not return a valid path ID.");
+      }
       
-      // If tags or favorite are set, update the entry
+      // If tags or favorite are set, update the entry immediately after creation
       if (tags.length > 0 || favorite) {
-        // Note: In a real implementation, you would get the entry ID from the saveToHistory response
-        // and then update it. For now, we'll just show a success message.
+        console.log(`Updating entry ${pathId} with tags/favorite status.`);
+        try {
+            await apiService.updateHistoryEntry(pathId, { tags, favorite });
+        } catch(updateError) {
+            console.error(`Failed to update tags/favorite for ${pathId} after saving:`, updateError);
+            // Notify user, but the path itself was saved successfully.
+            showNotification('Path saved, but failed to set initial tags/favorite.', 'warning');
+        }
       }
       
       showNotification('Learning path saved to history successfully!', 'success');
-      return true;
+      return { success: true, pathId: pathId };
     } catch (error) {
-      console.error('Error saving to history:', error);
-      showNotification('Failed to save to history. Please try again.', 'error');
-      return false;
+      console.error('Error saving to history via API:', error);
+      showNotification(`Failed to save to history: ${error.message || 'Unknown error'}`, 'error');
+      return { success: false, pathId: null };
     }
   };
 
   /**
    * Handle save dialog confirmation
-   * @returns {Promise<boolean>} Success status
+   * @returns {Promise<boolean>} Success status of the save operation
    */
   const handleSaveConfirm = async () => {
     if (generatedPath) {
-      const success = await saveToHistory(generatedPath, saveDialogTags, saveDialogFavorite);
+      // Use the refactored API save function
+      const result = await saveToHistoryAPI(generatedPath, saveDialogTags, saveDialogFavorite);
       setSaveDialogOpen(false);
-      return success;
+      return result.success;
     }
     setSaveDialogOpen(false);
     return false;

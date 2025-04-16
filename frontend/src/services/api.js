@@ -1,5 +1,5 @@
 import axios from 'axios';
-import * as localHistoryService from './localHistoryService';
+// import * as localHistoryService from './localHistoryService';
 
 // Use local API when in development mode, Railway API in production
 const API_URL = process.env.NODE_ENV === 'development' 
@@ -452,8 +452,15 @@ export const migrateLearningPaths = async (learningPaths) => {
   try {
     // If learning paths weren't provided directly, get them from local storage
     if (!learningPaths || !Array.isArray(learningPaths)) {
-      const localHistory = localHistoryService.getLocalHistory();
-      learningPaths = localHistory.entries || [];
+      // *** This part will require localHistoryService temporarily during migration phase ***
+      // We need to get localHistoryService back temporarily or adjust this logic later.
+      // For now, let's assume learningPaths are always provided by the caller (AuthContext)
+      // const localHistory = localHistoryService.getLocalHistory();
+      // learningPaths = localHistory.entries || [];
+      if (!learningPaths) {
+         console.warn("migrateLearningPaths called without explicit learningPaths array.");
+         return { success: true, migrated_count: 0, errors: ["No paths provided for migration."] };
+      }
     }
     
     // Process the learning paths to ensure they're in the right format for migration
@@ -663,23 +670,22 @@ export const getLearningPath = async (taskId) => {
   }
 };
 
-// History API functions (now using server-side API)
-export const getHistoryPreview = async (sortBy = 'creation_date', filterSource = null, searchTerm = null) => {
-  // REMOVED sessionStorage cache logic here - caching handled by useHistoryEntries hook
+// History API functions (Refactored to use ONLY server-side API)
+export const getHistoryPreview = async (sortBy = 'creation_date', filterSource = null, searchTerm = null, page = 1, perPage = 10) => {
+  // Ensure user is authenticated
+  if (!authToken) {
+    console.error('getHistoryPreview Error: Authentication required.');
+    // Return structure expected by hooks on auth error, preventing fallback
+    return { entries: [], total: 0, page: 1, per_page: perPage }; 
+  }
   
   try {
-    // If no auth token is present, fall back to local storage
-    if (!authToken) {
-      console.log('No auth token present, using local storage for history');
-      const localEntries = localHistoryService.getHistoryPreview(sortBy, filterSource, searchTerm);
-      // Wrap the local entries array in the expected object structure
-      return { entries: localEntries, total: localEntries.length };
-    }
-    
     // Prepare request with optimized parameters
     const params = new URLSearchParams();
     params.append('sort_by', sortBy);
     params.append('include_full_data', 'false'); // Use lightweight endpoint
+    params.append('page', page.toString());
+    params.append('per_page', perPage.toString());
     if (filterSource) params.append('source', filterSource);
     if (searchTerm) params.append('search', searchTerm);
     
@@ -692,263 +698,151 @@ export const getHistoryPreview = async (sortBy = 'creation_date', filterSource =
     }
     
     // Ensure response.data has valid entries property
-    if (!response.data || !response.data.entries) {
-      console.warn('API response missing entries property, using empty array');
-      return { entries: [], total: 0 };
+    if (!response.data || !response.data.entries || !Array.isArray(response.data.entries)) {
+      console.warn('API response missing or invalid entries property, returning empty array.');
+      return { entries: [], total: response.data?.total || 0, page: response.data?.page || page, per_page: response.data?.per_page || perPage };
     }
     
-    return response.data;
-  } catch (serverError) {
-    console.error('Server error fetching history:', serverError);
+    // Map backend response (path_id) to frontend expectation (id) if needed by hooks/UI
+    // The backend LearningPathList already contains LearningPathResponse which has path_id
+    // Let's ensure the hooks handle 'path_id' correctly instead of transforming here.
     
-    // If we get a 401/403 error, clear the invalid auth token
-    if (serverError.response && (serverError.response.status === 401 || serverError.response.status === 403)) {
-      console.warn('Authentication error (401/403), clearing token and falling back to local storage');
-      clearAuthToken();
-    }
-    
-    // Fall back to local storage
-    const localEntries = localHistoryService.getHistoryPreview(sortBy, filterSource, searchTerm);
-    // Wrap the local entries array in the expected object structure
-    return { entries: localEntries, total: localEntries.length };
+    return response.data; // Returns { entries: [], total: 0, page: 1, per_page: 10 }
+
+  } catch (error) {
+    console.error('Server error fetching history preview:', error);
+    // Re-throw the error for the hook to handle (display message, etc.)
+    // No fallback to local storage
+    throw error; 
   }
 };
 
-export const getHistoryEntry = async (entryId) => {
+export const getHistoryEntry = async (pathId) => {
+  // Ensure user is authenticated
+  if (!authToken) {
+    console.error('getHistoryEntry Error: Authentication required.');
+    throw new Error('Authentication required to view learning path details.');
+  }
+  
   try {
-    // If authenticated, use the server API
-    if (authToken) {
-      try {
-        // Log the ID being used
-        console.log('Fetching learning path with ID:', entryId);
-        
-        // Make the API call with the provided ID (should be path_id)
-        const response = await api.get(`/learning-paths/${entryId}`);
-        return { entry: response.data };
-      } catch (serverError) {
-        console.error('Server error fetching history entry:', serverError);
-        
-        // If we get a 401/403 error, clear the invalid auth token
-        if (serverError.response && (serverError.response.status === 401 || serverError.response.status === 403)) {
-          console.warn('Authentication error (401/403), clearing token and falling back to local storage');
-          clearAuthToken();
-        }
-        
-        // For backward compatibility, try local storage as fallback
-        console.warn('Falling back to local storage for compatibility');
-        const localEntry = localHistoryService.getHistoryEntry(entryId);
-        if (localEntry && localEntry.entry) {
-          console.log('Found entry in local storage with ID:', entryId);
-          return localEntry;
-        }
-        
-        // If both fail, throw a more helpful error
-        throw new Error('Learning path not found. The ID may be invalid or the item has been deleted.');
-      }
-    } else {
-      // Not authenticated, use local storage
-      return localHistoryService.getHistoryEntry(entryId);
-    }
+    console.log('Fetching learning path with path_id:', pathId);
+    const response = await api.get(`/learning-paths/${pathId}`);
+    // The API returns the LearningPathResponse directly, which fits the { entry: ... } structure implicitly
+    return { entry: response.data }; 
   } catch (error) {
-    console.error('Error fetching history entry:', error);
+    console.error('Server error fetching history entry:', error);
+     // Re-throw the error for the hook to handle
     throw error;
   }
 };
 
-export const saveToHistory = async (learningPath, source = 'generated') => {
-  try {
-    // If authenticated, save to server
-    if (authToken) {
-      console.log('Saving learning path to server database:', learningPath.topic);
-      
-      const response = await api.post('/learning-paths', {
-        topic: learningPath.topic || 'Untitled',
-        path_data: learningPath,
-        favorite: false,
-        tags: [],
-        source: source,
-        language: learningPath.language || 'es'
-      });
-      
-      // The server returns the path_id which we should use for all future operations
-      console.log('Learning path saved with path_id:', response.data.path_id);
-      
-      return { 
-        success: true, 
-        entry_id: response.data.path_id 
-      };
-    } else {
-      // Otherwise save to local storage
-      console.log('User not authenticated, saving to local storage');
-      return localHistoryService.saveToHistory(learningPath, source);
-    }
-  } catch (error) {
-    console.error('Error saving to history:', error);
-    
-    // Fall back to local storage if server fails or user is not authenticated
-    console.warn('Falling back to local storage due to error');
-    return localHistoryService.saveToHistory(learningPath, source);
+export const saveToHistory = async (learningPathData, source = 'generated') => {
+   // Ensure user is authenticated
+  if (!authToken) {
+    console.error('saveToHistory Error: Authentication required.');
+    throw new Error('Authentication required to save learning paths.');
   }
-};
-
-export const updateHistoryEntry = async (entryId, data) => {
+  
   try {
-    // If authenticated, use the API
-    if (authToken) {
-      // Log the ID being used
-      console.log('Updating learning path with ID:', entryId);
-      
-      // Make the API call with the provided ID (should be path_id)
-      await api.put(`/learning-paths/${entryId}`, data);
-      return { success: true };
-    } else {
-      // Otherwise use local storage
-      return localHistoryService.updateHistoryEntry(entryId, data);
-    }
+    console.log('Saving learning path to server database:', learningPathData.topic);
+    
+    // Prepare payload according to LearningPathCreate schema
+    const payload = {
+      topic: learningPathData.topic || 'Untitled',
+      path_data: learningPathData, // Assuming learningPathData is the full path_data object
+      favorite: learningPathData.favorite || false, // Allow setting initial favorite status? Check schema/API. Defaulting to false.
+      tags: learningPathData.tags || [], // Allow setting initial tags? Defaulting to empty.
+      source: source,
+      language: learningPathData.language || 'en' // Use provided language or default
+    };
+    
+    const response = await api.post('/learning-paths', payload);
+    
+    console.log('Learning path saved with path_id:', response.data.path_id);
+    
+    // Return the path_id (as entry_id for compatibility with hooks if needed)
+    return { 
+      success: true, 
+      entry_id: response.data.path_id, // Use path_id from response
+      path_id: response.data.path_id // Also include path_id explicitly
+    };
+
   } catch (error) {
-    console.error('Error updating history entry:', error);
-    
-    // Try local storage as fallback only for unauthenticated users
-    if (!authToken) {
-      return localHistoryService.updateHistoryEntry(entryId, data);
-    }
-    
+    console.error('Error saving learning path via API:', error);
+     // Re-throw the error for the hook to handle
     throw error;
   }
 };
 
-export const deleteHistoryEntry = async (entryId) => {
+export const updateHistoryEntry = async (pathId, data) => {
+  // Ensure user is authenticated
+  if (!authToken) {
+    console.error('updateHistoryEntry Error: Authentication required.');
+    throw new Error('Authentication required to update learning paths.');
+  }
+
+  // Validate data contains only allowed fields (favorite, tags)
+  const updateData = {};
+  if (data.favorite !== undefined) updateData.favorite = data.favorite;
+  if (data.tags !== undefined) updateData.tags = data.tags;
+
+  if (Object.keys(updateData).length === 0) {
+      console.warn("updateHistoryEntry called with no valid fields to update.");
+      return { success: true }; // Nothing to update
+  }
+
   try {
-    // If authenticated, use the API
-    if (authToken) {
-      // Log the ID being used
-      console.log('Deleting learning path with ID:', entryId);
-      
-      // Make the API call with the provided ID (should be path_id)
-      await api.delete(`/learning-paths/${entryId}`);
-      return { success: true };
-    } else {
-      // Otherwise use local storage
-      return localHistoryService.deleteHistoryEntry(entryId);
-    }
+    console.log('Updating learning path with path_id:', pathId);
+    // Make the API call with the provided ID (should be path_id)
+    await api.put(`/learning-paths/${pathId}`, updateData); // Send only valid update fields
+    return { success: true };
   } catch (error) {
-    console.error('Error deleting history entry:', error);
-    
-    // Try local storage as fallback only for unauthenticated users
-    if (!authToken) {
-      return localHistoryService.deleteHistoryEntry(entryId);
-    }
-    
+    console.error('Error updating history entry via API:', error);
+     // Re-throw the error for the hook to handle
     throw error;
   }
 };
 
-/**
- * Imports a learning path from a parsed JSON object
- * @param {object} learningPathObject - Parsed learning path data
- * @returns {Promise<object>} - Object indicating success and entry ID
- */
-export const importLearningPath = async (learningPathObject) => {
+export const deleteHistoryEntry = async (pathId) => {
+  // Ensure user is authenticated
+  if (!authToken) {
+    console.error('deleteHistoryEntry Error: Authentication required.');
+    throw new Error('Authentication required to delete learning paths.');
+  }
+
   try {
-    // Assume learningPathObject is a validated object from the caller
-    
-    // If authenticated, use the API
-    if (authToken) {
-      console.log('Importing learning path to server database:', learningPathObject.topic);
-      
-      // Construct payload using the object properties
-      const payload = {
-        topic: learningPathObject.topic || 'Untitled', // Use topic from object
-        path_data: learningPathObject, // Send the full object
-        favorite: learningPathObject.favorite || false, // Use favorite from object if exists, else default
-        tags: learningPathObject.tags || [], // Use tags from object if exists, else default
-        source: 'imported',
-        language: learningPathObject.language || 'es' // Use language from object if exists, else default
-      };
-      
-      const response = await api.post('/learning-paths', payload);
-      
-      console.log('Learning path imported with path_id:', response.data.path_id);
-      
-      return {
-        success: true,
-        entry_id: response.data.path_id,
-        topic: learningPathObject.topic // Return topic from the imported object
-      };
-    } else {
-      // Otherwise use local storage (needs object now)
-      console.log('User not authenticated, attempting to import to local storage');
-      // Local storage service might need adaptation to accept an object or a stringified version
-      // For now, let's assume it might need stringification, but this needs verification
-      // return localHistoryService.importLearningPath(JSON.stringify(learningPathObject));
-      // OR if it handles objects directly:
-      return localHistoryService.importLearningPath(learningPathObject);
-    }
+    console.log('Deleting learning path with path_id:', pathId);
+    await api.delete(`/learning-paths/${pathId}`);
+    return { success: true };
   } catch (error) {
-    console.error('Error importing learning path:', error);
-    
-    // Fallback logic is problematic as localHistoryService might also fail (quota) or expect different input.
-    // Temporarily commenting out the fallback to clearly isolate API errors.
-    // A separate task should address robust offline/fallback handling.
-    console.warn('Fallback to local storage during import error is currently disabled.');
-    // // Fall back to local storage if server fails or user is not authenticated
-    // console.warn('Falling back to local storage due to error');
-    // // The fallback needs the original jsonData string, which is not available here anymore.
-    // // Needs refactoring if fallback is desired.
-    // // return localHistoryService.importLearningPath(jsonData); // jsonData is not defined here
-    
-    // Re-throw the error so the calling function (useHistoryActions) can handle it
+    console.error('Error deleting history entry via API:', error);
+     // Re-throw the error for the hook to handle
     throw error;
   }
 };
 
-export const clearHistory = async () => {
-  try {
-    // We don't have a bulk delete API, so we'll just clear local storage
-    return localHistoryService.clearHistory();
-  } catch (error) {
-    console.error('Error clearing history:', error);
-    throw error;
-  }
-};
+// Keep these functions for the migration logic in AuthContext
+// We need localHistoryService for these temporarily.
+// Let's import it here specifically for these functions for now.
+import * as localHistoryService from './localHistoryService'; 
 
-export const exportHistory = async () => {
-  try {
-    // If authenticated, get all learning paths from API
-    if (authToken) {
-      const response = await api.get('/learning-paths?per_page=1000');
-      
-      // Ensure we have the path_id for each entry in the exported data
-      const entries = response.data.entries.map(entry => ({
-        ...entry,
-        // Explicitly include path_id in case frontend code expects it at this property
-        id: entry.path_id 
-      }));
-      
-      return {
-        entries: entries,
-        last_updated: new Date().toISOString()
-      };
-    } else {
-      // Otherwise get from local storage
-      return localHistoryService.getLocalHistory();
-    }
-  } catch (error) {
-    console.error('Error exporting history:', error);
-    
-    // Fall back to local storage if server fails
-    return localHistoryService.getLocalHistory();
-  }
-};
-
-// Get raw local history (used for migration)
 export const getLocalHistoryRaw = () => {
-  return localHistoryService.getLocalHistory();
+  // Ensure localHistoryService is available or handle error
+  if (localHistoryService) {
+      return localHistoryService.getLocalHistory();
+  } else {
+      console.error("localHistoryService not available for getLocalHistoryRaw");
+      return { entries: [], last_updated: new Date().toISOString() };
+  }
 };
-
-// Clear local history
 export const clearLocalHistory = () => {
-  return localHistoryService.clearHistory();
+  // Ensure localHistoryService is available or handle error
+  if (localHistoryService) {
+      return localHistoryService.clearHistory();
+  } else {
+      console.error("localHistoryService not available for clearLocalHistory");
+      return false;
+  }
 };
 
 /**
@@ -1211,9 +1105,6 @@ export default {
   saveToHistory,
   updateHistoryEntry,
   deleteHistoryEntry,
-  importLearningPath,
-  clearHistory,
-  exportHistory,
   getLocalHistoryRaw,
   clearLocalHistory,
   validateApiKeys,
@@ -1231,7 +1122,6 @@ export default {
   checkAuthStatus,
   downloadLearningPathPDF,
   getUserCredits,
-  // Admin API functions
   getUsers,
   getUser,
   updateUser,
