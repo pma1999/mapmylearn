@@ -54,6 +54,7 @@ const LearningPathView = ({ source }) => {
   const currentLearningPath = localLearningPath || learningPath;
   const isLoading = localLoading !== false && loading;
   const currentError = localError || error;
+  const isPersisted = isFromHistory || savedToHistory; // Calculate persisted status
   
   // Determine the correct pathId to use
   // Priority: localEntryId (after save) > entryId (from URL) > learningPath.path_id (intrinsic)
@@ -193,6 +194,7 @@ const LearningPathView = ({ source }) => {
           <LearningPathHeader 
             topic={currentLearningPath.topic}
             savedToHistory={savedToHistory}
+            isPersisted={isPersisted}
             onDownload={handleDownloadJSON}
             onDownloadPDF={handleDownloadPDFWithUpdate}
             onSaveToHistory={handleSaveToHistory}

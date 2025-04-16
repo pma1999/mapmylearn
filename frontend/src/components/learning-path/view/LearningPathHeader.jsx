@@ -24,6 +24,7 @@ import { motion } from 'framer-motion';
  * @param {Object} props Component props 
  * @param {string} props.topic Learning path topic/title
  * @param {boolean} props.savedToHistory Whether the learning path is saved to history
+ * @param {boolean} props.isPersisted Whether the path is saved or loaded from history
  * @param {Function} props.onDownload Handler for JSON download
  * @param {Function} props.onDownloadPDF Handler for PDF download
  * @param {Function} props.onSaveToHistory Handler for saving to history
@@ -33,6 +34,7 @@ import { motion } from 'framer-motion';
 const LearningPathHeader = ({ 
   topic, 
   savedToHistory, 
+  isPersisted,
   onDownload, 
   onDownloadPDF,
   onSaveToHistory, 
@@ -166,16 +168,19 @@ const LearningPathHeader = ({
                     </motion.div>
                     
                     <motion.div variants={buttonVariants} sx={{ flex: 1 }}>
-                      <Tooltip title="Download as PDF">
-                        <Button
-                          variant="outlined"
-                          fullWidth
-                          startIcon={<PictureAsPdfIcon />}
-                          onClick={onDownloadPDF}
-                          size={isMobile ? "small" : "medium"}
-                        >
-                          PDF
-                        </Button>
+                      <Tooltip title={!isPersisted ? "Save to history to enable PDF download" : "Download as PDF"}>
+                        <span>
+                          <Button
+                            variant="outlined"
+                            fullWidth
+                            startIcon={<PictureAsPdfIcon />}
+                            onClick={onDownloadPDF}
+                            size={isMobile ? "small" : "medium"}
+                            disabled={!isPersisted}
+                          >
+                            PDF
+                          </Button>
+                        </span>
                       </Tooltip>
                     </motion.div>
                   </Box>
@@ -224,14 +229,17 @@ const LearningPathHeader = ({
                     </motion.div>
                     
                     <motion.div variants={buttonVariants}>
-                      <Tooltip title="Download as PDF">
-                        <Button
-                          variant="outlined"
-                          startIcon={<PictureAsPdfIcon />}
-                          onClick={onDownloadPDF}
-                        >
-                          PDF
-                        </Button>
+                      <Tooltip title={!isPersisted ? "Save to history to enable PDF download" : "Download as PDF"}>
+                        <span>
+                          <Button
+                            variant="outlined"
+                            startIcon={<PictureAsPdfIcon />}
+                            onClick={onDownloadPDF}
+                            disabled={!isPersisted}
+                          >
+                            PDF
+                          </Button>
+                        </span>
                       </Tooltip>
                     </motion.div>
                   </Box>
@@ -271,6 +279,7 @@ const LearningPathHeader = ({
 LearningPathHeader.propTypes = {
   topic: PropTypes.string.isRequired,
   savedToHistory: PropTypes.bool.isRequired,
+  isPersisted: PropTypes.bool.isRequired,
   onDownload: PropTypes.func.isRequired,
   onDownloadPDF: PropTypes.func.isRequired,
   onSaveToHistory: PropTypes.func.isRequired,
