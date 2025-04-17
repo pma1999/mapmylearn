@@ -1142,7 +1142,7 @@ async def execute_submodule_specific_searches(
     search_parallel_count = state.get("search_parallel_count", 2)
     scrape_timeout = int(os.environ.get("SCRAPE_TIMEOUT", 10))
     # Potentially fewer results needed for submodule context
-    max_results_per_query = int(os.environ.get("SEARCH_MAX_RESULTS_SUBMODULE", 3))
+    max_results_per_query = int(os.environ.get("SEARCH_MAX_RESULTS_SUBMODULE", 5))
 
     sem = asyncio.Semaphore(search_parallel_count)
     all_search_service_results: List[SearchServiceResult] = []

@@ -553,7 +553,7 @@ async def generate_submodule_resources(
 
         scrape_timeout = int(os.environ.get("SCRAPE_TIMEOUT", 10))
         # Fewer results for submodules usually
-        max_results_per_query = int(os.environ.get("SEARCH_MAX_RESULTS_SUBMODULE", 3))
+        max_results_per_query = int(os.environ.get("SEARCH_MAX_RESULTS_SUBMODULE", 5))
 
         # Set operation name for tracking
         provider = tavily_key_provider.set_operation("submodule_resource_search")
