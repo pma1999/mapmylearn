@@ -77,7 +77,7 @@ Ensure the submodules create a complete, cohesive learning experience for this m
 SUBMODULE_QUERY_GENERATION_PROMPT = """
 # EXPERT RESEARCH ASSISTANT INSTRUCTIONS
 
-Your task is to generate optimal search queries that will gather comprehensive information for developing educational content for a specific submodule.
+Your task is to generate optimal search queries that will gather comprehensive information for developing educational content.
 
 ## SUBMODULE INFORMATION
 Title: "{submodule_title}"
@@ -91,23 +91,25 @@ Module context: {module_context}
 Learning path context: {learning_path_context}
 
 ## SEARCH LANGUAGE STRATEGY
-Important: While the content will be presented in {language}, you should generate search queries in the language most likely to yield comprehensive, high-quality information (often English for technical topics).
+Important: While the content will be presented in {language}, you should generate search queries in the language most likely to yield comprehensive information. For universal topics, this is typically English, but for regionally specific topics (e.g., history of Spain), consider using the appropriate regional language.
 
 ## SEARCH STRATEGY
 
-Based on thorough analysis of this submodule's requirements, generate EXACTLY 5 search queries that will:
-1. Cover different critical aspects needed for developing this submodule's content.
-2. Target specific concepts, techniques, or examples that should be included.
-3. Ensure comprehensive understanding of the submodule's core focus.
-4. Address various complexity levels appropriate for this submodule (if applicable, consider terms like 'introduction to' or 'advanced techniques for').
-5. Target high-quality educational content (explanations, examples, tutorials) from authoritative sources.
+Based on thorough analysis of this submodule's requirements, generate 5 search queries that will:
+1. Cover different critical aspects needed for developing this submodule
+2. Target specific concepts, techniques, or examples that should be included
+3. Ensure comprehensive understanding of the submodule's core focus
+4. Address various complexity levels appropriate for this submodule
+5. Target high-quality educational content from authoritative sources
 
 For each search query:
-- **Prioritize queries that find:** Detailed explanations ('how {key_concept} works', 'explanation {key_concept}'), practical examples ('{key_concept} code example', '{key_concept} use case'), tutorials ('{key_concept} tutorial'), common pitfalls ('{key_concept} common mistakes'), and best practices ('{key_concept} best practices') relevant to "{submodule_title}".
-- **USE QUOTES "" WITH EXTREME CAUTION:** Only for essential multi-word technical terms specific to this submodule (e.g., "React Context API"). Overusing quotes drastically reduces results. Getting *relevant* results is better than getting *no* results.
-- Make it specific and targeted to return useful results for *writing the content* of this submodule.
-- Explain why this search is essential for developing comprehensive content for this submodule.
-- Ensure it addresses a different aspect needed for thorough coverage.
+- Make it specific and targeted to return useful results
+- Prioritize queries that find detailed explanations ('how {key_concept} works', 'explanation {key_concept}'), practical examples ('{key_concept} code example', '{key_concept} use case'), tutorials ('{key_concept} tutorial'), common pitfalls ('{key_concept} common errors'), and best practices ('{key_concept} best practices') relevant to '{submodule_title}'.
+- Explain why this search is essential for developing this submodule
+- Ensure it addresses a different aspect needed for comprehensive coverage
+- Design it to return high-quality educational content
+- USE QUOTES WITH EXTREME CAUTION: Only for multi-word technical terms that are absolutely essential and specific to this submodule (e.g., "React Context API"). Overusing quotes will drastically reduce results. It is preferable to get more relevant results than none.
+- If the submodule has a defined depth level (e.g., basic, advanced), try to subtly reflect this in the search terms (e.g., 'introduction to...' or 'advanced techniques for...'), but without sacrificing getting results.
 
 Your response should be exactly 5 search queries, each with its detailed rationale.
 
@@ -277,41 +279,53 @@ Your 10 questions should assess comprehensively the submodule's content.
 TOPIC_RESOURCE_QUERY_GENERATION_PROMPT = """
 # EXPERT RESEARCHER INSTRUCTIONS
 
-Your task is to create the SINGLE MOST EFFECTIVE search query to find **high-quality, comprehensive external learning resources** (e.g., books, articles, online courses, tutorials, videos, official documentation) for the overall learning path on "{user_topic}".
+Your task is to create the SINGLE MOST EFFECTIVE search query to find **high-quality, comprehensive external learning resources** (e.g., books, articles, online courses, tutorials, videos, official documentation) for a learning path on "{user_topic}".
 
 ## LEARNING PATH OVERVIEW
-This query aims to find top-tier external learning materials providing broad, authoritative coverage of the entire learning path topic.
+This search query aims to find top-tier external learning materials providing broad, authoritative coverage of the entire learning path topic.
 
 ## LEARNING PATH STRUCTURE
 {learning_path_context}
 
 ## LANGUAGE STRATEGY
 - Content will be presented to users in {language}.
-- For the search query itself, use {search_language} (often English) to maximize information quality, unless {user_topic} is region-specific.
+- For search queries, use {search_language} to maximize information quality.
+- If {user_topic} is culturally/regionally specific, consider language optimization.
 
 ## SEARCH QUERY REQUIREMENTS
 
 ### 1. Keyword-Focused Format for Finding Quality Resources
 Your query MUST be optimized for a search engine API (like Google or Tavily) to find **excellent learning materials**:
-- **Combine '{user_topic}' intelligently with indicators of quality and resource type.** Use terms like: 'best tutorial', 'comprehensive guide', 'recommended online course', 'definitive book', 'official documentation', 'essential reference', 'video course', 'authoritative article'.
-- **IMPORTANT - BALANCE QUALITY & RESULTS:** Aim for the BEST resources, but be realistic. Use only 1-2 quality indicators (like 'best', 'comprehensive') combined with '{user_topic}' and perhaps ONE resource type ('tutorial', 'book').
-- **AVOID QUOTES ""** unless '{user_topic}' is an inseparable multi-word phrase. Prioritize getting a useful list of high-quality options over a perfectly precise query that yields nothing.
-- Focus on keywords that signal quality but keep the search broad enough to return actual results.
-- Avoid conversational language. Keep it concise (3-6 keywords/terms total).
+- Combine the core topic "{user_topic}" with a smart combination of quality indicators and resource type keywords.
+- Use a mix like: **best {user_topic} tutorial**, **comprehensive {user_topic} guide**, **recommended {user_topic} online course**, **definitive {user_topic} book**, **official {user_topic} documentation**, **essential {user_topic} reference**, **{user_topic} video course**, **authoritative {user_topic} article**.
+- IMPORTANT: The goal is to find the BEST available resources. Use quality terms ('best', 'complete', 'authoritative'), but combine ONLY 1 or 2 of these with the {user_topic} and perhaps ONE resource type ('tutorial', 'book'). DO NOT use quotes unless '{user_topic}' is an inseparable multi-word phrase. Prioritize getting a useful list of high-quality options.
+- Focus on keywords that signal quality but keep the search broad enough to return results.
+- Avoid conversational language.
 
 ### 2. Comprehensive Resource Discovery Goal
-Your query should aim to find resources covering "{user_topic}" broadly: foundational concepts, key principles, typical progression, different depths, theoretical and practical aspects.
+Your query should aim to find resources covering "{user_topic}" broadly:
+- Foundational concepts
+- Key principles
+- Typical progression paths
+- Different depths (beginner to advanced)
+- Both theoretical and practical aspects
 
 ### 3. Implied Quality and Authority
-Use keywords suggesting quality ('best', 'comprehensive', 'authoritative', 'official') strategically, without making the query too restrictive.
+Use keywords that suggest quality (like "best", "comprehensive", "authoritative", "official") while keeping the query open enough to return actual results.
 
 ### 4. Educational Focus
-Keywords must emphasize finding **learning resources** specifically.
+The keywords must emphasize finding **learning resources** specifically.
+
+### 5. Search Engine Optimization
+- CRITICAL: Balance specificity with breadth - too restrictive queries return no results.
+- Limit to 3-6 keywords/terms total for best results.
+- Include at most ONE quoted term ONLY if '{user_topic}' is a critical multi-word concept.
+- Prioritize getting useful, high-quality results over perfect precision.
 
 ## OUTPUT REQUIREMENTS
 Provide:
-1. A single, powerful search engine query string optimized to find **comprehensive, high-quality external learning resources** for the topic.
-2. A detailed explanation of your search strategy and why this query is likely to find excellent broad resources.
+1. A single, powerful search engine query string (keywords, phrases) optimized to find **comprehensive, high-quality external learning resources** for the topic.
+2. A detailed explanation of your search strategy and why this query is likely to find excellent resources.
 
 {format_instructions}
 """
@@ -332,31 +346,37 @@ This module is part of a larger learning path:
 
 ## LANGUAGE STRATEGY
 - Content will be presented to users in {language}.
-- For the search query, use {search_language} (often English) to maximize information quality, unless the module covers region-specific content.
+- For search queries, use {search_language} to maximize information quality.
+- If this module covers culturally/regionally specific content, consider language optimization.
 
 ## SEARCH QUERY REQUIREMENTS
 
 ### 1. Keyword-Focused Format for Finding Quality Resources
-Your query MUST be optimized for a search engine API to find **excellent learning materials** relevant to this module:
-- Combine specific keywords from "{module_title}" and its description with terms indicating resource types or specific goals.
-- **Consider terms reflecting module objectives:** 'practical guide {module_title}', 'applied examples {module_title}', '{module_title} key concepts', 'detailed tutorial {module_title}', '{module_title} exercises', 'best practices {module_title}'.
-- **CRITICAL - BALANCE RELEVANCE & RESULTS:** It's vital to find resources RELEVANT to THIS MODULE. A slightly broader query returning good related resources is better than a hyper-specific one returning nothing.
-- **USE QUOTES "" SPARINGLY:** Only if a key technical term crucial to the module *must* be kept together. Example: 'tutorial "React Hooks"' (if React Hooks is the module focus). Avoid quoting generic terms like 'tutorial' or 'examples'.
-- Focus on keywords likely to yield high-quality educational content for *this specific module*.
-- Avoid conversational language. Keep it concise (3-6 keywords/terms total).
+Your query MUST be optimized for a search engine API (like Google or Tavily) to find **excellent learning materials** relevant to this module:
+- Combine specific keywords from "{module_title}" and its description with terms indicating resource types or learning goals. Ensure the query reflects the key concepts and objectives mentioned in the module description: {module_description}.
+- Use keywords like: **tutorial {module_title}**, **practical guide {module_title}**, **{module_title} applied examples**, **{module_title} key concepts**, **detailed tutorial {module_title}**, **{module_title} exercises**, **article {module_title}**, **{module_title} video lecture**, **documentation {module_title}**, **best practices {module_title}**.
+- CRITICAL: Use quotes SPARINGLY and ONLY for the most essential technical terms or module-specific concepts that must be kept together. Example: `tutorial "React Hooks"` (only the specific concept is quoted). Avoid: `"tutorial" "React Hooks" "examples"`.
+- Focus on keywords likely to yield high-quality educational content for this specific module.
+- Avoid conversational language.
 
 ### 2. Module-Specific Focus
-Target resources specifically relevant to {module_title}, addressing its core concepts (from {module_description}) and learning objectives.
+Your query must target resources specifically relevant to {module_title}, addressing its core concepts and key components.
 
 ### 3. Implied Quality and Authority
-Use keywords suggesting quality ('guide', 'documentation', 'official') where appropriate, without overly restricting results.
+Use keywords that suggest quality ("best", "guide", "documentation", "official") while ensuring the query isn't too restrictive to return results.
 
 ### 4. Educational Value
-Keywords must emphasize finding **learning resources** relevant to this module.
+The query keywords must emphasize finding **learning resources** specifically relevant to this module.
+
+### 5. Search Engine Optimization
+- CRITICAL: Balance specificity with breadth - too restrictive queries return no results. It is crucial to find RELEVANT resources for THIS MODULE. It's better to have a slightly broader query that returns good resources related to '{module_title}' than a hyper-specific one that returns nothing.
+- Limit to 3-6 keywords/terms total for best results.
+- Include at most ONE quoted term for critical multi-word concepts. Use quotes only if a KEY technical term for the module absolutely requires it.
+- Prioritize getting useful results over perfect precision.
 
 ## OUTPUT REQUIREMENTS
 Provide:
-1. A single, powerful search engine query string optimized to find **relevant, high-quality external learning resources** for this module.
+1. A single, powerful search engine query string (keywords, phrases) optimized to find **relevant, high-quality external learning resources** for this module.
 2. A detailed explanation of your search strategy and why this query is likely to find good resources for this specific module.
 
 {format_instructions}
@@ -380,33 +400,37 @@ Adjacent submodules: {adjacent_context}
 
 ## LANGUAGE STRATEGY
 - Content will be presented to users in {language}.
-- For the search query, use {search_language} (often English) to maximize information quality, especially for technical topics.
+- For search queries, use {search_language} to maximize information quality.
+- If this submodule covers specialized or regional content, consider language optimization.
 
 ## SEARCH QUERY REQUIREMENTS
 
 ### 1. Keyword-Focused Format for Finding Specific Resources
-Your query MUST be optimized for a search engine API to find **specific, high-quality learning materials** for this submodule:
-- Combine very specific technical terms from "{submodule_title}" and its description with terms indicating resource types or actions.
-- **Include terms related to application/problems:** 'implement {submodule_title}', 'apply {submodule_title}', 'debug {submodule_title}', '{submodule_title} common issues', 'practical example {submodule_title}', 'how to use {submodule_title}'.
-- **MAXIMUM CAUTION WITH QUOTES "":** If there's ONE critical multi-word technical term defining this submodule (e.g., a specific API name, algorithm), consider quoting ONLY that term (e.g., 'tutorial "useState Hook"'). Otherwise, AVOID quotes and rely on specific keyword combinations.
-- Focus on keywords likely to yield targeted and authoritative educational content (tutorials, code examples, docs, articles, videos).
-- Avoid conversational language. Select only the 3-5 most essential terms.
+Your query MUST be optimized for a search engine API (like Google or Tavily) to find **specific, high-quality learning materials** for this submodule:
+- Combine very specific technical terms from "{submodule_title}" and its description with terms indicating resource types, application, or specific content areas.
+- Use keywords like: **tutorial {submodule_title}**, **{submodule_title} code example**, **{submodule_title} explanation**, **{submodule_title} case study**, **implement {submodule_title}**, **apply {submodule_title}**, **debug {submodule_title}**, **{submodule_title} common issues**, **{submodule_title} practical example**, **how to use {submodule_title}**, **{submodule_title} video tutorial**, **official documentation {submodule_title}**, **{submodule_title} practice exercise**.
+- MAXIMUM CAUTION WITH QUOTES: If there is ONE SINGLE CRITICAL multi-word technical term defining this submodule (e.g., a specific API name, a concrete algorithm), consider using quotes ONLY for that term (e.g., `tutorial "useState Hook"`). In all other cases, AVOID quotes and rely on the combination of specific keywords.
+- Focus on keywords likely to yield targeted and authoritative educational content.
+- Avoid conversational language.
 
 ### 2. Laser-Focused Targeting
-Target resources addressing the exact concepts and skills covered in **this submodule**.
+Your query must target resources that specifically address the exact concepts and skills covered in **this submodule**.
 
-### 3. Quality and Diversity
-Aim for a mix of high-quality external resources like specific tutorials, code examples, documentation pages, explanatory articles, or videos.
+### 3. Implied Quality and Diversity
+The query keywords should help find a mix of high-quality external learning resources like specific tutorials, code examples, documentation pages, explanatory articles, or videos.
 
 ### 4. Contextual Relevance
-Keywords should reflect the specific focus of this submodule ({submodule_description}) and its need for **targeted external learning materials**.
+The query keywords should reflect the specific focus of this submodule and its need for **targeted external learning materials**.
 
-### 5. Search Engine Optimization - GETTING RESULTS IS KEY
-- **ABSOLUTELY CRITICAL:** It's infinitely better to generate a query that is slightly less specific but returns *useful and relevant* resources for "{submodule_title}" than a 'perfectly' specific query returning ZERO results. **Optimize for finding useful learning material.**
+### 5. Search Engine Optimization
+- ABSOLUTELY CRITICAL: Balance specificity with breadth. It is infinitely better to generate a slightly less specific query that returns USEFUL and RELEVANT resources for '{submodule_title}' than a 'perfectly' specific query that returns ZERO results. The number one priority is finding helpful learning material. Optimize for obtaining relevant results.
+- Choose the 3-5 most important terms or keywords that will find resources.
+- Include at most ONE quoted phrase for a critical technical term, only if absolutely necessary as per instruction 1.
+- Select only the most essential terms from the submodule title/description.
 
 ## OUTPUT REQUIREMENTS
 Provide:
-1. A single, powerful search engine query string optimized to find **specific, high-quality external learning resources** for this submodule.
+1. A single, powerful search engine query string (keywords, phrases) optimized to find **specific, high-quality external learning resources** for this submodule.
 2. A detailed explanation of your search strategy and why it's ideal for finding relevant resources for this particular submodule.
 
 {format_instructions}
