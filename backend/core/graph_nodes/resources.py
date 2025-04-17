@@ -150,7 +150,7 @@ async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
         # Prepare context from scraped results
         scraped_context_parts = []
         max_context_per_query_llm = 5 # Limit results used for LLM context
-        max_chars_per_result_llm = 4000 # Limit chars per result for LLM context
+        max_chars_per_result_llm = 100000 # Limit chars per result for LLM context
         results_included_llm = 0
         for res in search_service_result.results:
              if results_included_llm >= max_context_per_query_llm:
@@ -350,7 +350,7 @@ async def generate_module_resources(state: LearningPathState, module_id: int, mo
         # Prepare context from scraped results
         scraped_context_parts = []
         max_context_per_query_llm = 5 # Limit results used for LLM context
-        max_chars_per_result_llm = 4000 # Limit chars per result for LLM context
+        max_chars_per_result_llm = 100000 # Limit chars per result for LLM context
         results_included_llm = 0
         for res in search_service_result.results:
              if results_included_llm >= max_context_per_query_llm:
@@ -591,8 +591,8 @@ async def generate_submodule_resources(
 
         # Prepare context from scraped results
         scraped_context_parts = []
-        max_context_per_query_llm = 3 # Limit results used for LLM context
-        max_chars_per_result_llm = 3000 # Limit chars per result for LLM context
+        max_context_per_query_llm = 5 # Limit results used for LLM context
+        max_chars_per_result_llm = 100000 # Limit chars per result for LLM context
         results_included_llm = 0
         for res in search_service_result.results:
              if results_included_llm >= max_context_per_query_llm:

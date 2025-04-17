@@ -115,7 +115,7 @@ async def _scrape_single_url(session: aiohttp.ClientSession, url: str, timeout: 
             clean_text = re.sub(r'\n\s*\n', '\n\n', clean_text) # Consolidate multiple newlines
 
             # Limit content size if needed
-            MAX_SCRAPE_LENGTH = 30000 # Limit to 30k characters
+            MAX_SCRAPE_LENGTH = 100000 # Limit to 100k characters
             if len(clean_text) > MAX_SCRAPE_LENGTH:
                clean_text = clean_text[:MAX_SCRAPE_LENGTH] + "... (truncated)"
 

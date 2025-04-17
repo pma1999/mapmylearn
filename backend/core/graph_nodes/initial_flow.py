@@ -385,7 +385,7 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
         # Process the new search results structure for the LLM prompt
         context_parts = []
         max_context_per_query = 5 # Limit number of results per query used in context
-        max_chars_per_result = 4000 # Limit characters per scraped result
+        max_chars_per_result = 100000 # Limit characters per scraped result
 
         for report in search_service_results:
             query = escape_curly_braces(report.query)
