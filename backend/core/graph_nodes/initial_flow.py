@@ -81,17 +81,21 @@ Analyze the topic "{user_topic}" to identify key structural components:
 ## SEARCH STRATEGY
 
 Design EXACTLY 5 search queries that will:
-1. Retrieve information about optimal learning path structures for this topic
-2. Discover how experts organize curriculum on this subject
-3. Identify standard modules and their sequencing
-4. Find information about pedagogical progressions specific to this topic
-5. Uncover recommended learning sequences and prerequisites
+1. Retrieve information about optimal learning path **structures** for this topic.
+2. Discover how experts **organize curriculum** on this subject.
+3. Identify standard modules and their **sequencing**.
+4. Find information about **pedagogical progressions** specific to this topic.
+5. Uncover recommended learning sequences and **prerequisites**.
+
+**CRITICAL:** Ensure each query is specific enough to find information about **CURRICULUM STRUCTURE** (how to organize the learning) but broad enough to yield real examples of syllabi, pedagogical discussions, or existing course structures. Avoid terms so specific they would only describe a non-existent hypothetical course. These queries should NOT search for HOW TO DO {user_topic}, but rather HOW TO TEACH OR STRUCTURE THE LEARNING of {user_topic}.
 
 For each search query:
-- Make it specific to retrieving STRUCTURAL and ORGANIZATIONAL information
-- Focus on curriculum design, learning path structure, and module organization
-- Target educational resources that reveal how knowledge in this domain is best structured
-- Explain precisely how this query will help determine the optimal modules and their sequence
+- Make it specific to retrieving **STRUCTURAL and ORGANIZATIONAL** information.
+- Focus on curriculum design, learning path structure, and module organization.
+- Target educational resources that reveal how knowledge in this domain is best structured.
+- **Consider terms like:** 'curriculum design {user_topic}', 'learning path structure {user_topic}', 'module sequence {user_topic}', 'pedagogical framework {user_topic}', 'skill progression {user_topic}', 'example syllabus {user_topic}', 'prerequisites {user_topic}'.
+- Explain precisely how this query will help determine the optimal modules and their sequence.
+- **Balance specificity with the need to get results.** Avoid overly narrow terms or excessive use of quotes "" which might return nothing.
 
 Your response should be exactly 5 search queries, each with a detailed rationale explaining how it contributes to creating the perfect learning path STRUCTURE.
 
