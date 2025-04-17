@@ -662,7 +662,8 @@ async def process_submodule_batch(state: LearningPathState) -> Dict[str, Any]:
                     search_queries=data.get("search_queries", []),
                     search_results=search_results_dicts, # Use the converted list of dicts
                     content=data.get("content", ""),
-                    quiz_questions=data.get("quiz_questions", None)
+                    quiz_questions=data.get("quiz_questions", None),
+                    resources=data.get("resources", []) # Add the resources here
                 ))
     
     # Update progress based on completion percentage

@@ -901,27 +901,34 @@ async def add_resources_to_final_learning_path(state: LearningPathState) -> Dict
         final_path["topic_resources"] = topic_resources
         logger.info(f"Added {len(topic_resources)} topic resources to the final learning path.")
 
-        # Module/Submodule resources should have been added in-place to the
-        # EnhancedModule/Submodule objects during their processing steps.
-        # We just log a confirmation here.
+        # Add module resources from the processed state
+        module_resources_data = state.get("module_resources_in_process", {})
         module_resource_count = 0
-        submodule_resource_count = 0
-        if "modules" in final_path and isinstance(final_path["modules"], list):
-             for module_data in final_path["modules"]:
-                  if isinstance(module_data, dict):
-                       module_resource_count += len(module_data.get("resources", []))
-                       if "submodules" in module_data and isinstance(module_data["submodules"], list):
-                            for sub_data in module_data["submodules"]:
-                                 if isinstance(sub_data, dict):
-                                      submodule_resource_count += len(sub_data.get("resources", []))
-                  elif hasattr(module_data, 'resources'): # Handle object case
-                       module_resource_count += len(module_data.resources)
-                       if hasattr(module_data, 'submodules'):
-                            for sub_data in module_data.submodules:
-                                 if hasattr(sub_data, 'resources'):
-                                      submodule_resource_count += len(sub_data.resources)
+        submodule_resource_count = 0 # Initialize here
 
-        logger.info(f"Final path includes {module_resource_count} module resources and {submodule_resource_count} submodule resources (added previously).")
+        if "modules" in final_path and isinstance(final_path["modules"], list):
+            for module_index, module_data in enumerate(final_path["modules"]):
+                # Find resources for this module index
+                processed_module_resources = module_resources_data.get(module_index, {}).get("resources", [])
+                if processed_module_resources:
+                     if isinstance(module_data, dict):
+                          module_data["resources"] = processed_module_resources
+                     elif hasattr(module_data, 'resources'):
+                          module_data.resources = processed_module_resources
+                     module_resource_count += len(processed_module_resources)
+
+                # Count submodule resources (already added in the previous step)
+                if isinstance(module_data, dict):
+                     if "submodules" in module_data and isinstance(module_data["submodules"], list):
+                          for sub_data in module_data["submodules"]:
+                               if isinstance(sub_data, dict):
+                                    submodule_resource_count += len(sub_data.get("resources", []))
+                elif hasattr(module_data, 'submodules'):
+                     for sub_data in module_data.submodules:
+                          if hasattr(sub_data, 'resources'):
+                               submodule_resource_count += len(sub_data.resources)
+
+        logger.info(f"Final path includes {len(topic_resources)} topic resources, {module_resource_count} module resources, and {submodule_resource_count} submodule resources.")
 
 
     return {"final_learning_path": final_path} 

@@ -294,9 +294,11 @@ This search query aims to find top-tier external learning materials providing br
 ### 1. Keyword-Focused Format for Finding Quality Resources
 Your query MUST be optimized for a search engine API (like Google or Tavily) to find **excellent learning materials**:
 - Combine the core topic "{user_topic}" with keywords representing different types of valuable resources.
-- Use keywords like: **"best {user_topic} tutorial"**, **"comprehensive {user_topic} guide"**, **"{user_topic} online course"**, **"authoritative book {user_topic}"**, **"{user_topic} documentation"**, **"{user_topic} examples"**, **"video lecture {user_topic}"**, **"research articles {user_topic}"**.
-- Use quotes for the main topic if it's a multi-word phrase (e.g., "best \"machine learning\" tutorial").
-- Focus on keywords that signal quality and educational value (e.g., "best", "comprehensive", "authoritative", "official").
+- Use keywords like: **best {user_topic} tutorial**, **comprehensive {user_topic} guide**, **{user_topic} online course**, **authoritative book {user_topic}**, **{user_topic} documentation**, **{user_topic} examples**, **video lecture {user_topic}**, **research articles {user_topic}**.
+- IMPORTANT: Use quotes SPARINGLY and ONLY for multi-word concepts that are absolutely critical. Using too many quoted terms will severely restrict search results.
+- Example of good use of quotes: If the topic is "machine learning", one quoted term is sufficient: **best "machine learning" tutorial**
+- Example of problematic overuse: **"best tutorial" "machine learning" "beginners guide"** (too restrictive)
+- Focus on keywords that signal quality but keep the search broad enough to return results.
 - Avoid conversational language.
 
 ### 2. Comprehensive Resource Discovery Goal
@@ -308,10 +310,16 @@ Your query should aim to find resources covering "{user_topic}" broadly:
 - Both theoretical and practical aspects
 
 ### 3. Implied Quality and Authority
-The query keywords (like "best", "comprehensive", "authoritative", "official", "expert") should guide the search towards high-quality, reliable resources.
+Use keywords that suggest quality (like "best", "comprehensive", "authoritative", "official") while keeping the query open enough to return actual results.
 
 ### 4. Educational Focus
 The keywords must emphasize finding **learning resources** specifically.
+
+### 5. Search Engine Optimization
+- CRITICAL: Balance specificity with breadth - too restrictive queries return no results
+- Limit to 3-6 keywords/terms total for best results
+- Include at most ONE quoted term for critical multi-word concepts
+- Prioritize getting useful results over perfect precision
 
 ## OUTPUT REQUIREMENTS
 Provide:
@@ -345,8 +353,10 @@ This module is part of a larger learning path:
 ### 1. Keyword-Focused Format for Finding Quality Resources
 Your query MUST be optimized for a search engine API (like Google or Tavily) to find **excellent learning materials** relevant to this module:
 - Combine specific keywords from "{module_title}" and its description with terms indicating resource types.
-- Use keywords like: **"tutorial {module_title}"**, **"{module_title} guide examples"**, **"article {module_title}"**, **"{module_title} video lecture"**, **"documentation {module_title}"**, **"{module_title} exercises"**, **"best practices {module_title}"**.
-- Use quotes for the core module concept or specific technical terms (e.g., "tutorial \"React Hooks\"").
+- Use keywords like: **tutorial {module_title}**, **{module_title} guide examples**, **article {module_title}**, **{module_title} video lecture**, **documentation {module_title}**, **{module_title} exercises**, **best practices {module_title}**.
+- CRITICAL: Use quotes SPARINGLY and ONLY for the most essential technical terms or module-specific concepts that must be kept together.
+- Example of good use of quotes: **tutorial "React Hooks"** (only the specific technical concept is quoted)
+- Example of bad use of quotes: **"tutorial" "React Hooks" "examples"** (too many quotes severely limits results)
 - Focus on keywords likely to yield high-quality educational content for this specific module.
 - Avoid conversational language.
 
@@ -354,10 +364,16 @@ Your query MUST be optimized for a search engine API (like Google or Tavily) to 
 Your query must target resources specifically relevant to {module_title}, addressing its core concepts and key components.
 
 ### 3. Implied Quality and Authority
-The query keywords ("best", "guide", "documentation", "official") should guide the search towards high-quality resources for this module.
+Use keywords that suggest quality ("best", "guide", "documentation", "official") while ensuring the query isn't too restrictive to return results.
 
 ### 4. Educational Value
 The query keywords must emphasize finding **learning resources** specifically relevant to this module.
+
+### 5. Search Engine Optimization
+- CRITICAL: Balance specificity with breadth - too restrictive queries return no results
+- Limit to 3-6 keywords/terms total for best results
+- Include at most ONE quoted term for critical multi-word concepts
+- Prioritize getting useful results over perfect precision
 
 ## OUTPUT REQUIREMENTS
 Provide:
@@ -393,8 +409,10 @@ Adjacent submodules: {adjacent_context}
 ### 1. Keyword-Focused Format for Finding Specific Resources
 Your query MUST be optimized for a search engine API (like Google or Tavily) to find **specific, high-quality learning materials** for this submodule:
 - Combine very specific technical terms from "{submodule_title}" and its description with terms indicating resource types or specific content.
-- Use keywords like: **"tutorial {submodule_title}"**, **"{submodule_title} code example"**, **"{submodule_title} explanation"**, **"{submodule_title} case study"**, **"how to implement {submodule_title}"**, **"{submodule_title} video tutorial"**, **"official documentation {submodule_title}"**, **"{submodule_title} practice exercise"**.
-- Use quotes for essential technical terms or exact phrases critical to the submodule (e.g., "tutorial \"React context API\"").
+- Use keywords like: **tutorial {submodule_title}**, **{submodule_title} code example**, **{submodule_title} explanation**, **{submodule_title} case study**, **how to implement {submodule_title}**, **{submodule_title} video tutorial**, **official documentation {submodule_title}**, **{submodule_title} practice exercise**.
+- VITAL: Use quotes ONLY for the most critical technical term or concept, if necessary.
+- Example of appropriate quotes: **tutorial "React context API"** (only the specific technical API is quoted)
+- Example of problematic quotes: **"tutorial" "React context API" "example"** (excessive quotes will yield no results)
 - Focus on keywords likely to yield targeted and authoritative educational content.
 - Avoid conversational language.
 
@@ -406,6 +424,13 @@ The query keywords should help find a mix of high-quality external learning reso
 
 ### 4. Contextual Relevance
 The query keywords should reflect the specific focus of this submodule and its need for **targeted external learning materials**.
+
+### 5. Search Engine Optimization
+- ABSOLUTELY CRITICAL: Balance specificity with breadth - too restrictive queries return no results
+- Choose the 3-5 most important terms or keywords that will find resources
+- Include at most ONE quoted phrase for a critical technical term
+- It is better to get some useful results than no results at all
+- Select only the most essential terms from the submodule title/description
 
 ## OUTPUT REQUIREMENTS
 Provide:
