@@ -1613,7 +1613,8 @@ async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str,
                 "prerequisites": getattr(module, 'prerequisites', []),
                 "key_components": getattr(module, 'key_components', []),
                 "expected_outcomes": getattr(module, 'expected_outcomes', []),
-                "submodules": submodule_data
+                "submodules": submodule_data,
+                "resources": []
             }
             
             final_modules.append(module_data)
