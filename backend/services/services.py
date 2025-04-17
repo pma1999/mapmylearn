@@ -10,6 +10,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_tavily import TavilySearch
 from typing import Optional, Union, Tuple, Any
 from bs4 import BeautifulSoup
+import trafilatura # Added for HTML extraction
 
 # Import models directly for runtime use
 from backend.models.models import SearchServiceResult, ScrapedResult
@@ -25,13 +26,25 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Configuration
+# TODO: Consider moving constants to a config file/object
+SEARCH_SERVICE = "tavily"
 # Maximum characters to extract from scraped content (HTML or PDF)
-MAX_SCRAPE_LENGTH = 100000 
+MAX_SCRAPE_LENGTH = 100000
+# Minimum content length threshold for Trafilatura fallback
+TRAFILATURA_MIN_LENGTH_FALLBACK = 100
+# Percentage of page height to consider as header/footer margin in PDF
+PDF_HEADER_MARGIN_PERCENT = 0.10 # 10%
+PDF_FOOTER_MARGIN_PERCENT = 0.10 # 10%
 
-# --- Start of Added PDF Helper Function ---
+# --- Start of Modified PDF Helper Function ---
 def _extract_pdf_text_sync(pdf_bytes: bytes, source_url: str) -> str:
-    """Synchronous helper to extract text from PDF bytes using PyMuPDF.
-    
+    """Synchronous helper to extract text from PDF bytes using PyMuPDF block analysis.
+
+    Attempts to extract text by analyzing blocks, filtering headers/footers,
+    and sorting blocks by reading order. Falls back to simple page text extraction if
+    block analysis fails or yields no content.
+
     Designed to be run in a thread executor.
 
     Args:
@@ -39,51 +52,90 @@ def _extract_pdf_text_sync(pdf_bytes: bytes, source_url: str) -> str:
         source_url: The original URL for logging context.
 
     Returns:
-        The extracted text content.
+        The extracted and cleaned text content.
 
     Raises:
         ValueError: If the PDF is encrypted.
         fitz.fitz.FileDataError: If the PDF data is corrupted or invalid.
         RuntimeError: For other PyMuPDF or general exceptions during processing.
     """
-    logger.debug(f"Starting PDF text extraction for {source_url}")
-    all_text = []
+    logger.debug(f"Starting PDF block analysis text extraction for {source_url}")
+    all_text_content = ""
+    extraction_method_used = "block_analysis" # Track method
+
     try:
         with fitz.open(stream=io.BytesIO(pdf_bytes), filetype="pdf") as doc:
             if doc.is_encrypted:
                 logger.warning(f"Skipping encrypted PDF: {source_url}")
-                # Raise specific error to be caught in the async function
-                raise ValueError("PDF is encrypted") 
+                raise ValueError("PDF is encrypted")
 
+            page_texts = []
             for page_num in range(len(doc)):
+                page_text_blocks = []
                 try:
                     page = doc.load_page(page_num)
-                    page_text = page.get_text("text", sort=True).strip()
-                    if page_text:
-                        all_text.append(page_text)
+                    page_rect = page.rect
+                    page_height = page_rect.height
+                    header_limit = page_rect.y0 + page_height * PDF_HEADER_MARGIN_PERCENT
+                    footer_limit = page_rect.y1 - page_height * PDF_FOOTER_MARGIN_PERCENT
+
+                    blocks = page.get_text("blocks", sort=False) # Get blocks with coordinates, no initial sort
+
+                    # Filter headers/footers and empty blocks
+                    filtered_blocks = [
+                        b for b in blocks
+                        if b[1] >= header_limit and b[3] <= footer_limit and b[4].strip() # y0>=header, y1<=footer, text exists
+                    ]
+
+                    # Sort by reading order (top-to-bottom, left-to-right)
+                    filtered_blocks.sort(key=lambda b: (b[1], b[0])) # Sort by y0, then x0
+
+                    page_text_blocks = [b[4].strip() for b in filtered_blocks] # Extract text
+
+                    if page_text_blocks:
+                        page_texts.append("\n".join(page_text_blocks)) # Join blocks with single newline
+
                 except Exception as page_err:
-                    # Log error for specific page but continue if possible
-                    logger.error(f"Error extracting text from page {page_num+1} of PDF {source_url}: {page_err}", exc_info=False)
+                    logger.error(f"Error processing blocks on page {page_num+1} of PDF {source_url}: {page_err}", exc_info=False)
+                    # For now, continue processing other pages.
 
-            # Use corrected string literal for joining pages
-            clean_text = "\n\n".join(all_text) # Separate pages by double newline
-            # Optional: Further cleaning (e.g., excessive whitespace within pages)
-            clean_text = re.sub(r'[ 	]*\n[ 	]*', '\n', clean_text) # Normalize line breaks
-            clean_text = re.sub(r'\n{3,}', '\n\n', clean_text) # Consolidate multiple newlines
+            if page_texts:
+                 all_text_content = "\n\n".join(page_texts) # Join pages with double newline
 
-            logger.debug(f"Successfully extracted text from PDF: {source_url}")
-            return clean_text
+            # --- Fallback to simple page text extraction if block analysis yielded nothing ---
+            if not all_text_content.strip():
+                logger.warning(f"PDF block analysis yielded no text for {source_url}. Falling back to simple page extraction.")
+                extraction_method_used = "page_text_fallback"
+                all_text_fallback = []
+                for page_num in range(len(doc)):
+                     try:
+                         page = doc.load_page(page_num)
+                         page_text = page.get_text("text", sort=True).strip() # Simple text extraction
+                         if page_text:
+                             all_text_fallback.append(page_text)
+                     except Exception as page_err:
+                         logger.error(f"Error during fallback text extraction on page {page_num+1} of PDF {source_url}: {page_err}", exc_info=False)
+                all_text_content = "\n\n".join(all_text_fallback)
 
-    except (fitz.fitz.FileDataError, ValueError) as e: # Catch known issues
+            # --- Final Cleaning (Applied regardless of method) ---
+            if all_text_content:
+                # Corrected regex substitutions
+                clean_text = re.sub(r'[ \t]*\n[ \t]*', '\n', all_text_content)
+                clean_text = re.sub(r'\n{3,}', '\n\n', clean_text).strip()
+                logger.debug(f"Successfully extracted text from PDF ({extraction_method_used}): {source_url}")
+                return clean_text
+            else:
+                 logger.warning(f"No text could be extracted from PDF {source_url} using any method.")
+                 return "" # Return empty string if no content found
+
+    except (fitz.fitz.FileDataError, ValueError) as e:
         logger.error(f"Failed to process PDF {source_url}: {e}")
-        raise # Re-raise specific errors to be handled distinctly if needed
-
+        raise
     except Exception as e:
-        # Catch-all for other unexpected errors during fitz processing
         logger.error(f"Unexpected error during PDF processing for {source_url}: {type(e).__name__} - {e}", exc_info=True)
         raise RuntimeError(f"Unexpected error during PDF processing: {type(e).__name__}") from e
 
-# --- End of Added PDF Helper Function ---
+# --- End of Modified PDF Helper Function ---
 
 
 async def get_llm(key_provider=None):
@@ -133,9 +185,12 @@ async def get_llm(key_provider=None):
         logger.error(f"Error initializing ChatGoogleGenerativeAI: {str(e)}")
         raise
 
-# --- Modified _scrape_single_url ---
+# --- Start of Modified _scrape_single_url ---
 async def _scrape_single_url(session: aiohttp.ClientSession, url: str, timeout: int) -> Tuple[Optional[str], Optional[str]]:
     """Scrapes cleaned textual content from a single URL (HTML or PDF).
+
+    Prioritizes using Trafilatura for HTML and block analysis for PDF, with fallbacks.
+    Cleans the content THEN truncates to MAX_SCRAPE_LENGTH.
 
     Args:
         session: The aiohttp client session.
@@ -143,11 +198,11 @@ async def _scrape_single_url(session: aiohttp.ClientSession, url: str, timeout: 
         timeout: Request timeout in seconds.
 
     Returns:
-        A tuple containing (scraped_content, error_message).
-        scraped_content is None if an error occurred.
-        error_message is None if scraping was successful.
+        A tuple containing (cleaned_scraped_content, error_message).
+        cleaned_scraped_content is None if an error occurred or no content found after cleaning.
+        error_message contains details if scraping or processing failed.
     """
-    headers = {'User-Agent': 'Mozilla/5.0 (compatible; LearniBot/1.0; +https://github.com/your-repo)'}
+    headers = {'User-Agent': 'Mozilla/5.0 (compatible; LearniBot/1.0; +https://learni.com/bot)'} # Example Bot UA
     clean_text: Optional[str] = None
     error_message: Optional[str] = None
 
@@ -159,96 +214,137 @@ async def _scrape_single_url(session: aiohttp.ClientSession, url: str, timeout: 
             
             # --- PDF Handling ---
             if "application/pdf" in content_type:
-                logger.info(f"Detected PDF content type for: {url}")
+                logger.debug(f"Detected PDF content type for: {url}")
+                extraction_method_used = "pdf_block_analysis" # Default assumption
                 try:
                     pdf_bytes = await response.read()
                     if not pdf_bytes:
-                         logger.warning(f"Received empty response body for PDF: {url}")
-                         # Use return instead of assignment for immediate exit
-                         return None, "Received empty PDF content"
-                    
+                        logger.warning(f"Received empty response body for PDF: {url}")
+                        return None, "Received empty PDF content"
+
                     loop = asyncio.get_running_loop()
-                    # Run synchronous PDF extraction in a thread executor
                     clean_text = await loop.run_in_executor(
                         None, _extract_pdf_text_sync, pdf_bytes, url
                     )
-                    logger.info(f"Successfully extracted text from PDF: {url}")
-                    # Reset error message on success
-                    error_message = None 
-                    
-                except ValueError as ve: # Catch specific encryption error
+                    # _extract_pdf_text_sync now returns empty string if no content, not None
+                    if not clean_text:
+                         logger.warning(f"PDF extraction yielded no content for {url}")
+                         error_message = "No text content extracted from PDF"
+                         # clean_text remains "" (empty string) which evaluates as False later
+                    else:
+                         error_message = None # Success
+
+                except ValueError as ve: # Specific encryption error
                     logger.warning(f"Skipping encrypted PDF {url}: {ve}")
-                    clean_text = None # Ensure clean_text is None on error
+                    clean_text = None
                     error_message = "Skipped: PDF is encrypted"
-                except (fitz.fitz.FileDataError, RuntimeError) as pdf_err: # Catch errors raised by helper
+                    extraction_method_used = "pdf_error_encrypted"
+                except (fitz.fitz.FileDataError, RuntimeError) as pdf_err: # Specific processing errors
                     logger.error(f"PDF processing failed for {url}: {pdf_err}")
-                    clean_text = None # Ensure clean_text is None on error
+                    clean_text = None
                     error_message = f"PDF processing error: {type(pdf_err).__name__}"
+                    extraction_method_used = "pdf_error_processing"
                 except asyncio.CancelledError:
                     logger.warning(f"PDF processing cancelled for {url}")
-                    raise # Propagate cancellation
-                except Exception as e: # Catch errors during response.read() or executor itself
+                    raise
+                except Exception as e: # Catch-all for read/executor errors
                     logger.error(f"Error handling PDF content for {url}: {type(e).__name__} - {e}", exc_info=True)
-                    clean_text = None # Ensure clean_text is None on error
+                    clean_text = None
                     error_message = f"Error reading/processing PDF: {type(e).__name__}"
+                    extraction_method_used = "pdf_error_unknown"
 
             # --- HTML Handling ---
             elif "text/html" in content_type:
                 logger.debug(f"Detected HTML content type for: {url}")
+                extraction_method_used = "trafilatura" # Default assumption
                 try:
                     html_content = await response.text()
-                    
-                    # Basic cleaning with BeautifulSoup
-                    soup = BeautifulSoup(html_content, 'html.parser')
-                    for tag in soup(['script', 'style', 'nav', 'footer', 'aside', 'header', 'form', 'button', 'input', 'textarea']):
-                        tag.decompose()
-                    
-                    main_content = soup.find('main') or soup.find('article') or soup.find('div', role='main') or soup.find('div', id='content') or soup.find('div', class_='content')
-                    target_element = main_content if main_content else soup.find('body')
 
-                    if target_element:
-                        clean_text = target_element.get_text(separator='\n', strip=True)
+                    # Attempt extraction with Trafilatura first
+                    extracted_text = trafilatura.extract(
+                        html_content,
+                        include_comments=False, # Don't include comments
+                        include_tables=True,    # Include table content if relevant
+                        # favor_recall=True,    # Consider if more content is desired at risk of noise
+                    )
+
+                    # Check if Trafilatura result is usable
+                    if extracted_text and len(extracted_text) >= TRAFILATURA_MIN_LENGTH_FALLBACK:
+                        clean_text = extracted_text
+                        logger.debug(f"Using Trafilatura extracted content for {url}")
                     else:
-                        clean_text = "Could not extract body or main content" # Should be unlikely
-                        logger.warning(f"Could not find body or main content for HTML: {url}")
+                        # Fallback to BeautifulSoup method if Trafilatura failed or got too little
+                        extraction_method_used = "beautifulsoup_fallback"
+                        logger.warning(f"Trafilatura yielded insufficient content (<{TRAFILATURA_MIN_LENGTH_FALLBACK} chars) for {url}. Falling back to BeautifulSoup.")
+                        soup = BeautifulSoup(html_content, 'lxml') # Use lxml parser
+                        # Remove common noise tags more aggressively
+                        for tag in soup(['script', 'style', 'nav', 'footer', 'aside', 'header', 'form', 'button', 'input', 'textarea', 'select', 'option', 'label', 'iframe', 'noscript', 'figure', 'figcaption']):
+                            tag.decompose()
 
-                    # Further cleaning
-                    clean_text = re.sub(r'\n\s*\n', '\n\n', clean_text)
-                    logger.info(f"Successfully extracted text from HTML: {url}")
-                    # Reset error message on success
-                    error_message = None 
-                except Exception as html_err: # Catch potential errors in HTML processing
-                    logger.error(f"Error processing HTML content for {url}: {type(html_err).__name__} - {html_err}", exc_info=True)
+                        # Find main content areas (add more selectors if needed)
+                        main_content = soup.find('main') or \
+                                       soup.find('article') or \
+                                       soup.find('div', role='main') or \
+                                       soup.find('div', id='content') or \
+                                       soup.find('div', class_=re.compile(r'\b(content|main|body|article)\b', re.I)) # More flexible class search
+
+                        target_element = main_content if main_content else soup.find('body')
+
+                        if target_element:
+                            clean_text = target_element.get_text(separator='\n', strip=True)
+                        else:
+                            # Extremely unlikely fallback
+                            logger.error(f"Could not find body or main content element for HTML fallback: {url}")
+                            clean_text = None # Mark as failure
+                            error_message = "HTML parsing failed: No body/main element found"
+
+                    # Apply final cleaning steps to text from either method
+                    if clean_text:
+                        # Corrected regex substitutions
+                        clean_text = re.sub(r'[ \t]*\n[ \t]*', '\n', clean_text)
+                        clean_text = re.sub(r'\n{3,}', '\n\n', clean_text).strip()
+                        logger.info(f"Successfully extracted text from HTML ({extraction_method_used}): {url}")
+                        error_message = None # Reset error on success
+                    elif not error_message: # If clean_text became None/empty without an explicit error set
+                         logger.warning(f"HTML processing ({extraction_method_used}) resulted in empty content for {url}")
+                         error_message = "No text content extracted from HTML"
+
+                except Exception as html_err:
+                    logger.error(f"Error processing HTML content ({extraction_method_used}) for {url}: {type(html_err).__name__} - {html_err}", exc_info=True)
                     clean_text = None
                     error_message = f"Error processing HTML: {type(html_err).__name__}"
+                    extraction_method_used = "html_error_unknown"
 
             # --- Other Content Types ---
             else:
                 logger.warning(f"Skipping unsupported content type '{content_type}' for URL: {url}")
                 clean_text = None
                 error_message = f"Skipped: Unsupported content type ({content_type})"
+                extraction_method_used = "skipped_content_type"
 
-            # --- Truncation (Applied to both HTML and PDF if text exists) ---
+            # --- Truncation (Applied AFTER cleaning if text exists) ---
             if clean_text is not None and len(clean_text) > MAX_SCRAPE_LENGTH:
-               logger.debug(f"Truncating content for {url} from {len(clean_text)} chars")
-               clean_text = clean_text[:MAX_SCRAPE_LENGTH] + "... (truncated)"
+                logger.debug(f"Truncating content ({extraction_method_used}) for {url} from {len(clean_text)} chars to {MAX_SCRAPE_LENGTH}")
+                clean_text = clean_text[:MAX_SCRAPE_LENGTH] + "... (truncated)"
+            elif clean_text == "": # Handle case where cleaning resulted in empty string but no error
+                clean_text = None # Treat as no content found
+                if not error_message: # Avoid overwriting specific errors
+                     error_message = "No text content found after cleaning"
 
-            # Final return based on processing outcome
-            return clean_text, error_message 
+            # Return the cleaned (and possibly truncated) text
+            return clean_text, error_message
 
     except asyncio.TimeoutError:
         logger.warning(f"Scrape timed out for {url} after {timeout}s")
         return None, f"Scrape timed out after {timeout}s"
     except aiohttp.ClientResponseError as e:
         logger.warning(f"HTTP error scraping {url}: {e.status} {e.message}")
-        # Provide specific HTTP status in error message
         return None, f"HTTP error: {e.status} ({e.message})"
-    except aiohttp.ClientError as e:
+    except aiohttp.ClientError as e: # Includes connection errors etc.
         logger.warning(f"Client error scraping {url}: {type(e).__name__}")
-        return None, f"Scraping error: {type(e).__name__}"
+        return None, f"Scraping client error: {type(e).__name__}"
     except Exception as e:
-        # Catch unexpected errors during request/initial handling
-        logger.error(f"Unexpected error scraping {url}: {type(e).__name__} - {str(e)}", exc_info=True)
+        logger.error(f"Unexpected error during initial scrape request for {url}: {type(e).__name__} - {str(e)}", exc_info=True)
         return None, f"Unexpected scraping error: {type(e).__name__}"
 # --- End of Modified _scrape_single_url ---
 
