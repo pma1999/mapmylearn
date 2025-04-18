@@ -108,7 +108,12 @@ For each search query:
 - Explain why this search is essential for developing this submodule
 - Ensure it addresses a different aspect needed for comprehensive coverage
 - Design it to return high-quality educational content
-- USE QUOTES WITH EXTREME CAUTION: Only for multi-word technical terms that are absolutely essential and specific to this submodule (e.g., "React Context API"). Overusing quotes will drastically reduce results. It is preferable to get more relevant results than none.
+- **QUOTE USAGE RULE: NEVER use more than ONE quoted phrase per query.** Quotes are ONLY for essential multi-word technical terms that MUST be searched together (e.g., "React Context API").
+- **DO NOT put quotes around every keyword.** Combine specific keywords without quotes. 
+    - BAD Example (Too many quotes): `"Spectral Analysis" "DFT" "FFT" "windowing functions"`
+    - GOOD Example (One quote): `"Spectral Analysis" concepts DFT FFT tutorial`
+    - GOOD Example (No quotes): `Spectral Analysis DFT FFT windowing functions common issues`
+- **Getting *some* relevant results by combining specific unquoted terms is ALWAYS better than getting *zero* results from excessive quoting.**
 - If the submodule has a defined depth level (e.g., basic, advanced), try to subtly reflect this in the search terms (e.g., 'introduction to...' or 'advanced techniques for...'), but without sacrificing getting results.
 
 Your response should be exactly 5 search queries, each with its detailed rationale.
@@ -298,7 +303,12 @@ This search query aims to find top-tier external learning materials providing br
 Your query MUST be optimized for a search engine API (like Google or Tavily) to find **excellent learning materials**:
 - Combine the core topic "{user_topic}" with a smart combination of quality indicators and resource type keywords.
 - Use a mix like: **best {user_topic} tutorial**, **comprehensive {user_topic} guide**, **recommended {user_topic} online course**, **definitive {user_topic} book**, **official {user_topic} documentation**, **essential {user_topic} reference**, **{user_topic} video course**, **authoritative {user_topic} article**.
-- IMPORTANT: The goal is to find the BEST available resources. Use quality terms ('best', 'complete', 'authoritative'), but combine ONLY 1 or 2 of these with the {user_topic} and perhaps ONE resource type ('tutorial', 'book'). DO NOT use quotes unless '{user_topic}' is an inseparable multi-word phrase. Prioritize getting a useful list of high-quality options.
+- **QUOTE USAGE RULE: NEVER use more than ONE quoted phrase per query.** Quotes are ONLY appropriate if the core "{user_topic}" itself is an essential multi-word phrase (e.g., "machine learning").
+- **DO NOT add quotes around quality indicators or resource types.** Combine terms without quotes.
+    - BAD Example (Too many quotes): `"best" "machine learning" "tutorial" "guide"`
+    - GOOD Example (One quote, only if topic needs it): `best "machine learning" tutorial guide`
+    - GOOD Example (No quotes): `best machine learning tutorial guide comprehensive`
+- **Getting *some* high-quality resource results is ALWAYS better than getting *zero* results from excessive quoting.**
 - Focus on keywords that signal quality but keep the search broad enough to return results.
 - Avoid conversational language.
 
@@ -319,7 +329,7 @@ The keywords must emphasize finding **learning resources** specifically.
 ### 5. Search Engine Optimization
 - CRITICAL: Balance specificity with breadth - too restrictive queries return no results.
 - Limit to 3-6 keywords/terms total for best results.
-- Include at most ONE quoted term ONLY if '{user_topic}' is a critical multi-word concept.
+- Follow the **QUOTE USAGE RULE** strictly: **NEVER more than ONE quoted phrase**, and only if the topic itself requires it.
 - Prioritize getting useful, high-quality results over perfect precision.
 
 ## OUTPUT REQUIREMENTS
@@ -355,7 +365,12 @@ This module is part of a larger learning path:
 Your query MUST be optimized for a search engine API (like Google or Tavily) to find **excellent learning materials** relevant to this module:
 - Combine specific keywords from "{module_title}" and its description with terms indicating resource types or learning goals. Ensure the query reflects the key concepts and objectives mentioned in the module description: {module_description}.
 - Use keywords like: **tutorial {module_title}**, **practical guide {module_title}**, **{module_title} applied examples**, **{module_title} key concepts**, **detailed tutorial {module_title}**, **{module_title} exercises**, **article {module_title}**, **{module_title} video lecture**, **documentation {module_title}**, **best practices {module_title}**.
-- CRITICAL: Use quotes SPARINGLY and ONLY for the most essential technical terms or module-specific concepts that must be kept together. Example: `tutorial "React Hooks"` (only the specific concept is quoted). Avoid: `"tutorial" "React Hooks" "examples"`.
+- **QUOTE USAGE RULE: NEVER use more than ONE quoted phrase per query.** Quotes are ONLY for the most essential multi-word technical term specific to this module (e.g., "React Hooks"), if absolutely necessary.
+- **DO NOT put quotes around every keyword.** Combine specific module terms without quotes.
+    - BAD Example (Too many quotes): `"tutorial" "React Hooks" "examples" "best practices"`
+    - GOOD Example (One quote): `tutorial "React Hooks" examples best practices`
+    - GOOD Example (No quotes): `React Hooks tutorial examples best practices guide`
+- **Getting *some* relevant module resources is ALWAYS better than getting *zero* results from excessive quoting.**
 - Focus on keywords likely to yield high-quality educational content for this specific module.
 - Avoid conversational language.
 
@@ -371,7 +386,7 @@ The query keywords must emphasize finding **learning resources** specifically re
 ### 5. Search Engine Optimization
 - CRITICAL: Balance specificity with breadth - too restrictive queries return no results. It is crucial to find RELEVANT resources for THIS MODULE. It's better to have a slightly broader query that returns good resources related to '{module_title}' than a hyper-specific one that returns nothing.
 - Limit to 3-6 keywords/terms total for best results.
-- Include at most ONE quoted term for critical multi-word concepts. Use quotes only if a KEY technical term for the module absolutely requires it.
+- Follow the **QUOTE USAGE RULE** strictly: **NEVER more than ONE quoted phrase**, and only if a key technical term requires it.
 - Prioritize getting useful results over perfect precision.
 
 ## OUTPUT REQUIREMENTS
@@ -409,7 +424,12 @@ Adjacent submodules: {adjacent_context}
 Your query MUST be optimized for a search engine API (like Google or Tavily) to find **specific, high-quality learning materials** for this submodule:
 - Combine very specific technical terms from "{submodule_title}" and its description with terms indicating resource types, application, or specific content areas.
 - Use keywords like: **tutorial {submodule_title}**, **{submodule_title} code example**, **{submodule_title} explanation**, **{submodule_title} case study**, **implement {submodule_title}**, **apply {submodule_title}**, **debug {submodule_title}**, **{submodule_title} common issues**, **{submodule_title} practical example**, **how to use {submodule_title}**, **{submodule_title} video tutorial**, **official documentation {submodule_title}**, **{submodule_title} practice exercise**.
-- MAXIMUM CAUTION WITH QUOTES: If there is ONE SINGLE CRITICAL multi-word technical term defining this submodule (e.g., a specific API name, a concrete algorithm), consider using quotes ONLY for that term (e.g., `tutorial "useState Hook"`). In all other cases, AVOID quotes and rely on the combination of specific keywords.
+- **QUOTE USAGE RULE: NEVER use more than ONE quoted phrase per query.** Quotes are ONLY for the SINGLE most critical multi-word technical term defining this submodule (e.g., a specific API name like "useState Hook"), IF ABSOLUTELY NECESSARY.
+- **DO NOT put quotes around every keyword.** Combine specific keywords without quotes.
+    - BAD Example (Too many quotes): `"hominin fossil record" "key examples" "Lucy" "Taung Child"`
+    - GOOD Example (One quote): `"hominin fossil record" significance analysis Lucy`
+    - GOOD Example (No quotes): `hominin fossil record key examples significance Lucy Taung Child`
+- **Getting *some* relevant results by combining specific unquoted terms is VASTLY preferable to getting *zero* results from excessive quoting.**
 - Focus on keywords likely to yield targeted and authoritative educational content.
 - Avoid conversational language.
 
@@ -425,7 +445,7 @@ The query keywords should reflect the specific focus of this submodule and its n
 ### 5. Search Engine Optimization
 - ABSOLUTELY CRITICAL: Balance specificity with breadth. It is infinitely better to generate a slightly less specific query that returns USEFUL and RELEVANT resources for '{submodule_title}' than a 'perfectly' specific query that returns ZERO results. The number one priority is finding helpful learning material. Optimize for obtaining relevant results.
 - Choose the 3-5 most important terms or keywords that will find resources.
-- Include at most ONE quoted phrase for a critical technical term, only if absolutely necessary as per instruction 1.
+- Follow the **QUOTE USAGE RULE** strictly: **NEVER more than ONE quoted phrase**, and only if essential.
 - Select only the most essential terms from the submodule title/description.
 
 ## OUTPUT REQUIREMENTS

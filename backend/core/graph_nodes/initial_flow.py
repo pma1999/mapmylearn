@@ -93,6 +93,11 @@ For each search query:
 - Target educational resources, discussions, or examples that reveal how knowledge in this domain is best structured (e.g., syllabi, course outlines, pedagogical guides).
 - Consider terms like: 'curriculum design {user_topic}', 'learning path structure {user_topic}', 'module sequence {user_topic}', 'pedagogical framework {user_topic}', 'skill progression {user_topic}', 'example syllabus {user_topic}', '{user_topic} prerequisites'.
 - CRITICAL: Ensure each query balances specificity (finding CURRICULUM STRUCTURE info) with breadth (getting actual results). Avoid terms so specific they describe only a hypothetical course.
+- QUOTE USAGE RULE: NEVER use more than ONE quoted phrase per query. Quotes are ONLY for essential multi-word concepts that MUST be searched together (e.g., "machine learning" if the topic is broad, or a specific framework name). DO NOT put quotes around every keyword. Combine specific structural terms without quotes.
+    - BAD Example (Too many quotes): `"curriculum design" "machine learning" "module sequence" "prerequisites"`
+    - GOOD Example (One quote): `"machine learning" curriculum design syllabus example`
+    - GOOD Example (No quotes): `machine learning curriculum design module sequence prerequisites`
+- Getting *some* relevant structural examples/discussions is ALWAYS better than getting *zero* results from excessive quoting.
 - Explain precisely how this query will help determine the optimal modules and their sequence.
 
 Your response should be exactly 5 search queries, each with a detailed rationale explaining how it contributes to creating the perfect learning path STRUCTURE.
