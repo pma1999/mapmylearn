@@ -11,10 +11,11 @@ import ModuleCard from '../../../components/organisms/ModuleCard';
  * 
  * @param {Object} props Component props
  * @param {Array} props.modules Array of module objects
- * @param {string} props.pathId ID of the parent learning path
+ * @param {string} props.pathId ID of the parent learning path (temp or persistent)
+ * @param {boolean} props.isTemporaryPath Flag indicating if pathId is temporary
  * @returns {JSX.Element} Module section component
  */
-const ModuleSection = ({ modules, pathId }) => {
+const ModuleSection = ({ modules, pathId, isTemporaryPath }) => {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   
@@ -56,6 +57,7 @@ const ModuleSection = ({ modules, pathId }) => {
                 module={module} 
                 index={index} 
                 pathId={pathId}
+                isTemporaryPath={isTemporaryPath}
               />
             </Grid>
           ))}
@@ -68,6 +70,7 @@ const ModuleSection = ({ modules, pathId }) => {
               module={module} 
               index={index} 
               pathId={pathId}
+              isTemporaryPath={isTemporaryPath}
             />
           ))}
         </Box>
@@ -90,7 +93,8 @@ ModuleSection.propTypes = {
       )
     })
   ).isRequired,
-  pathId: PropTypes.string.isRequired
+  pathId: PropTypes.string.isRequired,
+  isTemporaryPath: PropTypes.bool.isRequired,
 };
 
 export default ModuleSection; 

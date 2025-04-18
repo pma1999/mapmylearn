@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   saveToHistory, 
   updateHistoryEntry, 
-  downloadLearningPathPDF 
+  downloadLearningPathPDF,
+  getHistoryEntry
 } from '../../../services/api';
 
 /**
@@ -14,6 +15,7 @@ import {
  * @param {boolean} savedToHistory - Whether the learning path is saved to history
  * @param {string} entryId - ID of the history entry (if from history)
  * @param {string} taskId - ID of the task (if from generation)
+ * @param {string} temporaryPathId - Newly added temporary ID (if applicable)
  * @returns {Object} Actions and states for learning path management
  */
 const useLearningPathActions = (
@@ -21,7 +23,8 @@ const useLearningPathActions = (
   isFromHistory, 
   savedToHistory, 
   entryId, 
-  taskId
+  taskId,
+  temporaryPathId
 ) => {
   const navigate = useNavigate();
   
@@ -33,7 +36,7 @@ const useLearningPathActions = (
   const [notification, setNotification] = useState({ 
     open: false, 
     message: '', 
-    severity: 'success' 
+    severity: 'info' 
   });
 
   /**
@@ -41,7 +44,7 @@ const useLearningPathActions = (
    * @param {string} message - Message to display
    * @param {string} severity - Severity level (success, error, warning, info)
    */
-  const showNotification = (message, severity = 'success') => {
+  const showNotification = (message, severity = 'info') => {
     setNotification({
       open: true,
       message,
@@ -52,8 +55,7 @@ const useLearningPathActions = (
   /**
    * Closes the notification
    */
-  const handleNotificationClose = (event, reason) => {
-    if (reason === 'clickaway') return;
+  const handleNotificationClose = () => {
     setNotification({ ...notification, open: false });
   };
 
@@ -152,9 +154,13 @@ const useLearningPathActions = (
    */
   const handleSaveToHistory = () => {
     if (savedToHistory) {
-      showNotification('This learning path is already saved to history', 'info');
+      showNotification('Learning path is already saved.', 'info');
       return;
     }
+    // Reset dialog state
+    setTags([]);
+    setNewTag('');
+    setFavorite(false);
     setSaveDialogOpen(true);
   };
   
@@ -169,39 +175,50 @@ const useLearningPathActions = (
    * Saves the learning path to history
    */
   const handleSaveConfirm = async () => {
-    if (!learningPath) return;
+    if (!learningPath) {
+      showNotification('Learning path data is not available to save.', 'error');
+      return null;
+    }
     
+    if (savedToHistory) {
+       showNotification('Learning path is already saved.', 'info');
+       return null; // Or return indicating already saved
+    }
+
     try {
-      const result = await saveToHistory(learningPath, 'generated');
-      
-      if (result.success) {
-        showNotification('Learning path saved to history successfully', 'success');
-        
-        // If tags or favorite are set, update the entry
-        if (tags.length > 0 || favorite) {
-          try {
-            await updateHistoryEntry(result.entry_id, { tags, favorite });
-          } catch (error) {
-            console.error('Error updating history entry:', error);
-          }
-        }
-        
-        // Signal that the learning path is now saved
-        setSaveDialogOpen(false);
-        return {
-          savedToHistory: true,
-          entryId: result.entry_id
-        };
-      } else {
-        showNotification('Failed to save learning path to history', 'error');
-        setSaveDialogOpen(false);
-        return { savedToHistory: false };
+      // Prepare payload for the saveToHistory API endpoint
+      const payload = {
+        path_data: learningPath,         // The main learning path content
+        topic: learningPath.topic || 'Untitled Learning Path', // Ensure topic exists
+        favorite: favorite,              // From dialog state
+        tags: tags,                      // From dialog state
+        source_task_id: taskId,          // Include the original task ID for reference
+      };
+
+      // Include temporaryPathId if this path was temporary before saving
+      if (temporaryPathId && !isFromHistory) { // Only add if it was temporary
+         payload.temporary_path_id = temporaryPathId;
+         console.log('Saving path with temporary_path_id:', temporaryPathId);
       }
-    } catch (error) {
-      console.error('Error saving to history:', error);
-      showNotification('Failed to save learning path to history', 'error');
+
+      // Call the correct API function: saveToHistory
+      const response = await saveToHistory(payload);
+
+      showNotification('Learning path saved successfully!', 'success');
       setSaveDialogOpen(false);
-      return { savedToHistory: false };
+
+      // Return details needed by LearningPathView to update its state
+      // Assuming response directly contains the new entry data
+      return {
+        savedToHistory: true,
+        path_id: response.path_id // <<<< Use path_id from response
+      };
+
+    } catch (error) {
+      console.error("Error saving learning path:", error);
+      showNotification(`Error saving learning path: ${error.message || 'Unknown error'}`, 'error');
+      setSaveDialogOpen(false); // Close dialog on error too
+      return null;
     }
   };
   

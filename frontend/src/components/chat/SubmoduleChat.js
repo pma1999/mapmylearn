@@ -88,7 +88,7 @@ const markdownComponents = {
   // table elements omitted as per spec
 };
 
-const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId }) => {
+const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleContent, isTemporaryPath }) => {
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -106,32 +106,52 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId }) => {
     scrollToBottom();
   }, [messages]);
 
-  // Regenerate threadId if props change (e.g., navigating to a different submodule)
+  // Regenerate threadId and clear state if the context (path/submodule) changes
   useEffect(() => {
-    setThreadId(`user-${userId || 'anon'}-path-${pathId}-mod-${moduleIndex}-sub-${submoduleIndex}`);
-    setMessages([]); // Clear messages when context changes
-    setError(null);
-    setIsLoading(false);
-  }, [pathId, moduleIndex, submoduleIndex, userId]);
+    // Ensure pathId is present before creating threadId or clearing state
+    if (pathId) {
+      setThreadId(`user-${userId || 'anon'}-path-${pathId}-mod-${moduleIndex}-sub-${submoduleIndex}`);
+      setMessages([]); // Clear messages when context changes
+      setError(null);
+      setIsLoading(false);
+    } else {
+      // Handle case where pathId is initially null/undefined if necessary
+      // e.g., show a message or disable chat input
+      setError("Chat context (pathId) is not available.");
+    }
+  }, [pathId, moduleIndex, submoduleIndex, userId]); // Dependencies are correct
 
   const handleSendMessage = useCallback(async () => {
     const messageText = inputValue.trim();
-    if (!messageText || isLoading) return;
+    // Ensure pathId exists before sending
+    if (!pathId || !messageText || isLoading) return;
 
     const userMessage = { sender: 'user', text: messageText, timestamp: new Date() };
-    setMessages((prev) => [...prev, userMessage]);
+    // Use functional update to ensure we have the latest messages state
+    setMessages((prevMessages) => [...prevMessages, userMessage]);
+    const currentMessages = [...messages, userMessage]; // Use updated messages for condition check
     setInputValue('');
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await sendMessage({
+      // Base payload for the API call
+      const payload = {
         path_id: pathId,
         module_index: moduleIndex,
         submodule_index: submoduleIndex,
         user_message: messageText,
         thread_id: threadId,
-      });
+      };
+
+      // Conditionally add context for the first message of a temporary path
+      if (isTemporaryPath && currentMessages.length === 1) {
+        payload.submodule_context = submoduleContent;
+        console.log("Sending initial message for temporary path with context."); // Debug log
+      }
+
+      // Call the API service function
+      const response = await sendMessage(payload);
 
       const aiMessage = { sender: 'ai', text: response.ai_response, timestamp: new Date() };
       setMessages((prev) => [...prev, aiMessage]);
@@ -145,7 +165,8 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [inputValue, isLoading, pathId, moduleIndex, submoduleIndex, threadId, userId]); // Added userId dependency
+    // Update dependencies for useCallback
+  }, [inputValue, isLoading, pathId, moduleIndex, submoduleIndex, threadId, userId, isTemporaryPath, submoduleContent, messages]);
 
   const handleClearChat = useCallback(async () => {
     setError(null);
@@ -163,7 +184,8 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [threadId, pathId, moduleIndex, submoduleIndex, userId]); // Added dependencies
+    // Update dependencies for useCallback
+  }, [threadId, pathId, moduleIndex, submoduleIndex, userId]);
 
   const handleKeyPress = (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {

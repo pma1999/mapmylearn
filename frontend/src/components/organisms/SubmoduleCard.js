@@ -62,7 +62,7 @@ const TabPanel = (props) => {
   );
 };
 
-const SubmoduleCard = ({ submodule, index, moduleIndex, pathId }) => {
+const SubmoduleCard = ({ submodule, index, moduleIndex, pathId, isTemporaryPath }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const theme = useTheme();
@@ -358,12 +358,18 @@ const SubmoduleCard = ({ submodule, index, moduleIndex, pathId }) => {
 
             {/* Chatbot tab panel */}
             <TabPanel value={activeTab} index={3}>
-              <SubmoduleChat 
-                pathId={pathId} 
-                moduleIndex={moduleIndex} 
-                submoduleIndex={index} 
-                userId={user?.id}
-              />
+              {pathId ? (
+                <SubmoduleChat
+                  pathId={pathId}
+                  moduleIndex={moduleIndex}
+                  submoduleIndex={index}
+                  userId={user?.sub}
+                  submoduleContent={submodule.content}
+                  isTemporaryPath={isTemporaryPath}
+                />
+              ) : (
+                <Typography sx={{ p: 2 }}>Chat requires a valid path ID.</Typography>
+              )}
             </TabPanel>
           </Box>
         </DialogContent>

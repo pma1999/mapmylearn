@@ -46,6 +46,7 @@ const LearningPathView = ({ source }) => {
     error,
     isFromHistory,
     savedToHistory: initialSavedToHistory,
+    temporaryPathId,
     refreshData
   } = useLearningPathData(source);
   
@@ -55,13 +56,16 @@ const LearningPathView = ({ source }) => {
   const isLoading = localLoading !== false && loading;
   const currentError = localError || error;
   const isPersisted = isFromHistory || savedToHistory; // Calculate persisted status
+  const isTemporaryPath = !isPersisted && !!temporaryPathId; // Calculate temporary path status
   
   // Determine the correct pathId to use
   // Priority: localEntryId (after save) > entryId (from URL) > learningPath.path_id (intrinsic)
   let derivedPathId = null;
   const currentEntryId = localEntryId || entryId; // Use localEntryId if path was just saved
   if (!isLoading && currentLearningPath) {
-    if (currentEntryId) {
+    if (isTemporaryPath) {
+      derivedPathId = temporaryPathId; // Use temporary ID for unsaved paths
+    } else if (currentEntryId) {
       derivedPathId = currentEntryId;
     } else if (!isFromHistory && currentLearningPath.path_id) {
       // Use intrinsic ID if loaded from task result and ID exists
@@ -138,8 +142,9 @@ const LearningPathView = ({ source }) => {
     currentLearningPath,
     isFromHistory,
     savedToHistory,
-    localEntryId || entryId,
-    taskId
+    currentEntryId,
+    taskId,
+    temporaryPathId
   );
   
   // Handle save confirmation with state updates
@@ -147,8 +152,12 @@ const LearningPathView = ({ source }) => {
     const result = await handleSaveConfirm();
     if (result && result.savedToHistory) {
       setLocalSavedToHistory(true);
-      if (result.entryId) {
-        setLocalEntryId(result.entryId);
+      if (result.path_id) {
+        setLocalEntryId(result.path_id);
+      } else {
+        console.error('Save confirmed but no new path_id received from backend.');
+        // Potentially refresh all data as a fallback?
+        // refreshData(); 
       }
     }
   };
@@ -201,12 +210,16 @@ const LearningPathView = ({ source }) => {
             onNewLearningPath={handleNewLearningPathClick}
           />
           
-          {/* Modules Section - Pass derivedPathId and render conditionally */}
-          {derivedPathId && (
+          {/* Modules Section - Pass derivedPathId and isTemporaryPath */}
+          {derivedPathId ? (
             <ModuleSection
               modules={currentLearningPath.modules}
               pathId={derivedPathId}
+              isTemporaryPath={isTemporaryPath}
             />
+          ) : (
+            // Optional: Render a message or placeholder if pathId is still null after loading
+            !isLoading && <Typography sx={{mt: 2}}>Module ID not available yet.</Typography>
           )}
           
           {/* Learning Path Resources Section - UPDATED to use ResourcesSection */}
