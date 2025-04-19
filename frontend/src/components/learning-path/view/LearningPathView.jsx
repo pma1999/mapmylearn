@@ -76,9 +76,10 @@ const LearningPathView = ({ source }) => {
   }
   
   // Extract the actual path data object, handling both history and generation cases
-  // Based on logs, when isFromHistory=true, learningPath is the full entry, data is in learningPath.path_data
-  // When isFromHistory=false, learningPath is the result object (assumed to be the path data itself)
-  const actualPathData = isFromHistory ? learningPath?.path_data : learningPath;
+  // Checks if the newer nested structure (learningPath.path_data) exists when loading from history.
+  const actualPathData = isFromHistory
+    ? (learningPath?.path_data ? learningPath.path_data : learningPath) // Handle both old/new history structures
+    : learningPath; // Use learningPath directly for generation
 
   // Setup actions for the learning path
   const {
