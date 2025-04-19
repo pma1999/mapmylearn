@@ -226,7 +226,6 @@ export const AuthProvider = ({ children }) => {
 
                     if (migrationResult.success) {
                         console.log(`Successfully migrated ${migrationResult.migrated_count} learning paths. Clearing local history.`);
-                        clearHistory(); // Updated usage
                         localStorage.setItem(MIGRATION_FLAG_KEY, 'true');
                     } else {
                         console.error("Local history migration failed:", migrationResult.errors);

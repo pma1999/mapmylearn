@@ -1,5 +1,5 @@
 import axios from 'axios';
-// import * as localHistoryService from './localHistoryService';
+import * as localHistoryService from './localHistoryService';
 
 // Use local API when in development mode, Railway API in production
 const API_URL = process.env.NODE_ENV === 'development' 
@@ -821,90 +821,117 @@ export const deleteHistoryEntry = async (pathId) => {
   }
 };
 
-// Keep these functions for the migration logic in AuthContext
-// We need localHistoryService for these temporarily.
-// Let's import it here specifically for these functions for now.
-import * as localHistoryService from './localHistoryService'; 
-
 /**
- * Get raw history data directly from local storage service
+ * Get raw history data directly from local storage service - FOR MIGRATION ONLY
  * @returns {Object} Raw history object
  */
 export const getLocalHistoryRaw = () => {
   // Security Note: Exposing raw local storage data might be risky depending on contents.
   // Consider if this is truly needed or if specific data should be fetched instead.
   // Avoid exposing if sensitive info could be stored.
-  // return localHistoryService.getLocalHistory(); 
-  console.warn('getLocalHistoryRaw is disabled for potential security implications.');
-  return { entries: [], last_updated: new Date().toISOString() };
+  try {
+      return localHistoryService.getLocalHistory(); 
+  } catch (e) {
+       console.error("Failed to get raw local history:", e);
+       // Fallback if localHistoryService fails or isn't available
+       return { entries: [], last_updated: new Date().toISOString() };
+  }
 };
 
 /**
- * Clears all history entries from local storage
+ * Clears all history entries from local storage - FOR MIGRATION ONLY
  * @returns {Promise<Object>} Result object { success: boolean }
  */
 export const clearHistory = async () => {
+  // DEPRECATED for general use. Use clearAllHistoryAPI instead.
+  // This function interacts with LOCAL STORAGE, only intended for post-migration cleanup if needed.
   try {
     // Simulating async operation, though local storage is sync
     await new Promise(resolve => setTimeout(resolve, 10)); 
-    // const result = localHistoryService.clearHistory();
-    // return result;
-    console.warn('clearHistory functionality temporarily disabled pending review.');
-    // TEMPORARY: Return success for UI testing, replace with actual implementation later
-    return { success: true }; 
+    const result = localHistoryService.clearHistory();
+    console.warn('clearHistory (local storage) executed.'); // Add warning for tracking
+    return result;
   } catch (error) {
     console.error('Error clearing local history via API layer:', error);
     // Ensure a consistent error object format is returned/thrown
-    throw new Error('Failed to clear history'); 
+    throw new Error('Failed to clear local history'); 
   }
 };
 
 /**
- * Exports all history entries from local storage service.
- * @returns {Promise<Array>} Array of history entries.
+ * Exports all history entries from local storage service - DEPRECATED
+ * @returns {Array} Array of history entries.
  */
-export const exportAllHistory = async () => {
-  try {
-    // Simulating async operation
-    await new Promise(resolve => setTimeout(resolve, 10)); 
-    // const entries = localHistoryService.exportHistory();
-    // return entries;
-    console.warn('exportAllHistory functionality temporarily disabled pending review.');
-    // TEMPORARY: Return empty array for UI testing, replace with actual implementation later
-    return [];
-  } catch (error) {
-    console.error('Error exporting history via API layer:', error);
-    throw new Error('Failed to export history');
-  }
+export const exportAllHistory = () => { 
+  // DEPRECATED: Uses local storage. Use exportAllHistoryAPI instead.
+  console.error("Deprecated function exportAllHistory called. It uses local storage.");
+  // throw new Error('Deprecated function exportAllHistory called. Use exportAllHistoryAPI.'); 
+  // Return empty array to avoid breaking UI completely for now
+  return [];
 };
 
 /**
- * Imports a single learning path entry into local storage history.
+ * Imports a single learning path entry into local storage history - DEPRECATED
  * @param {Object} learningPathObject - The learning path object to import.
  * @returns {Promise<Object>} Result object { success: boolean, entry_id: string, topic: string }
  */
 export const importHistoryEntry = async (learningPathObject) => {
-  try {
-    if (!learningPathObject || typeof learningPathObject !== 'object') {
-      throw new Error("Invalid learning path data provided for import.");
-    }
-    // Simulating async operation
-    await new Promise(resolve => setTimeout(resolve, 10)); 
-    
-    // Convert object back to JSON string for the local service function
-    // const jsonData = JSON.stringify(learningPathObject); 
-    // const result = localHistoryService.importLearningPath(jsonData);
-    // return result;
+  // DEPRECATED: Uses local storage. Use saveToHistory API call instead.
+  console.error("Deprecated function importHistoryEntry called. It uses local storage.");
+  // throw new Error('Deprecated function importHistoryEntry called. Use saveToHistory API call.');
+  // Return failure to avoid incorrect UI feedback
+  return { success: false, error: "Import function deprecated." };
+};
 
-    console.warn('importHistoryEntry functionality temporarily disabled pending review.');
-    // TEMPORARY: Return mock success for UI testing, replace with actual implementation later
-    return { success: true, entry_id: 'mock-' + Date.now(), topic: learningPathObject.topic || 'Imported Topic' };
+// --- Placeholders for Required Backend API Functions ---
+
+/**
+ * Exports all history entries via the backend API.
+ * NOTE: Backend endpoint GET /api/learning-paths/export needs implementation.
+ * @returns {Promise<Array>} Array of history entries.
+ */
+export const exportAllHistoryAPI = async () => {
+  console.warn("Export All functionality pending backend endpoint (GET /api/learning-paths/export).");
+  // TODO: Implement actual API call to GET /api/learning-paths/export once backend is ready.
+  // Example: const response = await api.get('/learning-paths/export'); return response.data;
+  // throw new Error("Export All functionality is not yet available."); 
+  // Return []; // Or return empty array temporarily? Throwing error is clearer.
+  try {
+    const response = await api.get('/learning-paths/export');
+    // The backend returns the list directly
+    return response.data; 
   } catch (error) {
-    console.error('Error importing history entry via API layer:', error);
-    // Throw error to be caught by calling function
-    throw new Error(error.message || 'Failed to import history entry'); 
+    console.error('API Error exporting all history:', error);
+    // Re-throw the formatted error from the interceptor
+    throw error; 
   }
 };
+
+/**
+ * Clears all history entries for the user via the backend API.
+ * NOTE: Backend endpoint DELETE /api/learning-paths/clear-all needs implementation.
+ * @returns {Promise<Object>} Result object { success: boolean }
+ */
+export const clearAllHistoryAPI = async () => {
+  console.warn("Clear All functionality pending backend endpoint (DELETE /api/learning-paths/clear-all).");
+  // TODO: Implement actual API call to DELETE /api/learning-paths/clear-all once backend is ready.
+  // Example: await api.delete('/learning-paths/clear-all'); return { success: true };
+  // throw new Error("Clear All functionality is not yet available.");
+  // return { success: false }; // Or return failure temporarily? Throwing error is clearer.
+  try {
+    // Use the axios instance directly for DELETE
+    await api.delete('/learning-paths/clear-all'); 
+    // DELETE requests usually return 204 No Content on success, 
+    // so we just return a success indicator for the frontend handler.
+    return { success: true }; 
+  } catch (error) {
+     console.error('API Error clearing all history:', error);
+    // Re-throw the formatted error from the interceptor
+    throw error;
+  }
+};
+
+// --- End Placeholders ---
 
 /**
  * Downloads a learning path as PDF
@@ -1196,7 +1223,7 @@ export default {
   resendVerificationEmail,
   forgotPassword,
   resetPassword,
-  exportAllHistory,
-  importHistoryEntry,
+  exportAllHistoryAPI,
+  clearAllHistoryAPI,
 };
 

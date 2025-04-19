@@ -186,6 +186,30 @@ async def get_learning_paths(
     }
 
 
+@router.get("/export", response_model=List[LearningPathResponse])
+async def export_all_learning_paths(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Export all learning paths (including full path_data) for the current user.
+    """
+    try:
+        learning_paths = db.query(LearningPath).filter(
+            LearningPath.user_id == user.id
+        ).order_by(LearningPath.creation_date.desc()).all()
+        
+        logger.info(f"Exporting {len(learning_paths)} learning paths for user {user.id}")
+        # The LearningPathResponse schema will handle serialization
+        return learning_paths
+    except Exception as e:
+        logger.exception(f"Error exporting learning paths for user {user.id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not export learning paths due to a server error."
+        )
+
+
 @router.get("/{path_id}", response_model=LearningPathResponse)
 async def get_learning_path(
     path_id: str,
@@ -297,6 +321,34 @@ async def update_learning_path(
     return learning_path
 
 
+@router.delete("/clear-all", status_code=status.HTTP_204_NO_CONTENT)
+async def clear_all_learning_paths(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete ALL learning paths for the current user. Use with caution!
+    """
+    try:
+        # Perform bulk delete
+        deleted_count = db.query(LearningPath).filter(
+            LearningPath.user_id == user.id
+        ).delete(synchronize_session=False) # Use synchronize_session=False for potentially better performance
+        
+        db.commit()
+        logger.info(f"Cleared {deleted_count} learning paths for user {user.id}")
+        # Return No Content response
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+        
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Error clearing all learning paths for user {user.id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not clear learning paths due to a server error."
+        )
+
+
 @router.delete("/{path_id}")
 async def delete_learning_path(
     path_id: str,
@@ -320,7 +372,7 @@ async def delete_learning_path(
     db.delete(learning_path)
     db.commit()
     
-    return {"detail": "Learning path deleted successfully"}
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/migrate", response_model=MigrationResponse)
@@ -476,17 +528,8 @@ async def download_learning_path_pdf(
         # Set headers to ensure file downloads properly
         response.headers["Content-Disposition"] = f"attachment; filename={filename}"
         
-        # Cleanup handler that will delete the temp file after it's been sent
-        async def cleanup_temp_file():
-            try:
-                if os.path.exists(pdf_path):
-                    os.unlink(pdf_path)
-            except Exception as e:
-                print(f"Error removing temporary PDF file: {e}")
-        
-        # Register cleanup function to run after response is sent
-        response.background = cleanup_temp_file
-        
+        # Cleanup is handled in background task
+        # Return the file response
         return response
     
     except Exception as e:

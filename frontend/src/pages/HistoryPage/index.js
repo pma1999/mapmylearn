@@ -139,9 +139,21 @@ const HistoryPage = () => {
     setIsImportDialogOpen(false); // Close dialog immediately
     showNotification('Importing history...', 'info');
     try {
-      const result = await api.importHistoryEntry(learningPathObject);
+      // Prepare payload for saveToHistory (matches LearningPathCreate schema)
+      const payload = {
+        topic: learningPathObject.topic || 'Untitled Imported Path',
+        language: learningPathObject.language || 'en', // Default or extract from object
+        path_data: learningPathObject, // The entire object is the path_data
+        favorite: learningPathObject.favorite || false,
+        tags: learningPathObject.tags || [],
+        source: 'imported' // Explicitly set source
+      };
+      
+      // Call the correct backend API endpoint via api.saveToHistory
+      const result = await api.saveToHistory(payload);
+      
       if (result.success) {
-        showNotification(`Learning path "${result.topic}" imported successfully!`, 'success');
+        showNotification(`Learning path "${payload.topic}" imported successfully!`, 'success');
         refreshEntries(); // Refresh the list
       } else {
         // This path might not be reached if api throws error, but good practice
@@ -163,27 +175,32 @@ const HistoryPage = () => {
     setIsProcessing(true);
     showNotification('Exporting history...', 'info');
     try {
-      const exportedEntries = await api.exportAllHistory();
+      // Call the placeholder for the backend API endpoint
+      const exportedEntries = await api.exportAllHistoryAPI(); 
+      
+      // --- This download logic will execute only if the API call succeeds --- 
+      // --- (which it won't until the backend endpoint is implemented) --- 
       if (!exportedEntries || exportedEntries.length === 0) {
         showNotification('No history entries found to export.', 'info');
-        return;
+        // No return here, proceed to finally
+      } else {
+        const jsonString = JSON.stringify(exportedEntries, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `learni_history_export_${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showNotification('History exported successfully.', 'success');
       }
-      
-      const jsonString = JSON.stringify(exportedEntries, null, 2);
-      const blob = new Blob([jsonString], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `learni_history_export_${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
-      showNotification('History exported successfully.', 'success');
     } catch (error) {
       console.error("Export failed:", error);
-      showNotification(`Export failed: ${error.message}`, 'error');
+      // Display the error from the API call (or the placeholder error)
+      showNotification(`Export failed: ${error.message}`, 'error'); 
     } finally {
       setIsProcessing(false);
     }
@@ -198,16 +215,17 @@ const HistoryPage = () => {
     setIsProcessing(true);
     showNotification('Clearing history...', 'info');
     try {
-      const result = await api.clearHistory();
-      if (result.success) {
-        showNotification('History cleared successfully.', 'success');
-        refreshEntries(); // Refresh the list
-      } else {
-        // This path might not be reached if api throws error
-        throw new Error(result.error || 'Failed to clear history.');
-      }
+       // Call the placeholder for the backend API endpoint
+      await api.clearAllHistoryAPI();
+
+      // --- This success logic will execute only if the API call succeeds --- 
+      // --- (which it won't until the backend endpoint is implemented) --- 
+      showNotification('History cleared successfully.', 'success');
+      refreshEntries(); // Refresh the list
+      
     } catch (error) {
       console.error("Clear history failed:", error);
+      // Display the error from the API call (or the placeholder error)
       showNotification(`Failed to clear history: ${error.message}`, 'error');
     } finally {
       setIsProcessing(false);
