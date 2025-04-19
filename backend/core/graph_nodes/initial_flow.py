@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 from langchain_core.messages import HumanMessage
 import os
@@ -11,6 +11,7 @@ from backend.services.services import get_llm, perform_search_and_scrape
 from langchain_core.prompts import ChatPromptTemplate
 
 from backend.core.graph_nodes.helpers import run_chain, batch_items, format_search_results, escape_curly_braces
+from backend.core.graph_nodes.search_utils import execute_search_with_llm_retry
 
 async def generate_search_queries(state: LearningPathState) -> Dict[str, Any]:
     """
@@ -167,6 +168,98 @@ Your response should be exactly 5 search queries, each with a detailed rationale
             
         return {"search_queries": [], "steps": [f"Error: {str(e)}"]}
 
+async def regenerate_initial_structure_query(
+    state: LearningPathState, 
+    failed_query: SearchQuery
+) -> SearchQuery:
+    """
+    Regenerates a search query for learning path structure after a "no results found" error.
+    
+    This function uses an LLM to create an alternative search query when the original
+    structure-focused query returns no results. It provides the failed query as context
+    and instructs the LLM to broaden or rephrase the search while maintaining focus on
+    finding structural/organizational information.
+    
+    Args:
+        state: The current LearningPathState with user_topic.
+        failed_query: The SearchQuery object that failed to return results.
+        
+    Returns:
+        A new SearchQuery object with an alternative query.
+    """
+    logging.info(f"Regenerating structure query after no results for: {failed_query.keywords}")
+    
+    # Get language information from state
+    output_language = state.get('language', 'en')
+    search_language = state.get('search_language', 'en')
+    
+    # Get Google key provider from state
+    google_key_provider = state.get("google_key_provider")
+    if not google_key_provider:
+        logging.warning("Google key provider not found in state for query regeneration")
+    
+    prompt_text = """
+# SEARCH QUERY RETRY SPECIALIST INSTRUCTIONS
+
+The following search query returned NO RESULTS when searching for information about how to structure a learning path on "{user_topic}":
+
+FAILED QUERY: {failed_query}
+
+I need you to generate a DIFFERENT search query that is more likely to find results but still focused on retrieving STRUCTURAL and ORGANIZATIONAL information about learning this topic.
+
+## ANALYSIS OF FAILED QUERY
+
+Analyze why the previous query might have failed:
+- Was it too specific with too many quoted terms?
+- Did it use uncommon terminology or jargon?
+- Was it too long or complex?
+- Did it combine too many concepts that rarely appear together?
+
+## NEW QUERY REQUIREMENTS
+
+Create ONE alternative search query that:
+1. Is BROADER or uses more common terminology
+2. Maintains focus on curriculum design, learning path structure, and module organization
+3. Uses fewer quoted phrases (one at most)
+4. Is more likely to match existing educational content
+5. Balances specificity (finding curriculum structure info) with generality (getting actual results)
+
+## LANGUAGE INSTRUCTIONS
+- Generate your analysis and response in {output_language}.
+- For the search query, use {search_language} to maximize retrieving high-quality curriculum design information.
+
+## QUERY FORMAT RULES
+- CRITICAL: Ensure your new query is DIFFERENT from the failed one
+- Fewer keywords is better than too many
+- QUOTE USAGE RULE: NEVER use more than ONE quoted phrase. Quotes are ONLY for essential multi-word concepts
+- Getting some relevant results is BETTER than getting zero results
+- The query should still target STRUCTURAL information (how to organize learning), NOT just content about the topic
+
+Your response should include just ONE search query and a brief rationale for why this query might work better.
+
+{format_instructions}
+"""
+    prompt = ChatPromptTemplate.from_template(prompt_text)
+    try:
+        result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), search_queries_parser, {
+            "user_topic": state["user_topic"],
+            "failed_query": failed_query.keywords,
+            "output_language": output_language,
+            "search_language": search_language,
+            "format_instructions": search_queries_parser.get_format_instructions()
+        })
+        
+        # Return just the first query from the result
+        if result.queries and len(result.queries) > 0:
+            logging.info(f"Successfully regenerated structure query: {result.queries[0].keywords}")
+            return result.queries[0]
+        else:
+            logging.error("Query regeneration returned empty result")
+            return None
+    except Exception as e:
+        logging.error(f"Error regenerating structure query: {str(e)}")
+        return None
+
 async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
     """
     Execute web searches using Tavily and scrape results for each search query in parallel.
@@ -225,20 +318,26 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
         # Create a semaphore to limit concurrency
         sem = asyncio.Semaphore(search_parallel_count)
         
-        async def bounded_search_and_scrape(query_obj: SearchQuery):
+        async def bounded_search_with_retry(query_obj: SearchQuery):
             async with sem:
                 # Set operation name for tracking
                 provider = tavily_key_provider.set_operation("initial_web_search")
-                # Call the new centralized service function
-                return await perform_search_and_scrape(
-                    query_obj.keywords, 
-                    provider,
-                    max_results=max_results_per_query,
-                    scrape_timeout=scrape_timeout
+                
+                # Use the new function with retry capability
+                return await execute_search_with_llm_retry(
+                    state=state,
+                    initial_query=query_obj,
+                    regenerate_query_func=regenerate_initial_structure_query,
+                    max_retries=1,
+                    tavily_key_provider=provider,
+                    search_config={
+                        "max_results": max_results_per_query,
+                        "scrape_timeout": scrape_timeout
+                    }
                 )
         
         # Create tasks for all searches
-        tasks = [bounded_search_and_scrape(query) for query in search_queries]
+        tasks = [bounded_search_with_retry(query) for query in search_queries]
         
         if progress_callback and len(tasks) > 0:
             await progress_callback(

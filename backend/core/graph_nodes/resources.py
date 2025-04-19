@@ -35,6 +35,7 @@ from backend.prompts.learning_path_prompts import (
 )
 
 from backend.core.graph_nodes.helpers import run_chain, escape_curly_braces
+from backend.core.graph_nodes.search_utils import execute_search_with_llm_retry
 
 # Configure logger
 logger = logging.getLogger("learning_path.resources")
@@ -111,7 +112,7 @@ async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
         if progress_callback:
             await progress_callback(f"Searching & scraping for high-quality resources on {escaped_topic}...", phase="topic_resources", phase_progress=0.4, overall_progress=0.47, action="processing")
 
-        # 2. Execute search and scrape using the new service
+        # 2. Execute search and scrape with retry capability
         tavily_key_provider = state.get("tavily_key_provider")
         if not tavily_key_provider:
              raise ValueError("Tavily key provider not found in state for topic resource search.")
@@ -121,16 +122,27 @@ async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
 
         # Set operation name for tracking
         provider = tavily_key_provider.set_operation("topic_resource_search")
-        search_service_result = await perform_search_and_scrape(
-            resource_query.query,
-            provider,
-            max_results=max_results_per_query,
-            scrape_timeout=scrape_timeout
+        
+        # Use the new execute_search_with_llm_retry function
+        search_service_result = await execute_search_with_llm_retry(
+            state=state,
+            initial_query=resource_query, # Note: This is a ResourceQuery not SearchQuery
+            regenerate_query_func=regenerate_resource_query,
+            max_retries=1,
+            tavily_key_provider=provider,
+            search_config={
+                "max_results": max_results_per_query,
+                "scrape_timeout": scrape_timeout
+            },
+            regenerate_args={
+                "target_level": "topic"
+            }
         )
 
         # Check for search provider errors
         if search_service_result.search_provider_error:
-            raise Exception(f"Search provider error: {search_service_result.search_provider_error}")
+            logger.warning(f"Search provider error after retry attempts: {search_service_result.search_provider_error}")
+            # Continue with whatever results we have, which might be none
 
         # Log scraping success/failure summary
         scrape_errors = [r.scrape_error for r in search_service_result.results if r.scrape_error]
@@ -290,7 +302,6 @@ async def generate_module_resources(state: LearningPathState, module_id: int, mo
         if progress_callback:
              await progress_callback(f"Analyzing module '{module.title}' to find resource query...", phase="module_resources", phase_progress=(module_id + 0.2) / max(1, len(modules)), overall_progress=0.65, action="processing")
 
-
         module_title = escape_curly_braces(module.title if hasattr(module, 'title') else module.get("title", f"Module {module_id+1}"))
         module_description = escape_curly_braces(module.description if hasattr(module, 'description') else module.get("description", "No description"))
 
@@ -309,7 +320,7 @@ async def generate_module_resources(state: LearningPathState, module_id: int, mo
         if progress_callback:
              await progress_callback(f"Searching & scraping resources for module '{module.title}'...", phase="module_resources", phase_progress=(module_id + 0.4) / max(1, len(modules)), overall_progress=0.65, action="processing")
 
-        # 2. Execute search and scrape using the new service
+        # 2. Execute search and scrape with retry capability
         tavily_key_provider = state.get("tavily_key_provider")
         if not tavily_key_provider:
              raise ValueError("Tavily key provider not found in state for module resource search.")
@@ -319,16 +330,31 @@ async def generate_module_resources(state: LearningPathState, module_id: int, mo
 
         # Set operation name for tracking
         provider = tavily_key_provider.set_operation("module_resource_search")
-        search_service_result = await perform_search_and_scrape(
-            resource_query.query,
-            provider,
-            max_results=max_results_per_query,
-            scrape_timeout=scrape_timeout
+        
+        # Use the new execute_search_with_llm_retry function
+        search_service_result = await execute_search_with_llm_retry(
+            state=state,
+            initial_query=resource_query, # Note: This is a ResourceQuery not SearchQuery
+            regenerate_query_func=regenerate_resource_query,
+            max_retries=1,
+            tavily_key_provider=provider,
+            search_config={
+                "max_results": max_results_per_query,
+                "scrape_timeout": scrape_timeout
+            },
+            regenerate_args={
+                "target_level": "module",
+                "context": {
+                    "module_title": module_title,
+                    "module_description": module_description
+                }
+            }
         )
 
         # Check for search provider errors
         if search_service_result.search_provider_error:
-            raise Exception(f"Search provider error: {search_service_result.search_provider_error}")
+            logger.warning(f"Search provider error after retry attempts: {search_service_result.search_provider_error}")
+            # Continue with whatever results we have, which might be none
 
         # Log scraping success/failure summary
         scrape_errors = [r.scrape_error for r in search_service_result.results if r.scrape_error]
@@ -336,7 +362,6 @@ async def generate_module_resources(state: LearningPathState, module_id: int, mo
         logger.info(f"Scraping completed for module '{module.title}' query '{resource_query.query}'. Successful: {successful_scrapes}/{len(search_service_result.results)}.")
         if scrape_errors:
             logger.warning(f"Scraping errors encountered: {scrape_errors[:3]}...")
-
 
         # Update progress
         if progress_callback:
@@ -546,7 +571,7 @@ async def generate_submodule_resources(
             await progress_callback(f"Searching & scraping resources for {submodule.title}...", phase="submodule_resources", phase_progress=(current_submodule_index + 0.4) / max(1, total_submodules), overall_progress=0.78, action="processing")
 
 
-        # 2. Execute search and scrape using the new service
+        # 2. Execute search and scrape with retry capability
         tavily_key_provider = state.get("tavily_key_provider")
         if not tavily_key_provider:
              raise ValueError("Tavily key provider not found in state for submodule resource search.")
@@ -557,16 +582,32 @@ async def generate_submodule_resources(
 
         # Set operation name for tracking
         provider = tavily_key_provider.set_operation("submodule_resource_search")
-        search_service_result = await perform_search_and_scrape(
-            resource_query.query,
-            provider,
-            max_results=max_results_per_query,
-            scrape_timeout=scrape_timeout
+        
+        # Use the new execute_search_with_llm_retry function
+        search_service_result = await execute_search_with_llm_retry(
+            state=state,
+            initial_query=resource_query, # Note: This is a ResourceQuery not SearchQuery
+            regenerate_query_func=regenerate_resource_query,
+            max_retries=1,
+            tavily_key_provider=provider,
+            search_config={
+                "max_results": max_results_per_query,
+                "scrape_timeout": scrape_timeout
+            },
+            regenerate_args={
+                "target_level": "submodule",
+                "context": {
+                    "submodule_title": submodule_title,
+                    "submodule_description": submodule_description,
+                    "module_title": module_title
+                }
+            }
         )
 
         # Check for search provider errors
         if search_service_result.search_provider_error:
-            raise Exception(f"Search provider error: {search_service_result.search_provider_error}")
+            logger.warning(f"Search provider error after retry attempts: {search_service_result.search_provider_error}")
+            # Continue with whatever results we have, which might be none
 
         # Log scraping success/failure summary
         scrape_errors = [r.scrape_error for r in search_service_result.results if r.scrape_error]
@@ -651,7 +692,7 @@ async def generate_submodule_resources(
                  "resource_types": [resource.type for resource in submodule_resources]
              }
             await progress_callback(
-                 f"Generated {len(submodule_resources)} resources for {submodule_title}",
+                 f"Generated {len(submodule_resources)} resources for {submodule.title}",
                  phase="submodule_resources",
                  phase_progress=(current_submodule_index + 1) / max(1, total_submodules),
                  overall_progress=0.8, # Keep estimate
@@ -931,4 +972,119 @@ async def add_resources_to_final_learning_path(state: LearningPathState) -> Dict
         logger.info(f"Final path includes {len(topic_resources)} topic resources, {module_resource_count} module resources, and {submodule_resource_count} submodule resources.")
 
 
-    return {"final_learning_path": final_path} 
+    return {"final_learning_path": final_path}
+
+async def regenerate_resource_query(
+    state: LearningPathState,
+    failed_query: ResourceQuery,
+    target_level: str = "topic",
+    context: Dict[str, Any] = None
+) -> ResourceQuery:
+    """
+    Regenerates a resource search query after a "no results found" error.
+    
+    This function uses an LLM to create an alternative resource search query
+    when the original query returns no results. It provides the failed query 
+    as context and instructs the LLM to broaden or rephrase the search while
+    maintaining focus on finding high-quality learning resources.
+    
+    Args:
+        state: The current LearningPathState with user_topic.
+        failed_query: The ResourceQuery object that failed to return results.
+        target_level: The level for which resources are being searched ('topic', 'module', 'submodule').
+        context: Additional context specific to the resource level, such as module or submodule details.
+        
+    Returns:
+        A new ResourceQuery object with an alternative query.
+    """
+    if context is None:
+        context = {}
+    
+    logger.info(f"Regenerating {target_level} resource query after no results for: {failed_query.query}")
+    
+    # Get language information from state
+    output_language = state.get('language', 'en')
+    search_language = state.get('search_language', 'en')
+    
+    # Get Google key provider from state
+    google_key_provider = state.get("google_key_provider")
+    if not google_key_provider:
+        logger.warning("Google key provider not found in state for resource query regeneration")
+    
+    # Build context specific details based on target_level
+    resource_level_context = ""
+    if target_level == "topic":
+        resource_level_context = f"This query is for finding high-quality resources for the ENTIRE topic: {state['user_topic']}"
+    elif target_level == "module" and 'module_title' in context:
+        resource_level_context = f"This query is for finding resources for a SPECIFIC MODULE: {context['module_title']}\nModule Description: {context.get('module_description', 'No description available')}"
+    elif target_level == "submodule" and 'submodule_title' in context:
+        resource_level_context = f"This query is for finding resources for a SPECIFIC SUBMODULE: {context['submodule_title']}\nSubmodule Description: {context.get('submodule_description', 'No description available')}"
+    else:
+        resource_level_context = f"This query is for finding learning resources related to: {state['user_topic']}"
+    
+    prompt_text = """
+# RESOURCE SEARCH QUERY RETRY SPECIALIST INSTRUCTIONS
+
+The following search query returned NO RESULTS when searching for learning resources:
+
+FAILED QUERY: {failed_query}
+
+Resource Level Context:
+{resource_level_context}
+
+I need you to generate a DIFFERENT search query that is more likely to find results but still focused on retrieving HIGH-QUALITY LEARNING RESOURCES for this specific learning need.
+
+## ANALYSIS OF FAILED QUERY
+
+Analyze why the previous query might have failed:
+- Was it too specific with too many quoted terms?
+- Did it use uncommon terminology or jargon?
+- Was it too long or complex?
+- Did it combine too many concepts that rarely appear together?
+- Did it focus too narrowly on a specific resource type or format?
+
+## NEW QUERY REQUIREMENTS
+
+Create ONE alternative search query that:
+1. Is BROADER or uses more common terminology
+2. Maintains focus on finding high-quality learning resources (tutorials, guides, courses, videos, etc.)
+3. Uses fewer quoted phrases (one at most)
+4. Is more likely to match existing educational content
+5. Balances specificity (finding relevant resources) with generality (getting actual results)
+
+## LANGUAGE INSTRUCTIONS
+- Generate your analysis and response in {output_language}.
+- For the search query, use {search_language} to maximize retrieving high-quality resources.
+
+## QUERY FORMAT RULES
+- CRITICAL: Ensure your new query is DIFFERENT from the failed one
+- Fewer keywords is better than too many
+- QUOTE USAGE RULE: NEVER use more than ONE quoted phrase. Quotes are ONLY for essential multi-word concepts
+- Getting some relevant results is BETTER than getting zero results
+- Try different resource-related terms (tutorial, course, guide, learn, beginner, introduction, etc.)
+- For technical topics, consider including common platforms, websites, or formats where such resources might be found
+
+Your response should include just ONE search query and a brief rationale for why this query might work better.
+
+{format_instructions}
+"""
+    prompt = ChatPromptTemplate.from_template(prompt_text)
+    try:
+        result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), resource_query_parser, {
+            "user_topic": state["user_topic"],
+            "failed_query": failed_query.query,
+            "resource_level_context": resource_level_context,
+            "output_language": output_language,
+            "search_language": search_language,
+            "format_instructions": resource_query_parser.get_format_instructions()
+        })
+        
+        if not result or not hasattr(result, 'query'):
+            logger.error("Resource query regeneration returned invalid result")
+            return None
+            
+        logger.info(f"Successfully regenerated resource query: {result.query}")
+        return result
+    except Exception as e:
+        logger.exception(f"Error regenerating resource query: {str(e)}")
+        return None 

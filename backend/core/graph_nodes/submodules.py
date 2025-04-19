@@ -4,13 +4,29 @@ import re
 import json
 import os
 from typing import Dict, Any, List, Tuple, Optional
+from datetime import datetime
 
-from backend.models.models import SearchQuery, EnhancedModule, Submodule, SubmoduleContent, LearningPathState, QuizQuestion, QuizQuestionList, SearchServiceResult, ScrapedResult
-from backend.parsers.parsers import submodule_parser, module_queries_parser, quiz_questions_parser
-from backend.services.services import get_llm, perform_search_and_scrape
+import aiohttp
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from pydantic import BaseModel, Field
+from langchain.output_parsers import PydanticOutputParser
+
+from backend.models.models import (
+    SearchQuery, 
+    LearningPathState, 
+    EnhancedModule, 
+    Submodule, 
+    SubmoduleContent,
+    SearchServiceResult, 
+    ScrapedResult, 
+    QuizQuestion,
+    QuizQuestionList
+)
+from backend.parsers.parsers import submodule_parser, module_queries_parser, quiz_questions_parser
+from backend.services.services import get_llm, perform_search_and_scrape
+from backend.core.graph_nodes.helpers import run_chain, escape_curly_braces, batch_items
+from backend.core.graph_nodes.search_utils import execute_search_with_llm_retry
 
 # Import the extracted prompts
 from backend.prompts.learning_path_prompts import (
@@ -20,10 +36,135 @@ from backend.prompts.learning_path_prompts import (
     # SUBMODULE_QUERY_GENERATION_PROMPT,
     # SUBMODULE_CONTENT_DEVELOPMENT_PROMPT
 )
+
+async def regenerate_submodule_content_query(
+    state: LearningPathState,
+    failed_query: SearchQuery,
+    module_id: int = None,
+    sub_id: int = None,
+    module: EnhancedModule = None,
+    submodule: Submodule = None
+) -> SearchQuery:
+    """
+    Regenerates a search query for submodule content development after a "no results found" error.
+    
+    This function uses an LLM to create an alternative search query when the original
+    content-focused query returns no results. It provides the failed query as context
+    and instructs the LLM to broaden or rephrase the search while maintaining focus on
+    finding information relevant to developing the submodule content.
+    
+    Args:
+        state: The current LearningPathState with user_topic.
+        failed_query: The SearchQuery object that failed to return results.
+        module_id: The index of the current module.
+        sub_id: The index of the current submodule.
+        module: The EnhancedModule object containing the submodule.
+        submodule: The Submodule object for which content is being developed.
+        
+    Returns:
+        A new SearchQuery object with an alternative query.
+    """
+    logging.info(f"Regenerating submodule content query after no results for: {failed_query.keywords}")
+    
+    # Get language information from state
+    output_language = state.get('language', 'en')
+    search_language = state.get('search_language', 'en')
+    
+    # Get Google key provider from state
+    google_key_provider = state.get("google_key_provider")
+    if not google_key_provider:
+        logging.warning("Google key provider not found in state for submodule query regeneration")
+    
+    # Build context information
+    submodule_context = ""
+    if module and submodule:
+        escaped_topic = escape_curly_braces(state["user_topic"])
+        module_title = escape_curly_braces(module.title)
+        submodule_title = escape_curly_braces(submodule.title)
+        submodule_description = escape_curly_braces(submodule.description)
+        
+        submodule_context = f"""
+Topic: {escaped_topic}
+Module: {module_title}
+Submodule: {submodule_title}
+Submodule Description: {submodule_description}
+Position: Submodule {sub_id + 1} of {len(module.submodules)} in Module {module_id + 1}
+        """
+    
+    prompt_text = """
+# SEARCH QUERY RETRY SPECIALIST INSTRUCTIONS
+
+The following search query returned NO RESULTS when searching for information to develop content for a learning submodule:
+
+FAILED QUERY: {failed_query}
+
+## SUBMODULE CONTEXT
+{submodule_context}
+
+I need you to generate a DIFFERENT search query that is more likely to find results but still focused on retrieving RELEVANT INFORMATION for developing educational content about this submodule.
+
+## ANALYSIS OF FAILED QUERY
+
+Analyze why the previous query might have failed:
+- Was it too specific with too many quoted terms?
+- Did it use uncommon terminology or jargon?
+- Was it too long or complex?
+- Did it combine too many concepts that rarely appear together?
+- Did it include too many technical terms or specific frameworks?
+
+## NEW QUERY REQUIREMENTS
+
+Create ONE alternative search query that:
+1. Is BROADER or uses more common terminology
+2. Maintains focus on the same subject matter as the original query
+3. Uses fewer quoted phrases (one at most)
+4. Is more likely to match existing educational content
+5. Balances specificity (finding relevant content) with generality (getting actual results)
+
+## LANGUAGE INSTRUCTIONS
+- Generate your analysis and response in {output_language}.
+- For the search query, use {search_language} to maximize retrieving high-quality information.
+
+## QUERY FORMAT RULES
+- CRITICAL: Ensure your new query is DIFFERENT from the failed one
+- Fewer keywords is better than too many
+- QUOTE USAGE RULE: NEVER use more than ONE quoted phrase. Quotes are ONLY for essential multi-word concepts
+- Getting some relevant results is BETTER than getting zero results
+- Try different terms or synonyms that might be more common in educational content
+
+Your response should be formatted as a JSON object with 'query' (the new search query) and 'rationale' (why this query might work better).
+
+{format_instructions}
+"""
+    try:
+        # Use SingleSearchQueryOutput parser or create a simple one
+        class SingleSearchQueryOutput(BaseModel):
+            query: str = Field(description="The optimal search query to use")
+            rationale: str = Field(description="Explanation of why this query is optimal for this submodule")
+        
+        single_query_parser = PydanticOutputParser(pydantic_object=SingleSearchQueryOutput)
+        
+        prompt = ChatPromptTemplate.from_template(prompt_text)
+        result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), single_query_parser, {
+            "failed_query": failed_query.keywords,
+            "submodule_context": submodule_context,
+            "output_language": output_language,
+            "search_language": search_language,
+            "format_instructions": single_query_parser.get_format_instructions()
+        })
+        
+        if result and hasattr(result, 'query'):
+            logging.info(f"Successfully regenerated submodule content query: {result.query}")
+            return SearchQuery(keywords=result.query, purpose="content_development")
+        else:
+            logging.error("Submodule query regeneration returned empty or invalid result")
+            return None
+    except Exception as e:
+        logging.exception(f"Error regenerating submodule content query: {str(e)}")
+        return None
+
 # Optional: Import the prompt registry for more advanced prompt management
 # from prompts.prompt_registry import registry
-
-from backend.core.graph_nodes.helpers import run_chain, batch_items, escape_curly_braces
 
 # Helper function to extract JSON from potentially markdown-formatted strings
 def extract_json_from_markdown(text: str) -> Optional[Dict[str, Any]]:
@@ -1123,75 +1264,80 @@ async def execute_submodule_specific_searches(
     sub_queries: List[SearchQuery]
 ) -> List[SearchServiceResult]:
     """
-    Execute web searches (Tavily+Scrape) for submodule-specific queries in parallel.
+    Execute web searches specific to a submodule to gather content for development.
+    Uses retry with regeneration for queries that return no results.
     """
-    logger = logging.getLogger("learning_path.search_executor")
-    logger.info(f"Executing {len(sub_queries)} searches for submodule {module_id}.{sub_id}")
+    logging.info(f"Executing web searches for submodule {module_id+1}.{sub_id+1}: {submodule.title}")
+    
     if not sub_queries:
+        logging.warning(f"No search queries provided for submodule {module_id+1}.{sub_id+1}")
         return []
-
-    # Get the Tavily key provider from state
+    
+    # Get key parameters
     tavily_key_provider = state.get("tavily_key_provider")
     if not tavily_key_provider:
-        logger.error("Tavily key provider not found in state for submodule search.")
-        # Return empty list with error indication (or handle differently)
-        return [SearchServiceResult(query=q.keywords, results=[], search_provider_error="Tavily key provider not found") for q in sub_queries]
-
-    # Use a smaller parallelism count for submodule searches maybe?
-    # Or use the main search_parallel_count
-    search_parallel_count = state.get("search_parallel_count", 2)
+        raise ValueError(f"Tavily key provider not found in state for submodule {module_id+1}.{sub_id+1}")
+    
+    # Get search configuration
+    max_results_per_query = int(os.environ.get("SEARCH_MAX_RESULTS", 5))
     scrape_timeout = int(os.environ.get("SCRAPE_TIMEOUT", 10))
-    # Potentially fewer results needed for submodule context
-    max_results_per_query = int(os.environ.get("SEARCH_MAX_RESULTS_SUBMODULE", 5))
-
-    sem = asyncio.Semaphore(search_parallel_count)
-    all_search_service_results: List[SearchServiceResult] = []
-
-    async def bounded_search_and_scrape(query_obj: SearchQuery):
+    
+    results = []
+    
+    # Create a semaphore to limit concurrency
+    sem = asyncio.Semaphore(3)  # Allow up to 3 concurrent searches
+    
+    async def bounded_search_with_retry(query_obj: SearchQuery):
         async with sem:
             # Set operation name for tracking
-            op_name = f"submodule_{module_id}_{sub_id}_search"
-            provider = tavily_key_provider.set_operation(op_name)
-            return await perform_search_and_scrape(
-                query_obj.keywords,
-                provider,
-                max_results=max_results_per_query,
-                scrape_timeout=scrape_timeout
+            provider = tavily_key_provider.set_operation("submodule_content_search")
+            
+            # Use the new execute_search_with_llm_retry function
+            return await execute_search_with_llm_retry(
+                state=state,
+                initial_query=query_obj,
+                regenerate_query_func=regenerate_submodule_content_query,
+                max_retries=1,
+                tavily_key_provider=provider,
+                search_config={
+                    "max_results": max_results_per_query,
+                    "scrape_timeout": scrape_timeout
+                },
+                regenerate_args={
+                    "module_id": module_id,
+                    "sub_id": sub_id,
+                    "module": module,
+                    "submodule": submodule
+                }
             )
-
-    tasks = [bounded_search_and_scrape(query) for query in sub_queries]
-
-    # Run tasks concurrently
-    results_or_exceptions = await asyncio.gather(*tasks, return_exceptions=True)
-
-    # Process results
-    for i, res_or_exc in enumerate(results_or_exceptions):
-        query_keywords = sub_queries[i].keywords
-        if isinstance(res_or_exc, Exception):
-            logger.error(f"Error executing search task for submodule query '{query_keywords}': {res_or_exc}")
-            all_search_service_results.append(
-                SearchServiceResult(
-                    query=query_keywords,
-                    results=[],
-                    search_provider_error=f"Task execution error: {type(res_or_exc).__name__} - {str(res_or_exc)}"
+    
+    try:
+        tasks = [bounded_search_with_retry(query) for query in sub_queries]
+        results_or_excs = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for i, res_or_exc in enumerate(results_or_excs):
+            if isinstance(res_or_exc, Exception):
+                logging.error(f"Search error for submodule {module_id+1}.{sub_id+1}: {str(res_or_exc)}")
+                # Create an error result
+                error_result = SearchServiceResult(
+                    query=sub_queries[i].keywords,
+                    search_provider_error=f"Search task error: {str(res_or_exc)}"
                 )
-            )
-        elif isinstance(res_or_exc, SearchServiceResult):
-            all_search_service_results.append(res_or_exc)
-            # Log errors from the result object
-            if res_or_exc.search_provider_error:
-                 logger.error(f"Search provider error for submodule query '{query_keywords}': {res_or_exc.search_provider_error}")
-            scrape_errors = [r.scrape_error for r in res_or_exc.results if r.scrape_error]
-            if scrape_errors:
-                logger.warning(f"Scraping issues for submodule query '{query_keywords}': {len(scrape_errors)}/{len(res_or_exc.results)} URLs failed.")
-        else:
-            logger.error(f"Unexpected result type for submodule query '{query_keywords}': {type(res_or_exc)}")
-            all_search_service_results.append(
-                 SearchServiceResult(query=query_keywords, results=[], search_provider_error="Unexpected result type from gather")
-             )
-
-    logger.info(f"Completed {len(all_search_service_results)} searches for submodule {module_id}.{sub_id}")
-    return all_search_service_results
+                results.append(error_result)
+            else:
+                results.append(res_or_exc)
+                # Log any search provider errors
+                if res_or_exc.search_provider_error:
+                    logging.warning(f"Search provider error for submodule query '{sub_queries[i].keywords}': {res_or_exc.search_provider_error}")
+        
+        return results
+    
+    except Exception as e:
+        logging.exception(f"Error executing searches for submodule {module_id+1}.{sub_id+1}: {str(e)}")
+        return [SearchServiceResult(
+            query=f"Error: {str(e)}",
+            search_provider_error=f"Failed to execute submodule searches: {str(e)}"
+        )]
 
 async def develop_submodule_specific_content(
     state: LearningPathState,

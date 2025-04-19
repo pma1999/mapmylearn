@@ -25,9 +25,11 @@ import { PageHeaderWrapper, ActionButtonsWrapper } from '../styledComponents';
  * @param {Function} props.onImport - Handler for import button click
  * @param {Function} props.onExport - Handler for export button click
  * @param {Function} props.onClear - Handler for clear button click
+ * @param {boolean} [props.isLoading] - Optional: Indicates if initial data is loading
+ * @param {boolean} [props.isProcessing] - Optional: Indicates if a bulk action is in progress
  * @returns {JSX.Element} Page header component
  */
-const PageHeader = ({ hasEntries, onImport, onExport, onClear }) => {
+const PageHeader = ({ hasEntries, onImport, onExport, onClear, isLoading = false, isProcessing = false }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
@@ -63,6 +65,7 @@ const PageHeader = ({ hasEntries, onImport, onExport, onClear }) => {
           onClick={onImport}
           fullWidth={isMobile}
           size="small"
+          disabled={isLoading || isProcessing}
         >
           Import
         </Button>
@@ -70,7 +73,7 @@ const PageHeader = ({ hasEntries, onImport, onExport, onClear }) => {
           variant="outlined"
           startIcon={<DownloadIcon />}
           onClick={onExport}
-          disabled={!hasEntries}
+          disabled={!hasEntries || isLoading || isProcessing}
           fullWidth={isMobile}
           size="small"
         >
@@ -81,7 +84,7 @@ const PageHeader = ({ hasEntries, onImport, onExport, onClear }) => {
           color="error"
           startIcon={<ClearAllIcon />}
           onClick={onClear}
-          disabled={!hasEntries}
+          disabled={!hasEntries || isLoading || isProcessing}
           fullWidth={isMobile}
           size="small"
         >
@@ -107,7 +110,9 @@ PageHeader.propTypes = {
   hasEntries: PropTypes.bool.isRequired,
   onImport: PropTypes.func.isRequired,
   onExport: PropTypes.func.isRequired,
-  onClear: PropTypes.func.isRequired
+  onClear: PropTypes.func.isRequired,
+  isLoading: PropTypes.bool,
+  isProcessing: PropTypes.bool
 };
 
 export default PageHeader; 

@@ -6,7 +6,6 @@ import { Container, Snackbar, Alert, useMediaQuery, useTheme, Box, Typography, P
 // Custom hooks
 import useLearningPathData from '../hooks/useLearningPathData';
 import useLearningPathActions from '../hooks/useLearningPathActions';
-import useProgressTracking from '../hooks/useProgressTracking';
 
 // View components
 import LearningPathHeader from './LearningPathHeader';
@@ -32,90 +31,55 @@ const LearningPathView = ({ source }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
-  // States for tracking save status updates
+  // States for tracking ACTIONS (like save completion), keep these for now
   const [localSavedToHistory, setLocalSavedToHistory] = useState(false);
   const [localEntryId, setLocalEntryId] = useState(null);
-  const [localLearningPath, setLocalLearningPath] = useState(null);
-  const [localLoading, setLocalLoading] = useState(true);
-  const [localError, setLocalError] = useState('');
   
-  // Load learning path data from appropriate source
+  // Load learning path data using the hook - rely solely on this for data/loading/error state
   const {
-    learningPath,
-    loading,
-    error,
+    learningPath, // This holds the data object (full entry for history, result for generation)
+    loading,      // Loading state from the hook
+    error,        // Error state from the hook
     isFromHistory,
     savedToHistory: initialSavedToHistory,
     temporaryPathId,
-    refreshData
+    refreshData // Keep refresh function if needed elsewhere
   } = useLearningPathData(source);
   
-  // Combined states (from hook or local updates)
+  // Use derived state based ONLY on hook values and local ACTION results
   const savedToHistory = localSavedToHistory || initialSavedToHistory;
-  const currentLearningPath = localLearningPath || learningPath;
-  const isLoading = localLoading !== false && loading;
-  const currentError = localError || error;
-  const isPersisted = isFromHistory || savedToHistory; // Calculate persisted status
-  const isTemporaryPath = !isPersisted && !!temporaryPathId; // Calculate temporary path status
+  const isPersisted = isFromHistory || savedToHistory;
+  const isTemporaryPath = !isPersisted && !!temporaryPathId;
   
-  // Determine the correct pathId to use
-  // Priority: localEntryId (after save) > entryId (from URL) > learningPath.path_id (intrinsic)
+  // Determine the correct pathId to use (logic seems okay, but adapt to direct learningPath use)
   let derivedPathId = null;
-  const currentEntryId = localEntryId || entryId; // Use localEntryId if path was just saved
-  if (!isLoading && currentLearningPath) {
+  const currentEntryId = localEntryId || entryId;
+  // Use loading directly, access path_id from learningPath if !isFromHistory
+  if (!loading && learningPath) { 
     if (isTemporaryPath) {
-      derivedPathId = temporaryPathId; // Use temporary ID for unsaved paths
+      derivedPathId = temporaryPathId;
     } else if (currentEntryId) {
       derivedPathId = currentEntryId;
-    } else if (!isFromHistory && currentLearningPath.path_id) {
-      // Use intrinsic ID if loaded from task result and ID exists
-      derivedPathId = currentLearningPath.path_id;
+    } else if (!isFromHistory && learningPath.path_id) { 
+      // If from generation, path_id might be top-level in the result
+      derivedPathId = learningPath.path_id;
+    } else if (isFromHistory && learningPath.path_id) {
+      // If from history, path_id is top-level in the full entry object
+      derivedPathId = learningPath.path_id;
+    } else if (isFromHistory && !learningPath.path_id && entryId) {
+       // Fallback for history view if somehow path_id is missing in object but we have entryId
+       derivedPathId = entryId;
+       console.warn('Using entryId as derivedPathId because learningPath.path_id was missing in history view.');
     } else {
-      // Log if we somehow can't determine an ID after loading is complete
       console.warn('Could not determine pathId for LearningPathView');
     }
   }
   
-  // Callback for when a task completes
-  const handleTaskComplete = useCallback((response) => {
-    console.log('Task completed with status:', response.status);
-    if (response.status === 'completed' && response.result) {
-      // Update the data directly
-      setLocalLearningPath(response.result);
-      setLocalLoading(false);
-      setLocalError('');
-    } else if (response.status === 'failed') {
-      // Set error state
-      setLocalError(response.error?.message || 'Learning path generation failed');
-      setLocalLoading(false);
-    }
-  }, []);
-  
-  // Track generation progress for new learning paths
-  const {
-    progressMessages,
-    isPolling,
-    taskStatus,
-    startPollingForResult,
-    checkTaskStatus
-  } = useProgressTracking(taskId, handleTaskComplete);
-  
-  // Initialize progress tracking for running tasks
-  useEffect(() => {
-    if (!isFromHistory && taskId && isLoading) {
-      startPollingForResult();
-    }
-  }, [isFromHistory, taskId, isLoading, startPollingForResult]);
-  
-  // Check task status when component mounts if needed
-  useEffect(() => {
-    // If we're in the result page and task is not from history,
-    // check the current status once
-    if (!isFromHistory && taskId && !currentLearningPath) {
-      checkTaskStatus();
-    }
-  }, [isFromHistory, taskId, checkTaskStatus, currentLearningPath]);
-  
+  // Extract the actual path data object, handling both history and generation cases
+  // Based on logs, when isFromHistory=true, learningPath is the full entry, data is in learningPath.path_data
+  // When isFromHistory=false, learningPath is the result object (assumed to be the path data itself)
+  const actualPathData = isFromHistory ? learningPath?.path_data : learningPath;
+
   // Setup actions for the learning path
   const {
     saveDialogOpen,
@@ -139,32 +103,48 @@ const LearningPathView = ({ source }) => {
     handleTagKeyDown,
     handleNotificationClose
   } = useLearningPathActions(
-    currentLearningPath,
+    // Pass the correct data structure to the actions hook
+    actualPathData, // Pass the extracted path data
     isFromHistory,
     savedToHistory,
-    currentEntryId,
-    taskId,
-    temporaryPathId
+    currentEntryId, // Use the most reliable ID (entry or local override)
+    taskId,         // Pass taskId for generation context
+    temporaryPathId // Pass temporaryId for potential save action
   );
   
-  // Handle save confirmation with state updates
-  const handleSaveConfirmWithUpdate = async () => {
-    const result = await handleSaveConfirm();
-    if (result && result.savedToHistory) {
-      setLocalSavedToHistory(true);
-      if (result.path_id) {
-        setLocalEntryId(result.path_id);
-      } else {
-        console.error('Save confirmed but no new path_id received from backend.');
-        // Potentially refresh all data as a fallback?
-        // refreshData(); 
+  // Adjust action handlers if they directly used `learningPath` expecting the wrong structure
+  // e.g., handleDownloadJSON likely needs `actualPathData` now
+  const handleDownloadJSONAdjusted = () => {
+      if (!actualPathData) return;
+      try {
+          const json = JSON.stringify(actualPathData, null, 2);
+          const blob = new Blob([json], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          const fileName = actualPathData.topic
+              ? `learning_path_${actualPathData.topic.replace(/\s+/g, '_').substring(0, 30)}.json`
+              : 'learning_path.json';
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          showNotification('Learning path downloaded successfully', 'success');
+      } catch (err) {
+          console.error('Error downloading JSON:', err);
+          showNotification('Failed to download learning path', 'error');
       }
-    }
   };
-  
-  // Handle PDF download with state updates
+
+  // Adjust handleDownloadPDF if it relied on top-level props of learningPath
+  // It seems handleDownloadPDF mainly uses `entryId` and `learningPath.topic`
+  // `useLearningPathActions` needs `actualPathData` to get the topic correctly.
   const handleDownloadPDFWithUpdate = async () => {
-    const result = await handleDownloadPDF();
+    // The action hook `useLearningPathActions` now receives `actualPathData`,
+    // so its internal `handleDownloadPDF` should get the topic correctly.
+    // We still need to update local state based on the action result.
+    const result = await handleDownloadPDF(); // Call original function from hook
     if (result && result.savedToHistory) {
       setLocalSavedToHistory(true);
       if (result.entryId) {
@@ -172,22 +152,20 @@ const LearningPathView = ({ source }) => {
       }
     }
   };
-  
-  // Loading state
-  if (isLoading) {
+
+  // Use `loading` directly from hook
+  if (loading) {
     return (
-      <LoadingState 
-        progressMessages={progressMessages}
-        isPolling={isPolling}
-      />
+      // Keep LoadingState, but remove progressMessages/isPolling if generation logic removed
+      <LoadingState /> 
     );
   }
   
-  // Error state
-  if (currentError) {
+  // Use `error` directly from hook
+  if (error) {
     return (
       <ErrorState 
-        error={currentError} 
+        error={error.message || 'An error occurred'} // Use error message
         onHomeClick={handleHomeClick}
         onNewLearningPathClick={handleNewLearningPathClick}
       />
@@ -197,48 +175,51 @@ const LearningPathView = ({ source }) => {
   // Success state - show learning path
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 3, md: 4 } }}>
-      {/* Header Section */}
-      {currentLearningPath && (
+      {/* Use actualPathData for rendering */} 
+      {actualPathData && (
         <>
           <LearningPathHeader 
-            topic={currentLearningPath.topic}
+            topic={actualPathData.topic} // Use topic from actualPathData
             savedToHistory={savedToHistory}
             isPersisted={isPersisted}
-            onDownload={handleDownloadJSON}
+            onDownload={handleDownloadJSONAdjusted} // Use adjusted download handler
             onDownloadPDF={handleDownloadPDFWithUpdate}
             onSaveToHistory={handleSaveToHistory}
             onNewLearningPath={handleNewLearningPathClick}
           />
           
-          {/* Modules Section - Pass derivedPathId and isTemporaryPath */}
+          {/* Modules Section */} 
           {derivedPathId ? (
             <ModuleSection
-              modules={currentLearningPath.modules}
+              // Access modules correctly based on actualPathData structure
+              modules={actualPathData.modules} 
               pathId={derivedPathId}
               isTemporaryPath={isTemporaryPath}
             />
           ) : (
-            // Optional: Render a message or placeholder if pathId is still null after loading
-            !isLoading && <Typography sx={{mt: 2}}>Module ID not available yet.</Typography>
+            // Use loading directly here
+            !loading && <Typography sx={{mt: 2}}>Module ID not available yet.</Typography>
           )}
           
-          {/* Learning Path Resources Section - UPDATED to use ResourcesSection */}
+          {/* Learning Path Resources Section */} 
           <Box sx={{ mt: 6, mb: 4 }}>
             <ResourcesSection 
-              resources={currentLearningPath.topic_resources} 
+              // Access resources correctly based on actualPathData structure
+              resources={actualPathData.topic_resources} 
               title="Learning Path Resources"
               type="topic"
-              isLoading={taskStatus === 'running' && progressMessages.some(msg => msg.phase === 'topic_resources')}
+              // Remove isLoading prop or adjust based on removed polling state
+              // isLoading={taskStatus === 'running' && progressMessages.some(msg => msg.phase === 'topic_resources')}
             />
           </Box>
         </>
       )}
       
-      {/* Save to History Dialog */}
+      {/* Keep Save Dialog and Snackbar as they use actions/state */} 
       <SaveDialog
         open={saveDialogOpen}
         onClose={handleSaveDialogClose}
-        onConfirm={handleSaveConfirmWithUpdate}
+        onConfirm={handleSaveConfirm}
         tags={tags}
         newTag={newTag}
         favorite={favorite}
@@ -249,8 +230,6 @@ const LearningPathView = ({ source }) => {
         onFavoriteChange={setFavorite}
         isMobile={isMobile}
       />
-      
-      {/* Notification Snackbar */}
       <Snackbar
         open={notification.open}
         autoHideDuration={6000}

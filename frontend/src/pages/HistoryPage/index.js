@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useCallback } from 'react';
+import React, { useMemo, useRef, useCallback, useState } from 'react';
 import { Container, Paper, Divider, Grid, Snackbar, Alert, useMediaQuery, useTheme, Typography, Box } from '@mui/material';
 import { FixedSizeGrid } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
@@ -15,12 +15,17 @@ import HistoryFilters from './components/HistoryFilters';
 import HistoryEntryCard from './components/HistoryEntryCard';
 import HistoryEntrySkeleton from './components/HistoryEntrySkeleton';
 import EmptyState from './components/EmptyState';
+import ImportDialog from './components/ImportDialog';
+import ConfirmationDialog from './components/ConfirmationDialog';
+
+// API Service
+import * as api from '../../services/api';
 
 /**
  * Virtualized grid cell renderer for history entries
  */
 const EntryCell = ({ columnIndex, rowIndex, style, data }) => {
-  const { entries, columnCount, onView, onDelete, onToggleFavorite, onUpdateTags, onDownloadPDF } = data;
+  const { entries, columnCount, onView, onDelete, onToggleFavorite, onUpdateTags, onDownloadPDF, onExport } = data;
   const index = rowIndex * columnCount + columnIndex;
   
   if (index >= entries.length) {
@@ -42,6 +47,7 @@ const EntryCell = ({ columnIndex, rowIndex, style, data }) => {
         onToggleFavorite={onToggleFavorite}
         onUpdateTags={onUpdateTags}
         onDownloadPDF={onDownloadPDF}
+        onExport={onExport}
         virtualized={true}
       />
     </div>
@@ -109,7 +115,108 @@ const HistoryPage = () => {
     showNotification
   );
   
-  // Initialize history actions hook
+  // State for dialogs and processing status
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false); // Added for disabling buttons during actions
+
+  // Placeholder handlers for PageHeader props - Updated Below
+  // const handleImport = () => console.warn('Import functionality not implemented yet.');
+  // const handleExportAll = () => console.warn('Export All functionality not implemented yet.');
+  // const handleClearHistory = () => console.warn('Clear History functionality not implemented yet.');
+
+  // Mock/Placeholder handler for individual entry export
+  const handleExportEntry = (entryId) => console.warn(`Export for entry ${entryId} not implemented yet.`);
+
+  // --- Updated Action Handlers ---
+
+  const handleImport = () => {
+    setIsImportDialogOpen(true);
+  };
+
+  const handlePerformImport = async (learningPathObject) => {
+    setIsProcessing(true);
+    setIsImportDialogOpen(false); // Close dialog immediately
+    showNotification('Importing history...', 'info');
+    try {
+      const result = await api.importHistoryEntry(learningPathObject);
+      if (result.success) {
+        showNotification(`Learning path "${result.topic}" imported successfully!`, 'success');
+        refreshEntries(); // Refresh the list
+      } else {
+        // This path might not be reached if api throws error, but good practice
+        throw new Error(result.error || 'Import failed due to an unknown reason.');
+      }
+    } catch (error) {
+      console.error("Import failed:", error);
+      showNotification(`Import failed: ${error.message || 'Could not process the import request.'}`, 'error');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleExportAll = async () => {
+    if (!entries.length) {
+      showNotification('No history entries to export.', 'info');
+      return;
+    }
+    setIsProcessing(true);
+    showNotification('Exporting history...', 'info');
+    try {
+      const exportedEntries = await api.exportAllHistory();
+      if (!exportedEntries || exportedEntries.length === 0) {
+        showNotification('No history entries found to export.', 'info');
+        return;
+      }
+      
+      const jsonString = JSON.stringify(exportedEntries, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `learni_history_export_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      showNotification('History exported successfully.', 'success');
+    } catch (error) {
+      console.error("Export failed:", error);
+      showNotification(`Export failed: ${error.message}`, 'error');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleClearHistory = () => {
+    setIsClearConfirmOpen(true);
+  };
+
+  const handlePerformClear = async () => {
+    setIsClearConfirmOpen(false); // Close dialog immediately
+    setIsProcessing(true);
+    showNotification('Clearing history...', 'info');
+    try {
+      const result = await api.clearHistory();
+      if (result.success) {
+        showNotification('History cleared successfully.', 'success');
+        refreshEntries(); // Refresh the list
+      } else {
+        // This path might not be reached if api throws error
+        throw new Error(result.error || 'Failed to clear history.');
+      }
+    } catch (error) {
+      console.error("Clear history failed:", error);
+      showNotification(`Failed to clear history: ${error.message}`, 'error');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // --- End Updated Action Handlers ---
+
+  // Destructure actions from useHistoryActions
   const {
     handleViewLearningPath,
     handleDeleteLearningPath,
@@ -144,7 +251,7 @@ const HistoryPage = () => {
   // Computed value to check if any filters are applied
   const hasFiltersApplied = !!filterSource || !!searchTerm || sortBy !== 'creation_date';
   
-  // Virtualized list itemData
+  // Virtualized list itemData - include onExport
   const itemData = useMemo(() => ({
     entries,
     columnCount,
@@ -152,7 +259,8 @@ const HistoryPage = () => {
     onDelete: handleDeleteLearningPath,
     onToggleFavorite: handleToggleFavorite,
     onUpdateTags: handleUpdateTags,
-    onDownloadPDF: handleDownloadPDF
+    onDownloadPDF: handleDownloadPDF,
+    onExport: handleExportEntry
   }), [
     entries, 
     columnCount, 
@@ -160,7 +268,8 @@ const HistoryPage = () => {
     handleDeleteLearningPath, 
     handleToggleFavorite, 
     handleUpdateTags, 
-    handleDownloadPDF
+    handleDownloadPDF,
+    handleExportEntry
   ]);
   
   // Reference to AutoSizer for recalculating dimensions when entries change
@@ -185,6 +294,10 @@ const HistoryPage = () => {
         <PageHeader 
           hasEntries={entries.length > 0}
           isLoading={loading && !initialLoadComplete}
+          isProcessing={isProcessing}
+          onImport={handleImport}
+          onExport={handleExportAll}
+          onClear={handleClearHistory}
         />
         
         <Divider sx={{ mb: 3 }} />
@@ -247,6 +360,21 @@ const HistoryPage = () => {
         )}
       </Paper>
       
+      {/* Render Dialogs */}
+      <ImportDialog 
+        open={isImportDialogOpen} 
+        onClose={() => !isProcessing && setIsImportDialogOpen(false)} // Prevent closing while processing
+        onImport={handlePerformImport} // Pass the actual import handler
+      />
+      
+      <ConfirmationDialog 
+        open={isClearConfirmOpen} 
+        title="Confirm Clear History" 
+        message="Are you sure you want to delete ALL learning path history entries? This action cannot be undone." 
+        onConfirm={handlePerformClear} 
+        onCancel={() => !isProcessing && setIsClearConfirmOpen(false)} // Prevent closing while processing
+      />
+
       {/* Notification Snackbar */}
       <Snackbar
         open={notification.open}

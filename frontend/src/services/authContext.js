@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import * as api from './api';
-import { getLocalHistoryRaw, clearLocalHistory } from './api';
+import { getLocalHistoryRaw, clearHistory } from './api';
 
 // Create authentication context
 const AuthContext = createContext(null);
@@ -226,7 +226,7 @@ export const AuthProvider = ({ children }) => {
 
                     if (migrationResult.success) {
                         console.log(`Successfully migrated ${migrationResult.migrated_count} learning paths. Clearing local history.`);
-                        clearLocalHistory(); // Use the function from api.js
+                        clearHistory(); // Updated usage
                         localStorage.setItem(MIGRATION_FLAG_KEY, 'true');
                     } else {
                         console.error("Local history migration failed:", migrationResult.errors);
