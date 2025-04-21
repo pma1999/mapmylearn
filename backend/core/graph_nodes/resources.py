@@ -817,6 +817,7 @@ async def process_module_resources(state: LearningPathState) -> Dict[str, Any]:
                 "error": result.get("error"),
                 "resource_count": len(result.get("resources", [])),
                 "query": result.get("resource_query").query if result.get("resource_query") else None,
+                "resources": result.get("resources", []),
                 # Avoid storing full search results in state if possible
                 # "search_results": result.get("search_results")
             }
