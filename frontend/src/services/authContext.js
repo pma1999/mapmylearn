@@ -68,7 +68,7 @@ export const AuthProvider = ({ children }) => {
       setTokenRefreshTimer(null);
     }
     setUser(null);
-    setError(null);
+    setError(null); // Or consider setError('session_expired') or similar
     api.clearAuthToken();
     localStorage.removeItem('auth');
     refreshPromise.current = null; // Clear any pending refresh promise
@@ -82,13 +82,8 @@ export const AuthProvider = ({ children }) => {
       console.warn('Logout API call failed (might be expected if already logged out):', err);
     }
     
-    // Redirect to login page if not already there
-    if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-      // Add a query parameter to indicate session expiration if applicable
-      const reason = error ? 'error' : 'manual_logout'; 
-      // Using replace to avoid adding logout to history
-      window.location.replace(`/login?logout_reason=${reason}`);
-    }
+    // Removed window.location.replace - Navigation is now handled by ProtectedRoute via state change
+    setIsLoggingOut(false); // Reset logout flag after completion
   };
 
   // Unified and Robust Token Refresh Function
@@ -128,10 +123,12 @@ export const AuthProvider = ({ children }) => {
         // Check if it's an auth error (e.g., invalid refresh token) or max attempts reached
         if (err.response?.status === 401 || attempt >= MAX_REFRESH_ATTEMPTS) {
           console.warn(`Refresh failed permanently (status ${err.response?.status}) or max attempts reached. Logging out.`);
-          await logout(); // Use await here
+          // Call logout (which now only updates state)
+          await logout(); 
           setRefreshInProgress(false); 
           refreshPromise.current = null; // Clear the promise on failure
-          throw new Error("Token refresh failed permanently."); // Propagate error
+          // Throw the specific error to signal permanent failure upstream
+          throw new Error("Token refresh failed permanently."); 
         } else {
           // Schedule retry with exponential backoff
           const backoffTime = Math.pow(2, attempt) * 1000; // Exponential backoff (1s, 2s, 4s...)
@@ -187,29 +184,49 @@ export const AuthProvider = ({ children }) => {
               await attemptSilentRefresh(); 
               console.log("Silent refresh successful during init.");
               isAuthenticated = true; // User is authenticated after successful refresh
+              // Ensure loading is false only after *successful* refresh or if token was valid
+              setLoading(false); 
             } catch (refreshError) {
-              console.error("Silent refresh failed during init:", refreshError.message);
-              // Logout is handled within refreshToken
-              setLoading(false);
-              return; 
+              // Check if it's the specific error from refreshToken failure
+              if (refreshError.message === "Token refresh failed permanently.") {
+                console.error("Silent refresh failed permanently during init (logout state set):", refreshError.message);
+                // Logout state is already set by refreshToken calling logout()
+                // We just need to ensure loading is false and stop further init steps
+                setLoading(false);
+                return; // Stop initialization here, user is logged out
+              } else {
+                // Unexpected error during silent refresh attempt
+                console.error("Unexpected error during silent refresh:", refreshError);
+                setError("Failed to initialize session."); // Set a generic error
+                setLoading(false);
+                // Consider if logout is appropriate here, or just show error
+                // For now, just stop init and let ProtectedRoute handle !isAuthenticated
+                return; 
+                // Optionally re-throw for higher-level error boundary: throw refreshError;
+              }
             }
           } else {
             console.log('Using valid stored token.');
             updateAuthState(parsedAuth.accessToken, parsedAuth.expiresIn, parsedAuth.user);
             isAuthenticated = true; // User is authenticated with existing token
-            fetchUserCredits();
+            fetchUserCredits(); // Assuming this is defined later
+            setLoading(false); // Set loading false if token was valid
           }
         } else {
            console.log("Stored auth data incomplete, clearing.");
-           await logout(); // Ensure logout completes
+           // Logout ensures state is cleared properly
+           await logout(); 
+           setLoading(false); 
         }
       } else {
          console.log("No stored auth data found.");
          setUser(null); 
+         setLoading(false); // No auth data, loading complete
       }
 
       // --- Automatic Local History Migration --- 
       // Run migration check *after* authentication status is determined
+      // AND only if initialization didn't exit early due to errors/logout
       if (isAuthenticated) {
         console.log("User is authenticated, checking for pending local history migration...");
         try {
@@ -248,15 +265,17 @@ export const AuthProvider = ({ children }) => {
              }
         }
       } else {
-        console.log("User is not authenticated, skipping migration check.");
+        console.log("User not authenticated after init, skipping migration check.");
       }
-      // --- End Migration Logic --- 
-
+      // Ensure loading is false at the end of the process if not already set
+      setLoading(false); 
     } catch (err) {
-      console.error('Error initializing auth:', err);
-      setError('Failed to initialize authentication state.');
-      await logout(); // Attempt logout on initialization error
-    } finally {
+      // Catch any unexpected errors during the broader init process (e.g., JSON parse)
+      console.error("Critical error during auth initialization:", err);
+      setError("Failed to initialize application.");
+      setUser(null); // Ensure user is logged out
+      api.clearAuthToken();
+      localStorage.removeItem('auth');
       setLoading(false);
     }
   };

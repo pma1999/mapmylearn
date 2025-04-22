@@ -117,30 +117,57 @@ async def handle_chat(
 ):
     logger.info(f"Received chat request for path {request.path_id}, module {request.module_index}, sub {request.submodule_index}, thread {request.thread_id}")
     try:
-        # 1. Attempt to fetch persisted Learning Path; if missing, use ephemeral data from request
+        # 1. Determine the source of path_data (DB vs Request) and normalize structure
+        actual_learning_content = None
         db_entry = db.query(LearningPath).filter(
             LearningPath.path_id == request.path_id,
             LearningPath.user_id == user.id
         ).first()
+        
+        using_ephemeral_data = False
         if db_entry:
-            path_data = db_entry.path_data
-        else:
-            # Fallback: use full path_data payload if supplied (ephemeral session)
-            if request.path_data and isinstance(request.path_data, dict):
-                path_data = request.path_data
-                logger.info(f"Using ephemeral path_data for path {request.path_id} from request payload.")
+            raw_db_path_data = db_entry.path_data
+            if isinstance(raw_db_path_data, dict):
+                # Check for direct structure (older format)
+                if 'modules' in raw_db_path_data and isinstance(raw_db_path_data.get('modules'), list):
+                    actual_learning_content = raw_db_path_data
+                    logger.info(f"Using direct path_data structure from DB for {request.path_id}")
+                # Check for nested structure (newer format)
+                elif 'path_data' in raw_db_path_data and isinstance(raw_db_path_data.get('path_data'), dict):
+                    nested_content = raw_db_path_data['path_data']
+                    if 'modules' in nested_content and isinstance(nested_content.get('modules'), list):
+                        actual_learning_content = nested_content
+                        logger.info(f"Using nested path_data structure from DB for {request.path_id}")
+                    else:
+                         logger.error(f"Invalid nested path_data structure in DB for {request.path_id}: 'modules' key missing or not a list inside nested 'path_data'.")
+                else:
+                    logger.error(f"Unrecognized dictionary structure in path_data from DB for {request.path_id}. Keys: {list(raw_db_path_data.keys())}")
             else:
-                logger.warning(f"Learning path {request.path_id} not found for user {user.id}")
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Learning path not found")
+                logger.error(f"path_data from DB for {request.path_id} is not a dictionary. Type: {type(raw_db_path_data)}")
+        else:
+            # Fallback: use ephemeral path_data from the request payload
+            if request.path_data and isinstance(request.path_data, dict):
+                # Check if ephemeral data itself has the 'modules' key
+                if 'modules' in request.path_data and isinstance(request.path_data.get('modules'), list):
+                    actual_learning_content = request.path_data
+                    using_ephemeral_data = True
+                    logger.info(f"Using ephemeral path_data for path {request.path_id} from request payload.")
+                else:
+                    logger.error(f"Ephemeral path_data structure invalid for {request.path_id}: 'modules' key missing or not a list.")
+            else:
+                # No DB entry and no valid ephemeral data
+                logger.warning(f"Learning path {request.path_id} not found for user {user.id} and no valid ephemeral data provided.")
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Learning path not found and no valid ephemeral data provided.")
 
-        if not isinstance(path_data, dict):
-             logger.error(f"path_data is not a dict for path {request.path_id}")
-             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid learning path data structure")
+        # If after all checks, we don't have valid content, raise an error
+        if actual_learning_content is None:
+             logger.error(f"Could not determine valid learning path content for path {request.path_id}")
+             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid learning path data structure encountered.")
 
-        # 2. Extract Context
-        modules = path_data.get('modules', [])
+        # 2. Extract Context using the normalized 'actual_learning_content'
+        modules = actual_learning_content.get('modules', []) # Use the normalized content
         if not (0 <= request.module_index < len(modules)):
-            logger.warning(f"Invalid module index {request.module_index} for path {request.path_id}")
+            logger.warning(f"Invalid module index {request.module_index} for path {request.path_id} (module count: {len(modules)})")
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid module index")
 
         module = modules[request.module_index]
@@ -151,46 +178,50 @@ async def handle_chat(
 
         submodule = submodules[request.submodule_index]
 
-        # Safely get context elements
+        # Safely get context elements from the normalized content
         submodule_title = submodule.get('title', 'N/A')
         submodule_description = submodule.get('description', 'N/A')
         submodule_content = submodule.get('content', 'No content available for this submodule.') # Crucial knowledge base
         module_title = module.get('title', 'N/A')
-        user_topic = path_data.get('topic', 'N/A')
-        
-        # Determine language: persisted entry has language, else default to English
+        user_topic = actual_learning_content.get('topic', 'N/A') # Use normalized content
+
+        # Determine language: Use DB entry if available, else default
         if db_entry and getattr(db_entry, 'language', None):
             language_code = db_entry.language
             language_name = get_full_language_name(language_code)
             logger.info(f"Using persisted language '{language_name}' for path {request.path_id}")
         else:
-            # No DB entry or missing language => default to English
-            language_code = 'en'
-            language_name = 'English'
+            # Use language from ephemeral data if present, otherwise default
+            language_code = actual_learning_content.get('language', 'en') # Check ephemeral data too
+            language_name = get_full_language_name(language_code)
             if db_entry:
-                logger.error(f"Stored learning path {db_entry.path_id} missing language; defaulting to English.")
-            else:
-                logger.info(f"No stored entry for path {request.path_id}; using default language '{language_name}'.")
+                logger.error(f"Stored learning path {db_entry.path_id} missing language; defaulting to '{language_name}'.")
+            elif using_ephemeral_data:
+                 logger.info(f"Using language '{language_name}' from ephemeral data for path {request.path_id}.")
+            else: # Should not happen given checks above, but defensively log
+                 logger.info(f"No stored entry or language in ephemeral data for path {request.path_id}; using default language '{language_name}'.")
 
-        # 3. Format Path Structure & Prompt
-        learning_path_structure = format_path_structure(path_data)
 
-        # Retrieve raw research context for this submodule (if present)
+        # 3. Format Path Structure & Prompt using the normalized 'actual_learning_content'
+        learning_path_structure = format_path_structure(actual_learning_content) # Use normalized content
+
+        # Retrieve raw research context for this submodule (if present) from normalized content
         submodule_research = submodule.get('research_context', '')
 
+        # System prompt uses values derived from actual_learning_content
         system_prompt_string = CHATBOT_SYSTEM_PROMPT.format(
             submodule_title=submodule_title,
             user_topic=user_topic,
             module_title=module_title,
             module_order=request.module_index + 1,
-            module_count=len(modules),
+            module_count=len(modules), # Derived from actual_learning_content
             submodule_order=request.submodule_index + 1,
-            submodule_count=len(submodules),
+            submodule_count=len(submodules), # Derived from actual_learning_content
             submodule_description=submodule_description,
-            learning_path_structure=learning_path_structure,
+            learning_path_structure=learning_path_structure, # Derived from actual_learning_content
             submodule_research=submodule_research,
             submodule_content=submodule_content,
-            language=language_name  # Use the full language name instead of the code
+            language=language_name
         )
 
         # 4. Initialize LLM and Prompt Template for this request

@@ -245,13 +245,22 @@ async def create_learning_path(
     # Generate a unique ID for the learning path
     path_id = str(uuid.uuid4())
     
+    # --- Debugging: Log structure of incoming path_data --- 
+    logger.info(f"Received learning_path object type: {type(learning_path)}")
+    logger.info(f"Received learning_path.path_data type: {type(learning_path.path_data)}")
+    if isinstance(learning_path.path_data, dict):
+        logger.info(f"Received learning_path.path_data keys: {list(learning_path.path_data.keys())}")
+    else:
+        logger.warning(f"Received learning_path.path_data is not a dict: {str(learning_path.path_data)[:200]}...")
+    # --- End Debugging ---
+
     # Create database entry
     db_learning_path = LearningPath(
         user_id=user.id,
         path_id=path_id,
         topic=learning_path.topic,
         language=learning_path.language,
-        path_data=learning_path.path_data,
+        path_data=learning_path.path_data,  # Intentionally keeping this for now, pending log results
         favorite=learning_path.favorite,
         tags=learning_path.tags,
         source=learning_path.source,
@@ -259,6 +268,11 @@ async def create_learning_path(
     )
     
     try:
+        # --- Debugging: Log structure being saved --- 
+        logger.info(f"Attempting to save path_data type: {type(db_learning_path.path_data)}")
+        if isinstance(db_learning_path.path_data, dict):
+             logger.info(f"Attempting to save path_data keys: {list(db_learning_path.path_data.keys())}")
+        # --- End Debugging ---
         db.add(db_learning_path)
         db.commit()
         db.refresh(db_learning_path)

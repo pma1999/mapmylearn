@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { useAuth } from '../services/authContext';
@@ -14,40 +14,64 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
   const [authChecked, setAuthChecked] = useState(false);
   const [isRehydrating, setIsRehydrating] = useState(false);
   const [rehydrationAttempted, setRehydrationAttempted] = useState(false);
+  const isMountedRef = useRef(true);
 
   // Effect to handle session rehydration
   useEffect(() => {
+    // Set mount status on mount
+    isMountedRef.current = true;
+
     const checkAndRehydrateSession = async () => {
       // Skip rehydration if logout is in progress
       if (isLoggingOut) { 
         console.log('Logout in progress, skipping rehydration check.');
+        // Ensure authChecked is true if we skip, otherwise loading might persist
+        if (isMountedRef.current) {
+          setAuthChecked(true); 
+        }
         return; 
       }
 
       // Only attempt rehydration if not authenticated and not already attempted
-      if (!isAuthenticated && !rehydrationAttempted && !loading) {
+      // Also ensure component is still mounted before starting async operation
+      if (!isAuthenticated && !rehydrationAttempted && !loading && isMountedRef.current) {
         try {
           console.log('Attempting to rehydrate session');
-          setIsRehydrating(true);
+          // Check mount status before setting state
+          if (isMountedRef.current) setIsRehydrating(true); 
           
           // Force a re-initialization of auth state
           await initAuth();
           
           // Mark rehydration as attempted regardless of outcome
-          setRehydrationAttempted(true);
+          // Check mount status before setting state
+          if (isMountedRef.current) setRehydrationAttempted(true); 
+
         } catch (err) {
-          console.error('Session rehydration failed:', err);
+          // Handle errors potentially thrown by initAuth (other than the caught refresh error)
+          console.error('Session rehydration failed in ProtectedRoute:', err);
+          // Potentially set an error state here if needed
         } finally {
-          setIsRehydrating(false);
-          setAuthChecked(true);
+          // Check mount status before setting state in finally block
+          if (isMountedRef.current) {
+            setIsRehydrating(false);
+            setAuthChecked(true);
+          }
         }
-      } else if (!authChecked) {
-        // If no rehydration needed, mark auth as checked
+      } else if (!authChecked && isMountedRef.current) {
+        // If no rehydration needed, mark auth as checked (only if mounted)
         setAuthChecked(true);
       }
     };
 
     checkAndRehydrateSession();
+
+    // Cleanup function: Set mount status to false when component unmounts
+    return () => {
+      isMountedRef.current = false;
+    };
+    // Dependencies: Ensure all necessary dependencies are included.
+    // initAuth is a stable function from context, but including it follows linting rules.
   }, [isAuthenticated, rehydrationAttempted, loading, initAuth, authChecked, isLoggingOut]);
 
   // Show loading spinner while checking authentication or rehydrating
