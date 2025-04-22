@@ -1735,8 +1735,17 @@ async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str,
                             "explanation": quiz.explanation
                         })
                     total_quiz_questions += len(quiz_data)
-                    
-                # Add submodule data with quiz info if available
+                
+                # Build research_context from raw scraped results
+                research_parts = []
+                for res in getattr(sub, "search_results", []):
+                    text = res.get("scraped_content") or res.get("tavily_snippet") or ""
+                    if text:
+                        snippet = text[:3000]
+                        research_parts.append(f"Source: {res.get('url')}\n{snippet}")
+                research_context = "\n\n".join(research_parts)[:10000]
+
+                # Add submodule data with quiz info and research context
                 submodule_data.append({
                     "id": sub.submodule_id,
                     "title": sub.title,
@@ -1746,9 +1755,10 @@ async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str,
                     "summary": summary,
                     "connections": getattr(sub, 'connections', {}),
                     "quiz_questions": quiz_data,
-                    "resources": getattr(sub, 'resources', [])
+                    "resources": getattr(sub, 'resources', []),
+                    "research_context": research_context
                 })
-                
+            
             # Build module data
             module_data = {
                 "id": module_id,

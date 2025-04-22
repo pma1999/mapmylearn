@@ -166,6 +166,9 @@ async def handle_chat(
         # 3. Format Path Structure & Prompt
         learning_path_structure = format_path_structure(path_data)
 
+        # Retrieve raw research context for this submodule (if present)
+        submodule_research = submodule.get('research_context', '')
+
         system_prompt_string = CHATBOT_SYSTEM_PROMPT.format(
             submodule_title=submodule_title,
             user_topic=user_topic,
@@ -176,6 +179,7 @@ async def handle_chat(
             submodule_count=len(submodules),
             submodule_description=submodule_description,
             learning_path_structure=learning_path_structure,
+            submodule_research=submodule_research,
             submodule_content=submodule_content,
             language=language_name  # Use the full language name instead of the code
         )
