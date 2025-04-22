@@ -35,7 +35,7 @@ const LearningPathView = ({ source }) => {
   const [localSavedToHistory, setLocalSavedToHistory] = useState(false);
   const [localEntryId, setLocalEntryId] = useState(null);
   
-  // Load learning path data using the hook - rely solely on this for data/loading/error state
+  // Load learning path data using the hook - rely solely on this for data/loading/error/progress state
   const {
     learningPath, // This holds the data object (full entry for history, result for generation)
     loading,      // Loading state from the hook
@@ -43,6 +43,7 @@ const LearningPathView = ({ source }) => {
     isFromHistory,
     savedToHistory: initialSavedToHistory,
     temporaryPathId,
+    progressMessages, // <-- Get progress messages from the hook
     refreshData // Keep refresh function if needed elsewhere
   } = useLearningPathData(source);
   
@@ -102,7 +103,8 @@ const LearningPathView = ({ source }) => {
     handleAddTag,
     handleDeleteTag,
     handleTagKeyDown,
-    handleNotificationClose
+    handleNotificationClose,
+    showNotification // Make showNotification available if needed directly
   } = useLearningPathActions(
     // Pass the correct data structure to the actions hook
     actualPathData, // Pass the extracted path data
@@ -131,10 +133,20 @@ const LearningPathView = ({ source }) => {
           a.click();
           document.body.removeChild(a);
           URL.revokeObjectURL(url);
-          showNotification('Learning path downloaded successfully', 'success');
+          // Use showNotification from useLearningPathActions if available
+          if (showNotification) {
+              showNotification('Learning path downloaded successfully', 'success');
+          } else {
+              // Fallback or handle differently if showNotification isn't returned
+              console.log('Learning path downloaded successfully');
+          }
       } catch (err) {
           console.error('Error downloading JSON:', err);
-          showNotification('Failed to download learning path', 'error');
+          if (showNotification) {
+              showNotification('Failed to download learning path', 'error');
+          } else {
+              console.error('Failed to download learning path');
+          }
       }
   };
 
@@ -157,8 +169,8 @@ const LearningPathView = ({ source }) => {
   // Use `loading` directly from hook
   if (loading) {
     return (
-      // Keep LoadingState, but remove progressMessages/isPolling if generation logic removed
-      <LoadingState /> 
+      // Pass progressMessages to LoadingState
+      <LoadingState progressMessages={progressMessages} /> 
     );
   }
   
@@ -166,7 +178,7 @@ const LearningPathView = ({ source }) => {
   if (error) {
     return (
       <ErrorState 
-        error={error.message || 'An error occurred'} // Use error message
+        error={error || 'An error occurred'} // Use error object/message
         onHomeClick={handleHomeClick}
         onNewLearningPathClick={handleNewLearningPathClick}
       />
@@ -198,21 +210,21 @@ const LearningPathView = ({ source }) => {
               isTemporaryPath={isTemporaryPath}
             />
           ) : (
-            // Use loading directly here
-            !loading && <Typography sx={{mt: 2}}>Module ID not available yet.</Typography>
+            // If not loading and still no derivedPathId, it means something went wrong post-loading
+            !loading && <Typography sx={{mt: 2, color: 'error.main'}}>Module ID could not be determined.</Typography>
           )}
           
           {/* Learning Path Resources Section */} 
-          <Box sx={{ mt: 6, mb: 4 }}>
-            <ResourcesSection 
-              // Access resources correctly based on actualPathData structure
-              resources={actualPathData.topic_resources} 
-              title="Learning Path Resources"
-              type="topic"
-              // Remove isLoading prop or adjust based on removed polling state
-              // isLoading={taskStatus === 'running' && progressMessages.some(msg => msg.phase === 'topic_resources')}
-            />
-          </Box>
+          {actualPathData.topic_resources && actualPathData.topic_resources.length > 0 && (
+            <Box sx={{ mt: 6, mb: 4 }}>
+              <ResourcesSection 
+                // Access resources correctly based on actualPathData structure
+                resources={actualPathData.topic_resources} 
+                title="Learning Path Resources"
+                type="topic"
+              />
+            </Box>
+          )}
         </>
       )}
       
@@ -231,32 +243,35 @@ const LearningPathView = ({ source }) => {
         onFavoriteChange={setFavorite}
         isMobile={isMobile}
       />
-      <Snackbar
-        open={notification.open}
-        autoHideDuration={6000}
-        onClose={handleNotificationClose}
-        anchorOrigin={{ 
-          vertical: 'bottom', 
-          horizontal: isMobile ? 'center' : 'right' 
-        }}
-        sx={{
-          bottom: { xs: 16, sm: 24 }
-        }}
-      >
-        <Alert 
-          onClose={handleNotificationClose} 
-          severity={notification.severity}
-          sx={{ width: { xs: '100%', sm: 'auto' } }}
-        >
-          {notification.message}
-        </Alert>
-      </Snackbar>
+      {/* Ensure notification uses the object structure from the hook */}
+      {notification && notification.open && (
+          <Snackbar
+            open={notification.open}
+            autoHideDuration={6000}
+            onClose={handleNotificationClose}
+            anchorOrigin={{ 
+              vertical: 'bottom', 
+              horizontal: isMobile ? 'center' : 'right' 
+            }}
+            sx={{
+              bottom: { xs: 16, sm: 24 }
+            }}
+          >
+            <Alert 
+              onClose={handleNotificationClose} 
+              severity={notification.severity}
+              sx={{ width: { xs: '100%', sm: 'auto' } }}
+            >
+              {notification.message}
+            </Alert>
+          </Snackbar>
+      )}
     </Container>
   );
-};
+}
 
 LearningPathView.propTypes = {
-  source: PropTypes.string
+  source: PropTypes.oneOf(['history', null]),
 };
 
 export default LearningPathView; 

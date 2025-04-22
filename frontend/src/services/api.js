@@ -2,7 +2,7 @@ import axios from 'axios';
 import * as localHistoryService from './localHistoryService';
 
 // Use local API when in development mode, Railway API in production
-const API_URL = process.env.NODE_ENV === 'development' 
+export const API_URL = process.env.NODE_ENV === 'development'
   ? 'http://localhost:8000' 
   : 'https://web-production-62f88.up.railway.app';
 console.log('Using API URL:', API_URL);

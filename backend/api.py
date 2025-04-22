@@ -613,6 +613,7 @@ async def generate_learning_path_task(
         )
         
         # Pass callback to update front-end with progress
+        # Nested try/except specifically for the core generation logic
         try:
             result = await generate_learning_path(
                 topic,
@@ -647,36 +648,42 @@ async def generate_learning_path_task(
                 try:
                     # Get a new DB session
                     from backend.config.database import get_db
-                    db = next(get_db())
-                    
-                    # Find the user and restore credit
-                    user = db.query(User).filter(User.id == user_id).first()
-                    if user is not None:
-                        user.credits += 1
-                        
-                        # Create credit transaction record for the refund
-                        transaction = CreditTransaction(
-                            user_id=user.id,
-                            amount=1,  # Positive amount for refund
-                            transaction_type="refund",
-                            notes=f"Refunded 1 credit due to failed generation for topic: {topic}"
-                        )
-                        db.add(transaction)
-                        db.commit()
-                        logger.info(f"Restored 1 credit to user {user_id} due to generation error")
+                    # Ensure db session handling is robust
+                    db_session = next(get_db())
+                    try:
+                        # Find the user and restore credit
+                        user = db_session.query(User).filter(User.id == user_id).first()
+                        if user is not None:
+                            user.credits += 1
+                            
+                            # Create credit transaction record for the refund
+                            transaction = CreditTransaction(
+                                user_id=user.id,
+                                amount=1,  # Positive amount for refund
+                                transaction_type="refund",
+                                notes=f"Refunded 1 credit due to failed generation for topic: {topic}"
+                            )
+                            db_session.add(transaction)
+                            db_session.commit()
+                            logger.info(f"Restored 1 credit to user {user_id} due to generation error")
+                        else:
+                            logger.warning(f"User {user_id} not found for credit refund.")
+                    finally:
+                        db_session.close() # Ensure session is closed
                 except Exception as credit_error:
                     logger.error(f"Failed to restore credit to user {user_id}: {str(credit_error)}")
             
             # Update task status with sanitized error info - this is an unexpected error
             async with active_generations_lock:
-                active_generations[task_id]["status"] = "failed"
-                active_generations[task_id]["error"] = {
-                    "message": user_error_msg,
-                    "type": "unexpected_error"
-                }
-            return
+                if task_id in active_generations:
+                    active_generations[task_id]["status"] = "failed"
+                    active_generations[task_id]["error"] = {
+                        "message": user_error_msg,
+                        "type": "unexpected_error"
+                    }
+            return # Stop further execution in this outer try block on inner failure
         
-        # Send completion message
+        # If generate_learning_path completed without raising an exception
         await enhanced_progress_callback(
             "Learning path generation completed successfully!",
             phase="completion",
@@ -687,92 +694,103 @@ async def generate_learning_path_task(
         
         # Store result in active_generations
         async with active_generations_lock:
-            active_generations[task_id]["result"] = result
-            active_generations[task_id]["status"] = "completed"
+            if task_id in active_generations:
+                active_generations[task_id]["result"] = result
+                active_generations[task_id]["status"] = "completed"
             
         logging.info(f"Learning path generation completed for: {topic}")
         
     except LearningPathGenerationError as e:
-        # These errors have already been logged and reported through the progress callback
+        # Handle specific, anticipated generation errors
         async with active_generations_lock:
-            active_generations[task_id]["status"] = "failed"
-            active_generations[task_id]["error"] = {
-                "message": e.message,
-                "type": "learning_path_generation_error",
-                "details": e.details
-            }
+            if task_id in active_generations:
+                active_generations[task_id]["status"] = "failed"
+                active_generations[task_id]["error"] = {
+                    "message": e.message,
+                    "type": "learning_path_generation_error",
+                    "details": e.details
+                }
             
-        # Restore credit to user if the generation failed and record the transaction
+        # Restore credit for anticipated errors too
         if user_id is not None:
-            try:
-                # Get a new DB session
-                from backend.config.database import get_db
-                db = next(get_db())
-                
-                # Find the user and restore credit
-                user = db.query(User).filter(User.id == user_id).first()
-                if user is not None:
-                    user.credits += 1
-                    
-                    # Create credit transaction record for the refund
-                    transaction = CreditTransaction(
-                        user_id=user.id,
-                        amount=1,  # Positive amount for refund
-                        transaction_type="refund",
-                        notes=f"Refunded 1 credit due to failed generation for topic: {topic}"
-                    )
-                    db.add(transaction)
-                    db.commit()
-                    logger.info(f"Restored 1 credit to user {user_id} due to generation error")
-            except Exception as credit_error:
-                logger.error(f"Failed to restore credit to user {user_id}: {str(credit_error)}")
-    except Exception as e:
-        # Catch any other unexpected exceptions
-        error_message = f"Unexpected error during learning path generation: {str(e)}"
+             try:
+                 from backend.config.database import get_db
+                 db_session = next(get_db())
+                 try:
+                     user = db_session.query(User).filter(User.id == user_id).first()
+                     if user is not None:
+                         user.credits += 1
+                         transaction = CreditTransaction(
+                             user_id=user.id,
+                             amount=1,
+                             transaction_type="refund",
+                             notes=f"Refunded 1 credit due to known error: {e.message[:100]}"
+                         )
+                         db_session.add(transaction)
+                         db_session.commit()
+                         logger.info(f"Restored 1 credit to user {user_id} due to known error: {e.message[:100]}")
+                     else:
+                         logger.warning(f"User {user_id} not found for credit refund.")
+                 finally:
+                     db_session.close()
+             except Exception as credit_error:
+                 logger.error(f"Failed to restore credit to user {user_id} after known error: {str(credit_error)}")
+                 
+    except Exception as outer_e:
+        # Catch any other unexpected errors during setup or finalization
+        error_message = f"Outer error in generate_learning_path_task: {str(outer_e)}"
         logging.exception(error_message)
-        
-        # Create a sanitized user-facing error message
-        user_error_msg = "An unexpected error occurred while generating your learning path. Please try again later."
-        
-        # Send error message to frontend
+        user_error_msg = "An unexpected error occurred before generation could complete."
         await enhanced_progress_callback(
             f"Error: {user_error_msg}",
             phase="unknown",
             action="error"
         )
-        
-        # Restore credit to user if the generation failed and record the transaction
+        async with active_generations_lock:
+            if task_id in active_generations:
+                active_generations[task_id]["status"] = "failed"
+                active_generations[task_id]["error"] = {
+                    "message": user_error_msg,
+                    "type": "outer_task_error"
+                }
+                
+        # Attempt to restore credit here as well
         if user_id is not None:
             try:
-                # Get a new DB session
-                from backend.config.database import get_db
-                db = next(get_db())
-                
-                # Find the user and restore credit
-                user = db.query(User).filter(User.id == user_id).first()
-                if user is not None:
-                    user.credits += 1
-                    
-                    # Create credit transaction record for the refund
-                    transaction = CreditTransaction(
-                        user_id=user.id,
-                        amount=1,  # Positive amount for refund
-                        transaction_type="refund",
-                        notes=f"Refunded 1 credit due to failed generation for topic: {topic}"
-                    )
-                    db.add(transaction)
-                    db.commit()
-                    logger.info(f"Restored 1 credit to user {user_id} due to generation error")
+                 from backend.config.database import get_db
+                 db_session = next(get_db())
+                 try:
+                     user = db_session.query(User).filter(User.id == user_id).first()
+                     if user is not None:
+                         user.credits += 1
+                         transaction = CreditTransaction(
+                             user_id=user.id,
+                             amount=1,
+                             transaction_type="refund",
+                             notes=f"Refunded 1 credit due to outer task error."
+                         )
+                         db_session.add(transaction)
+                         db_session.commit()
+                         logger.info(f"Restored 1 credit to user {user_id} due to outer task error.")
+                     else:
+                         logger.warning(f"User {user_id} not found for credit refund.")
+                 finally:
+                     db_session.close()
             except Exception as credit_error:
-                logger.error(f"Failed to restore credit to user {user_id}: {str(credit_error)}")
-        
-        # Update status to failed with sanitized error info
-        async with active_generations_lock:
-            active_generations[task_id]["status"] = "failed"
-            active_generations[task_id]["error"] = {
-                "message": user_error_msg,
-                "type": "unexpected_error"
-            }
+                 logger.error(f"Failed to restore credit to user {user_id} after outer task error: {str(credit_error)}")
+
+    finally:
+        # --- Add finally block to signal SSE completion --- 
+        logging.debug(f"Task {task_id} entering finally block.")
+        async with progress_queues_lock:
+            if task_id in progress_queues:
+                try:
+                    await progress_queues[task_id].put(None)  # Signal completion (or failure)
+                    logging.info(f"Signaled completion queue for task {task_id}")
+                except Exception as q_err:
+                    logging.error(f"Error signaling completion queue for task {task_id}: {q_err}")
+            else:
+                logging.warning(f"Progress queue for task {task_id} not found in finally block.")
 
 @app.post("/api/validate-api-keys")
 async def validate_api_keys(request: ApiKeyValidationRequest):
