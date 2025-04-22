@@ -254,13 +254,35 @@ async def create_learning_path(
         logger.warning(f"Received learning_path.path_data is not a dict: {str(learning_path.path_data)[:200]}...")
     # --- End Debugging ---
 
-    # Create database entry
+    # Extract the actual learning path content dictionary
+    # The incoming learning_path.path_data might incorrectly contain the entire payload structure
+    actual_content_to_save = None
+    if isinstance(learning_path.path_data, dict):
+        # Look for the nested 'path_data' key which holds the real content
+        if 'path_data' in learning_path.path_data and isinstance(learning_path.path_data['path_data'], dict):
+             actual_content_to_save = learning_path.path_data['path_data']
+             logger.info("Extracted nested 'path_data' from request for saving.")
+        # Fallback: Maybe the structure is already correct? (Shouldn't happen based on logs, but check)
+        elif 'modules' in learning_path.path_data: 
+             actual_content_to_save = learning_path.path_data
+             logger.warning("Incoming learning_path.path_data had direct 'modules' key, using directly.")
+        else:
+             logger.error("Could not find 'modules' or nested 'path_data' in received learning_path.path_data.")
+    
+    # If extraction failed, log error but proceed with potentially incorrect data to avoid breaking entirely?
+    # Or raise an error? Raising is safer but might break saving if the root cause isn't fixed.
+    # For now, we'll default to the (likely incorrect) full dict if extraction fails, but log heavily.
+    if actual_content_to_save is None:
+        logger.error("Failed to extract actual learning content! Saving raw learning_path.path_data. THIS WILL LIKELY CAUSE NESTING ISSUES.")
+        actual_content_to_save = learning_path.path_data # Fallback to potentially incorrect data
+
+    # Create database entry using the extracted content
     db_learning_path = LearningPath(
         user_id=user.id,
         path_id=path_id,
         topic=learning_path.topic,
         language=learning_path.language,
-        path_data=learning_path.path_data,  # Intentionally keeping this for now, pending log results
+        path_data=actual_content_to_save,  # Use the correctly extracted content
         favorite=learning_path.favorite,
         tags=learning_path.tags,
         source=learning_path.source,
@@ -268,10 +290,12 @@ async def create_learning_path(
     )
     
     try:
-        # --- Debugging: Log structure being saved --- 
-        logger.info(f"Attempting to save path_data type: {type(db_learning_path.path_data)}")
-        if isinstance(db_learning_path.path_data, dict):
-             logger.info(f"Attempting to save path_data keys: {list(db_learning_path.path_data.keys())}")
+        # --- Debugging: Log structure ACTUALLY being saved --- 
+        logger.info(f"Attempting to save path_data type: {type(actual_content_to_save)}")
+        if isinstance(actual_content_to_save, dict):
+             logger.info(f"Attempting to save path_data keys: {list(actual_content_to_save.keys())}")
+        else:
+             logger.warning(f"Attempting to save non-dict path_data: {str(actual_content_to_save)[:200]}...")
         # --- End Debugging ---
         db.add(db_learning_path)
         db.commit()
