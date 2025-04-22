@@ -23,7 +23,7 @@ import SubmoduleCard from './SubmoduleCard';
 // Import ResourcesSection instead of PlaceholderContent
 import ResourcesSection from '../shared/ResourcesSection';
 
-const ModuleCard = ({ module, index, pathId, isTemporaryPath }) => {
+const ModuleCard = ({ module, index, pathId, isTemporaryPath, actualPathData }) => {
   const [expanded, setExpanded] = useState(index === 0);
   const [showResources, setShowResources] = useState(false);
   const theme = useTheme();
@@ -174,6 +174,7 @@ const ModuleCard = ({ module, index, pathId, isTemporaryPath }) => {
                         moduleIndex={index}
                         pathId={pathId}
                         isTemporaryPath={isTemporaryPath}
+                        actualPathData={actualPathData}
                       />
                     ))}
                   </Stack>

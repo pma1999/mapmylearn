@@ -208,6 +208,7 @@ const LearningPathView = ({ source }) => {
               modules={actualPathData.modules} 
               pathId={derivedPathId}
               isTemporaryPath={isTemporaryPath}
+              actualPathData={actualPathData} // Provide full path data for ephemeral chat
             />
           ) : (
             // If not loading and still no derivedPathId, it means something went wrong post-loading

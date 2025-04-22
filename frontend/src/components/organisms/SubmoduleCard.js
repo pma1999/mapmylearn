@@ -62,7 +62,7 @@ const TabPanel = (props) => {
   );
 };
 
-const SubmoduleCard = ({ submodule, index, moduleIndex, pathId, isTemporaryPath }) => {
+const SubmoduleCard = ({ submodule, index, moduleIndex, pathId, isTemporaryPath, actualPathData }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const theme = useTheme();
@@ -366,6 +366,7 @@ const SubmoduleCard = ({ submodule, index, moduleIndex, pathId, isTemporaryPath 
                   userId={user?.sub}
                   submoduleContent={submodule.content}
                   isTemporaryPath={isTemporaryPath}
+                  pathData={actualPathData}
                 />
               ) : (
                 <Typography sx={{ p: 2 }}>Chat requires a valid path ID.</Typography>

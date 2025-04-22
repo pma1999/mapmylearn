@@ -88,7 +88,7 @@ const markdownComponents = {
   // table elements omitted as per spec
 };
 
-const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleContent, isTemporaryPath }) => {
+const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleContent, isTemporaryPath, pathData }) => {
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -144,10 +144,12 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
         thread_id: threadId,
       };
 
-      // Conditionally add context for the first message of a temporary path
-      if (isTemporaryPath && currentMessages.length === 1) {
-        payload.submodule_context = submoduleContent;
-        console.log("Sending initial message for temporary path with context."); // Debug log
+      // Attach full ephemeral path data for every chat request on a temporary path
+      if (isTemporaryPath) {
+        if (pathData && typeof pathData === 'object') {
+          payload.path_data = pathData;
+        }
+        console.debug('Attaching ephemeral path_data to chat payload', payload.path_data);
       }
 
       // Call the API service function
@@ -166,7 +168,7 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
       setIsLoading(false);
     }
     // Update dependencies for useCallback
-  }, [inputValue, isLoading, pathId, moduleIndex, submoduleIndex, threadId, userId, isTemporaryPath, submoduleContent, messages]);
+  }, [inputValue, isLoading, pathId, moduleIndex, submoduleIndex, threadId, userId, isTemporaryPath, submoduleContent, pathData, messages]);
 
   const handleClearChat = useCallback(async () => {
     setError(null);

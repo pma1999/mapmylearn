@@ -117,17 +117,22 @@ async def handle_chat(
 ):
     logger.info(f"Received chat request for path {request.path_id}, module {request.module_index}, sub {request.submodule_index}, thread {request.thread_id}")
     try:
-        # 1. Fetch Learning Path
-        learning_path = db.query(LearningPath).filter(
+        # 1. Attempt to fetch persisted Learning Path; if missing, use ephemeral data from request
+        db_entry = db.query(LearningPath).filter(
             LearningPath.path_id == request.path_id,
             LearningPath.user_id == user.id
         ).first()
+        if db_entry:
+            path_data = db_entry.path_data
+        else:
+            # Fallback: use full path_data payload if supplied (ephemeral session)
+            if request.path_data and isinstance(request.path_data, dict):
+                path_data = request.path_data
+                logger.info(f"Using ephemeral path_data for path {request.path_id} from request payload.")
+            else:
+                logger.warning(f"Learning path {request.path_id} not found for user {user.id}")
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Learning path not found")
 
-        if not learning_path:
-            logger.warning(f"Learning path {request.path_id} not found for user {user.id}")
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Learning path not found")
-
-        path_data = learning_path.path_data
         if not isinstance(path_data, dict):
              logger.error(f"path_data is not a dict for path {request.path_id}")
              raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid learning path data structure")
@@ -153,15 +158,19 @@ async def handle_chat(
         module_title = module.get('title', 'N/A')
         user_topic = path_data.get('topic', 'N/A')
         
-        # Get language from learning path and convert code to full name
-        if not hasattr(learning_path, 'language') or not learning_path.language:
-            logger.error(f"Learning path {learning_path.path_id} is missing the language attribute. Defaulting to English.")
-            language_code = "en"
-            language_name = "English"
-        else:
-            language_code = learning_path.language
+        # Determine language: persisted entry has language, else default to English
+        if db_entry and getattr(db_entry, 'language', None):
+            language_code = db_entry.language
             language_name = get_full_language_name(language_code)
-            logger.info(f"Using language '{language_name}' (from code '{language_code}') for path {request.path_id}")
+            logger.info(f"Using persisted language '{language_name}' for path {request.path_id}")
+        else:
+            # No DB entry or missing language => default to English
+            language_code = 'en'
+            language_name = 'English'
+            if db_entry:
+                logger.error(f"Stored learning path {db_entry.path_id} missing language; defaulting to English.")
+            else:
+                logger.info(f"No stored entry for path {request.path_id}; using default language '{language_name}'.")
 
         # 3. Format Path Structure & Prompt
         learning_path_structure = format_path_structure(path_data)
