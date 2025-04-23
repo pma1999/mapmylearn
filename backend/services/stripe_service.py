@@ -15,7 +15,7 @@ STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
 STRIPE_PRICE_ID = os.getenv('STRIPE_PRICE_ID')
 
 # Constants
-CREDIT_PRICE_NET = 0.60  # €0.60 net per credit
+CREDIT_PRICE_NET = 1  # €0.60 net per credit
 STRIPE_FEE_PERCENTAGE = 2.9  # 2.9% + €0.30 fixed fee
 STRIPE_FIXED_FEE = 0.30  # €0.30 fixed fee
 

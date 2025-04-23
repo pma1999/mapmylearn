@@ -18,7 +18,7 @@ import * as api from '../../services/api';
 // Initialize Stripe
 const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY);
 
-const CREDIT_PRICE = 0.60; // €0.60 per credit
+const CREDIT_PRICE = 1; // €0.60 per credit
 
 const CreditPurchaseDialog = ({ open, onClose }) => {
   const [quantity, setQuantity] = useState(1);
