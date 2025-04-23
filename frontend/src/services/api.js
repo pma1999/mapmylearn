@@ -1185,6 +1185,28 @@ export const clearChatHistory = async (data) => {
   }
 };
 
+// Create a Stripe Checkout session
+export const createCheckoutSession = async (quantity) => {
+  try {
+    const response = await api.post('/payments/checkout-sessions', { quantity });
+    return response.data;
+  } catch (error) {
+    console.error('Error creating checkout session:', error);
+    throw error;
+  }
+};
+
+// Get details of a Checkout session
+export const getCheckoutSession = async (sessionId) => {
+  try {
+    const response = await api.get(`/payments/session/${sessionId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error getting checkout session:', error);
+    throw error;
+  }
+};
+
 export default {
   generateLearningPath,
   getLearningPath,
@@ -1225,5 +1247,7 @@ export default {
   resetPassword,
   exportAllHistoryAPI,
   clearAllHistoryAPI,
+  createCheckoutSession,
+  getCheckoutSession,
 };
 

@@ -7,8 +7,11 @@ from urllib.parse import quote_plus
 import sqlite3
 from datetime import datetime
 
-# Load environment variables
-load_dotenv()
+# Define the path to the .env file relative to this script
+dotenv_path = os.path.join(os.path.dirname(__file__), '../.env')
+
+# Load environment variables from the specified path
+load_dotenv(dotenv_path=dotenv_path)
 
 # Get database connection details from environment variables
 DATABASE_URL = os.getenv("DATABASE_URL")

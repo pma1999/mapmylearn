@@ -25,6 +25,7 @@ from backend.routes.auth import router as auth_router
 from backend.routes.learning_paths import router as learning_paths_router
 from backend.routes.admin import router as admin_router
 from backend.routes.chatbot import router as chatbot_router
+from backend.routes.payments import router as payments_router
 from backend.models.auth_models import User, CreditTransaction
 from backend.utils.auth import decode_access_token
 
@@ -122,6 +123,7 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(learning_paths_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(chatbot_router, prefix="/api")
+app.include_router(payments_router, prefix="/api")
 
 # --------------------------------------------------------------------------------
 # Global exception handler middleware

@@ -31,6 +31,7 @@ import TokenIcon from '@mui/icons-material/Token';
 import Fab from '@mui/material/Fab';
 import Zoom from '@mui/material/Zoom';
 import { useAuth } from '../services/authContext';
+import CreditPurchaseDialog from './payments/CreditPurchaseDialog';
 
 const navItems = [
   { text: 'Home', path: '/', ariaLabel: 'Go to homepage' },
@@ -127,6 +128,7 @@ function Navbar() {
   const userMenuOpen = Boolean(userMenuAnchorEl);
   const [scrolled, setScrolled] = useState(false);
   const { isAuthenticated, user, logout, loading, fetchUserCredits } = useAuth();
+  const [purchaseDialogOpen, setPurchaseDialogOpen] = useState(false);
   
   // Auth-aware navigation items
   const navItems = useMemo(() => {
@@ -198,6 +200,15 @@ function Navbar() {
     await logout();
     navigate('/');
   }, [logout, navigate, handleUserMenuClose]);
+
+  const handlePurchaseCredits = () => {
+    handleUserMenuClose();
+    setPurchaseDialogOpen(true);
+  };
+
+  const handlePurchaseDialogClose = () => {
+    setPurchaseDialogOpen(false);
+  };
 
   const DesktopNav = useMemo(() => (
     <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -337,6 +348,10 @@ function Navbar() {
               </Box>
             )}
             <Divider />
+            <MenuItem onClick={handlePurchaseCredits}>
+              <TokenIcon fontSize="small" sx={{ mr: 1 }} />
+              Purchase Credits
+            </MenuItem>
             <MenuItem onClick={handleLogout}>
               <LogoutIcon fontSize="small" sx={{ mr: 1 }} />
               Logout
@@ -381,7 +396,7 @@ function Navbar() {
         </>
       )}
     </Box>
-  ), [location.pathname, handleKeyDown, theme, isAuthenticated, user, userMenuOpen, userMenuAnchorEl, handleUserMenuOpen, handleUserMenuClose, handleLogout]);
+  ), [location.pathname, handleKeyDown, theme, isAuthenticated, user, userMenuOpen, userMenuAnchorEl, handleUserMenuOpen, handleUserMenuClose, handleLogout, handlePurchaseCredits]);
 
   const MobileNav = useMemo(() => (
     <>
@@ -468,6 +483,10 @@ function Navbar() {
                 </Box>
               </Box>
             )}
+            <MenuItem onClick={handlePurchaseCredits}>
+              <TokenIcon fontSize="small" sx={{ mr: 1 }} />
+              Purchase Credits
+            </MenuItem>
             <MenuItem onClick={handleLogout}>
               <LogoutIcon fontSize="small" sx={{ mr: 1 }} />
               Logout
@@ -495,7 +514,7 @@ function Navbar() {
         )}
       </Menu>
     </>
-  ), [anchorEl, open, handleMenuOpen, handleMenuClose, theme.palette.secondary.light, location.pathname, navItems, isAuthenticated, user, handleLogout]);
+  ), [anchorEl, open, handleMenuOpen, handleMenuClose, theme.palette.secondary.light, location.pathname, navItems, isAuthenticated, user, handleLogout, handlePurchaseCredits]);
 
   return (
     <>
@@ -533,6 +552,11 @@ function Navbar() {
           <KeyboardArrowUpIcon />
         </Fab>
       </ScrollTop>
+      
+      <CreditPurchaseDialog
+        open={purchaseDialogOpen}
+        onClose={handlePurchaseDialogClose}
+      />
     </>
   );
 }

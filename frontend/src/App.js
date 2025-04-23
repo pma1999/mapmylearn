@@ -26,6 +26,10 @@ import LearningPathView from './components/learning-path/view/LearningPathView';
 // Import auth provider
 import { AuthProvider } from './services/authContext';
 
+// Import new components
+import PurchaseSuccessPage from './components/payments/PurchaseSuccessPage';
+import PurchaseCancelPage from './components/payments/PurchaseCancelPage';
+
 // Create theme
 const theme = createTheme({
   palette: {
@@ -104,6 +108,22 @@ function App() {
                   <LearningPathView source="history" />
                 </ProtectedRoute>
               } />
+              <Route 
+                path="/purchase/success" 
+                element={
+                  <ProtectedRoute>
+                    <PurchaseSuccessPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/purchase/cancel" 
+                element={
+                  <ProtectedRoute>
+                    <PurchaseCancelPage />
+                  </ProtectedRoute>
+                } 
+              />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Box>
