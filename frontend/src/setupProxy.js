@@ -6,14 +6,15 @@ module.exports = function(app) {
     const csp = [
       "default-src 'self'",
       // Allow Vercel debug script ONLY in development
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://va.vercel-scripts.com",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://va.vercel-scripts.com",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.goin.cloud",
       "img-src 'self' data: https: http:",
       "font-src 'self' https://fonts.gstatic.com https://cdn.goin.cloud",
       // Allow connection to backend API (adjust target below if needed)
       "connect-src 'self' https://web-production-62f88.up.railway.app http://localhost:8000",
       "object-src 'none'",
-      "frame-src 'none'",
+      // Allow Stripe's iframe
+      "frame-src 'self' https://js.stripe.com",
       "base-uri 'self'",
       "form-action 'self'"
     ].join('; ');

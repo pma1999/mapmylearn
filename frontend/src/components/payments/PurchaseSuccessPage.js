@@ -120,7 +120,7 @@ const PurchaseSuccessPage = () => {
                   Credits: {sessionData.metadata?.credit_quantity}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Transaction ID: {sessionData.metadata?.payment_intent_id || 'N/A'}
+                  Transaction ID: {sessionData.payment_intent_id || 'N/A'}
                 </Typography>
               </Box>
             )}

@@ -109,7 +109,8 @@ async def get_checkout_session(
             'amount_total': session.get('amount_total'),
             'currency': session.get('currency'),
             'customer_email': session.get('customer_email'),
-            'metadata': session.get('metadata')
+            'metadata': session.get('metadata'),
+            'payment_intent_id': session.get('payment_intent')
         }
 
     except Exception as e:

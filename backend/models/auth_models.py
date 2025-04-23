@@ -92,29 +92,35 @@ class CreditTransaction(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     admin_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     amount = Column(Integer, nullable=False)  # Positive for additions, negative for usage
-    transaction_type = Column(String, nullable=False)  # "admin_add", "system_add", "generation_use", "refund"
+    transaction_type = Column(String, nullable=False)  # "admin_add", "system_add", "generation_use", "refund", "purchase"
     created_at = Column(DateTime, default=func.now(), nullable=False)
     
     # SQLite requires this column, used to store user's balance after the transaction
-    balance_after = Column(Integer, nullable=False, default=0)
+    balance_after = Column(Integer, nullable=True) # Making this nullable for flexibility, can be updated
     
-    # We support both column names for compatibility
-    # Original database might have 'description' column (SQLite) while PostgreSQL has 'notes'
-    notes = Column("description", String, nullable=True)  # Use 'description' as the actual column name for SQLite compatibility
+    # Use 'notes' for PostgreSQL, 'description' was for SQLite
+    notes = Column(String, nullable=True)
     
-    # Optional field for tracking related learning paths
+    # Optional field for tracking related learning paths (if applicable to purchase)
     learning_path_id = Column(Integer, nullable=True)
+    
+    # Add Stripe related fields
+    stripe_checkout_session_id = Column(String, unique=True, nullable=True, index=True)
+    stripe_payment_intent_id = Column(String, unique=True, nullable=True, index=True)
+    purchase_metadata = Column(JSON, nullable=True) # Use JSONB for PostgreSQL, JSON for SQLite
     
     # Relationships
     user = relationship("User", foreign_keys=[user_id], back_populates="credit_transactions")
     admin = relationship("User", foreign_keys=[admin_user_id])
     
-    # Indexes for efficient querying
+    # Indexes for efficient querying (add indexes for Stripe columns)
     __table_args__ = (
         Index('idx_credit_transaction_user_id', user_id),
         Index('idx_credit_transaction_admin_id', admin_user_id),
         Index('idx_credit_transaction_created_at', created_at.desc()),
         Index('idx_credit_transaction_action_type', transaction_type),
+        Index('idx_credit_transaction_checkout_session', stripe_checkout_session_id),
+        Index('idx_credit_transaction_payment_intent', stripe_payment_intent_id),
     )
 
 
