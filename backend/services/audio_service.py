@@ -12,9 +12,8 @@ from sqlalchemy.orm.attributes import flag_modified
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
-# Import ElevenLabs client and save function
-from elevenlabs.client import ElevenLabs
-from elevenlabs import save
+# Import OpenAI client
+import openai
 
 from backend.models.auth_models import LearningPath, Base
 from backend.services.services import _scrape_single_url, get_llm
@@ -22,9 +21,11 @@ from backend.prompts.audio_prompts import SUBMODULE_AUDIO_SCRIPT_PROMPT
 
 logger = logging.getLogger(__name__)
 
-# Correct environment variable name for ElevenLabs tool
-ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY")
-ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "JBFqnCBsd6RMkjVDRZzb")
+# OpenAI Configuration
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_TTS_MODEL = os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts")
+OPENAI_TTS_VOICE = os.getenv("OPENAI_TTS_VOICE", "onyx") # Default voice
+
 STATIC_AUDIO_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "audio")
 
 async def generate_submodule_audio(
@@ -35,15 +36,15 @@ async def generate_submodule_audio(
     language: str
 ) -> str:
     """
-    Generates audio for a specific submodule, saves it, and returns the URL.
-    Handles scraping, LLM script generation (in the specified language), TTS using ElevenLabs SDK directly.
+    Generates audio for a specific submodule using OpenAI TTS, saves it, and returns the URL.
+    Handles scraping, LLM script generation (in the specified language), and TTS using OpenAI SDK.
     If db session and learning_path.id are provided, updates DB.
     """
     is_persisted = db is not None and hasattr(learning_path, 'id') and learning_path.id is not None
 
-    if not ELEVEN_API_KEY:
-        logger.error("ELEVEN_API_KEY is not set.")
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Audio generation service is not configured (Missing API Key).")
+    if not OPENAI_API_KEY:
+        logger.error("OPENAI_API_KEY is not set.")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Audio generation service is not configured (Missing OpenAI API Key).")
 
     path_data = learning_path.path_data
     if not isinstance(path_data, dict):
@@ -110,38 +111,59 @@ async def generate_submodule_audio(
         logger.error(f"LLM generated invalid or empty script (lang: {language}): '{audio_script[:100]}...'")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Generated audio script was invalid or empty.")
 
-    # --- Text-to-Speech (ElevenLabs SDK Direct) --- 
-    logger.info("Generating audio with ElevenLabs SDK...")
+    # --- Text-to-Speech (OpenAI SDK) ---
+    logger.info(f"Generating audio with OpenAI TTS model '{OPENAI_TTS_MODEL}' and voice '{OPENAI_TTS_VOICE}'...")
+    
+    # Warn if the script is potentially too long for the model
+    if len(audio_script) > 3500:
+        logger.warning(f"Audio script length ({len(audio_script)} chars) is long. Model '{OPENAI_TTS_MODEL}' might have stability issues (pauses, repetition). Consider splitting longer content.")
+        
     permanent_audio_path = None # Define path variable outside try
     try:
-        client = ElevenLabs(api_key=ELEVEN_API_KEY)
-        audio_iterator = client.text_to_speech.convert(
-            text=audio_script,
-            voice_id=ELEVENLABS_VOICE_ID,
-            model_id="eleven_flash_v2_5", # Example model
-            output_format="mp3_44100_128" # Example format
+        openai_client = openai.OpenAI() # API key is automatically picked up from OPENAI_API_KEY env var
+        response = openai_client.audio.speech.create(
+            model=OPENAI_TTS_MODEL,
+            voice=OPENAI_TTS_VOICE,
+            input=audio_script,
+            response_format="mp3" # Ensure MP3 format
         )
-
-        # --- File Storage & Serving (integrated with SDK save) --- 
+        
+        # --- File Storage & Serving --- 
         unique_filename = f"{uuid.uuid4()}.mp3"
         permanent_audio_path = os.path.join(STATIC_AUDIO_DIR, unique_filename)
         
-        # Use the SDK's save function (runs in the current thread, might block if large)
-        # Consider asyncio.to_thread if saving becomes a bottleneck
-        save(audio_iterator, permanent_audio_path)
+        # Stream the response content directly to a file
+        response.stream_to_file(permanent_audio_path)
 
         audio_url = f"/static/audio/{unique_filename}"
-        logger.info(f"ElevenLabs audio generated and saved successfully: {permanent_audio_path}")
+        logger.info(f"OpenAI TTS audio generated and saved successfully: {permanent_audio_path}")
 
     except Exception as e:
-        logger.exception("Error calling ElevenLabs API or saving file")
-        # Attempt cleanup if file path was determined but saving failed
+        logger.exception("Error during OpenAI TTS generation or saving file")
         if permanent_audio_path and os.path.exists(permanent_audio_path):
-             try:
-                 os.remove(permanent_audio_path)
-             except OSError:
-                 pass # Ignore cleanup error
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Text-to-Speech service error: {e}")
+             try: os.remove(permanent_audio_path)
+             except OSError: pass
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Text-to-Speech generation failed: {e}")
+    except openai.APIError as e:
+        # Handle API errors from OpenAI (e.g., invalid key, rate limits, server issues)
+        logger.exception(f"OpenAI API error during TTS generation: {e}")
+        if permanent_audio_path and os.path.exists(permanent_audio_path):
+            try: os.remove(permanent_audio_path)
+            except OSError as cleanup_error:
+                 logger.error(f"Failed to cleanup partially created audio file {permanent_audio_path} after API error: {cleanup_error}")
+        # Try to provide a more specific error message if available
+        detail = f"Text-to-Speech service error (API): {str(e)}"
+        if hasattr(e, 'message') and e.message: 
+             detail = f"Text-to-Speech service error (API): {e.message}"
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail)
+    except Exception as e:
+        # Handle other potential errors (e.g., file system issues, unexpected errors)
+        logger.exception("Unexpected error during OpenAI TTS generation or saving file")
+        if permanent_audio_path and os.path.exists(permanent_audio_path):
+            try: os.remove(permanent_audio_path)
+            except OSError as cleanup_error:
+                logger.error(f"Failed to cleanup partially created audio file {permanent_audio_path} after unexpected error: {cleanup_error}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Text-to-Speech generation failed: {str(e)}")
 
     # --- Update Database (Only if persisted) --- 
     if is_persisted:
