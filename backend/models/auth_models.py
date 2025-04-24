@@ -7,6 +7,15 @@ from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime, T
 from sqlalchemy.orm import relationship
 from backend.config.database import Base
 
+# Transaction Type Constants
+class TransactionType:
+    ADMIN_ADD = "admin_add"
+    SYSTEM_ADD = "system_add"
+    GENERATION_USE = "generation_use"
+    AUDIO_GENERATION_USE = "audio_generation_use" # New type
+    REFUND = "refund"
+    PURCHASE = "purchase"
+
 class User(Base):
     """
     User model for authentication.
@@ -92,7 +101,7 @@ class CreditTransaction(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     admin_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     amount = Column(Integer, nullable=False)  # Positive for additions, negative for usage
-    transaction_type = Column(String, nullable=False)  # "admin_add", "system_add", "generation_use", "refund", "purchase"
+    transaction_type = Column(String, nullable=False)  # Use constants from TransactionType class
     created_at = Column(DateTime, default=func.now(), nullable=False)
     
     # SQLite requires this column, used to store user's balance after the transaction

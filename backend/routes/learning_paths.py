@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Response, Path
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import uuid
 import os
 from datetime import datetime
@@ -9,14 +9,24 @@ from fastapi.responses import FileResponse
 import logging
 
 from backend.config.database import get_db
-from backend.models.auth_models import User, LearningPath
-from backend.schemas.auth_schemas import LearningPathCreate, LearningPathUpdate, LearningPathResponse, LearningPathList, MigrationRequest, MigrationResponse
+from backend.models.auth_models import User, LearningPath, TransactionType
+from backend.schemas.auth_schemas import (
+    LearningPathCreate, LearningPathUpdate, LearningPathResponse, 
+    LearningPathList, MigrationRequest, MigrationResponse,
+    GenerateAudioRequest, GenerateAudioResponse # Import new schemas
+)
 from backend.utils.auth_middleware import get_current_user
 from backend.utils.pdf_generator import generate_pdf, create_filename
+# Import the new audio generation service
+from backend.services.audio_service import generate_submodule_audio 
+from backend.services.credit_service import CreditService # Import CreditService
 
-router = APIRouter(prefix="/learning-paths", tags=["learning-paths"])
+router = APIRouter(prefix="/v1/learning-paths", tags=["learning-paths"])
 logger = logging.getLogger(__name__) # Add logger instance
 
+# Define supported languages
+SUPPORTED_AUDIO_LANGUAGES = ["en", "es", "fr", "de", "it", "pt"]
+DEFAULT_AUDIO_LANGUAGE = "en" # Although we expect frontend to always send it
 
 @router.get("", response_model=LearningPathList)
 async def get_learning_paths(
@@ -217,7 +227,8 @@ async def get_learning_path(
     db: Session = Depends(get_db)
 ):
     """
-    Get a specific learning path by ID.
+    Get a specific learning path by ID. 
+    The LearningPathResponse schema automatically includes the full path_data.
     """
     learning_path = db.query(LearningPath).filter(
         LearningPath.path_id == path_id,
@@ -574,4 +585,134 @@ async def download_learning_path_pdf(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error generating PDF: {str(e)}"
-        ) 
+        )
+
+
+# --- Updated Audio Generation Endpoint ---
+@router.post(
+    "/{path_id}/modules/{module_index}/submodules/{submodule_index}/audio",
+    response_model=GenerateAudioResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Generate or retrieve audio for a submodule"
+)
+async def generate_or_get_submodule_audio(
+    request_data: GenerateAudioRequest, # Moved first
+    path_id: str = Path(..., description="ID of the learning path (can be temporary task ID or persistent UUID)"),
+    module_index: int = Path(..., ge=0, description="Zero-based index of the module"),
+    submodule_index: int = Path(..., ge=0, description="Zero-based index of the submodule"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    credit_service: CreditService = Depends() # Inject CreditService
+):
+    """
+    Generates audio narration for a specific submodule in the requested language.
+
+    - If the learning path is persisted and audio already exists (assumed to be in the default language initially), returns the existing URL.
+      (Note: This doesn't re-generate in a different language if already exists. Future enhancement could be to store language with URL).
+    - If the learning path is persisted and audio doesn't exist, generates it in the requested language, saves the URL, and returns it.
+    - If the learning path ID is temporary (not in DB), uses `request_data.path_data` to generate the audio in the requested language and returns the URL (without persisting).
+    """
+    logger.info(f"Received audio generation request for path {path_id}, module {module_index}, sub {submodule_index}, lang {request_data.language}")
+
+    # --- Validate Language ---
+    requested_language = request_data.language
+    if requested_language not in SUPPORTED_AUDIO_LANGUAGES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported language '{requested_language}'. Supported languages are: {SUPPORTED_AUDIO_LANGUAGES}"
+        )
+
+    # 1. Try fetching from Database (for persisted paths)
+    learning_path = db.query(LearningPath).filter(
+        LearningPath.path_id == path_id,
+        LearningPath.user_id == user.id
+    ).first()
+
+    is_persisted = learning_path is not None
+    temp_path_data = request_data.path_data if not is_persisted else None
+
+    if is_persisted:
+        logger.info(f"Path {path_id} found in DB (persisted). Checking for existing audio URL.")
+        # --- Check Cache (existing URL in path_data) ---
+        # Note: Current cache check doesn't consider language. If found, returns existing URL.
+        try:
+            path_data_json = learning_path.path_data
+            if isinstance(path_data_json, dict):
+                modules = path_data_json.get('modules', [])
+                if 0 <= module_index < len(modules):
+                    submodules = modules[module_index].get('submodules', [])
+                    if 0 <= submodule_index < len(submodules):
+                        # TODO: Future: Store language alongside URL? e.g., audio_urls: {"en": "/path/en.mp3"}
+                        existing_url = submodules[submodule_index].get('audio_url')
+                        if existing_url:
+                            logger.info(f"Found cached audio URL for {path_id}/{module_index}/{submodule_index}: {existing_url}. Returning cached version.")
+                            return GenerateAudioResponse(audio_url=existing_url)
+            else:
+                logger.warning(f"path_data for persisted path {path_id} is not a dict. Type: {type(path_data_json)}")
+        except Exception as e:
+            # Log error but proceed to generate if cache check fails
+            logger.exception(f"Error checking audio cache for {path_id}/{module_index}/{submodule_index}: {e}")
+
+        # If no cached URL, proceed to generate and persist
+        logger.info(f"No cached audio found for persisted path {path_id}. Charging credit and generating in '{requested_language}'...")
+        notes = f"Audio generation ({requested_language}) for persisted path {path_id}, Mod {module_index}, Sub {submodule_index}"
+        try:
+            # Use credit service context manager
+            async with credit_service.charge(user=user, amount=1, transaction_type=TransactionType.AUDIO_GENERATION_USE, notes=notes):
+                generated_url = await generate_submodule_audio(
+                    db=db,
+                    learning_path=learning_path,
+                    module_index=module_index,
+                    submodule_index=submodule_index,
+                    language=requested_language # Pass language
+                )
+            # If context manager exits without error, credit is deducted and committed.
+            return GenerateAudioResponse(audio_url=generated_url)
+        except HTTPException as http_exc:
+            # If charge() raised 403, or generate_submodule_audio raised HTTPException
+            # The context manager's __aexit__ handles refund if needed. Re-raise.
+            raise http_exc
+        except Exception as e:
+            # Context manager's __aexit__ handles refund. Log and raise standard 500.
+            logger.exception(f"Unexpected error during credit charge or audio generation for persisted path {path_id}: {e}")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Audio generation failed unexpectedly.")
+
+    else: # Temporary path
+        logger.info(f"Path {path_id} not found in DB (temporary). Charging credit and generating audio in '{requested_language}' using request body data.")
+        if not temp_path_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="path_data is required in the request body for temporary learning paths."
+            )
+
+        # Create a temporary LearningPath-like object for the service function
+        class TempLearningPath:
+            def __init__(self, data, temp_id):
+                self.path_data = data
+                self.id = None # Indicate it's not from DB
+                self.path_id = temp_id # Keep temporary ID if needed
+
+        temp_lp_obj = TempLearningPath(temp_path_data, path_id) # Use the path_id from the endpoint
+
+        notes = f"Audio generation ({requested_language}) for temporary path {path_id}, Mod {module_index}, Sub {submodule_index}"
+        try:
+            # Use credit service context manager
+            async with credit_service.charge(user=user, amount=1, transaction_type=TransactionType.AUDIO_GENERATION_USE, notes=notes):
+                # Call the main service, it should skip DB ops based on temp_lp_obj.id == None
+                generated_url = await generate_submodule_audio(
+                    db=None, # Pass None for DB session for temp path
+                    learning_path=temp_lp_obj,
+                    module_index=module_index,
+                    submodule_index=submodule_index,
+                    language=requested_language # Pass language
+                )
+            # If context manager exits without error, credit is deducted and committed.
+            return GenerateAudioResponse(audio_url=generated_url)
+
+        except HTTPException as http_exc:
+            # Context manager handles refund if needed. Re-raise.
+            raise http_exc
+        except Exception as e:
+            # Context manager handles refund. Log and raise standard 500.
+            logger.exception(f"Unexpected error during credit charge or audio generation for temporary path {path_id}: {e}")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Audio generation failed unexpectedly for temporary path.") 

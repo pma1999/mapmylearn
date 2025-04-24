@@ -8,7 +8,7 @@ export const API_URL = process.env.NODE_ENV === 'development'
 console.log('Using API URL:', API_URL);
 
 // Create axios instance with base URL
-const api = axios.create({
+export const api = axios.create({
   baseURL: `${API_URL}/api`,
   headers: {
     'Content-Type': 'application/json',
@@ -690,7 +690,8 @@ export const getHistoryPreview = async (sortBy = 'creation_date', filterSource =
     if (searchTerm) params.append('search', searchTerm);
     
     console.time('History API Request');
-    const response = await api.get(`/learning-paths?${params.toString()}`);
+    // Add /v1 prefix
+    const response = await api.get(`/v1/learning-paths?${params.toString()}`); 
     console.timeEnd('History API Request');
     
     if (response.data?.request_time_ms) {
@@ -726,8 +727,8 @@ export const getHistoryEntry = async (pathId) => {
   
   try {
     console.log('Fetching learning path with path_id:', pathId);
-    const response = await api.get(`/learning-paths/${pathId}`);
-    // The API returns the LearningPathResponse directly, which fits the { entry: ... } structure implicitly
+    // Add /v1 prefix
+    const response = await api.get(`/v1/learning-paths/${pathId}`); 
     return { entry: response.data }; 
   } catch (error) {
     console.error('Server error fetching history entry:', error);
@@ -756,7 +757,8 @@ export const saveToHistory = async (learningPathData, source = 'generated') => {
       language: learningPathData.language || 'en' // Use provided language or default
     };
     
-    const response = await api.post('/learning-paths', payload);
+    // Add /v1 prefix
+    const response = await api.post('/v1/learning-paths', payload);
     
     console.log('Learning path saved with path_id:', response.data.path_id);
     
@@ -793,8 +795,8 @@ export const updateHistoryEntry = async (pathId, data) => {
 
   try {
     console.log('Updating learning path with path_id:', pathId);
-    // Make the API call with the provided ID (should be path_id)
-    await api.put(`/learning-paths/${pathId}`, updateData); // Send only valid update fields
+    // Add /v1 prefix
+    await api.put(`/v1/learning-paths/${pathId}`, updateData); 
     return { success: true };
   } catch (error) {
     console.error('Error updating history entry via API:', error);
@@ -812,7 +814,8 @@ export const deleteHistoryEntry = async (pathId) => {
 
   try {
     console.log('Deleting learning path with path_id:', pathId);
-    await api.delete(`/learning-paths/${pathId}`);
+    // Add /v1 prefix
+    await api.delete(`/v1/learning-paths/${pathId}`);
     return { success: true };
   } catch (error) {
     console.error('Error deleting history entry via API:', error);
@@ -897,8 +900,8 @@ export const exportAllHistoryAPI = async () => {
   // throw new Error("Export All functionality is not yet available."); 
   // Return []; // Or return empty array temporarily? Throwing error is clearer.
   try {
-    const response = await api.get('/learning-paths/export');
-    // The backend returns the list directly
+    // Add /v1 prefix
+    const response = await api.get('/v1/learning-paths/export'); 
     return response.data; 
   } catch (error) {
     console.error('API Error exporting all history:', error);
@@ -919,8 +922,8 @@ export const clearAllHistoryAPI = async () => {
   // throw new Error("Clear All functionality is not yet available.");
   // return { success: false }; // Or return failure temporarily? Throwing error is clearer.
   try {
-    // Use the axios instance directly for DELETE
-    await api.delete('/learning-paths/clear-all'); 
+    // Add /v1 prefix
+    await api.delete('/v1/learning-paths/clear-all'); 
     // DELETE requests usually return 204 No Content on success, 
     // so we just return a success indicator for the frontend handler.
     return { success: true }; 
@@ -940,9 +943,9 @@ export const clearAllHistoryAPI = async () => {
  */
 export const downloadLearningPathPDF = async (pathId) => {
   try {
-    // Make the request with responseType blob to handle binary data
+    // Add /v1 prefix
     const response = await api.get(
-      `/learning-paths/${pathId}/pdf`, 
+      `/v1/learning-paths/${pathId}/pdf`, 
       { 
         responseType: 'blob',
         headers: {

@@ -1,5 +1,5 @@
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, EmailStr, Field, HttpUrl
+from typing import Optional, List, Dict, Any, Union
 from datetime import datetime, timezone
 from pydantic import field_validator, model_validator, field_serializer
 
@@ -246,4 +246,13 @@ class ForgotPasswordRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     """Schema for resetting password with a token."""
     token: str
-    new_password: str = Field(..., min_length=8) 
+    new_password: str = Field(..., min_length=8)
+
+
+class GenerateAudioRequest(BaseModel):
+    path_data: Optional[Dict[str, Any]] = Field(None, description="Full learning path data, required only if path_id refers to a temporary/non-persisted path")
+    language: str = Field(..., description="Target language code (ISO 639-1) for the audio script.")
+
+
+class GenerateAudioResponse(BaseModel):
+    audio_url: str = Field(..., description="URL to the generated audio file") 

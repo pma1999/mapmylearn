@@ -26,12 +26,16 @@ from backend.routes.learning_paths import router as learning_paths_router
 from backend.routes.admin import router as admin_router
 from backend.routes.chatbot import router as chatbot_router
 from backend.routes.payments import router as payments_router
-from backend.models.auth_models import User, CreditTransaction
+from backend.models.auth_models import User, CreditTransaction, TransactionType
 from backend.utils.auth import decode_access_token
 
 # Import rate limiter and backend
+from backend.utils.auth_middleware import get_optional_user
 from backend.utils.rate_limiter import rate_limiting_middleware
 from fastapi_limiter import FastAPILimiter
+
+# Import CreditService
+from backend.services.credit_service import CreditService
 
 # Initialize startup time for health check and uptime reporting
 startup_time = time.time()
@@ -76,6 +80,13 @@ app = FastAPI(
     description="API for MapMyLearn Learning Path Generator",
     version="0.1.0"
 )
+
+# Setup static file serving (for audio files)
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+audio_dir = os.path.join(static_dir, "audio")
+os.makedirs(audio_dir, exist_ok=True)
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+logger.info(f"Static files mounted from: {static_dir}")
 
 # Create the database tables if they don't exist
 # We'll use alembic for proper migrations in production
@@ -416,48 +427,43 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
     """
     client_ip = req.client.host if req.client else None
     
-    # Get current user if authenticated
-    user = None
-    user_id = None
-    try:
-        if req.headers.get("Authorization"):
-            # Get db session
-            db = next(get_db())
-            # Get user from auth token
-            auth_header = req.headers.get("Authorization")
-            if auth_header and auth_header.startswith("Bearer "):
-                token = auth_header.replace("Bearer ", "")
-                token_data = decode_access_token(token)
-                if token_data:
-                    user = db.query(User).filter(User.id == token_data.user_id).first()
-                    if user:
-                        user_id = user.id
-                        
-                        # Check if user has sufficient credits
-                        if user.credits <= 0:
-                            raise HTTPException(
-                                status_code=status.HTTP_403_FORBIDDEN,
-                                detail="Insufficient credits. Please contact the administrator to add credits to your account."
-                            )
-                        
-                        # Deduct one credit for the generation and record the transaction
-                        user.credits -= 1
-                        
-                        # Create credit transaction record
-                        transaction = CreditTransaction(
-                            user_id=user.id,
-                            amount=-1,  # Negative amount for usage
-                            transaction_type="generation_use",
-                            notes=f"Used 1 credit to generate learning path for topic: {request.topic}"
-                        )
-                        db.add(transaction)
-                        db.commit()
-                        logger.info(f"Deducted 1 credit from user {user.id}, remaining credits: {user.credits}")
-    except Exception as e:
-        logger.warning(f"Error getting user or checking credits: {str(e)}")
-        if isinstance(e, HTTPException):
-            raise
+    # Get database session
+    db = next(get_db())
     
+    # Use get_optional_user to handle both authenticated and unauthenticated requests initially
+    user = await get_optional_user(request=req, db=db)
+    user_id = user.id if user else None
+    
+    if not user:
+        # Handle case where authentication is strictly required (e.g., if credits are mandatory)
+        # If anonymous generation isn\'t allowed, raise an error here.
+        # For now, we proceed, but credit check will fail if user is None.
+        logger.warning("Learning path generation requested without authentication.")
+        # Optionally raise: HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=\"Authentication required to generate learning paths.\")
+    else:
+        # --- Refactored Credit Handling --- 
+        try:
+            notes = f"Generate learning path for topic: {request.topic}"
+            # Note: CreditService expects db in __init__, not Depends directly here
+            credit_service = CreditService(db=db)
+            async with credit_service.charge(user=user, amount=1, transaction_type=TransactionType.GENERATION_USE, notes=notes):
+                # If this block is entered, credit check passed and deduction was committed.
+                logger.info(f"Credit check passed and 1 credit deducted for user {user.id} for topic: {request.topic}")
+                pass # No action needed inside, just proceed if successful
+        except HTTPException as e:
+            # Handles 403 Forbidden from charge() or other HTTP errors
+            logger.warning(f"Credit charge failed for user {user.id}: {e.detail}")
+            raise e # Re-raise the original exception
+        except Exception as e:
+            # Catch unexpected errors during credit charge
+            logger.exception(f"Unexpected error during credit charge for user {user.id}: {e}")
+            # Raise a new HTTPException for internal errors
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="An internal error occurred while processing credits."
+            )
+        # --- End Refactored Credit Handling ---
+
     # Create a unique task ID
     task_id = str(uuid.uuid4())
     
