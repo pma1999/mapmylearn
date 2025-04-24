@@ -10,7 +10,7 @@ from backend.parsers.parsers import search_queries_parser, enhanced_modules_pars
 from backend.services.services import get_llm, perform_search_and_scrape
 from langchain_core.prompts import ChatPromptTemplate
 
-from backend.core.graph_nodes.helpers import run_chain, batch_items, format_search_results, escape_curly_braces
+from backend.core.graph_nodes.helpers import run_chain, batch_items, format_search_results, escape_curly_braces, MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT
 from backend.core.graph_nodes.search_utils import execute_search_with_llm_retry
 
 async def generate_search_queries(state: LearningPathState) -> Dict[str, Any]:
@@ -491,7 +491,6 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
         # Process the new search results structure for the LLM prompt
         context_parts = []
         max_context_per_query = 5 # Limit number of results per query used in context
-        max_chars_per_result = 100000 # Limit characters per scraped result
 
         for report in search_service_results:
             query = escape_curly_braces(report.query)
@@ -508,17 +507,19 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
 
                 if res.scraped_content:
                     content = escape_curly_braces(res.scraped_content)
-                    truncated_content = content[:max_chars_per_result]
-                    if len(content) > max_chars_per_result:
+                    truncated_content = content[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
+                    if len(content) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
                         truncated_content += "... (truncated)"
                     context_parts.append(f"Scraped Content Snippet:\n{truncated_content}")
                     results_included += 1
                 elif res.tavily_snippet:
-                    # Fallback to Tavily snippet if scraping failed
                     snippet = escape_curly_braces(res.tavily_snippet)
                     error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
-                    context_parts.append(f"Tavily Snippet:{error_info}\n{snippet}")
-                    results_included += 1 # Count even if scrape failed but snippet exists
+                    truncated_snippet = snippet[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
+                    if len(snippet) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
+                         truncated_snippet += "... (truncated)"
+                    context_parts.append(f"Tavily Snippet:{error_info}\n{truncated_snippet}")
+                    results_included += 1
                 else:
                      # If scrape failed and no snippet, mention the failure
                      error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"

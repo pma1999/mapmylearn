@@ -10,6 +10,10 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 logger = logging.getLogger("learning_path.helpers")
 
+# --- Constants ---
+MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT = 100000
+# --- End Constants ---
+
 T = TypeVar('T')  # Type variable for parser return type
 
 def escape_curly_braces(text: str) -> str:

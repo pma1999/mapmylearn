@@ -34,7 +34,7 @@ from backend.prompts.learning_path_prompts import (
     RESOURCE_EXTRACTION_PROMPT
 )
 
-from backend.core.graph_nodes.helpers import run_chain, escape_curly_braces
+from backend.core.graph_nodes.helpers import run_chain, escape_curly_braces, MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT
 from backend.core.graph_nodes.search_utils import execute_search_with_llm_retry
 
 # Configure logger
@@ -161,8 +161,7 @@ async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
 
         # Prepare context from scraped results
         scraped_context_parts = []
-        max_context_per_query_llm = 5 # Limit results used for LLM context
-        max_chars_per_result_llm = 100000 # Limit chars per result for LLM context
+        max_context_per_query_llm = 5
         results_included_llm = 0
         for res in search_service_result.results:
              if results_included_llm >= max_context_per_query_llm:
@@ -172,15 +171,18 @@ async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
              scraped_context_parts.append(f"### Source: {url} (Title: {title})")
              if res.scraped_content:
                  content = escape_curly_braces(res.scraped_content)
-                 truncated_content = content[:max_chars_per_result_llm]
-                 if len(content) > max_chars_per_result_llm:
+                 truncated_content = content[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
+                 if len(content) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
                       truncated_content += "... (truncated)"
                  scraped_context_parts.append(f"Content Snippet:\n{truncated_content}")
                  results_included_llm += 1
              elif res.tavily_snippet: # Fallback to snippet
                  snippet = escape_curly_braces(res.tavily_snippet)
                  error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
-                 scraped_context_parts.append(f"Tavily Snippet:{error_info}\n{snippet}")
+                 truncated_snippet = snippet[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
+                 if len(snippet) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
+                      truncated_snippet += "... (truncated)"
+                 scraped_context_parts.append(f"Tavily Snippet:{error_info}\n{truncated_snippet}")
                  results_included_llm += 1
              else:
                  error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
@@ -374,8 +376,7 @@ async def generate_module_resources(state: LearningPathState, module_id: int, mo
 
         # Prepare context from scraped results
         scraped_context_parts = []
-        max_context_per_query_llm = 5 # Limit results used for LLM context
-        max_chars_per_result_llm = 100000 # Limit chars per result for LLM context
+        max_context_per_query_llm = 5
         results_included_llm = 0
         for res in search_service_result.results:
              if results_included_llm >= max_context_per_query_llm:
@@ -385,15 +386,18 @@ async def generate_module_resources(state: LearningPathState, module_id: int, mo
              scraped_context_parts.append(f"### Source: {url} (Title: {title})")
              if res.scraped_content:
                  content = escape_curly_braces(res.scraped_content)
-                 truncated_content = content[:max_chars_per_result_llm]
-                 if len(content) > max_chars_per_result_llm:
+                 truncated_content = content[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
+                 if len(content) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
                       truncated_content += "... (truncated)"
                  scraped_context_parts.append(f"Content Snippet:\n{truncated_content}")
                  results_included_llm += 1
              elif res.tavily_snippet: # Fallback to snippet
                  snippet = escape_curly_braces(res.tavily_snippet)
                  error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
-                 scraped_context_parts.append(f"Tavily Snippet:{error_info}\n{snippet}")
+                 truncated_snippet = snippet[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
+                 if len(snippet) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
+                      truncated_snippet += "... (truncated)"
+                 scraped_context_parts.append(f"Tavily Snippet:{error_info}\n{truncated_snippet}")
                  results_included_llm += 1
              else:
                  error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
@@ -632,8 +636,7 @@ async def generate_submodule_resources(
 
         # Prepare context from scraped results
         scraped_context_parts = []
-        max_context_per_query_llm = 5 # Limit results used for LLM context
-        max_chars_per_result_llm = 100000 # Limit chars per result for LLM context
+        max_context_per_query_llm = 5
         results_included_llm = 0
         for res in search_service_result.results:
              if results_included_llm >= max_context_per_query_llm:
@@ -643,15 +646,18 @@ async def generate_submodule_resources(
              scraped_context_parts.append(f"### Source: {url} (Title: {title})")
              if res.scraped_content:
                  content = escape_curly_braces(res.scraped_content)
-                 truncated_content = content[:max_chars_per_result_llm]
-                 if len(content) > max_chars_per_result_llm:
+                 truncated_content = content[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
+                 if len(content) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
                       truncated_content += "... (truncated)"
                  scraped_context_parts.append(f"Content Snippet:\n{truncated_content}")
                  results_included_llm += 1
              elif res.tavily_snippet: # Fallback to snippet
                  snippet = escape_curly_braces(res.tavily_snippet)
                  error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
-                 scraped_context_parts.append(f"Tavily Snippet:{error_info}\n{snippet}")
+                 truncated_snippet = snippet[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
+                 if len(snippet) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
+                      truncated_snippet += "... (truncated)"
+                 scraped_context_parts.append(f"Tavily Snippet:{error_info}\n{truncated_snippet}")
                  results_included_llm += 1
              else:
                  error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
