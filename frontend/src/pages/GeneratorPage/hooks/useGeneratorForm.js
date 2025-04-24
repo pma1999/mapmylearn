@@ -1,5 +1,5 @@
+import { useNavigate } from 'react-router';
 import { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import * as apiService from '../../../services/api';
 import * as languageService from '../../../services/languageService';
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Typography, Paper, Button, Link } from '@mui/material';
 import ErrorIcon from '@mui/icons-material/Error';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink } from 'react-router';
 
 const ErrorDisplay = ({ 
   title = 'Error', 

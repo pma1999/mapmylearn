@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { useAuth } from '../services/authContext';
 

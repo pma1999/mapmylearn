@@ -1,5 +1,5 @@
 import React from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams } from 'react-router';
 
 // Import the new shared LearningPathView component
 import LearningPathView from '../components/learning-path/view/LearningPathView';
