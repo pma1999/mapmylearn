@@ -124,7 +124,11 @@ async def generate_submodule_audio(
 
         # Construct the dynamic instruction for the TTS model
         submodule_title = submodule.get('title', 'this topic') # Get title safely
-        instruction_text = f"Narrate this educational material about '{submodule_title}' for a learner using the {language} language. Speak clearly and engagingly, like a helpful tutor explaining the topic. Ensure accurate {language} pronunciation."
+        if language == 'es':
+            instruction_text = f"Narra este material educativo sobre '{submodule_title}' para un aprendiz usando español de España (acento castellano). Habla de forma clara y atractiva, como un tutor útil explicando el tema. Asegura una pronunciación precisa del español de España."
+        else:
+            # Default instruction for other languages
+            instruction_text = f"Narrate this educational material about '{submodule_title}' for a learner using the {language} language. Speak clearly and engagingly, like a helpful tutor explaining the topic. Ensure accurate {language} pronunciation."
         logger.info(f"Using TTS instruction: {instruction_text}")
 
         response = openai_client.audio.speech.create(
