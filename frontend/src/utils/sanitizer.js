@@ -22,13 +22,15 @@ export function configureDOMPurify() {
     }
     
     // Check for DOM clobbering attempts where element's id/name matches currentScript
-    if (node.hasAttribute && (
-      node.hasAttribute('id') && node.getAttribute('id') === 'currentScript' ||
-      node.hasAttribute('name') && node.getAttribute('name') === 'currentScript'
-    )) {
-      // Either remove the attribute or change it to something harmless
-      node.removeAttribute('id');
-      node.removeAttribute('name');
+    if (node.hasAttribute) {
+      const idIsCurrentScript = node.getAttribute('id') === 'currentScript';
+      const nameIsCurrentScript = node.getAttribute('name') === 'currentScript';
+
+      if (idIsCurrentScript || nameIsCurrentScript) {
+        // Either remove the attribute or change it to something harmless
+        node.removeAttribute('id');
+        node.removeAttribute('name');
+      }
     }
     
     return node;
@@ -76,10 +78,4 @@ export function sanitizeContent(content, options = {}) {
 export function initializeSanitizer() {
   configureDOMPurify();
   console.debug('DOM Sanitization initialized with PrismJS vulnerability protection');
-}
-
-export default {
-  sanitizeContent,
-  configureDOMPurify,
-  initializeSanitizer
-}; 
+} 
