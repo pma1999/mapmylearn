@@ -26,6 +26,11 @@ This module is part of a learning path about "{user_topic}".
 ## CONTEXT
 {learning_path_context}
 
+## STRUCTURAL RESEARCH INSIGHTS
+Based on web searches about how to structure the topic "{module_title}", here are some insights:
+{planning_search_context}
+---
+
 ## LANGUAGE INSTRUCTIONS
 Generate all content (titles, descriptions, explanations) in {language}.
 
@@ -49,23 +54,24 @@ Generate all content (titles, descriptions, explanations) in {language}.
 - Ensure no critical components or concepts are missed
 - Provide both breadth and depth through careful submodule design
 
-## SUBMODULE REQUIREMENTS
+## INSTRUCTIONS & REQUIREMENTS
+**Critically evaluate the STRUCTURAL RESEARCH INSIGHTS provided above.** Use these insights, along with the module description and overall path context, to inform your submodule plan.
 
 Create 3-5 logical submodules that:
-1. Cover different aspects of the module topic
-2. Build upon each other in a narrative sequence
-3. Are comprehensive yet focused
-4. Together completely fulfill the module's description
+1. Cover different aspects of the module topic, informed by common structures found in the research.
+2. Build upon each other in a narrative sequence.
+3. Are comprehensive yet focused.
+4. Together completely fulfill the module's description.
 
 For each submodule provide:
-1. A clear, descriptive title
-2. A detailed description explaining what this submodule will cover
-3. The core concept this submodule focuses on
-4. Clear learning objectives
-5. Key components to be covered
-6. The depth level (basic, intermediate, advanced, or expert)
+1. A clear, descriptive title reflecting its place in the structure.
+2. A detailed description explaining what this submodule will cover.
+3. The core concept this submodule focuses on.
+4. Clear learning objectives.
+5. Key components to be covered.
+6. The depth level (basic, intermediate, advanced, or expert).
 
-Ensure the submodules create a complete, cohesive learning experience for this module.
+Ensure the submodules create a complete, cohesive learning experience for this module, leveraging insights from the structural research.
 
 {format_instructions}
 """
@@ -73,6 +79,51 @@ Ensure the submodules create a complete, cohesive learning experience for this m
 # =========================================================================
 # Search Query Generation Prompts
 # =========================================================================
+
+MODULE_SUBMODULE_PLANNING_QUERY_GENERATION_PROMPT = """
+# EXPERT CURRICULUM STRUCTURE ANALYST INSTRUCTIONS
+
+Your task is to generate optimal search queries to find information specifically about how to STRUCTURE and ORGANIZE the content of a given learning module into logical submodules.
+
+## MODULE INFORMATION
+Title: "{module_title}"
+Description: {module_description}
+Position: Module {module_order} of {module_count}
+Learning Path Topic: "{user_topic}"
+
+## LEARNING PATH CONTEXT
+{learning_path_context}
+
+## LANGUAGE STRATEGY
+- The final learning path will be presented in {language}.
+- Generate search queries in {search_language} to maximize retrieval of structural information (e.g., syllabi, curriculum design discussions, standard breakdowns).
+
+## SEARCH FOCUS: MODULE STRUCTURE
+These queries are NOT for finding content about the module topic itself, but for understanding HOW TO BREAK DOWN the module topic {module_title} into smaller, teachable sub-units (submodules).
+
+Focus on finding information about:
+- Standard curriculum structures for "{module_title}" or similar topics.
+- Common ways "{module_title}" is divided in courses or textbooks.
+- Prerequisites and logical sequencing *within* the module topic.
+- Different approaches to teaching or structuring "{module_title}".
+- Example syllabi, course outlines, or breakdowns for "{module_title}".
+
+## SEARCH QUERY REQUIREMENTS
+Generate EXACTLY 3 search queries that will help determine the optimal submodule structure.
+
+For each search query:
+- Make it specific to retrieving STRUCTURAL and ORGANIZATIONAL information about "{module_title}".
+- Use terms like: '"{module_title}" curriculum structure', '"{module_title}" module breakdown', 'teaching "{module_title}" sequence', '"{module_title}" syllabus example', '"{module_title}" learning objectives progression'.
+- QUOTE USAGE RULE: Use quotes sparingly, ONLY for the exact module title "{module_title}" if it's a multi-word phrase or a very specific term that needs to be searched together. Combine structural keywords without quotes otherwise.
+    - GOOD Example (Title quoted): `"Machine Learning Foundations"` curriculum design breakdown
+    - GOOD Example (Title not quoted): `Physics kinematics module structure syllabus example`
+- Explain precisely how this query helps determine the submodule structure (number, titles, sequence).
+- Ensure queries are distinct and target different facets of structural planning.
+
+Your response should be exactly 3 search queries, each with a detailed rationale.
+
+{format_instructions}
+"""
 
 SUBMODULE_QUERY_GENERATION_PROMPT = """
 # EXPERT RESEARCH ASSISTANT INSTRUCTIONS

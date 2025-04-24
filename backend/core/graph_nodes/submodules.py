@@ -23,7 +23,7 @@ from backend.models.models import (
     QuizQuestion,
     QuizQuestionList
 )
-from backend.parsers.parsers import submodule_parser, module_queries_parser, quiz_questions_parser
+from backend.parsers.parsers import submodule_parser, module_queries_parser, quiz_questions_parser, search_queries_parser # Added search_queries_parser
 from backend.services.services import get_llm, perform_search_and_scrape
 from backend.core.graph_nodes.helpers import run_chain, escape_curly_braces, batch_items
 from backend.core.graph_nodes.search_utils import execute_search_with_llm_retry
@@ -31,7 +31,8 @@ from backend.core.graph_nodes.search_utils import execute_search_with_llm_retry
 # Import the extracted prompts
 from backend.prompts.learning_path_prompts import (
     SUBMODULE_PLANNING_PROMPT,
-    SUBMODULE_QUIZ_GENERATION_PROMPT
+    SUBMODULE_QUIZ_GENERATION_PROMPT,
+    MODULE_SUBMODULE_PLANNING_QUERY_GENERATION_PROMPT # Added new prompt import
     # Removed imports for prompts now defined inline
     # SUBMODULE_QUERY_GENERATION_PROMPT,
     # SUBMODULE_CONTENT_DEVELOPMENT_PROMPT
@@ -1915,3 +1916,562 @@ def check_submodule_batch_processing(state: LearningPathState) -> str:
         logger.info(f"Progress: {progress_pct}% - Processing batch {current_index+1} of {len(batches)}")
         
         return "continue_processing"
+
+# --- New Functions for Module Planning Research ---
+
+async def generate_module_specific_planning_queries(state: LearningPathState, module_id: int, module: EnhancedModule) -> List[SearchQuery]:
+    """
+    Generates search queries specifically for planning the structure of a given module.
+    """
+    logger = logging.getLogger("learning_path.submodule_planner")
+    logger.info(f"Generating structural planning queries for module {module_id+1}: {module.title}")
+
+    # Get providers and language settings
+    google_key_provider = state.get("google_key_provider")
+    output_language = state.get('language', 'en')
+    search_language = state.get('search_language', 'en')
+
+    # Prepare context
+    user_topic = escape_curly_braces(state["user_topic"])
+    # Extract module title/desc safely, using .get() if it might be a dict from basic modules
+    module_title = escape_curly_braces(module.title if hasattr(module, 'title') else module.get('title', f'Module {module_id+1}'))
+    module_description = escape_curly_braces(module.description if hasattr(module, 'description') else module.get('description', 'No description'))
+    module_count = len(state.get("modules", [])) # Use initial basic modules for count
+
+    learning_path_context = "\n".join([
+        f"Module {i+1}: {escape_curly_braces(mod.title if hasattr(mod, 'title') else mod.get('title', f'Module {i+1}'))}\n{escape_curly_braces(mod.description if hasattr(mod, 'description') else mod.get('description', 'No description'))}"
+        for i, mod in enumerate(state.get("modules", [])) # Use initial basic modules for context
+    ])
+
+    prompt = ChatPromptTemplate.from_template(MODULE_SUBMODULE_PLANNING_QUERY_GENERATION_PROMPT)
+
+    try:
+        result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), search_queries_parser, {
+            "module_title": module_title,
+            "module_description": module_description,
+            "module_order": module_id + 1,
+            "module_count": module_count,
+            "user_topic": user_topic,
+            "learning_path_context": learning_path_context,
+            "language": output_language,
+            "search_language": search_language,
+            "format_instructions": search_queries_parser.get_format_instructions()
+        })
+        search_queries = result.queries
+        logger.info(f"Generated {len(search_queries)} planning queries for module {module_id+1}")
+        return search_queries
+    except Exception as e:
+        logger.error(f"Error generating module planning queries for module {module_id+1}: {str(e)}")
+        return [] # Return empty list on failure
+
+async def regenerate_module_planning_query(
+    state: LearningPathState,
+    failed_query: SearchQuery, # Assuming regenerate_query_func in search_utils passes SearchQuery
+    module_id: int,
+    module: EnhancedModule
+) -> Optional[SearchQuery]: # Return SearchQuery or None
+    """
+    Regenerates a structural planning query for a module after a 'no results' error.
+    """
+    logger = logging.getLogger("learning_path.submodule_planner")
+    logger.info(f"Regenerating module planning query for module {module_id+1} after no results for: {failed_query.keywords}")
+
+    google_key_provider = state.get("google_key_provider")
+    output_language = state.get('language', 'en')
+    search_language = state.get('search_language', 'en')
+
+    user_topic = escape_curly_braces(state["user_topic"])
+    module_title = escape_curly_braces(module.title if hasattr(module, 'title') else module.get('title', f'Module {module_id+1}'))
+    module_description = escape_curly_braces(module.description if hasattr(module, 'description') else module.get('description', 'No description'))
+
+    module_context = f"""
+Topic: {user_topic}
+Module: {module_title}
+Description: {module_description}
+    """
+
+    # Simplified prompt focusing on getting *any* structural info
+    prompt_text = """
+# SEARCH QUERY RETRY SPECIALIST (MODULE STRUCTURE)
+
+The following query failed to find results about how to STRUCTURE module "{module_title}":
+
+FAILED QUERY: {failed_query}
+
+CONTEXT:
+{module_context}
+
+Generate ONE DIFFERENT, potentially broader, search query focused on finding *any* information about common structures, breakdowns, syllabi, or teaching sequences for "{module_title}". Prioritize getting *some* structural examples over perfect specificity. Use {search_language}.
+
+Example ideas: "{module_title} course outline", "how to teach {module_title}", "{module_title} curriculum example", "learning objectives {module_title}".
+
+Output only the new search query string.
+    """
+    prompt = ChatPromptTemplate.from_template(prompt_text)
+    parser = StrOutputParser() # Simple parser for the query string
+
+    try:
+        new_query_string = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), parser, {
+            "module_title": module_title,
+            "failed_query": failed_query.keywords,
+            "module_context": module_context,
+            "search_language": search_language,
+        })
+
+        if new_query_string and new_query_string.strip() and new_query_string.strip() != failed_query.keywords:
+            logger.info(f"Successfully regenerated module planning query: {new_query_string.strip()}")
+            # Return as SearchQuery object for consistency with execute_search_with_llm_retry
+            return SearchQuery(keywords=new_query_string.strip(), purpose="module_structure_planning_retry")
+        else:
+            logger.warning("Query regeneration yielded same or empty query.")
+            return None
+    except Exception as e:
+        logger.exception(f"Error regenerating module planning query: {str(e)}")
+        return None
+
+
+async def execute_module_specific_planning_searches(
+    state: LearningPathState,
+    module_id: int,
+    module: EnhancedModule,
+    planning_queries: List[SearchQuery]
+) -> List[SearchServiceResult]:
+    """
+    Executes web searches for module structural planning queries using Tavily+Scrape.
+    """
+    logger = logging.getLogger("learning_path.submodule_planner")
+    logger.info(f"Executing structural planning searches for module {module_id+1}: {module.title}")
+
+    if not planning_queries:
+        logger.warning(f"No planning queries provided for module {module_id+1}")
+        return []
+
+    tavily_key_provider = state.get("tavily_key_provider")
+    if not tavily_key_provider:
+        module_title_safe = module.title if hasattr(module, 'title') else module.get('title', f'Module {module_id+1}')
+        logger.error(f"Tavily key provider not found for module {module_id+1} ({module_title_safe}) planning search.")
+        # Create minimal error results
+        return [SearchServiceResult(query=q.keywords, search_provider_error="Missing Tavily Key Provider") for q in planning_queries]
+
+    max_results = int(os.environ.get("SEARCH_MAX_RESULTS_PLANNING", 3)) # Fewer results might be okay for planning
+    scrape_timeout = int(os.environ.get("SCRAPE_TIMEOUT", 10))
+    # Reuse existing parallel count setting or define a new one if needed
+    search_parallel_count = state.get("search_parallel_count", 3)
+
+    all_search_service_results: List[SearchServiceResult] = []
+    sem = asyncio.Semaphore(search_parallel_count)
+
+    async def bounded_search_with_planning_retry(query_obj: SearchQuery):
+        async with sem:
+            provider = tavily_key_provider.set_operation("module_planning_search")
+            return await execute_search_with_llm_retry(
+                state=state,
+                initial_query=query_obj,
+                regenerate_query_func=regenerate_module_planning_query, # Use the new specific regen function
+                max_retries=1,
+                tavily_key_provider=provider,
+                search_config={
+                    "max_results": max_results,
+                    "scrape_timeout": scrape_timeout
+                },
+                regenerate_args={ # Pass necessary context for regeneration
+                    "module_id": module_id,
+                    "module": module # Pass the module object itself
+                }
+            )
+
+    tasks = [bounded_search_with_planning_retry(query) for query in planning_queries]
+
+    results_or_excs = await asyncio.gather(*tasks, return_exceptions=True)
+
+    for i, res_or_exc in enumerate(results_or_excs):
+        if isinstance(res_or_exc, Exception):
+            query_keywords = planning_queries[i].keywords if i < len(planning_queries) else "unknown query"
+            logger.error(f"Search task error for module {module_id+1} planning query '{query_keywords}': {res_or_exc}")
+            all_search_service_results.append(SearchServiceResult(query=query_keywords, search_provider_error=f"Task execution error: {str(res_or_exc)}"))
+        elif isinstance(res_or_exc, SearchServiceResult):
+             all_search_service_results.append(res_or_exc)
+             if res_or_exc.search_provider_error:
+                  logger.warning(f"Search provider error for module planning query '{res_or_exc.query}': {res_or_exc.search_provider_error}")
+        else:
+            query_keywords = planning_queries[i].keywords if i < len(planning_queries) else "unknown query"
+            logger.error(f"Unexpected result type for module {module_id+1} planning query '{query_keywords}': {type(res_or_exc)}")
+            all_search_service_results.append(SearchServiceResult(query=query_keywords, search_provider_error=f"Unexpected result type: {type(res_or_exc)}"))
+
+
+    logger.info(f"Completed {len(all_search_service_results)} planning searches for module {module_id+1}")
+    return all_search_service_results
+
+# --- End New Functions ---
+
+
+async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
+    """
+    Breaks down each module into 3-5 detailed submodules using an LLM chain.
+    Performs structural research for each module before planning.
+    Processes modules in parallel based on the parallel_count configuration.
+
+    Args:
+        state: The current LearningPathState containing basic modules.
+
+    Returns:
+        A dictionary with enhanced modules (each including planned submodules) and a list of steps.
+    """
+    logging.info("Planning submodules for each module in parallel with structural research") # Updated log message
+    # Get basic modules list from the state (generated by create_learning_path)
+    basic_modules = state.get("modules")
+    if not basic_modules:
+        logging.warning("No basic modules available from create_learning_path")
+        return {"enhanced_modules": [], "steps": ["No basic modules available"]}
+
+    # Get parallelism configuration - use the parallel_count from the user settings
+    parallel_count = state.get("parallel_count", 2)
+    logging.info(f"Planning submodules with parallelism of {parallel_count}")
+
+    progress_callback = state.get("progress_callback")
+    if progress_callback:
+        # Enhanced progress update with phase information
+        await progress_callback(
+            f"Planning submodules for {len(basic_modules)} modules (with research) using parallelism={parallel_count}...", # Updated message
+            phase="submodule_planning",
+            phase_progress=0.0,
+            overall_progress=0.55, # Keep estimate
+            action="started"
+        )
+
+    # Create semaphore to control concurrency based on parallel_count
+    sem = asyncio.Semaphore(parallel_count)
+
+    # NEW HELPER: Calls the wrapper function that includes research
+    async def plan_and_research_module_submodules_bounded(idx, module):
+        async with sem: # Limits concurrency based on parallel_count
+             return await plan_and_research_module_submodules(state, idx, module)
+
+    tasks = [plan_and_research_module_submodules_bounded(idx, module) # NEW TASK LIST
+             for idx, module in enumerate(basic_modules)] # Iterate over basic_modules
+
+    enhanced_modules_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Process results and handle any exceptions
+    processed_modules = []
+    # IMPORTANT: Ensure EnhancedModule is available from top-level import
+    # No need for local imports here anymore.
+    for idx, result in enumerate(enhanced_modules_results):
+        if isinstance(result, Exception):
+            module_title = basic_modules[idx].title if hasattr(basic_modules[idx], 'title') else basic_modules[idx].get('title', f'Module {idx+1}')
+            module_desc = basic_modules[idx].description if hasattr(basic_modules[idx], 'description') else basic_modules[idx].get('description', 'No description')
+            logging.error(f"Error processing module {idx+1} ('{module_title}'): {str(result)}")
+            # Create a fallback module with no submodules using the top-level imported EnhancedModule
+            # from backend.models.models import EnhancedModule # REMOVED
+            processed_modules.append(EnhancedModule(
+                title=module_title,
+                description=module_desc,
+                submodules=[]
+            ))
+        elif isinstance(result, EnhancedModule): # Check if the result is the expected type
+            processed_modules.append(result)
+        else:
+            # Handle unexpected result type
+            module_title = basic_modules[idx].title if hasattr(basic_modules[idx], 'title') else basic_modules[idx].get('title', f'Module {idx+1}')
+            module_desc = basic_modules[idx].description if hasattr(basic_modules[idx], 'description') else basic_modules[idx].get('description', 'No description')
+            logging.error(f"Unexpected result type for module {idx+1} ('{module_title}'): {type(result)}")
+            # Create fallback using top-level imported EnhancedModule
+            # from backend.models.models import EnhancedModule # REMOVED
+            processed_modules.append(EnhancedModule(
+                title=module_title,
+                description=module_desc,
+                submodules=[]
+            ))
+
+    # Create preview data for frontend display
+    preview_modules = []
+    total_submodules = 0
+
+    for module in processed_modules:
+        # Ensure module is EnhancedModule before accessing attributes
+        if isinstance(module, EnhancedModule):
+            submodule_previews = []
+            # Check if submodules exist and is iterable
+            if hasattr(module, 'submodules') and module.submodules:
+                for submodule in module.submodules:
+                     # Ensure submodule has title and description
+                     sub_title = getattr(submodule, 'title', 'Untitled Submodule')
+                     sub_desc = getattr(submodule, 'description', '')
+                     submodule_previews.append({
+                         "title": sub_title,
+                         "description": sub_desc[:100] + "..." if len(sub_desc) > 100 else sub_desc
+                     })
+                     total_submodules += 1
+
+            preview_modules.append({
+                "title": getattr(module, 'title', 'Untitled Module'),
+                "submodules": submodule_previews
+            })
+        else:
+             # Handle case where module is not EnhancedModule (e.g., error fallback)
+             preview_modules.append({
+                  "title": getattr(module, 'title', 'Error Processing Module'),
+                  "submodules": []
+             })
+
+    if progress_callback:
+        await progress_callback(
+            f"Planned {total_submodules} submodules across {len(processed_modules)} modules (with research)", # Updated message
+            phase="submodule_planning",
+            phase_progress=1.0,
+            overall_progress=0.6, # Keep estimate
+            preview_data={"modules": preview_modules},
+            action="completed"
+        )
+
+    return {
+        "enhanced_modules": processed_modules,
+        "steps": state.get("steps", []) + [f"Planned submodules for {len(processed_modules)} modules with structural research using {parallel_count} parallel processes"] # Updated step description
+    }
+
+async def plan_module_submodules(
+    state: LearningPathState,
+    idx: int,
+    module, # Keep type Any for now, as it comes from basic modules list initially
+    planning_search_context: Optional[str] = None # Add new optional argument
+) -> EnhancedModule: # Return type should be EnhancedModule
+    """
+    Plans submodules for a specific module, optionally using structural research context.
+
+    Args:
+        state: The current state.
+        idx: Index of the module.
+        module: The module to process (initially from basic modules list).
+        planning_search_context: Optional formatted string of search results for structural planning.
+
+    Returns:
+        Enhanced module with planned submodules.
+    """
+    logger = logging.getLogger("learning_path.submodule_planner") # Use specific logger
+    # Extract module title/desc safely for logging
+    module_title = module.title if hasattr(module, 'title') else module.get('title', f'Module {idx+1}')
+    logger.info(f"Planning submodules for module {idx+1}: {module_title}")
+
+    progress_callback = state.get("progress_callback")
+    if progress_callback:
+        # Calculate overall progress based on module index
+        total_modules = len(state.get("modules", []))
+        module_progress = (idx + 0.2) / max(1, total_modules)  # Add 0.2 to avoid 0 progress
+        overall_progress = 0.55 + (module_progress * 0.05)  # submodule planning is 5% of overall
+
+        await progress_callback(
+            f"Planning submodules for module {idx+1}: {module_title}",
+            phase="submodule_planning",
+            phase_progress=module_progress,
+            overall_progress=overall_progress,
+            preview_data={"current_module": {"title": module_title, "index": idx}},
+            action="processing"
+        )
+
+    # Get language from state
+    output_language = state.get('language', 'en')
+
+    # Use initial basic modules for overall path context
+    learning_path_context = "\n".join([
+        f"Module {i+1}: {escape_curly_braces(mod.title if hasattr(mod, 'title') else mod.get('title', f'Module {i+1}'))}\n{escape_curly_braces(mod.description if hasattr(mod, 'description') else mod.get('description', 'No description'))}"
+        for i, mod in enumerate(state.get("modules", [])) # Use initial basic modules for context
+    ])
+
+    # Ensure planning_search_context is a non-empty string for the prompt
+    if not planning_search_context:
+        planning_search_context = "No specific structural research was performed or available for this module."
+
+    # Check if a specific number of submodules was requested
+    submodule_count_instruction = ""
+    if state.get("desired_submodule_count"):
+        submodule_count_instruction = f"IMPORTANT: Create EXACTLY {state['desired_submodule_count']} submodules for this module. Not more, not less."
+
+    # Modify the prompt to include the submodule count instruction if specified
+    # Base prompt is already updated in prompts file
+    base_prompt = SUBMODULE_PLANNING_PROMPT
+    if submodule_count_instruction:
+        # Insert the instruction before the format_instructions placeholder
+        base_prompt = base_prompt.replace("{format_instructions}", f"{submodule_count_instruction}\n\n{{format_instructions}}")
+
+    prompt = ChatPromptTemplate.from_template(base_prompt)
+    try:
+        # Re-extract module title/desc safely for prompt variables
+        module_title_for_prompt = module.title if hasattr(module, 'title') else module.get('title', f'Module {idx+1}')
+        module_description_for_prompt = module.description if hasattr(module, 'description') else module.get('description', 'No description')
+
+        result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider")), submodule_parser, {
+            "user_topic": state["user_topic"],
+            "module_title": module_title_for_prompt,
+            "module_description": module_description_for_prompt,
+            "learning_path_context": learning_path_context,
+            "language": output_language,
+            "planning_search_context": planning_search_context, # Pass the new context here
+            "format_instructions": submodule_parser.get_format_instructions()
+        })
+        submodules = result.submodules
+
+        # If a specific number of submodules was requested but not achieved, adjust the list
+        if state.get("desired_submodule_count") and len(submodules) != state["desired_submodule_count"]:
+            logging.warning(f"Requested {state['desired_submodule_count']} submodules but got {len(submodules)} for module {idx+1}")
+            if len(submodules) > state["desired_submodule_count"]:
+                # Trim excess submodules if we got too many
+                submodules = submodules[:state["desired_submodule_count"]]
+                logging.info(f"Trimmed submodules to match requested count of {state['desired_submodule_count']}")
+
+        # Set order for each submodule
+        for i, sub in enumerate(submodules):
+            sub.order = i + 1
+
+        # Create the enhanced module - always return EnhancedModule type
+        from backend.models.models import EnhancedModule # Ensure import
+        enhanced_module = EnhancedModule(
+            title=module_title_for_prompt,
+            description=module_description_for_prompt,
+            submodules=submodules
+            # Add other fields if needed from the original module object
+        )
+
+        logging.info(f"Planned {len(submodules)} submodules for module {idx+1}")
+
+        # Send progress update for completed module submodule planning
+        if progress_callback:
+            submodule_previews = []
+            for submodule in submodules:
+                submodule_previews.append({
+                    "title": submodule.title,
+                    "description": submodule.description[:100] + "..." if len(submodule.description) > 100 else submodule.description
+                })
+
+            # Calculate slightly more progress
+            total_modules = len(state.get("modules", [])) # Use basic modules count
+            module_progress = (idx + 1) / max(1, total_modules)
+            overall_progress = 0.55 + (module_progress * 0.05)
+
+            await progress_callback(
+                f"Planned {len(submodules)} submodules for module {idx+1}: {module_title}", # Use safe title
+                phase="submodule_planning",
+                phase_progress=module_progress,
+                overall_progress=overall_progress,
+                preview_data={
+                    "current_module": {
+                        "title": module_title, # Use safe title
+                        "index": idx,
+                        "submodules": submodule_previews
+                    }
+                },
+                action="processing" # Keep as processing, completion is handled by plan_submodules
+            )
+
+        return enhanced_module
+
+    except Exception as e:
+        module_title_safe = module.title if hasattr(module, 'title') else module.get('title', f'Module {idx+1}')
+        logging.error(f"Error planning submodules for module {idx+1} ('{module_title_safe}'): {str(e)}")
+
+        # Send error progress update
+        if progress_callback:
+            await progress_callback(
+                f"Error planning submodules for module {idx+1} ('{module_title_safe}'): {str(e)}",
+                phase="submodule_planning",
+                phase_progress=(idx + 0.5) / max(1, len(state.get("modules", []))),
+                overall_progress=0.57, # Keep estimate
+                action="error"
+            )
+
+        raise # Propagate the exception to be handled in plan_and_research_module_submodules or plan_submodules
+
+async def plan_and_research_module_submodules(state: LearningPathState, module_id: int, module) -> EnhancedModule:
+    """
+    Wrapper function to perform research and then plan submodules for a specific module.
+    Handles errors during research and falls back to planning without it.
+    Ensures an EnhancedModule is always returned.
+    """
+    logger = logging.getLogger("learning_path.submodule_planner") # Use specific logger
+    module_title_safe = module.title if hasattr(module, 'title') else module.get('title', f'Module {module_id+1}')
+    logger.info(f"Starting research & planning for module {module_id+1}: {module_title_safe}")
+    planning_search_results: Optional[List[SearchServiceResult]] = None
+    formatted_context = "No specific structural research available or search failed." # Default fallback
+
+    try:
+        # Step 1: Generate planning queries
+        planning_queries = await generate_module_specific_planning_queries(state, module_id, module)
+
+        # Step 2: Execute planning searches
+        if planning_queries:
+            planning_search_results = await execute_module_specific_planning_searches(state, module_id, module, planning_queries)
+
+            # Step 3: Format results for prompt (only if search was attempted and yielded results)
+            if planning_search_results:
+                 context_parts = []
+                 max_context_per_query = 3 # Limit results per query for planning context
+                 max_chars_per_result = 2000 # Limit chars per result for planning context
+
+                 for report in planning_search_results:
+                      # Ensure report has needed attributes
+                      if not isinstance(report, SearchServiceResult): continue
+                      query = escape_curly_braces(report.query)
+                      context_parts.append(f"\n## Insights from searching for: \"{query}\"\n")
+                      results_included = 0
+                      valid_results_found = False
+                      # Ensure report.results is iterable
+                      report_results = report.results if isinstance(report.results, list) else []
+                      for res in report_results:
+                           # Ensure res has needed attributes
+                           if not isinstance(res, ScrapedResult): continue
+                           if results_included >= max_context_per_query:
+                                break
+                           title = escape_curly_braces(res.title or 'N/A')
+                           url = res.url
+                           content_snippet = None
+                           if res.scraped_content:
+                               content = escape_curly_braces(res.scraped_content)
+                               content_snippet = content[:max_chars_per_result]
+                               if len(content) > max_chars_per_result: content_snippet += "... (truncated)"
+                           elif res.tavily_snippet: # Fallback
+                               snippet = escape_curly_braces(res.tavily_snippet)
+                               error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})" if res.scrape_error else ""
+                               content_snippet = f"Tavily Snippet:{error_info}\n{snippet}"
+                               content_snippet = content_snippet[:max_chars_per_result] # Truncate snippet too
+
+                           if content_snippet: # Only include if we have content
+                                context_parts.append(f"### Source: {url} (Title: {title})")
+                                context_parts.append(f"Content Snippet:\n{content_snippet}")
+                                context_parts.append("---")
+                                results_included += 1
+                                valid_results_found = True
+
+                      if not valid_results_found:
+                           context_parts.append("(No usable content snippets found for this query)")
+
+                 if context_parts: # Only update if we actually added something
+                     formatted_context = "\n".join(context_parts)
+
+        else:
+             logger.warning(f"No planning queries generated for module {module_id+1}, proceeding without structural research.")
+
+    except Exception as e:
+        logger.exception(f"Error during research phase for module {module_id+1}: {str(e)}. Proceeding with planning without research.")
+        # Keep planning_search_results as None and formatted_context as default
+
+    # Step 4: Call the actual planning function, passing the formatted context
+    try:
+        # Pass the formatted context string for the prompt
+        enhanced_module = await plan_module_submodules(
+            state,
+            idx=module_id,
+            module=module,
+            planning_search_context=formatted_context # Pass the formatted string here
+        )
+        return enhanced_module
+    except Exception as planning_error:
+         module_title_safe_inner = module.title if hasattr(module, 'title') else module.get('title', f'Module {module_id+1}')
+         module_desc_safe_inner = module.description if hasattr(module, 'description') else module.get('description', 'No description')
+         logger.exception(f"Error during submodule planning phase for module {module_id+1} ('{module_title_safe_inner}') (after research attempt): {planning_error}")
+         # If planning itself fails, return the original module without submodules as a fallback
+         from backend.models.models import EnhancedModule # Ensure import
+         fallback_module = EnhancedModule(
+              title=module_title_safe_inner,
+              description=module_desc_safe_inner,
+              submodules=[]
+         )
+         return fallback_module
