@@ -121,10 +121,17 @@ async def generate_submodule_audio(
     permanent_audio_path = None # Define path variable outside try
     try:
         openai_client = openai.OpenAI() # API key is automatically picked up from OPENAI_API_KEY env var
+
+        # Construct the dynamic instruction for the TTS model
+        submodule_title = submodule.get('title', 'this topic') # Get title safely
+        instruction_text = f"Narrate this educational material about '{submodule_title}' for a learner using the {language} language. Speak clearly and engagingly, like a helpful tutor explaining the topic. Ensure accurate {language} pronunciation."
+        logger.info(f"Using TTS instruction: {instruction_text}")
+
         response = openai_client.audio.speech.create(
             model=OPENAI_TTS_MODEL,
             voice=OPENAI_TTS_VOICE,
             input=audio_script,
+            instructions=instruction_text, # Add the instructions parameter
             response_format="mp3" # Ensure MP3 format
         )
         
