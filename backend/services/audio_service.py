@@ -29,6 +29,7 @@ Tts_tone = "positive, engaging, and helpful"
 Tts_pacing = "moderate, understandable pace with natural variation"
 Tts_intonation = "vary intonation naturally to emphasize key points and keep the listener engaged"
 TTS_CHUNK_CHAR_LIMIT = int(os.getenv("TTS_CHUNK_CHAR_LIMIT", 3000))
+TTS_CHUNK_PAUSE_MS = int(os.getenv("TTS_CHUNK_PAUSE_MS", 200))
 
 # Language-specific accent preferences (add more as needed)
 Tts_accent_map = {
@@ -297,10 +298,18 @@ async def generate_submodule_audio(
             # for path in temp_files[1:]:
             #     combined_audio = combined_audio.append(AudioSegment.from_mp3(path), crossfade=10) # 10ms crossfade
 
+            # Create the pause segment once
+            pause_segment = AudioSegment.silent(duration=TTS_CHUNK_PAUSE_MS)
+
+            first_segment = True
             for path in temp_files:
                 try:
                      segment = await asyncio.to_thread(AudioSegment.from_mp3, path)
-                     combined_audio += segment
+                     if first_segment:
+                         combined_audio = segment
+                         first_segment = False
+                     else:
+                         combined_audio += pause_segment + segment
                 except Exception as e:
                      logger.error(f"Error loading/concatenating chunk {path}: {e}")
                      raise # Re-raise to trigger cleanup and error response
