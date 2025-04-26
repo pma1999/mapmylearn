@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link as RouterLink, useLocation } from 'react-router';
+import { Helmet } from 'react-helmet-async';
 import {
   Container,
   Paper,
@@ -102,6 +103,10 @@ const LoginPage = () => {
 
   return (
     <Container maxWidth="sm">
+      <Helmet>
+        <title>Sign In | Learnì</title>
+        <meta name="description" content="Sign in to Learnì to access your personalized learning paths, history, and settings." />
+      </Helmet>
       <Paper elevation={3} sx={{ p: 4, mt: 6 }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <Box 

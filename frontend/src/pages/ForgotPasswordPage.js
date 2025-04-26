@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link as RouterLink } from 'react-router';
+import { Helmet } from 'react-helmet-async';
 import {
   Container,
   Paper,
@@ -42,6 +43,10 @@ const ForgotPasswordPage = () => {
 
   return (
     <Container maxWidth="sm">
+      <Helmet>
+        <title>Forgot Password | Learnì</title>
+        <meta name="description" content="Reset your Learnì account password. Enter your email to receive a password reset link." />
+      </Helmet>
       <Paper elevation={3} sx={{ p: 4, mt: 6 }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
            <Box 

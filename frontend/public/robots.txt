@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+
+# Allow crawling of main assets
+Allow: /static/
+
+# Disallow specific API paths if proxied and not meant for crawling (example)
+# Disallow: /api/
+
+# Sitemap directive will be added after sitemap generation is set up
+Sitemap: https://mapmylearn.app/sitemap.xml # Updated based on script 

@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link as RouterLink } from 'react-router';
+import { Helmet } from 'react-helmet-async';
 import {
   Typography,
   Button,
@@ -77,6 +78,38 @@ const FloatingElement = ({ children, delay = 0, offsetY = 15 }) => (
   </motion.div>
 );
 
+// Define JSON-LD Schema
+const softwareAppSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Learnì',
+  applicationCategory: 'EducationalApplication',
+  operatingSystem: 'Web Platform',
+  description: 'Learnì is an AI-powered application that generates personalized learning paths to help users master any topic.',
+  url: 'https://mapmylearn.app', // Replace with actual URL
+  // Add offers if applicable (e.g., pricing)
+  // "offers": {
+  //   "@type": "Offer",
+  //   "price": "0", // Or specify pricing
+  //   "priceCurrency": "USD"
+  // }
+};
+
+const websiteSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: 'Learnì',
+  url: 'https://mapmylearn.app', // Replace with actual URL
+  potentialAction: {
+    '@type': 'SearchAction',
+    target: {
+      '@type': 'EntryPoint',
+      urlTemplate: 'https://mapmylearn.app/search?q={search_term_string}' // Adjust if search feature exists
+    },
+    'query-input': 'required name=search_term_string'
+  }
+};
+
 function HomePage() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -108,6 +141,22 @@ function HomePage() {
 
   return (
     <Box sx={{ overflow: 'hidden' }}>
+      <Helmet>
+        <title>Learnì: AI-Powered Learning Path Generator | Custom Study Plans</title>
+        <meta 
+          name="description" 
+          content="Generate personalized learning paths for any topic with Learnì. Our AI creates comprehensive roadmaps with modules, resources, and optional quizzes to accelerate your learning journey."
+        />
+        {/* Add canonical URL if needed */}
+        {/* <link rel="canonical" href="https://mapmylearn.app/" /> */}
+        <script type="application/ld+json">
+          {JSON.stringify(softwareAppSchema)}
+        </script>
+        <script type="application/ld+json">
+          {JSON.stringify(websiteSchema)}
+        </script>
+      </Helmet>
+
       {/* Hero Section with Animated Background */}
       <Box
         component={motion.div}

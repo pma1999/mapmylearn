@@ -127,6 +127,14 @@ const AppContent = () => {
 }
 
 function App() {
+  /*
+   * SEO Improvement Note (Step 4):
+   * This application uses Client-Side Rendering (CSR).
+   * For optimal SEO, especially for the HomePage, configure pre-rendering (e.g., via Vercel settings)
+   * or implement Server-Side Rendering (SSR) / Static Site Generation (SSG) for public-facing routes.
+   * This ensures search engine crawlers receive fully rendered HTML content.
+   * Dynamic metadata (title, description) is handled by react-helmet-async (Step 1).
+   */
   return (
     <AuthProvider>
       <Analytics />
