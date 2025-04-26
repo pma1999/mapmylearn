@@ -21,6 +21,7 @@ const useLearningPathData = (source = null) => {
   const [temporaryPathId, setTemporaryPathId] = useState(null);
   const [progressMessages, setProgressMessages] = useState([]); 
   const [persistentPathId, setPersistentPathId] = useState(null);
+  const [initialDetailsWereSet, setInitialDetailsWereSet] = useState(false);
   
   // State for SSE reconnection logic
   const [isReconnecting, setIsReconnecting] = useState(false);
@@ -127,14 +128,25 @@ const useLearningPathData = (source = null) => {
         if (shouldLoadFromHistory) {
           // --- Load from History --- 
           console.log('useLearningPathData: Loading from history...', entryId);
+          setInitialDetailsWereSet(false); // Reset on new load
           const historyResponse = await getHistoryEntry(entryId);
+          
+          // Log the entire entry object to inspect its structure
+          console.log('API History Entry Response:', historyResponse?.entry);
           
           if (!historyResponse || !historyResponse.entry) {
             throw new Error('Learning path not found in history.');
           }
           
-          const pathData = historyResponse.entry.path_data || historyResponse.entry;
-          setData(pathData);
+          // Check if details were previously set
+          const entry = historyResponse.entry;
+          if ((entry.tags && entry.tags.length > 0) || entry.favorite === true) {
+            console.log('useLearningPathData: History entry has existing details (tags/favorite).');
+            setInitialDetailsWereSet(true);
+          }
+          
+          const pathData = entry.path_data || entry; // Use the full entry object
+          setData(pathData); // Consider setting the full entry to data? Check usage.
           setIsFromHistory(true);
           setPersistentPathId(entryId);
           setLoading(false);
@@ -142,6 +154,7 @@ const useLearningPathData = (source = null) => {
         
         } else if (taskId) {
           // --- Load via Generation Task (Modified) --- 
+          setInitialDetailsWereSet(false); // Reset/ensure false for generation
           
           // 1. Attempt to fetch final result directly first
           const initialResult = await tryFetchFinalResult(taskId);
@@ -326,6 +339,7 @@ const useLearningPathData = (source = null) => {
     loading,
     error,
     isFromHistory,
+    initialDetailsWereSet,
     persistentPathId,
     refreshData,
     temporaryPathId,

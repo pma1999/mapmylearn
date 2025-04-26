@@ -23,12 +23,13 @@ import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
 import LearningPathView from './components/learning-path/view/LearningPathView';
 
-// Import auth provider
-import { AuthProvider } from './services/authContext';
+// Import auth provider and hook
+import { AuthProvider, useAuth } from './services/authContext';
 
 // Import new components
 import PurchaseSuccessPage from './components/payments/PurchaseSuccessPage';
 import PurchaseCancelPage from './components/payments/PurchaseCancelPage';
+import WelcomeModal from './components/shared/WelcomeModal';
 
 // Create theme
 const theme = createTheme({
@@ -53,6 +54,78 @@ const theme = createTheme({
   },
 });
 
+// New component to render routes and modal
+const AppContent = () => {
+  const { showWelcomeModal, markWelcomeModalShown } = useAuth();
+
+  return (
+    <>
+      <Box sx={{ flexGrow: 1 }}>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route 
+            path="/generator" 
+            element={
+              <ProtectedRoute>
+                <GeneratorPage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/history" 
+            element={
+              <ProtectedRoute>
+                <HistoryPage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+          <Route 
+            path="/admin" 
+            element={
+              <ProtectedRoute adminOnly={true}>
+                <AdminPage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route path="/result/:taskId" element={
+            <ProtectedRoute>
+              <ResultPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/history/:entryId" element={
+            <ProtectedRoute>
+              <LearningPathView source="history" />
+            </ProtectedRoute>
+          } />
+          <Route 
+            path="/purchase/success" 
+            element={
+              <ProtectedRoute>
+                <PurchaseSuccessPage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/purchase/cancel" 
+            element={
+              <ProtectedRoute>
+                <PurchaseCancelPage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Box>
+      <WelcomeModal open={showWelcomeModal} onClose={markWelcomeModalShown} />
+    </>
+  );
+}
+
 function App() {
   return (
     <AuthProvider>
@@ -66,67 +139,7 @@ function App() {
           backgroundColor: 'background.default'
         }}>
           <Navbar />
-          <Box sx={{ flexGrow: 1 }}>
-            <Routes>
-              <Route path="/" element={<HomePage />} />
-              <Route 
-                path="/generator" 
-                element={
-                  <ProtectedRoute>
-                    <GeneratorPage />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/history" 
-                element={
-                  <ProtectedRoute>
-                    <HistoryPage />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route path="/verify-email" element={<VerifyEmailPage />} />
-              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-              <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
-              <Route 
-                path="/admin" 
-                element={
-                  <ProtectedRoute adminOnly={true}>
-                    <AdminPage />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route path="/result/:taskId" element={
-                <ProtectedRoute>
-                  <ResultPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/history/:entryId" element={
-                <ProtectedRoute>
-                  <LearningPathView source="history" />
-                </ProtectedRoute>
-              } />
-              <Route 
-                path="/purchase/success" 
-                element={
-                  <ProtectedRoute>
-                    <PurchaseSuccessPage />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/purchase/cancel" 
-                element={
-                  <ProtectedRoute>
-                    <PurchaseCancelPage />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </Box>
+          <AppContent />
           <Footer />
         </Box>
       </ThemeProvider>

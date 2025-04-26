@@ -25,6 +25,7 @@ import ArrowRightAltIcon from '@mui/icons-material/ArrowRightAlt';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import AssessmentIcon from '@mui/icons-material/Assessment';
+import { helpTexts } from '../constants/helpTexts';
 
 // Animation variants for Framer Motion
 const fadeInUp = {
@@ -267,10 +268,10 @@ function HomePage() {
               fontSize: { xs: '1.8rem', md: '2.5rem' }
             }}
           >
-            Why Choose MapMyLearn?
+            {helpTexts.homeWhyTitle}
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 700, mx: 'auto' }}>
-            Our AI-powered platform creates personalized learning experiences that adapt to your specific needs and goals.
+            {helpTexts.homeWhyDesc}
           </Typography>
         </Box>
 
@@ -346,11 +347,19 @@ function HomePage() {
             align="center"
             sx={{ 
               fontWeight: 700, 
-              mb: 6,
+              mb: 1,
               fontSize: { xs: '1.8rem', md: '2.5rem' }
             }}
           >
-            How It Works
+            {helpTexts.homeHowTitle}
+          </Typography>
+          <Typography 
+            variant="body1" 
+            color="text.secondary" 
+            align="center" 
+            sx={{ mb: 6, maxWidth: 700, mx: 'auto' }}
+          >
+            {helpTexts.homeHowDesc}
           </Typography>
 
           <Grid container spacing={isMobile ? 4 : 0} sx={{ position: 'relative' }}>

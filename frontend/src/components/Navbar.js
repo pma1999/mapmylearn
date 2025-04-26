@@ -32,6 +32,8 @@ import Fab from '@mui/material/Fab';
 import Zoom from '@mui/material/Zoom';
 import { useAuth } from '../services/authContext';
 import CreditPurchaseDialog from './payments/CreditPurchaseDialog';
+import InfoTooltip from './shared/InfoTooltip';
+import { helpTexts } from '../constants/helpTexts';
 
 const navItems = [
   { text: 'Home', path: '/', ariaLabel: 'Go to homepage' },
@@ -116,6 +118,9 @@ const NavLogo = React.memo(() => (
     </Typography>
   </Box>
 ));
+
+// Assume AUDIO_CREDIT_COST is defined globally or imported (e.g., 1)
+const AUDIO_CREDIT_COST = 1;
 
 function Navbar() {
   const location = useLocation();
@@ -321,28 +326,39 @@ function Navbar() {
             }}
             transformOrigin={{ horizontal: 'right', vertical: 'top' }}
             anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+            sx={{ '.MuiMenu-paper': { minWidth: 220 } }}
           >
             {user && (
-              <Box sx={{ px: 2, py: 1, minWidth: 180 }}>
+              <Box sx={{ px: 2, py: 1 }}>
                 <Typography variant="subtitle1" noWrap>
                   {user.full_name || 'User'}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" noWrap>
                   {user.email}
                 </Typography>
-                <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box sx={{ 
+                  mt: 1, 
+                  display: 'flex', 
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
+                }}>
                   <Chip
                     icon={<TokenIcon fontSize="small" />}
-                    label={`${user.credits || 0} credits`}
+                    label={`${user.credits ?? 0} credits`}
                     size="small"
-                    color={user.credits > 0 ? "primary" : "default"}
+                    color={user?.credits > 0 ? "primary" : "default"}
                     sx={{ 
                       fontWeight: 500,
                       transition: 'all 0.3s ease',
                       '& .MuiChip-icon': {
-                        color: user.credits > 0 ? 'inherit' : theme.palette.text.secondary
+                        color: user?.credits > 0 ? 'inherit' : theme.palette.text.secondary
                       }
                     }}
+                  />
+                  <InfoTooltip 
+                    title={helpTexts.navbarCreditsTooltip(AUDIO_CREDIT_COST)}
+                    size="small"
+                    sx={{ ml: 0.5 }}
                   />
                 </Box>
               </Box>
@@ -350,7 +366,7 @@ function Navbar() {
             <Divider />
             <MenuItem onClick={handlePurchaseCredits}>
               <TokenIcon fontSize="small" sx={{ mr: 1 }} />
-              Purchase Credits
+              {helpTexts.navbarPurchaseMore}
             </MenuItem>
             <MenuItem onClick={handleLogout}>
               <LogoutIcon fontSize="small" sx={{ mr: 1 }} />
@@ -396,7 +412,7 @@ function Navbar() {
         </>
       )}
     </Box>
-  ), [location.pathname, handleKeyDown, theme, isAuthenticated, user, userMenuOpen, userMenuAnchorEl, handleUserMenuOpen, handleUserMenuClose, handleLogout, handlePurchaseCredits]);
+  ), [location.pathname, handleKeyDown, theme, isAuthenticated, user, userMenuOpen, userMenuAnchorEl, handleUserMenuOpen, handleUserMenuClose, handleLogout, handlePurchaseCredits, navItems]);
 
   const MobileNav = useMemo(() => (
     <>
@@ -468,26 +484,31 @@ function Navbar() {
                 <Box sx={{ mt: 1, display: 'flex', alignItems: 'center' }}>
                   <Chip
                     icon={<TokenIcon fontSize="small" />}
-                    label={`${user.credits || 0} credits`}
+                    label={`${user.credits ?? 0} credits`}
                     size="small"
-                    color={user.credits > 0 ? "primary" : "default"}
+                    color={user?.credits > 0 ? "primary" : "default"}
                     sx={{ 
                       fontWeight: 500,
                       fontSize: '0.8rem',
                       transition: 'all 0.3s ease',
                       '& .MuiChip-icon': {
-                        color: user.credits > 0 ? 'inherit' : theme.palette.text.secondary
+                        color: user?.credits > 0 ? 'inherit' : theme.palette.text.secondary
                       }
                     }}
+                  />
+                  <InfoTooltip 
+                    title={helpTexts.navbarCreditsTooltip(AUDIO_CREDIT_COST)}
+                    size="small"
+                    sx={{ ml: 0.5 }}
                   />
                 </Box>
               </Box>
             )}
-            <MenuItem onClick={handlePurchaseCredits}>
+            <MenuItem onClick={() => { handleMenuClose(); handlePurchaseCredits(); }}>
               <TokenIcon fontSize="small" sx={{ mr: 1 }} />
-              Purchase Credits
+              {helpTexts.navbarPurchaseMore}
             </MenuItem>
-            <MenuItem onClick={handleLogout}>
+            <MenuItem onClick={() => { handleMenuClose(); handleLogout(); }}>
               <LogoutIcon fontSize="small" sx={{ mr: 1 }} />
               Logout
             </MenuItem>
@@ -514,7 +535,7 @@ function Navbar() {
         )}
       </Menu>
     </>
-  ), [anchorEl, open, handleMenuOpen, handleMenuClose, theme.palette.secondary.light, location.pathname, navItems, isAuthenticated, user, handleLogout, handlePurchaseCredits]);
+  ), [anchorEl, open, handleMenuOpen, handleMenuClose, theme, location.pathname, navItems, isAuthenticated, user, handleLogout, handlePurchaseCredits]);
 
   return (
     <>

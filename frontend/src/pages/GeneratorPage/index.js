@@ -13,6 +13,7 @@ import useGeneratorForm from './hooks/useGeneratorForm';
 import GeneratorForm from './components/GeneratorForm';
 import SaveDialog from '../../components/molecules/SaveDialog';
 import NotificationSystem from '../../components/molecules/NotificationSystem';
+import { helpTexts } from '../../constants/helpTexts'; // Import helpTexts
 
 const StyledChip = styled(Box)(({ theme }) => ({
   margin: theme.spacing(0.5),
@@ -76,7 +77,8 @@ const GeneratorPage = () => {
     <ResponsiveContainer maxWidth="md">
       <Paper elevation={3} sx={{ 
         p: { xs: 2, sm: 3, md: 4 }, 
-        borderRadius: 2 
+        borderRadius: 2,
+        mb: 3 // Add margin bottom to separate from subtitle
       }}>
         {/* Main Form */}
         <GeneratorForm
@@ -87,6 +89,19 @@ const GeneratorPage = () => {
           isMobile={isMobile}
         />
       </Paper>
+      
+      {/* Add Subtitle Here */}
+      <Typography 
+        variant="subtitle1" 
+        color="text.secondary" 
+        align="center" 
+        sx={{ 
+          mb: 4, 
+          px: { xs: 2, sm: 0 }
+        }}
+      >
+        {helpTexts.generatorSubtitle}
+      </Typography>
       
       <Box sx={{ mt: 4, textAlign: 'center' }}>
         <Typography variant="body2" color="text.secondary" sx={{

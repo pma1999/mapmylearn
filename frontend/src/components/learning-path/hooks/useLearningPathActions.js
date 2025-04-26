@@ -12,19 +12,21 @@ import {
  * 
  * @param {Object} learningPath - The learning path data
  * @param {boolean} isFromHistory - Whether the learning path is from history
- * @param {boolean} savedToHistory - Whether the learning path is saved to history
- * @param {string} entryId - ID of the history entry (if from history)
+ * @param {boolean} detailsHaveBeenSet - Whether tags/favorites have been set for the path
+ * @param {string} entryId - ID of the history entry (if from history or after save)
  * @param {string} taskId - ID of the task (if from generation)
  * @param {string} temporaryPathId - Newly added temporary ID (if applicable)
+ * @param {Function} onSaveSuccess - Callback function invoked after successful save
  * @returns {Object} Actions and states for learning path management
  */
 const useLearningPathActions = (
   learningPath, 
   isFromHistory, 
-  savedToHistory, 
+  detailsHaveBeenSet,
   entryId, 
   taskId,
-  temporaryPathId
+  temporaryPathId,
+  onSaveSuccess
 ) => {
   const navigate = useNavigate();
   
@@ -153,8 +155,8 @@ const useLearningPathActions = (
    * Opens the save dialog
    */
   const handleSaveToHistory = () => {
-    if (savedToHistory) {
-      showNotification('Learning path is already saved.', 'info');
+    if (detailsHaveBeenSet) {
+      showNotification('Learning path details already set.', 'info');
       return;
     }
     // Reset dialog state
@@ -180,40 +182,63 @@ const useLearningPathActions = (
       return null;
     }
     
-    if (savedToHistory) {
-       showNotification('Learning path is already saved.', 'info');
+    if (detailsHaveBeenSet) {
+       showNotification('Learning path details already set.', 'info');
        return null; // Or return indicating already saved
     }
 
     try {
-      // Prepare payload for the saveToHistory API endpoint
-      const payload = {
-        path_data: learningPath,         // The main learning path content
-        topic: learningPath.topic || 'Untitled Learning Path', // Ensure topic exists
-        favorite: favorite,              // From dialog state
-        tags: tags,                      // From dialog state
-        source_task_id: taskId,          // Include the original task ID for reference
-      };
+      showNotification('Saving details...', 'info');
+      let response;
+      let successEntryId = entryId; // Assume existing entryId for updates
 
-      // Include temporaryPathId if this path was temporary before saving
-      if (temporaryPathId && !isFromHistory) { // Only add if it was temporary
-         payload.temporary_path_id = temporaryPathId;
-         console.log('Saving path with temporary_path_id:', temporaryPathId);
+      if (isFromHistory) {
+        // --- Update existing history entry --- 
+        console.log(`Updating history entry ${entryId} with details...`);
+        const updatePayload = { 
+          favorite: favorite, 
+          tags: tags 
+        };
+        response = await updateHistoryEntry(entryId, updatePayload);
+        // Assuming updateHistoryEntry returns success confirmation, maybe { success: true }
+        // If it returns the updated entry, adjust accordingly.
+      } else {
+        // --- Save new entry to history --- 
+        console.log('Saving new entry to history...');
+        const payload = {
+          path_data: learningPath,        
+          topic: learningPath.topic || 'Untitled Learning Path', 
+          favorite: favorite,             
+          tags: tags,                     
+          source_task_id: taskId,         
+        };
+        if (temporaryPathId) { 
+           payload.temporary_path_id = temporaryPathId;
+           console.log('Saving path with temporary_path_id:', temporaryPathId);
+        }
+        response = await saveToHistory(learningPath, 'generated', taskId, payload); // Pass full payload now
+        // Keep original logic: saveToHistory returns { path_id: new_id }
+        if (response && response.path_id) {
+           successEntryId = response.path_id; // Update entryId if new one was created
+        }
       }
-
-      showNotification('Saving learning path...', 'info');
-      
-      // Call the API to save the learning path, passing the original taskId
-      const response = await saveToHistory(learningPath, 'generated', taskId); 
       
       // Handle response - update state, show success/error
-      if (response && response.path_id) {
-        showNotification('Learning path saved successfully!', 'success');
+      // Simplify response check: Check if response indicates success (might need adjustment based on actual API response)
+      if (response) { // Basic check, refine if API gives clearer success/error
+        showNotification('Learning path details saved successfully!', 'success');
         setSaveDialogOpen(false);
-        return {
-          savedToHistory: true,
-          path_id: response.path_id // <<<< Use path_id from response
-        };
+        
+        // Invoke the callback passed from the parent component with the relevant entryId
+        if (onSaveSuccess) {
+          onSaveSuccess({ entryId: successEntryId });
+        }
+
+        // Return success and the relevant entry ID
+        return { success: true, entryId: successEntryId }; 
+      } else {
+         // Throw an error if the response structure wasn't as expected
+         throw new Error('API response did not indicate success.');
       }
 
     } catch (error) {

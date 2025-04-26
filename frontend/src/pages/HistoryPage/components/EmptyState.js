@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import { Link as RouterLink } from 'react-router';
 import { Box, Typography, Button } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import { helpTexts } from '../../../constants/helpTexts';
 
 /**
  * Component to display when there are no history entries
@@ -17,12 +18,12 @@ const EmptyState = ({ onClearFilters, hasFilters = false }) => {
       <Typography variant="h6" color="text.secondary" gutterBottom>
         {hasFilters 
           ? 'No learning paths match your filters' 
-          : 'No learning paths found'}
+          : 'No learning paths found in your history'}
       </Typography>
       <Typography variant="body1" color="text.secondary" paragraph>
         {hasFilters
-          ? 'Try adjusting your filters or create a new learning path.'
-          : 'Create your first learning path or import one to get started.'}
+          ? 'Try adjusting your search or filters.'
+          : helpTexts.historyEmptyState}
       </Typography>
       
       {hasFilters && onClearFilters && (
@@ -43,7 +44,7 @@ const EmptyState = ({ onClearFilters, hasFilters = false }) => {
         to="/generator"
         sx={{ mt: 2 }}
       >
-        Create Learning Path
+        Create New Path
       </Button>
     </Box>
   );

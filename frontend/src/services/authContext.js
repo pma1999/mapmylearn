@@ -26,6 +26,8 @@ export const AuthProvider = ({ children }) => {
   const MAX_REFRESH_ATTEMPTS = 3;
   const refreshPromise = useRef(null); // To store the promise during refresh
   const MIGRATION_FLAG_KEY = 'mapmylearn_migration_attempted'; // Define key for flag
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false); // New state
+  const WELCOME_FLAG_KEY = 'mapmylearn_welcome_shown';
 
   // Function to check if token is expired or about to expire
   const isTokenExpiredOrExpiring = (expiresAt) => {
@@ -57,6 +59,18 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('auth', JSON.stringify(authData));
     setupTokenRefresh(expiresIn, tokenExpiry);
     setError(null); // Clear previous errors on successful auth update
+
+    // Check if welcome modal should be shown (only after successful login/refresh)
+    const welcomeShown = localStorage.getItem(WELCOME_FLAG_KEY);
+    if (!welcomeShown) {
+        setShowWelcomeModal(true); // Show the modal
+    }
+  };
+
+  // Function to mark welcome modal as shown
+  const markWelcomeModalShown = () => {
+    localStorage.setItem(WELCOME_FLAG_KEY, 'true');
+    setShowWelcomeModal(false);
   };
   
   // Logout function
@@ -71,6 +85,9 @@ export const AuthProvider = ({ children }) => {
     setError(null); // Or consider setError('session_expired') or similar
     api.clearAuthToken();
     localStorage.removeItem('auth');
+    // Also clear the welcome flag on logout?
+    // localStorage.removeItem(WELCOME_FLAG_KEY); // Optional: uncomment to show welcome again on next login
+    setShowWelcomeModal(false); // Ensure modal is hidden on logout
     refreshPromise.current = null; // Clear any pending refresh promise
     setRefreshInProgress(false); // Ensure refresh flag is reset
     refreshAttempts.current = 0; // Reset attempts on logout
@@ -171,6 +188,7 @@ export const AuthProvider = ({ children }) => {
       setError(null); // Clear errors on init
       const authData = localStorage.getItem('auth');
       let isAuthenticated = false; // Track if user is authenticated after init
+      let authUpdatedDuringInit = false; // Flag to check if updateAuthState was called
       
       if (authData) {
         const parsedAuth = JSON.parse(authData);
@@ -184,6 +202,7 @@ export const AuthProvider = ({ children }) => {
               await attemptSilentRefresh(); 
               console.log("Silent refresh successful during init.");
               isAuthenticated = true; // User is authenticated after successful refresh
+              authUpdatedDuringInit = true; // updateAuthState called in refreshToken
               // Ensure loading is false only after *successful* refresh or if token was valid
               setLoading(false); 
             } catch (refreshError) {
@@ -209,6 +228,7 @@ export const AuthProvider = ({ children }) => {
             console.log('Using valid stored token.');
             updateAuthState(parsedAuth.accessToken, parsedAuth.expiresIn, parsedAuth.user);
             isAuthenticated = true; // User is authenticated with existing token
+            authUpdatedDuringInit = true; // updateAuthState called here
             fetchUserCredits(); // Assuming this is defined later
             setLoading(false); // Set loading false if token was valid
           }
@@ -222,6 +242,15 @@ export const AuthProvider = ({ children }) => {
          console.log("No stored auth data found.");
          setUser(null); 
          setLoading(false); // No auth data, loading complete
+      }
+      
+      // If user is authenticated but updateAuthState wasn't called during *this* init run
+      // (e.g., token was valid), explicitly check if welcome needs showing.
+      if (isAuthenticated && !authUpdatedDuringInit) {
+          const welcomeShown = localStorage.getItem(WELCOME_FLAG_KEY);
+          if (!welcomeShown) {
+              setShowWelcomeModal(true);
+          }
       }
 
       // --- Automatic Local History Migration --- 
@@ -508,6 +537,8 @@ export const AuthProvider = ({ children }) => {
     // NEW:
     forgotPassword,
     resetPassword,
+    showWelcomeModal, // Expose state
+    markWelcomeModalShown // Expose function
     // Don't expose internal functions like refreshToken directly if not needed
   };
 

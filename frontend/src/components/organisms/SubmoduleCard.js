@@ -34,6 +34,12 @@ import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import MarkdownRenderer from '../MarkdownRenderer';
 import { motion } from 'framer-motion';
 import ResourcesSection from '../shared/ResourcesSection';
+import SmartToyIcon from '@mui/icons-material/SmartToy';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
+import ReactMarkdown from 'react-markdown';
+import InfoTooltip from '../shared/InfoTooltip';
+import { helpTexts } from '../../constants/helpTexts';
 
 // Import quiz components
 import { QuizContainer } from '../quiz';
@@ -83,6 +89,9 @@ const supportedLanguages = [
   { code: 'pt', name: 'Português' },
 ];
 const defaultLanguageCode = 'en';
+
+// Assume AUDIO_CREDIT_COST is defined globally or imported (e.g., 1)
+const AUDIO_CREDIT_COST = 1;
 
 const SubmoduleCard = ({ submodule, index, moduleIndex, pathId, isTemporaryPath, actualPathData }) => {
   const [modalOpen, setModalOpen] = useState(false);
@@ -238,12 +247,21 @@ const SubmoduleCard = ({ submodule, index, moduleIndex, pathId, isTemporaryPath,
     return null; 
   }
 
-  // Determine number of tabs
-  const tabCount = 3 + (hasQuizQuestions ? 1 : 0) + 1; // Content, Resources, Chat + Quiz? + Audio
-  let quizTabIndex = hasQuizQuestions ? 1 : -1; 
-  let resourcesTabIndex = 1 + (hasQuizQuestions ? 1 : 0);
-  let chatTabIndex = resourcesTabIndex + 1;
-  let audioTabIndex = chatTabIndex + 1;
+  // Determine number of tabs and indices
+  const hasQuiz = hasQuizQuestions; // Use shorter variable name
+  const quizTabIndex = hasQuiz ? 1 : -1;
+  const resourcesTabIndex = 1 + (hasQuiz ? 1 : 0);
+  const chatTabIndex = resourcesTabIndex + 1;
+  const audioTabIndex = chatTabIndex + 1;
+
+  // Create Tab Configuration
+  const tabsConfig = [
+    { index: 0, label: 'Content', icon: <MenuBookIcon />, ariaId: 'tab-0', controls: 'tabpanel-0', tooltip: null },
+    ...(hasQuiz ? [{ index: quizTabIndex, label: 'Quiz', icon: <FitnessCenterIcon />, ariaId: `tab-${quizTabIndex}`, controls: `tabpanel-${quizTabIndex}`, tooltip: helpTexts.submoduleTabQuiz }] : []),
+    { index: resourcesTabIndex, label: 'Resources', icon: <CollectionsBookmarkIcon />, ariaId: `tab-${resourcesTabIndex}`, controls: `tabpanel-${resourcesTabIndex}`, tooltip: null },
+    { index: chatTabIndex, label: 'Chat', icon: <QuestionAnswerIcon />, ariaId: `tab-${chatTabIndex}`, controls: `tabpanel-${chatTabIndex}`, tooltip: helpTexts.submoduleTabChat },
+    { index: audioTabIndex, label: 'Audio', icon: <GraphicEqIcon />, ariaId: `tab-${audioTabIndex}`, controls: `tabpanel-${audioTabIndex}`, tooltip: helpTexts.submoduleTabAudio(AUDIO_CREDIT_COST) }
+  ];
 
   return (
     <motion.div
@@ -406,14 +424,23 @@ const SubmoduleCard = ({ submodule, index, moduleIndex, pathId, isTemporaryPath,
                 scrollButtons={isMobile ? "auto" : false}
                 allowScrollButtonsMobile
               >
-                <Tab label="Content" icon={<MenuBookIcon />} iconPosition="start" id="tab-0" aria-controls="tabpanel-0" />
-                {hasQuizQuestions && (
-                  <Tab label="Quiz" icon={<FitnessCenterIcon />} iconPosition="start" id={`tab-${quizTabIndex}`} aria-controls={`tabpanel-${quizTabIndex}`} />
-                )}
-                <Tab label="Resources" icon={<CollectionsBookmarkIcon />} iconPosition="start" id={`tab-${resourcesTabIndex}`} aria-controls={`tabpanel-${resourcesTabIndex}`} />
-                <Tab label="Chat" icon={<QuestionAnswerIcon />} iconPosition="start" id={`tab-${chatTabIndex}`} aria-controls={`tabpanel-${chatTabIndex}`} />
-                {/* New Audio Tab */}
-                <Tab label="Audio" icon={<GraphicEqIcon />} iconPosition="start" id={`tab-${audioTabIndex}`} aria-controls={`tabpanel-${audioTabIndex}`} />
+                {tabsConfig.map((tab) => (
+                  <Tab
+                    key={tab.index}
+                    label={
+                      <Box sx={{ display: 'flex', alignItems: 'center', mx: 1 }}>
+                        {tab.icon}
+                        <Typography component="span" sx={{ ml: 1, textTransform: 'none' }}>{tab.label}</Typography>
+                        {tab.tooltip && 
+                          <InfoTooltip title={tab.tooltip} sx={{ ml: 0.5 }} size="small" />
+                        }
+                      </Box>
+                    }
+                    id={tab.ariaId}
+                    aria-controls={tab.controls}
+                    sx={{ minHeight: 48, px: { xs: 1, sm: 2 } }}
+                  />
+                ))}
               </Tabs>
             </Box>
             

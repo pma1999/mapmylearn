@@ -17,24 +17,26 @@ import SaveIcon from '@mui/icons-material/Save';
 import SchoolIcon from '@mui/icons-material/School';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import { motion } from 'framer-motion';
+import InfoTooltip from '../../shared/InfoTooltip';
+import { helpTexts } from '../../../constants/helpTexts';
 
 /**
  * Header component for learning path display
  * 
  * @param {Object} props Component props 
  * @param {string} props.topic Learning path topic/title
- * @param {boolean} props.savedToHistory Whether the learning path is saved to history
- * @param {boolean} props.isPersisted Whether the path is saved or loaded from history
+ * @param {boolean} props.detailsHaveBeenSet Whether tags/favorites have been set
+ * @param {boolean} props.isPdfReady Whether the PDF download is ready/enabled
  * @param {Function} props.onDownload Handler for JSON download
  * @param {Function} props.onDownloadPDF Handler for PDF download
- * @param {Function} props.onSaveToHistory Handler for saving to history
+ * @param {Function} props.onSaveToHistory Handler for opening save details dialog
  * @param {Function} props.onNewLearningPath Handler for creating a new learning path
  * @returns {JSX.Element} Header component
  */
 const LearningPathHeader = ({ 
   topic, 
-  savedToHistory, 
-  isPersisted,
+  detailsHaveBeenSet,
+  isPdfReady,
   onDownload, 
   onDownloadPDF,
   onSaveToHistory, 
@@ -168,7 +170,7 @@ const LearningPathHeader = ({
                     </motion.div>
                     
                     <motion.div variants={buttonVariants} sx={{ flex: 1 }}>
-                      <Tooltip title={!isPersisted ? "Save to history to enable PDF download" : "Download as PDF"}>
+                      <Tooltip title={!isPdfReady ? "PDF download available after generation completes" : "Download as PDF"}>
                         <span>
                           <Button
                             variant="outlined"
@@ -176,7 +178,7 @@ const LearningPathHeader = ({
                             startIcon={<PictureAsPdfIcon />}
                             onClick={onDownloadPDF}
                             size={isMobile ? "small" : "medium"}
-                            disabled={!isPersisted}
+                            disabled={!isPdfReady}
                           >
                             PDF
                           </Button>
@@ -186,17 +188,20 @@ const LearningPathHeader = ({
                   </Box>
                   
                   <motion.div variants={buttonVariants}>
-                    <Button
-                      variant="outlined"
-                      fullWidth
-                      color="secondary"
-                      startIcon={<SaveIcon />}
-                      onClick={onSaveToHistory}
-                      disabled={savedToHistory}
-                      size={isMobile ? "small" : "medium"}
-                    >
-                      {savedToHistory ? 'Saved to History' : 'Save to History'}
-                    </Button>
+                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                      <Button
+                        variant="outlined"
+                        fullWidth
+                        color="secondary"
+                        startIcon={<SaveIcon />}
+                        onClick={onSaveToHistory}
+                        disabled={detailsHaveBeenSet}
+                        size={isMobile ? "small" : "medium"}
+                      >
+                        {detailsHaveBeenSet ? "Details Set" : "Save Details"}
+                      </Button>
+                      <InfoTooltip title={helpTexts.lphSaveTooltip} />
+                    </Box>
                   </motion.div>
                   
                   <motion.div variants={buttonVariants}>
@@ -214,7 +219,7 @@ const LearningPathHeader = ({
                 </Stack>
               ) : (
                 /* Desktop view - Horizontal button layout */
-                <Stack direction="row" spacing={2}>
+                <Stack direction="row" spacing={2} alignItems="center">
                   <Box sx={{ display: 'flex', gap: 1 }}>
                     <motion.div variants={buttonVariants}>
                       <Tooltip title="Download as JSON">
@@ -229,13 +234,13 @@ const LearningPathHeader = ({
                     </motion.div>
                     
                     <motion.div variants={buttonVariants}>
-                      <Tooltip title={!isPersisted ? "Save to history to enable PDF download" : "Download as PDF"}>
+                      <Tooltip title={!isPdfReady ? "PDF download available after generation completes" : "Download as PDF"}>
                         <span>
                           <Button
                             variant="outlined"
                             startIcon={<PictureAsPdfIcon />}
                             onClick={onDownloadPDF}
-                            disabled={!isPersisted}
+                            disabled={!isPdfReady}
                           >
                             PDF
                           </Button>
@@ -245,15 +250,18 @@ const LearningPathHeader = ({
                   </Box>
                   
                   <motion.div variants={buttonVariants}>
-                    <Button
-                      variant="outlined"
-                      color="secondary"
-                      startIcon={<SaveIcon />}
-                      onClick={onSaveToHistory}
-                      disabled={savedToHistory}
-                    >
-                      {savedToHistory ? 'Saved to History' : 'Save to History'}
-                    </Button>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Button
+                        variant="outlined"
+                        color="secondary"
+                        startIcon={<SaveIcon />}
+                        onClick={onSaveToHistory}
+                        disabled={detailsHaveBeenSet}
+                      >
+                        {detailsHaveBeenSet ? "Details Set" : "Save Details"}
+                      </Button>
+                      <InfoTooltip title={helpTexts.lphSaveTooltip} />
+                    </Box>
                   </motion.div>
                   
                   <motion.div variants={buttonVariants}>
@@ -278,8 +286,8 @@ const LearningPathHeader = ({
 
 LearningPathHeader.propTypes = {
   topic: PropTypes.string.isRequired,
-  savedToHistory: PropTypes.bool.isRequired,
-  isPersisted: PropTypes.bool.isRequired,
+  detailsHaveBeenSet: PropTypes.bool.isRequired,
+  isPdfReady: PropTypes.bool.isRequired,
   onDownload: PropTypes.func.isRequired,
   onDownloadPDF: PropTypes.func.isRequired,
   onSaveToHistory: PropTypes.func.isRequired,

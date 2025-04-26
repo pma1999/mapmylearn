@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { useParams } from 'react-router';
-import { Container, Snackbar, Alert, useMediaQuery, useTheme, Box, Typography, Paper, Divider } from '@mui/material';
+import { Container, Snackbar, Alert, AlertTitle, useMediaQuery, useTheme, Box, Typography, Paper, Divider, IconButton } from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
+import { helpTexts } from '../../../constants/helpTexts'; // Corrected path
 
 // Custom hooks
 import useLearningPathData from '../hooks/useLearningPathData';
@@ -30,51 +32,60 @@ const LearningPathView = ({ source }) => {
   const { taskId, entryId } = useParams();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const [showFirstViewAlert, setShowFirstViewAlert] = useState(false);
   
-  // States for tracking ACTIONS (like save completion), keep these for now
-  const [localSavedToHistory, setLocalSavedToHistory] = useState(false);
-  const [localEntryId, setLocalEntryId] = useState(null);
-  
-  // Load learning path data using the hook - rely solely on this for data/loading/error/progress state
+  // Load learning path data using the hook
   const {
-    learningPath, // This holds the data object (full entry for history, result for generation)
-    loading,      // Loading state from the hook
-    error,        // Error state from the hook
+    learningPath, 
+    loading,      
+    error,        
     isFromHistory,
-    savedToHistory: initialSavedToHistory,
+    initialDetailsWereSet, // <-- Destructure new value
+    persistentPathId, 
     temporaryPathId,
-    progressMessages, // <-- Get progress messages from the hook
-    isReconnecting, // <-- Get reconnection state from hook
-    retryAttempt,   // <-- Get retry attempt number from hook
-    refreshData // Keep refresh function if needed elsewhere
-  } = useLearningPathData(source);
+    progressMessages, 
+    isReconnecting, 
+    retryAttempt,   
+    refreshData 
+  } = useLearningPathData(source); 
   
-  // Use derived state based ONLY on hook values and local ACTION results
-  const savedToHistory = localSavedToHistory || initialSavedToHistory;
-  const isPersisted = isFromHistory || savedToHistory;
-  const isTemporaryPath = !isPersisted && !!temporaryPathId;
+  // Local state for tracking if details (tags/favorites) have been set via dialog
+  // Initialize based on whether the loaded path (if from history) already had details
+  const [localDetailsHaveBeenSet, setLocalDetailsHaveBeenSet] = useState(false);
+  const [localEntryId, setLocalEntryId] = useState(null);
+
+  // Effect to initialize local state once loading is done and we have initial data
+  useEffect(() => {
+    if (!loading) {
+        setLocalDetailsHaveBeenSet(initialDetailsWereSet || false);
+        // Also set localEntryId if we loaded from history and have a persistentId
+        if (isFromHistory && persistentPathId) {
+            setLocalEntryId(persistentPathId);
+        } else {
+            // Reset if not loading from history or no persistentId yet
+            setLocalEntryId(null);
+        }
+    }
+  }, [loading, initialDetailsWereSet, isFromHistory, persistentPathId]);
   
-  // Determine the correct pathId to use (logic seems okay, but adapt to direct learningPath use)
+  // Derived states based on hook values and local actions
+  const isPdfReady = !loading && !!persistentPathId; // Determine if PDF can be downloaded
+  const isPersisted = isFromHistory || localDetailsHaveBeenSet || isPdfReady; // Determine if path is generally considered persistent (for other UI logic?)
+  const isTemporaryPath = !loading && !!temporaryPathId && !persistentPathId; // Path has temporary ID but not yet persistent one
+  
+  // Determine the correct pathId to use for component interactions
   let derivedPathId = null;
-  const currentEntryId = localEntryId || entryId;
-  // Use loading directly, access path_id from learningPath if !isFromHistory
+  const currentEntryId = localEntryId || entryId || persistentPathId; // Use persistentId as fallback
+  
   if (!loading && learningPath) { 
     if (isTemporaryPath) {
       derivedPathId = temporaryPathId;
-    } else if (currentEntryId) {
-      derivedPathId = currentEntryId;
-    } else if (!isFromHistory && learningPath.path_id) { 
-      // If from generation, path_id might be top-level in the result
-      derivedPathId = learningPath.path_id;
-    } else if (isFromHistory && learningPath.path_id) {
-      // If from history, path_id is top-level in the full entry object
-      derivedPathId = learningPath.path_id;
-    } else if (isFromHistory && !learningPath.path_id && entryId) {
-       // Fallback for history view if somehow path_id is missing in object but we have entryId
-       derivedPathId = entryId;
-       console.warn('Using entryId as derivedPathId because learningPath.path_id was missing in history view.');
     } else {
-      console.warn('Could not determine pathId for LearningPathView');
+      derivedPathId = currentEntryId; // Use the combined entryId / persistentId
+    }
+    // Additional safety checks (if derivedPathId is still null, log warning)
+    if (!derivedPathId) {
+      console.warn('Could not reliably determine pathId for LearningPathView interactions.');
     }
   }
   
@@ -83,6 +94,14 @@ const LearningPathView = ({ source }) => {
   const actualPathData = isFromHistory
     ? (learningPath?.path_data ? learningPath.path_data : learningPath) // Handle both old/new history structures
     : learningPath; // Use learningPath directly for generation
+
+  // Callback for when save is confirmed in the action hook
+  const handleSaveSuccess = useCallback((result) => {
+    if (result?.entryId) {
+      setLocalDetailsHaveBeenSet(true);
+      setLocalEntryId(result.entryId);
+    }
+  }, []); // Dependencies: none, relies on setters
 
   // Setup actions for the learning path
   const {
@@ -101,20 +120,20 @@ const LearningPathView = ({ source }) => {
     handleNewLearningPathClick,
     handleSaveToHistory,
     handleSaveDialogClose,
-    handleSaveConfirm,
+    handleSaveConfirm, // Keep this if SaveDialog calls it directly
     handleAddTag,
     handleDeleteTag,
     handleTagKeyDown,
     handleNotificationClose,
     showNotification // Make showNotification available if needed directly
   } = useLearningPathActions(
-    // Pass the correct data structure to the actions hook
-    actualPathData, // Pass the extracted path data
+    actualPathData, 
     isFromHistory,
-    savedToHistory,
-    currentEntryId, // Use the most reliable ID (entry or local override)
-    taskId,         // Pass taskId for generation context
-    temporaryPathId // Pass temporaryId for potential save action
+    localDetailsHaveBeenSet, // Pass renamed state
+    currentEntryId, 
+    taskId,         
+    temporaryPathId, 
+    handleSaveSuccess // Pass the callback
   );
   
   // Adjust action handlers if they directly used `learningPath` expecting the wrong structure
@@ -152,20 +171,25 @@ const LearningPathView = ({ source }) => {
       }
   };
 
-  // Adjust handleDownloadPDF if it relied on top-level props of learningPath
-  // It seems handleDownloadPDF mainly uses `entryId` and `learningPath.topic`
-  // `useLearningPathActions` needs `actualPathData` to get the topic correctly.
+  // Update PDF download handler: remove incorrect state update
   const handleDownloadPDFWithUpdate = async () => {
-    // The action hook `useLearningPathActions` now receives `actualPathData`,
-    // so its internal `handleDownloadPDF` should get the topic correctly.
-    // We still need to update local state based on the action result.
-    const result = await handleDownloadPDF(); // Call original function from hook
-    if (result && result.savedToHistory) {
-      setLocalSavedToHistory(true);
-      if (result.entryId) {
-        setLocalEntryId(result.entryId);
-      }
+    // Call original function from hook
+    await handleDownloadPDF(); // Removed state updates based on result
+    // No need to set localDetailsHaveBeenSet or localEntryId here
+  };
+
+  // Show dismissible alert on first view of a newly generated path
+  useEffect(() => {
+    const alertDismissedKey = `mapmylearn_alert_dismissed_${taskId}`;
+    if (!loading && !error && taskId && !isFromHistory && !sessionStorage.getItem(alertDismissedKey)) {
+      setShowFirstViewAlert(true);
     }
+  }, [loading, error, taskId, isFromHistory]);
+
+  const handleDismissFirstViewAlert = () => {
+    const alertDismissedKey = `mapmylearn_alert_dismissed_${taskId}`;
+    sessionStorage.setItem(alertDismissedKey, 'true');
+    setShowFirstViewAlert(false);
   };
 
   // Use `loading` directly from hook
@@ -194,30 +218,39 @@ const LearningPathView = ({ source }) => {
   // Success state - show learning path
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 3, md: 4 } }}>
+      {/* Render the dismissible alert first */}
+      {showFirstViewAlert && (
+        <Alert 
+          severity="info" 
+          sx={{ mb: 3, borderRadius: 2 }} 
+          onClose={handleDismissFirstViewAlert}
+        >
+          <AlertTitle>Your Learning Path is Ready!</AlertTitle>
+          {helpTexts.lpFirstViewAlert}
+        </Alert>
+      )}
+
       {/* Use actualPathData for rendering */} 
       {actualPathData && (
         <>
           <LearningPathHeader 
-            topic={actualPathData.topic} // Use topic from actualPathData
-            savedToHistory={savedToHistory}
-            isPersisted={isPersisted}
-            onDownload={handleDownloadJSONAdjusted} // Use adjusted download handler
+            topic={actualPathData.topic} 
+            detailsHaveBeenSet={localDetailsHaveBeenSet} // Pass renamed state
+            isPdfReady={isPdfReady} // Pass new state for PDF readiness
+            onDownload={handleDownloadJSONAdjusted} 
             onDownloadPDF={handleDownloadPDFWithUpdate}
-            onSaveToHistory={handleSaveToHistory}
+            onSaveToHistory={handleSaveToHistory} // Passed from action hook
             onNewLearningPath={handleNewLearningPathClick}
           />
           
-          {/* Modules Section */} 
           {derivedPathId ? (
             <ModuleSection
-              // Access modules correctly based on actualPathData structure
               modules={actualPathData.modules} 
               pathId={derivedPathId}
-              isTemporaryPath={isTemporaryPath}
-              actualPathData={actualPathData} // Provide full path data for ephemeral chat
+              isTemporaryPath={isTemporaryPath} // Pass re-calculated temporary state
+              actualPathData={actualPathData} 
             />
           ) : (
-            // If not loading and still no derivedPathId, it means something went wrong post-loading
             !loading && <Typography sx={{mt: 2, color: 'error.main'}}>Module ID could not be determined.</Typography>
           )}
           
@@ -239,15 +272,15 @@ const LearningPathView = ({ source }) => {
       <SaveDialog
         open={saveDialogOpen}
         onClose={handleSaveDialogClose}
-        onConfirm={handleSaveConfirm}
-        tags={tags}
-        newTag={newTag}
-        favorite={favorite}
-        onAddTag={handleAddTag}
-        onDeleteTag={handleDeleteTag}
-        onTagChange={setNewTag}
-        onTagKeyDown={handleTagKeyDown}
-        onFavoriteChange={setFavorite}
+        onConfirm={handleSaveConfirm} // Use onConfirm, pass handler from action hook
+        tags={tags} // Pass state variable from action hook
+        newTag={newTag} // Pass state variable from action hook
+        favorite={favorite} // Pass state variable from action hook
+        onAddTag={handleAddTag} // Pass handler from action hook
+        onDeleteTag={handleDeleteTag} // Pass handler from action hook
+        onTagChange={setNewTag} // Pass setter from action hook as the change handler
+        onTagKeyDown={handleTagKeyDown} // Pass handler from action hook
+        onFavoriteChange={setFavorite} // Pass setter from action hook as the change handler
         isMobile={isMobile}
       />
       {/* Ensure notification uses the object structure from the hook */}
@@ -278,7 +311,7 @@ const LearningPathView = ({ source }) => {
 }
 
 LearningPathView.propTypes = {
-  source: PropTypes.oneOf(['history', null]),
+  source: PropTypes.string, // 'history' or null/undefined
 };
 
 export default LearningPathView;
