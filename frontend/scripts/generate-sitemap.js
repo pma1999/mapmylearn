@@ -2,20 +2,20 @@ const Sitemap = require('react-router-sitemap').default;
 const path = require('path');
 const fs = require('fs');
 
-// Import the central route configuration
-// Note: This assumes the script is run from the frontend directory root or similar context
-// where require('../src/routesConfig') resolves correctly.
-let routesConfig;
+// Import the central route configuration DATA
+// This file only contains serializable data (paths, flags)
+let routesData;
 try {
-  routesConfig = require('../src/routesConfig').default;
+  // Require the new routesData file which uses module.exports
+  routesData = require('../src/routesData'); 
 } catch (error) {
-  console.error("Error: Could not load routes configuration from '../src/routesConfig.js'.", error);
+  console.error("Error: Could not load routes configuration from '../src/routesData.js'.", error);
   console.error("Ensure the path is correct relative to where the script is executed.");
   process.exit(1); // Exit if config cannot be loaded
 }
 
-// Filter for routes marked as public in the configuration
-const publicPaths = routesConfig
+// Filter for routes marked as public in the configuration data
+const publicPaths = routesData
   .filter(route => route.isPublic)
   .map(route => route.path);
 
