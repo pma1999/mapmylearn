@@ -19,6 +19,9 @@ const publicPaths = routesData
   .filter(route => route.isPublic)
   .map(route => route.path);
 
+// Format paths for the Sitemap constructor
+const sitemapPathsConfig = publicPaths.map(p => ({ path: p }));
+
 // Determine the base URL
 // Use PUBLIC_URL standard env variable provided by Create React App during build
 const baseUrl = process.env.PUBLIC_URL;
@@ -35,9 +38,8 @@ const domain = baseUrl || 'https://mapmylearn.app'; // Fallback domain
 
 let sitemapInstance;
 try {
-  // Generate sitemap using the discovered public paths and the determined domain
-  // Since we have no public dynamic routes, applyParams is not needed.
-  sitemapInstance = new Sitemap(publicPaths).build(domain);
+  // Generate sitemap using the discovered public paths (formatted as objects) and the determined domain
+  sitemapInstance = new Sitemap(sitemapPathsConfig).build(domain);
 } catch (error) {
   console.error("Error: Failed to build the sitemap.", error);
   process.exit(1);
