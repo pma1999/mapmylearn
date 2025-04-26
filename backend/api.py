@@ -1004,8 +1004,10 @@ async def generate_learning_path_task(
         async with progress_queues_lock:
             if task_id in progress_queues:
                 try:
+                    # logging.info(f"Task {task_id}: Attempting to signal completion queue.") # Remove this log
                     await progress_queues[task_id].put(None)  # Signal completion (or failure)
-                    logging.info(f"Signaled completion queue for task {task_id}")
+                    logging.info(f"Signaled completion queue for task {task_id}") # Restore original log message if needed, or remove this one too if the original wasn't there
+                    # logging.info(f"Task {task_id}: Successfully signaled completion queue.") # Remove this log
                 except Exception as q_err:
                     logging.error(f"Error signaling completion queue for task {task_id}: {q_err}")
             else:

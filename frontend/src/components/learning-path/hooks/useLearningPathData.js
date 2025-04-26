@@ -99,10 +99,8 @@ const useLearningPathData = (source = null) => {
       if (eventSourceRef.current) {
         console.log('useLearningPathData: Cleaning up EventSource.');
         eventSourceRef.current.close();
-        eventSourceRef.current = null;
       }
       if (retryTimeoutRef.current) {
-        console.log('useLearningPathData: Clearing retry timeout.');
         clearTimeout(retryTimeoutRef.current);
         retryTimeoutRef.current = null;
       }
@@ -207,6 +205,12 @@ const useLearningPathData = (source = null) => {
             setError(fetchErr.message || 'Error retrieving final learning path data.');
         } finally {
             setLoading(false); // Always stop loading after attempting final fetch
+            // Add conditional close logic here
+            if (receivedFinalSignalRef.current && eventSourceRef.current) {
+                console.log('Closing EventSource after successful signal and final fetch.');
+                eventSourceRef.current.close();
+                eventSourceRef.current = null;
+            }
         }
     };
 
@@ -254,9 +258,7 @@ const useLearningPathData = (source = null) => {
           if (event.data === '{\"complete\": true}') {
              console.log('SSE stream signaled completion.');
              receivedFinalSignalRef.current = true; 
-             es.close();
-             eventSourceRef.current = null;
-             fetchFinalResult(taskId);
+             fetchFinalResult(taskId); // Call fetch, it will handle closing later
              return; 
           }
 
@@ -283,8 +285,6 @@ const useLearningPathData = (source = null) => {
               receivedFinalSignalRef.current = true;
               setError(progressData.message || 'Learning path generation failed during progress updates.');
               setLoading(false);
-              es.close();
-              eventSourceRef.current = null;
           }
 
           if (progressData.persistentPathId) {
@@ -318,10 +318,28 @@ const useLearningPathData = (source = null) => {
             connectSSE(); 
           }, delay);
         } else {
-          console.error('Max retry attempts reached. Setting final error.');
-          setError('Connection lost after multiple retries. Please check the History page for final status.');
-          setLoading(false);
-          setIsReconnecting(false); 
+          // --- Modified Max Retry Logic ---
+          console.log('Max retries reached. Performing final status check via API.');
+          setIsReconnecting(false); // Ensure this is reset
+
+          // Use an IIFE to handle async call within the synchronous handler logic flow
+          (async () => {
+              const finalCheckResult = await tryFetchFinalResult(taskId);
+              console.log('Final API check status:', finalCheckResult.status);
+
+              // Only set the connection error if the final API check didn't resolve the state
+              if (finalCheckResult.status !== 'completed' && finalCheckResult.status !== 'failed') {
+                  console.error('Final API check did not resolve to completed/failed status. Setting connection error.');
+                  setError('Connection lost after multiple retries. Please check the History page for final status.');
+                  // setLoading(false) should already be handled by tryFetchFinalResult in this case (error or processing)
+                  // Ensure loading is false just in case tryFetch didn't set it
+                  if(loading) setLoading(false); 
+              } else {
+                  // State was successfully updated by tryFetchFinalResult
+                  console.log('Successfully recovered final state via API after SSE failure.');
+              }
+          })();
+          // --- End Modified Max Retry Logic ---
         }
       };
     };
