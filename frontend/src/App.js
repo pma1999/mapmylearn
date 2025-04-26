@@ -5,30 +5,18 @@ import CssBaseline from '@mui/material/CssBaseline';
 import { Container, Box } from '@mui/material';
 import { Analytics } from "@vercel/analytics/react";
 
-// Import pages
-import HomePage from './pages/HomePage';
-import GeneratorPage from './pages/GeneratorPage';
-import ResultPage from './pages/ResultPage';
-import HistoryPage from './pages/HistoryPage';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import AdminPage from './pages/AdminPage';
-import VerifyEmailPage from './pages/VerifyEmailPage';
-import ForgotPasswordPage from './pages/ForgotPasswordPage';
-import ResetPasswordPage from './pages/ResetPasswordPage';
-
 // Import components
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
-import LearningPathView from './components/learning-path/view/LearningPathView';
 
 // Import auth provider and hook
 import { AuthProvider, useAuth } from './services/authContext';
 
+// Import the centralized route configuration
+import routesConfig from './routesConfig';
+
 // Import new components
-import PurchaseSuccessPage from './components/payments/PurchaseSuccessPage';
-import PurchaseCancelPage from './components/payments/PurchaseCancelPage';
 import WelcomeModal from './components/shared/WelcomeModal';
 
 // Create theme
@@ -62,62 +50,31 @@ const AppContent = () => {
     <>
       <Box sx={{ flexGrow: 1 }}>
         <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route 
-            path="/generator" 
-            element={
-              <ProtectedRoute>
-                <GeneratorPage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/history" 
-            element={
-              <ProtectedRoute>
-                <HistoryPage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/verify-email" element={<VerifyEmailPage />} />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
-          <Route 
-            path="/admin" 
-            element={
-              <ProtectedRoute adminOnly={true}>
-                <AdminPage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route path="/result/:taskId" element={
-            <ProtectedRoute>
-              <ResultPage />
-            </ProtectedRoute>
-          } />
-          <Route path="/history/:entryId" element={
-            <ProtectedRoute>
-              <LearningPathView source="history" />
-            </ProtectedRoute>
-          } />
-          <Route 
-            path="/purchase/success" 
-            element={
-              <ProtectedRoute>
-                <PurchaseSuccessPage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/purchase/cancel" 
-            element={
-              <ProtectedRoute>
-                <PurchaseCancelPage />
-              </ProtectedRoute>
-            } 
-          />
+          {routesConfig.map((route, index) => {
+            const { path, component: Component, requiresAuth, adminOnly } = route;
+            
+            // Handle the LearningPathView specific prop
+            // In a more complex scenario, the config could include props directly
+            const elementProps = path === '/history/:entryId' ? { source: 'history' } : {};
+            const element = <Component {...elementProps} />;
+
+            if (requiresAuth) {
+              return (
+                <Route 
+                  key={index} 
+                  path={path} 
+                  element={
+                    <ProtectedRoute adminOnly={!!adminOnly}>
+                      {element}
+                    </ProtectedRoute>
+                  } 
+                />
+              );
+            } else {
+              return <Route key={index} path={path} element={element} />;
+            }
+          })}
+          {/* Fallback route */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Box>
