@@ -23,7 +23,9 @@ import {
   Select,
   MenuItem,
   FormControl,
-  InputLabel
+  InputLabel,
+  Tooltip,
+  Zoom
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
@@ -31,6 +33,7 @@ import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
 import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
 import QuestionAnswerIcon from '@mui/icons-material/QuestionAnswer';
 import GraphicEqIcon from '@mui/icons-material/GraphicEq';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import MarkdownRenderer from '../MarkdownRenderer';
 import { motion } from 'framer-motion';
 import ResourcesSection from '../shared/ResourcesSection';
@@ -38,7 +41,6 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import ReactMarkdown from 'react-markdown';
-import InfoTooltip from '../shared/InfoTooltip';
 import { helpTexts } from '../../constants/helpTexts';
 
 // Import quiz components
@@ -431,8 +433,25 @@ const SubmoduleCard = ({ submodule, index, moduleIndex, pathId, isTemporaryPath,
                       <Box sx={{ display: 'flex', alignItems: 'center', mx: 1 }}>
                         {tab.icon}
                         <Typography component="span" sx={{ ml: 1, textTransform: 'none' }}>{tab.label}</Typography>
-                        {tab.tooltip && 
-                          <InfoTooltip title={tab.tooltip} sx={{ ml: 0.5 }} size="small" />
+                        {tab.tooltip &&
+                          <Tooltip
+                            title={tab.tooltip}
+                            arrow
+                            placement="top"
+                            TransitionComponent={Zoom}
+                            enterDelay={300}
+                          >
+                            <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                              <InfoOutlinedIcon
+                                sx={{
+                                  ml: 0.5,
+                                  fontSize: 'small',
+                                  verticalAlign: 'middle',
+                                  color: 'text.secondary',
+                                }}
+                              />
+                            </span>
+                          </Tooltip>
                         }
                       </Box>
                     }
