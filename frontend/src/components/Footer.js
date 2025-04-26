@@ -29,10 +29,10 @@ function Footer() {
   ];
 
   const socialLinks = [
-    { icon: <LinkedInIcon />, url: '#', label: 'LinkedIn' },
-    { icon: <GitHubIcon />, url: '#', label: 'GitHub' },
-    { icon: <TwitterIcon />, url: '#', label: 'Twitter' },
-    { icon: <EmailIcon />, url: '#', label: 'Email' },
+    { icon: <LinkedInIcon />, url: 'https://www.linkedin.com/in/pablomiar', label: 'LinkedIn' },
+    { icon: <GitHubIcon />, url: 'https://github.com/pma1999', label: 'GitHub' },
+    { icon: <TwitterIcon />, url: 'https://x.com/pablomiar', label: 'X (Twitter)' },
+    { icon: <EmailIcon />, url: 'mailto:pablomiguelargudo@gmail.com', label: 'Email' },
   ];
 
   return (
