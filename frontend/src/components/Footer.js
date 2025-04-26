@@ -15,7 +15,7 @@ import {
 import SchoolIcon from '@mui/icons-material/School';
 import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import GitHubIcon from '@mui/icons-material/GitHub';
-import TwitterIcon from '@mui/icons-material/Twitter';
+import XIcon from '@mui/icons-material/X';
 import EmailIcon from '@mui/icons-material/Email';
 
 function Footer() {
@@ -31,7 +31,7 @@ function Footer() {
   const socialLinks = [
     { icon: <LinkedInIcon />, url: 'https://www.linkedin.com/in/pablomiar', label: 'LinkedIn' },
     { icon: <GitHubIcon />, url: 'https://github.com/pma1999', label: 'GitHub' },
-    { icon: <TwitterIcon />, url: 'https://x.com/pablomiar', label: 'X (Twitter)' },
+    { icon: <XIcon />, url: 'https://x.com/pablomiar', label: 'X (Twitter)' },
     { icon: <EmailIcon />, url: 'mailto:pablomiguelargudo@gmail.com', label: 'Email' },
   ];
 
