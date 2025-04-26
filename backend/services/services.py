@@ -6,6 +6,8 @@ import aiohttp
 import io # Added for BytesIO
 import fitz # Added for PyMuPDF
 import json # Added for parsing Brave response
+import threading # Added for thread-safe rate limiting
+import time # Added for thread-safe rate limiting
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.tools import BraveSearch # Replaced TavilySearch
@@ -37,6 +39,13 @@ TRAFILATURA_MIN_LENGTH_FALLBACK = 100
 # Percentage of page height to consider as header/footer margin in PDF
 PDF_HEADER_MARGIN_PERCENT = 0.10 # 10%
 PDF_FOOTER_MARGIN_PERCENT = 0.10 # 10%
+
+# Shared rate limiter for Brave Search API (1 call per second)
+# brave_search_rate_limiter = aiolimiter.AsyncLimiter(1, 1) # Removed
+
+# Thread-safe rate limiter components for Brave Search
+_brave_search_lock = threading.Lock()
+_last_brave_call_time = 0.0
 
 # --- Start of Modified PDF Helper Function ---
 def _extract_pdf_text_sync(pdf_bytes: bytes, source_url: str) -> str:
@@ -380,9 +389,40 @@ async def perform_search_and_scrape(
             search_kwargs={"count": max_results}
         )
 
-        logger.debug(f"Invoking Brave search for: '{query}'")
-        # BraveSearch returns a JSON string
-        brave_response_str = await brave_search.ainvoke({"query": query})
+        # --- Thread-safe Rate Limiting --- 
+        global _last_brave_call_time # Needed to modify the global variable
+        required_delay = 0.0 # Initialize delay
+        wait_until_time = 0.0 # Initialize scheduled start time
+
+        logger.debug(f"Acquiring thread lock for Brave search rate limit check: '{query}'")
+        with _brave_search_lock: # Acquire thread-safe lock only for time check/update
+            current_time = time.monotonic()
+            # Calculate the earliest time this call can start (1.05s after the last scheduled start)
+            wait_until_time = max(current_time, _last_brave_call_time + 1.05) # Added 50ms buffer
+            # Calculate the delay needed from the current time
+            required_delay = wait_until_time - current_time
+            # Update the global last call time to reserve the slot for *this* call
+            _last_brave_call_time = wait_until_time
+            logger.debug(f"Rate limit: Current time: {current_time:.2f}, Last scheduled: {_last_brave_call_time:.2f}, Wait until: {wait_until_time:.2f}, Delay: {required_delay:.2f}s. Lock released.")
+        # --- Lock is released --- 
+
+        # Perform wait *outside* the lock using asyncio.sleep
+        if required_delay > 0:
+            logger.info(f"Rate limiting Brave search. Waiting {required_delay:.2f} seconds...")
+            await asyncio.sleep(required_delay) # Use asyncio.sleep for cooperative multitasking
+
+        # --- Make the actual call (no lock held here) ---
+        logger.debug(f"Rate limit wait complete. Invoking Brave search: '{query}'")
+        try:
+            brave_response_str = await brave_search.ainvoke({"query": query})
+        except Exception as invoke_err:
+             logger.error(f"Error during brave_search.ainvoke for '{query}': {invoke_err}", exc_info=True)
+             # Add error to result and return, or raise depending on desired behavior
+             service_result.search_provider_error = f"Invoke Error: {type(invoke_err).__name__}"
+             return service_result # Example: return error result
+             # raise # Alternatively, re-raise the exception
+        # --- End Rate Limiting Logic & Call ---
+
         logger.debug(f"Received Brave response for: '{query}'")
 
         # Parse the JSON string response from Brave

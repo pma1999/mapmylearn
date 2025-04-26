@@ -21,34 +21,37 @@ logger = logging.getLogger("learning_path.search_utils")
 RegenerateQueryFunc = TypeVar('RegenerateQueryFunc', bound=Callable[..., Awaitable[Optional[Union[SearchQuery, ResourceQuery]]]])
 QueryObjectType = Union[SearchQuery, ResourceQuery]
 
+# Define max attempts constant
+MAX_SEARCH_ATTEMPTS = 4
+
 async def execute_search_with_llm_retry(
     state: LearningPathState,
     initial_query: QueryObjectType,
     regenerate_query_func: RegenerateQueryFunc,
-    max_retries: int = 1,
     search_provider_key_provider = None,
     search_config: Dict[str, Any] = None,
     regenerate_args: Dict[str, Any] = None,
 ) -> SearchServiceResult:
     """
-    Execute a search with retry capabilities for specific errors:
-    1. LLM-based query regeneration retry for "no results found" errors.
-    2. Exponential backoff retry for HTTP 429 (Rate Limit) errors.
+    Execute a search with up to 4 total attempts, handling errors and potentially regenerating queries.
+
+    Retries are performed for:
+    1. "No results found" errors (attempts regeneration first, then standard backoff).
+    2. Any other search provider errors (e.g., 429, API errors - uses standard backoff).
     
     Args:
         state: The current LearningPathState containing context and key providers.
         initial_query: The first SearchQuery or ResourceQuery object to try.
         regenerate_query_func: An async function that takes state and failed_query 
                              (plus any additional args in regenerate_args) and returns a new 
-                             SearchQuery or ResourceQuery.
-        max_retries: Maximum number of *query regeneration* retries to attempt. Default is 1.
+                             SearchQuery or ResourceQuery, or None if regeneration fails.
         search_provider_key_provider: The key provider for the search service (e.g., Brave).
         search_config: Dictionary with configuration for perform_search_and_scrape 
                      (max_results, scrape_timeout). Defaults to {max_results: 5, scrape_timeout: 10}.
         regenerate_args: Additional arguments to pass to regenerate_query_func.
     
     Returns:
-        A SearchServiceResult object containing the search results or error information.
+        A SearchServiceResult object containing the search results or the final error information after all attempts.
     """
     if search_config is None:
         search_config = {"max_results": 5, "scrape_timeout": 10}
@@ -62,24 +65,15 @@ async def execute_search_with_llm_retry(
         if not search_provider_key_provider:
             logger.error(f"No search provider key provider found in state ({provider_key_in_state}) or passed as argument")
             query_str = getattr(initial_query, 'keywords', getattr(initial_query, 'query', 'unknown'))
-            return SearchServiceResult(
-                query=query_str,
-                search_provider_error=f"No {provider_key_in_state} available"
-            )
+            return SearchServiceResult(query=query_str, search_provider_error=f"No {provider_key_in_state} available")
     
     current_query = initial_query
-    regeneration_retries_left = max_retries # Separate counter for regeneration
-    outer_attempts_made = 0
+    result: Optional[SearchServiceResult] = None
     
     # Pattern to detect "No search results found" in error messages
     no_results_pattern = re.compile(r"no search results found", re.IGNORECASE)
-    # Pattern to detect 429 error messages (simple check)
-    rate_limit_pattern = re.compile(r"429")
-    
-    # --- Outer loop for Query Regeneration Retries --- 
-    while outer_attempts_made <= max_retries: 
-        outer_attempts_made += 1
-        
+
+    for attempt_number in range(MAX_SEARCH_ATTEMPTS):
         # Safely get the query string based on object type
         query_str = ""
         if isinstance(current_query, SearchQuery):
@@ -87,118 +81,84 @@ async def execute_search_with_llm_retry(
         elif isinstance(current_query, ResourceQuery):
             query_str = current_query.query
         else:
-            logger.error(f"Unsupported query object type: {type(current_query)}")
-            query_str = getattr(current_query, 'keywords', getattr(current_query, 'query', 'unknown'))
-            return SearchServiceResult(query=query_str, search_provider_error="Unsupported query object type")
+            logger.error(f"Unsupported query object type: {type(current_query)}. Aborting search.")
+            return SearchServiceResult(query=getattr(current_query, 'keywords', getattr(current_query, 'query', 'unknown')), 
+                                       search_provider_error="Unsupported query object type")
             
-        logger.info(f"Search attempt {outer_attempts_made}/{max_retries+1} with query: '{query_str}'")
+        logger.info(f"Search attempt {attempt_number + 1}/{MAX_SEARCH_ATTEMPTS} with query: '{query_str}'")
         
-        # --- Inner loop for 429 Rate Limit Retries --- 
-        MAX_429_RETRIES = 3
-        retry_429_attempt = 0
-        base_delay = 1.1  # Start delay slightly over 1 second
-        result = None # Initialize result for this outer attempt
-        
-        while retry_429_attempt <= MAX_429_RETRIES:
-            try:
-                # Execute the search with current query string
-                result = await perform_search_and_scrape(
-                    query=query_str,
-                    brave_key_provider=search_provider_key_provider,
-                    max_results=search_config.get("max_results", 5),
-                    scrape_timeout=search_config.get("scrape_timeout", 10)
-                )
-        
-                search_error = result.search_provider_error
-                is_429_error = search_error and rate_limit_pattern.search(search_error)
-        
-                if not is_429_error:
-                    break # Exit 429 loop on success or non-429 error
-        
-                # Handle 429 Error
-                logger.warning(f"Rate limit (429) hit for query '{query_str}'. Attempt {retry_429_attempt + 1}/{MAX_429_RETRIES + 1}.")
-        
-                if retry_429_attempt >= MAX_429_RETRIES:
-                    logger.error(f"Max 429 retries ({MAX_429_RETRIES}) exceeded for query '{query_str}'.")
-                    break # Exit loop, returning the 429 error result
-        
-                retry_429_attempt += 1
-                # Exponential backoff with jitter
-                delay = (base_delay * (2 ** (retry_429_attempt - 1))) + (random.uniform(0, 0.5))
-                logger.info(f"Waiting {delay:.2f} seconds before retrying query '{query_str}' due to rate limit...")
-                await asyncio.sleep(delay)
-                # Continue the inner loop to retry perform_search_and_scrape
-        
-            except Exception as e:
-                 # Catch unexpected errors during perform_search_and_scrape itself
-                 logger.exception(f"Unexpected error during perform_search_and_scrape for query '{query_str}': {e}")
-                 result = SearchServiceResult(query=query_str, search_provider_error=f"Internal error during search: {type(e).__name__}")
-                 break # Exit 429 loop
-        # --- End Inner loop --- 
-        
-        # Ensure result is not None (should only happen if initial try block had an exception)
-        if result is None:
-            logger.error("Search result object is unexpectedly None after 429 retry loop.")
-            result = SearchServiceResult(query=query_str, search_provider_error="Unknown error during search execution")
-            
-        # --- Check final result of this outer attempt --- 
-        search_error = result.search_provider_error
-
-        # Check for "no results" error specifically for query regeneration
-        is_no_results_error = search_error and no_results_pattern.search(search_error)
-
-        if not is_no_results_error:
-            # Success, or an error *other* than "no results" (e.g., final 429, or other API error)
-            if search_error:
-                logger.warning(f"Search failed with error (not 'no results'): {search_error}")
-            # Return the result (success or the non-'no results' error)
-            return result 
-            
-        # We have a "no results" error - proceed with regeneration logic if possible
-        logger.warning(f"Search returned no results for query: '{query_str}'")
-        
-        # Check if we can regenerate query (based on outer loop retries)
-        if regeneration_retries_left <= 0:
-            logger.info("No regeneration retries left, returning original result with no results")
-            return result # Return the 'no results' error object
-        
-        # Try to regenerate query
-        logger.info(f"Attempting to regenerate query using LLM (Attempt {max_retries - regeneration_retries_left + 1}/{max_retries}) after no results for: '{query_str}'")
+        # Direct call to perform_search_and_scrape (rate limit handled within)
         try:
-            # Call the regenerate function with the state, failed query object, and any additional args
-            new_query_obj = await regenerate_query_func(state, current_query, **regenerate_args)
-            
-            if new_query_obj is None:
-                logger.error("Query regeneration failed, returned None. Returning original 'no results' error.")
-                return result # Return original failure
-            
-            # Safely get new query string for comparison and logging
-            new_query_str = ""
-            if isinstance(new_query_obj, SearchQuery):
-                new_query_str = new_query_obj.keywords
-            elif isinstance(new_query_obj, ResourceQuery):
-                new_query_str = new_query_obj.query
-            else:
-                 logger.error(f"Regeneration returned unsupported query type: {type(new_query_obj)}. Returning original 'no results' error.")
-                 return result # Return original failure
-                 
-            # Don't retry with the exact same query string
-            if new_query_str == query_str:
-                logger.warning("Regenerated query string is identical to original, won't retry regeneration. Returning original 'no results' error.")
-                return result # Return original failure
-            
-            logger.info(f"Successfully regenerated query. Original: '{query_str}', New: '{new_query_str}'")
-            current_query = new_query_obj # Use the new query OBJECT for the next outer loop iteration
-            regeneration_retries_left -= 1 # Decrement regeneration counter
-            # Continue the outer loop
-            
+            result = await perform_search_and_scrape(
+                query=query_str,
+                brave_key_provider=search_provider_key_provider,
+                max_results=search_config.get("max_results", 5),
+                scrape_timeout=search_config.get("scrape_timeout", 10)
+            )
         except Exception as e:
-            logger.exception(f"Error during query regeneration: {str(e)}")
-            # If regeneration fails, return the original 'no results' error result
-            return result
+            # Catch unexpected errors during perform_search_and_scrape itself
+            logger.exception(f"Unexpected error calling perform_search_and_scrape on attempt {attempt_number + 1}/{MAX_SEARCH_ATTEMPTS} for query '{query_str}': {e}")
+            result = SearchServiceResult(query=query_str, search_provider_error=f"Internal error during search: {type(e).__name__} - {str(e)}")
+
+        # --- Check result of this attempt --- 
+        if result is None:
+            # Should theoretically not happen due to try/except, but handle defensively
+            logger.error(f"Search result object is unexpectedly None after attempt {attempt_number + 1}/{MAX_SEARCH_ATTEMPTS}.")
+            result = SearchServiceResult(query=query_str, search_provider_error="Unknown error during search execution")
+
+        search_error = result.search_provider_error
         
-    # --- End Outer loop --- 
-    
-    # If we exit the outer loop (meaning regeneration retries exhausted), return the last result we got (which was a 'no results' error)
-    logger.info("Exhausted query regeneration retries.")
-    return result 
+        if not search_error:
+            logger.info(f"Search successful on attempt {attempt_number + 1}/{MAX_SEARCH_ATTEMPTS}.")
+            return result # Success!
+
+        # --- Handle Failure --- 
+        logger.warning(f"Search attempt {attempt_number + 1}/{MAX_SEARCH_ATTEMPTS} failed for query '{query_str}'. Error: {search_error}")
+        
+        # Check if this was the last attempt
+        if attempt_number == MAX_SEARCH_ATTEMPTS - 1:
+            logger.error(f"Max search attempts ({MAX_SEARCH_ATTEMPTS}) reached. Returning last error: {search_error}")
+            return result # Return the final error result
+        
+        # --- Decide Action Before Next Attempt --- 
+        should_regenerate = no_results_pattern.search(search_error)
+        regenerated = False
+        
+        if should_regenerate:
+            logger.info(f"Attempting query regeneration after 'no results' on attempt {attempt_number + 1}.")
+            try:
+                new_query_obj = await regenerate_query_func(state, current_query, **regenerate_args)
+                
+                if new_query_obj is None:
+                    logger.warning("Query regeneration returned None.")
+                else:
+                    # Safely get new query string
+                    new_query_str = getattr(new_query_obj, 'keywords', getattr(new_query_obj, 'query', None))
+                    if new_query_str is None:
+                         logger.error(f"Regeneration returned unsupported query type: {type(new_query_obj)}.")
+                    elif new_query_str == query_str:
+                        logger.warning("Regenerated query string is identical to original. Will proceed with backoff.")
+                    else:
+                        logger.info(f"Successfully regenerated query. New: '{new_query_str}'")
+                        current_query = new_query_obj # Use the new query OBJECT for the next iteration
+                        regenerated = True
+                        # Continue directly to next attempt with new query, skip backoff for regeneration
+                        continue 
+                        
+            except Exception as regen_e:
+                logger.exception(f"Error during query regeneration attempt: {str(regen_e)}. Proceeding with backoff.")
+            
+            # If we reach here after trying regeneration, it means it failed or was skipped.
+            logger.warning("Query regeneration failed or was skipped. Proceeding with standard backoff before retry.")
+        
+        # --- Standard Backoff for next attempt (if not regenerated) ---
+        base_delay = 1.0 # Base delay in seconds
+        jitter = 0.5 # Max jitter in seconds
+        backoff_delay = (base_delay * (2 ** attempt_number)) + random.uniform(0, jitter)
+        logger.info(f"Waiting {backoff_delay:.2f} seconds before next search attempt...")
+        await asyncio.sleep(backoff_delay)
+        # Loop continues to the next attempt_number
+            
+    # Fallback return (should ideally not be reached if loop logic is correct)
+    logger.error(f"Exited search retry loop unexpectedly after {MAX_SEARCH_ATTEMPTS} attempts.")
+    return result if result else SearchServiceResult(query=query_str, search_provider_error="Exited retry loop unexpectedly") 

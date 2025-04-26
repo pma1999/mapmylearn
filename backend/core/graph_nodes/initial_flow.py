@@ -328,7 +328,6 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
                     state=state,
                     initial_query=query_obj,
                     regenerate_query_func=regenerate_initial_structure_query,
-                    max_retries=1,
                     search_provider_key_provider=provider,
                     search_config={
                         "max_results": max_results_per_query,

@@ -1305,7 +1305,6 @@ async def execute_submodule_specific_searches(
                 state=state,
                 initial_query=query_obj,
                 regenerate_query_func=regenerate_submodule_content_query,
-                max_retries=1,
                 search_provider_key_provider=provider, # Corrected parameter name
                 search_config={
                     "max_results": max_results_per_query,
@@ -2129,7 +2128,6 @@ async def execute_module_specific_planning_searches(
                 state=state,
                 initial_query=query_obj,
                 regenerate_query_func=regenerate_module_planning_query, 
-                max_retries=1,
                 search_provider_key_provider=provider, # Corrected parameter name
                 search_config={
                     "max_results": max_results_per_query,

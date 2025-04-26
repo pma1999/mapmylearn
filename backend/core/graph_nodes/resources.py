@@ -128,7 +128,6 @@ async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
             state=state,
             initial_query=resource_query, # Note: This is a ResourceQuery not SearchQuery
             regenerate_query_func=regenerate_resource_query,
-            max_retries=1,
             search_provider_key_provider=provider,
             search_config={
                 "max_results": max_results_per_query,
@@ -338,7 +337,6 @@ async def generate_module_resources(state: LearningPathState, module_id: int, mo
             state=state,
             initial_query=resource_query,
             regenerate_query_func=regenerate_resource_query,
-            max_retries=1,
             search_provider_key_provider=provider,
             search_config={
                 "max_results": max_results_per_query,
@@ -589,7 +587,6 @@ async def generate_submodule_resources(
             state=state,
             initial_query=resource_query,
             regenerate_query_func=regenerate_resource_query,
-            max_retries=1,
             search_provider_key_provider=provider,
             search_config={
                 "max_results": max_results_per_query,
