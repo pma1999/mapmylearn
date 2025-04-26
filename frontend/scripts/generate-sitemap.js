@@ -1,4 +1,3 @@
-const router = require('../src/App.js'); // Assuming App.js defines routes, adjust if needed
 const Sitemap = require('react-router-sitemap').default;
 const path = require('path');
 const fs = require('fs');
