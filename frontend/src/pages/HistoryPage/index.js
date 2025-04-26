@@ -14,6 +14,7 @@ import PageHeader from './components/PageHeader';
 import HistoryFilters from './components/HistoryFilters';
 import HistoryEntryCard from './components/HistoryEntryCard';
 import HistoryEntrySkeleton from './components/HistoryEntrySkeleton';
+import ActiveGenerationCard from './components/ActiveGenerationCard';
 import EmptyState from './components/EmptyState';
 import ImportDialog from './components/ImportDialog';
 import ConfirmationDialog from './components/ConfirmationDialog';
@@ -40,16 +41,23 @@ const EntryCell = ({ columnIndex, rowIndex, style, data }) => {
       padding: '8px',
       boxSizing: 'border-box'
     }}>
-      <HistoryEntryCard
-        entry={entry}
-        onView={onView}
-        onDelete={onDelete}
-        onToggleFavorite={onToggleFavorite}
-        onUpdateTags={onUpdateTags}
-        onDownloadPDF={onDownloadPDF}
-        onExport={onExport}
-        virtualized={true}
-      />
+      {entry.isActive ? (
+        <ActiveGenerationCard 
+          entry={entry} 
+          virtualized={true} 
+        />
+      ) : (
+        <HistoryEntryCard
+          entry={entry}
+          onView={onView}
+          onDelete={onDelete}
+          onToggleFavorite={onToggleFavorite}
+          onUpdateTags={onUpdateTags}
+          onDownloadPDF={onDownloadPDF}
+          onExport={onExport}
+          virtualized={true}
+        />
+      )}
     </div>
   );
 };

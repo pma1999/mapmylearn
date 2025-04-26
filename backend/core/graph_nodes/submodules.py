@@ -8,7 +8,7 @@ from datetime import datetime
 
 import aiohttp
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.output_parsers import StrOutputParser, PydanticOutputParser
 from pydantic import BaseModel, Field
 from langchain.output_parsers import PydanticOutputParser
 
@@ -45,7 +45,7 @@ async def regenerate_submodule_content_query(
     sub_id: int = None,
     module: EnhancedModule = None,
     submodule: Submodule = None
-) -> SearchQuery:
+) -> Optional[SearchQuery]: # Return type changed to Optional[SearchQuery]
     """
     Regenerates a search query for submodule content development after a "no results found" error.
     
@@ -63,9 +63,10 @@ async def regenerate_submodule_content_query(
         submodule: The Submodule object for which content is being developed.
         
     Returns:
-        A new SearchQuery object with an alternative query.
+        A new SearchQuery object with keywords and rationale, or None if regeneration fails.
     """
-    logging.info(f"Regenerating submodule content query after no results for: {failed_query.keywords}")
+    logger = logging.getLogger("learning_path.submodule_processor") # Use relevant logger
+    logger.info(f"Regenerating submodule content query after no results for: {failed_query.keywords}")
     
     # Get language information from state
     output_language = state.get('language', 'en')
@@ -74,12 +75,13 @@ async def regenerate_submodule_content_query(
     # Get Google key provider from state
     google_key_provider = state.get("google_key_provider")
     if not google_key_provider:
-        logging.warning("Google key provider not found in state for submodule query regeneration")
+        logger.warning("Google key provider not found in state for submodule query regeneration")
+        return None # Return None if provider is missing
     
     # Build context information
     submodule_context = ""
     if module and submodule:
-        escaped_topic = escape_curly_braces(state["user_topic"])
+        escaped_topic = escape_curly_braces(state.get("user_topic", "the user's topic"))
         module_title = escape_curly_braces(module.title)
         submodule_title = escape_curly_braces(submodule.title)
         submodule_description = escape_curly_braces(submodule.description)
@@ -91,7 +93,10 @@ Submodule: {submodule_title}
 Submodule Description: {submodule_description}
 Position: Submodule {sub_id + 1} of {len(module.submodules)} in Module {module_id + 1}
         """
-    
+    else:
+         logger.warning("Module or submodule context missing for query regeneration.")
+         # Optionally return None or create minimal context
+
     prompt_text = """
 # SEARCH QUERY RETRY SPECIALIST INSTRUCTIONS
 
@@ -124,7 +129,7 @@ Create ONE alternative search query that:
 
 ## LANGUAGE INSTRUCTIONS
 - Generate your analysis and response in {output_language}.
-- For the search query, use {search_language} to maximize retrieving high-quality information.
+- For the search query keywords, use {search_language} to maximize retrieving high-quality information.
 
 ## QUERY FORMAT RULES
 - CRITICAL: Ensure your new query is DIFFERENT from the failed one
@@ -133,35 +138,37 @@ Create ONE alternative search query that:
 - Getting some relevant results is BETTER than getting zero results
 - Try different terms or synonyms that might be more common in educational content
 
-Your response should be formatted as a JSON object with 'query' (the new search query) and 'rationale' (why this query might work better).
+Your response MUST be a JSON object containing only the 'keywords' (the new search query string) and 'rationale' (your brief analysis and justification for the new query).
 
 {format_instructions}
 """
     try:
-        # Use SingleSearchQueryOutput parser or create a simple one
-        class SingleSearchQueryOutput(BaseModel):
-            query: str = Field(description="The optimal search query to use")
-            rationale: str = Field(description="Explanation of why this query is optimal for this submodule")
-        
-        single_query_parser = PydanticOutputParser(pydantic_object=SingleSearchQueryOutput)
+        # REMOVED local SingleSearchQueryOutput class definition
+
+        # Use the correct SearchQuery model for the parser
+        parser = PydanticOutputParser(pydantic_object=SearchQuery)
         
         prompt = ChatPromptTemplate.from_template(prompt_text)
-        result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), single_query_parser, {
+        
+        # Call run_chain with the correct parser and format instructions
+        result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), parser, {
             "failed_query": failed_query.keywords,
             "submodule_context": submodule_context,
             "output_language": output_language,
             "search_language": search_language,
-            "format_instructions": single_query_parser.get_format_instructions()
+            "format_instructions": parser.get_format_instructions() # Use correct parser's instructions
         })
         
-        if result and hasattr(result, 'query'):
-            logging.info(f"Successfully regenerated submodule content query: {result.query}")
-            return SearchQuery(keywords=result.query, purpose="content_development")
+        # Check if the result is a valid SearchQuery object
+        if result and isinstance(result, SearchQuery):
+            logger.info(f"Successfully regenerated submodule content query: Keywords='{result.keywords}', Rationale='{result.rationale}'")
+            # Return the valid SearchQuery object directly
+            return result
         else:
-            logging.error("Submodule query regeneration returned empty or invalid result")
+            logger.error(f"Submodule query regeneration returned empty or invalid result type: {type(result)}")
             return None
     except Exception as e:
-        logging.exception(f"Error regenerating submodule content query: {str(e)}")
+        logger.exception(f"Error regenerating submodule content query: {str(e)}")
         return None
 
 # Optional: Import the prompt registry for more advanced prompt management
@@ -1171,7 +1178,7 @@ Your task is to create a SINGLE OPTIMAL search query for in-depth research on a 
 ## SEARCH QUERY REQUIREMENTS
 
 ### 1. Keyword-Focused Format for Information Gathering
-Your query MUST be optimized for retrieving detailed information via a search engine API (like Google or Tavily) to be used for WRITING educational content:
+Your query MUST be optimized for retrieving detailed information via a search engine API (like Google or Brave Search) to be used for WRITING educational content: # Updated Tavily to Brave Search
 - Use the most relevant and specific keywords and technical terms from the submodule title and description.
 - Combine core concepts logically (e.g., use quotes for exact technical phrases if needed).
 - Focus on terms that will find explanations, examples, processes, methodologies, case studies, or data related to the submodule topic.
@@ -1275,9 +1282,9 @@ async def execute_submodule_specific_searches(
         return []
     
     # Get key parameters
-    tavily_key_provider = state.get("tavily_key_provider")
-    if not tavily_key_provider:
-        raise ValueError(f"Tavily key provider not found in state for submodule {module_id+1}.{sub_id+1}")
+    brave_key_provider = state.get("brave_key_provider") # Renamed tavily_key_provider
+    if not brave_key_provider:
+        raise ValueError(f"Brave Search key provider not found in state for submodule {module_id+1}.{sub_id+1}") # Updated message
     
     # Get search configuration
     max_results_per_query = int(os.environ.get("SEARCH_MAX_RESULTS", 5))
@@ -1291,7 +1298,7 @@ async def execute_submodule_specific_searches(
     async def bounded_search_with_retry(query_obj: SearchQuery):
         async with sem:
             # Set operation name for tracking
-            provider = tavily_key_provider.set_operation("submodule_content_search")
+            provider = brave_key_provider.set_operation("submodule_content_search") # Renamed tavily_key_provider
             
             # Use the new execute_search_with_llm_retry function
             return await execute_search_with_llm_retry(
@@ -1299,7 +1306,7 @@ async def execute_submodule_specific_searches(
                 initial_query=query_obj,
                 regenerate_query_func=regenerate_submodule_content_query,
                 max_retries=1,
-                tavily_key_provider=provider,
+                search_provider_key_provider=provider, # Corrected parameter name
                 search_config={
                     "max_results": max_results_per_query,
                     "scrape_timeout": scrape_timeout
@@ -1414,14 +1421,14 @@ async def develop_submodule_specific_content(
                     truncated_content += "... (truncated)"
                 search_context_parts.append(f"Content Snippet:\n{truncated_content}")
                 results_included_llm += 1
-            elif res.tavily_snippet:
-                snippet = escape_curly_braces(res.tavily_snippet)
+            elif res.search_snippet: # Renamed tavily_snippet
+                snippet = escape_curly_braces(res.search_snippet) # Renamed tavily_snippet
                 error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
                 # Use constant
                 truncated_snippet = snippet[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
                 if len(snippet) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
                      truncated_snippet += "... (truncated)"
-                search_context_parts.append(f"Tavily Snippet:{error_info}\n{truncated_snippet}")
+                search_context_parts.append(f"Search Snippet:{error_info}\n{truncated_snippet}") # Updated label
                 results_included_llm += 1
             else:
                  error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
@@ -1746,10 +1753,15 @@ async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str,
                 # Build research_context from raw scraped results
                 research_parts = []
                 for res in getattr(sub, "search_results", []):
-                    text = res.get("scraped_content") or res.get("tavily_snippet") or ""
-                    if text:
-                        snippet = text[:3000]
-                        research_parts.append(f"Source: {res.get('url')}\n{snippet}")
+                    # Ensure res is a dict before accessing keys
+                    if isinstance(res, dict):
+                        text = res.get("scraped_content") or res.get("search_snippet") or "" # Renamed tavily_snippet
+                        if text:
+                            snippet = text[:3000]
+                            research_parts.append(f"Source: {res.get('url')}\n{snippet}")
+                    else:
+                        # Log if res is not a dict (unexpected)
+                        logging.warning(f"Unexpected type for search result item in finalization: {type(res)}")
                 research_context = "\n\n".join(research_parts)[:10000]
 
                 # Add submodule data with quiz info and research context
@@ -1977,64 +1989,110 @@ async def regenerate_module_planning_query(
     module: EnhancedModule
 ) -> Optional[SearchQuery]: # Return SearchQuery or None
     """
-    Regenerates a structural planning query for a module after a 'no results' error.
+    Regenerates a search query for module structural planning after a "no results found" error.
+
+    Uses an LLM to create an alternative search query when the original planning query fails.
+    Provides context about the failed query and the module structure.
+
+    Args:
+        state: The current LearningPathState.
+        failed_query: The SearchQuery object that failed.
+        module_id: The index of the current module.
+        module: The EnhancedModule object for context.
+
+    Returns:
+        A new SearchQuery object with keywords and rationale, or None if regeneration fails.
     """
-    logger = logging.getLogger("learning_path.submodule_planner")
+    logger = logging.getLogger("learning_path.submodule_planner") # Use correct logger
     logger.info(f"Regenerating module planning query for module {module_id+1} after no results for: {failed_query.keywords}")
 
-    google_key_provider = state.get("google_key_provider")
+    # Get language information from state
     output_language = state.get('language', 'en')
     search_language = state.get('search_language', 'en')
 
-    user_topic = escape_curly_braces(state["user_topic"])
-    module_title = escape_curly_braces(module.title if hasattr(module, 'title') else module.get('title', f'Module {module_id+1}'))
-    module_description = escape_curly_braces(module.description if hasattr(module, 'description') else module.get('description', 'No description'))
+    # Get Google key provider from state
+    google_key_provider = state.get("google_key_provider")
+    if not google_key_provider:
+        logger.warning("Google key provider not found in state for module planning query regeneration")
+        # Decide if we should return None or raise an error, returning None for now
+        return None
 
+    # Build context information
+    module_title = escape_curly_braces(module.title)
+    module_description = escape_curly_braces(module.description)
+    user_topic = escape_curly_braces(state.get("user_topic", "the user's topic"))
+
+    # Construct a basic module context string
     module_context = f"""
 Topic: {user_topic}
-Module: {module_title}
-Description: {module_description}
+Module {module_id + 1}: {module_title}
+Module Description: {module_description}
+Objective: Regenerate a search query suitable for finding curriculum examples or structural guides for this specific module.
     """
 
-    # Simplified prompt focusing on getting *any* structural info
+    # Define the prompt text inline, asking for JSON output with keywords and rationale
     prompt_text = """
-# SEARCH QUERY RETRY SPECIALIST (MODULE STRUCTURE)
+# MODULE PLANNING SEARCH QUERY RETRY SPECIALIST
 
-The following query failed to find results about how to STRUCTURE module "{module_title}":
+The following search query returned NO RESULTS when searching for curriculum structures or syllabus examples for a learning path module:
 
 FAILED QUERY: {failed_query}
 
-CONTEXT:
+## MODULE CONTEXT
 {module_context}
 
-Generate ONE DIFFERENT, potentially broader, search query focused on finding *any* information about common structures, breakdowns, syllabi, or teaching sequences for "{module_title}". Prioritize getting *some* structural examples over perfect specificity. Use {search_language}.
+I need you to generate a DIFFERENT search query that is more likely to find relevant structural information (like syllabus examples, curriculum outlines, typical topic progressions) for this specific module.
 
-Example ideas: "{module_title} course outline", "how to teach {module_title}", "{module_title} curriculum example", "learning objectives {module_title}".
+## ANALYSIS OF FAILED QUERY
+Briefly analyze why the previous query might have failed (e.g., too specific, too niche, awkward phrasing for educational content search).
 
-Output only the new search query string.
-    """
+## NEW QUERY REQUIREMENTS
+Create ONE alternative search query that:
+1. Is broad enough to find syllabus/curriculum examples but specific enough to the module topic.
+2. Uses terminology common in educational or curriculum planning contexts.
+3. Avoids excessive quotes or overly complex structure.
+4. Focuses on finding *structural* information, not just general topic info.
+
+## LANGUAGE INSTRUCTIONS
+- Generate your analysis and response in {output_language}.
+- For the search query keywords, use {search_language} to maximize finding high-quality information.
+
+Your response MUST be a JSON object containing only the 'keywords' (the new search query string) and 'rationale' (your brief analysis and justification for the new query).
+
+{format_instructions}
+"""
+
+    # Set up the Pydantic parser for the SearchQuery model
+    parser = PydanticOutputParser(pydantic_object=SearchQuery)
+
     prompt = ChatPromptTemplate.from_template(prompt_text)
-    parser = StrOutputParser() # Simple parser for the query string
+    # Get the LLM instance via the provider
+    llm = get_llm(key_provider=google_key_provider) # Assuming get_llm returns a compatible LLM instance
+
+    # Construct the chain
+    chain = prompt | llm | parser
 
     try:
-        new_query_string = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), parser, {
-            "module_title": module_title,
+        # Invoke the chain - run_chain might not be needed if using LCEL directly
+        regenerated_query_object = await chain.ainvoke({ # Use ainovke for async
             "failed_query": failed_query.keywords,
             "module_context": module_context,
+            "output_language": output_language,
             "search_language": search_language,
+            "format_instructions": parser.get_format_instructions(),
         })
 
-        if new_query_string and new_query_string.strip() and new_query_string.strip() != failed_query.keywords:
-            logger.info(f"Successfully regenerated module planning query: {new_query_string.strip()}")
-            # Return as SearchQuery object for consistency with execute_search_with_llm_retry
-            return SearchQuery(keywords=new_query_string.strip(), purpose="module_structure_planning_retry")
+        if regenerated_query_object and isinstance(regenerated_query_object, SearchQuery):
+            logger.info(f"Successfully regenerated module planning query: Keywords='{regenerated_query_object.keywords}', Rationale='{regenerated_query_object.rationale}'")
+            # Return the validated SearchQuery object directly
+            return regenerated_query_object
         else:
-            logger.warning("Query regeneration yielded same or empty query.")
-            return None
+            logger.warning("Query regeneration did not return a valid SearchQuery object.")
+            return None # Return None if parsing failed or object is not as expected
     except Exception as e:
+        # Catch potential exceptions during LLM call or parsing
         logger.exception(f"Error regenerating module planning query: {str(e)}")
         return None
-
 
 async def execute_module_specific_planning_searches(
     state: LearningPathState,
@@ -2042,71 +2100,81 @@ async def execute_module_specific_planning_searches(
     module: EnhancedModule,
     planning_queries: List[SearchQuery]
 ) -> List[SearchServiceResult]:
-    """
-    Executes web searches for module structural planning queries using Tavily+Scrape.
-    """
-    logger = logging.getLogger("learning_path.submodule_planner")
-    logger.info(f"Executing structural planning searches for module {module_id+1}: {module.title}")
-
+    """Executes web searches for module structural planning queries using Brave+Scrape.""" # Updated docstring
+    logger = logging.getLogger("learning_path.submodule_planner") # Define logger
+    logger.info(f"Executing web searches for module planning: {module.title}") # Use logger
+    
     if not planning_queries:
-        logger.warning(f"No planning queries provided for module {module_id+1}")
+        logger.warning(f"No planning queries provided for module {module.title}") # Use logger
         return []
-
-    tavily_key_provider = state.get("tavily_key_provider")
-    if not tavily_key_provider:
-        module_title_safe = module.title if hasattr(module, 'title') else module.get('title', f'Module {module_id+1}')
-        logger.error(f"Tavily key provider not found for module {module_id+1} ({module_title_safe}) planning search.")
-        # Create minimal error results
-        return [SearchServiceResult(query=q.keywords, search_provider_error="Missing Tavily Key Provider") for q in planning_queries]
-
-    max_results = int(os.environ.get("SEARCH_MAX_RESULTS_PLANNING", 3)) # Fewer results might be okay for planning
+    
+    brave_key_provider = state.get("brave_key_provider") # Renamed tavily_key_provider
+    if not brave_key_provider:
+        module_title_safe = escape_curly_braces(module.title)
+        logger.error(f"Brave Search key provider not found for module {module_id+1} ({module_title_safe}) planning search.") # Use logger, updated message
+        # Create error results for each query
+        return [SearchServiceResult(query=q.keywords, search_provider_error="Missing Brave Key Provider") for q in planning_queries]
+    
+    max_results_per_query = int(os.environ.get("SEARCH_MAX_RESULTS", 5))
     scrape_timeout = int(os.environ.get("SCRAPE_TIMEOUT", 10))
-    # Reuse existing parallel count setting or define a new one if needed
-    search_parallel_count = state.get("search_parallel_count", 3)
-
-    all_search_service_results: List[SearchServiceResult] = []
-    sem = asyncio.Semaphore(search_parallel_count)
-
+    
+    results = []
+    sem = asyncio.Semaphore(3) # Limit concurrent searches
+    
     async def bounded_search_with_planning_retry(query_obj: SearchQuery):
         async with sem:
-            provider = tavily_key_provider.set_operation("module_planning_search")
+            provider = brave_key_provider.set_operation("module_planning_search") # Renamed tavily_key_provider
+            # Use retry function, passing the correct key provider
             return await execute_search_with_llm_retry(
                 state=state,
                 initial_query=query_obj,
-                regenerate_query_func=regenerate_module_planning_query, # Use the new specific regen function
+                regenerate_query_func=regenerate_module_planning_query, 
                 max_retries=1,
-                tavily_key_provider=provider,
+                search_provider_key_provider=provider, # Corrected parameter name
                 search_config={
-                    "max_results": max_results,
+                    "max_results": max_results_per_query,
                     "scrape_timeout": scrape_timeout
                 },
-                regenerate_args={ # Pass necessary context for regeneration
+                regenerate_args={
                     "module_id": module_id,
-                    "module": module # Pass the module object itself
+                    "module": module
                 }
             )
-
-    tasks = [bounded_search_with_planning_retry(query) for query in planning_queries]
-
-    results_or_excs = await asyncio.gather(*tasks, return_exceptions=True)
-
-    for i, res_or_exc in enumerate(results_or_excs):
-        if isinstance(res_or_exc, Exception):
-            query_keywords = planning_queries[i].keywords if i < len(planning_queries) else "unknown query"
-            logger.error(f"Search task error for module {module_id+1} planning query '{query_keywords}': {res_or_exc}")
-            all_search_service_results.append(SearchServiceResult(query=query_keywords, search_provider_error=f"Task execution error: {str(res_or_exc)}"))
-        elif isinstance(res_or_exc, SearchServiceResult):
-             all_search_service_results.append(res_or_exc)
-             if res_or_exc.search_provider_error:
-                  logger.warning(f"Search provider error for module planning query '{res_or_exc.query}': {res_or_exc.search_provider_error}")
-        else:
-            query_keywords = planning_queries[i].keywords if i < len(planning_queries) else "unknown query"
-            logger.error(f"Unexpected result type for module {module_id+1} planning query '{query_keywords}': {type(res_or_exc)}")
-            all_search_service_results.append(SearchServiceResult(query=query_keywords, search_provider_error=f"Unexpected result type: {type(res_or_exc)}"))
-
-
-    logger.info(f"Completed {len(all_search_service_results)} planning searches for module {module_id+1}")
-    return all_search_service_results
+            
+    try:
+        tasks = [bounded_search_with_planning_retry(q) for q in planning_queries]
+        results_or_excs = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        processed_results = []
+        for i, res_or_exc in enumerate(results_or_excs):
+            if isinstance(res_or_exc, Exception):
+                query_keywords = planning_queries[i].keywords
+                logger.error(f"Planning search failed for query '{query_keywords}': {str(res_or_exc)}") # Use logger
+                processed_results.append(SearchServiceResult(
+                    query=query_keywords,
+                    search_provider_error=f"Search task error: {str(res_or_exc)}"
+                ))
+            elif isinstance(res_or_exc, SearchServiceResult):
+                 processed_results.append(res_or_exc)
+                 if res_or_exc.search_provider_error:
+                     logger.warning(f"Search provider error for planning query '{res_or_exc.query}': {res_or_exc.search_provider_error}") # Use logger
+            else:
+                 # Handle unexpected return type
+                 query_keywords = planning_queries[i].keywords
+                 logger.error(f"Unexpected result type for planning query '{query_keywords}': {type(res_or_exc)}") # Use logger
+                 processed_results.append(SearchServiceResult(
+                     query=query_keywords,
+                     search_provider_error=f"Unexpected result type: {type(res_or_exc).__name__}"
+                 ))
+                 
+        return processed_results
+        
+    except Exception as e:
+        logger.exception(f"Error executing planning searches for module {module.title}: {str(e)}") # Use logger
+        return [SearchServiceResult(
+            query=f"Error: {str(e)}",
+            search_provider_error=f"Failed to execute planning searches: {str(e)}"
+        )]
 
 # --- End New Functions ---
 
@@ -2242,103 +2310,109 @@ async def plan_module_submodules(
     planning_search_context: Optional[str] = None # Add new optional argument
 ) -> EnhancedModule: # Return type should be EnhancedModule
     """
-    Plans submodules for a specific module, optionally using structural research context.
-
+    Plans submodules for a specific module, potentially using planning search results.
+    
     Args:
         state: The current state.
         idx: Index of the module.
-        module: The module to process (initially from basic modules list).
-        planning_search_context: Optional formatted string of search results for structural planning.
-
+        module: The module to process.
+        planning_search_context: Optional string containing context from planning searches.
+        
     Returns:
         Enhanced module with planned submodules.
     """
-    logger = logging.getLogger("learning_path.submodule_planner") # Use specific logger
-    # Extract module title/desc safely for logging
-    module_title = module.title if hasattr(module, 'title') else module.get('title', f'Module {idx+1}')
-    logger.info(f"Planning submodules for module {idx+1}: {module_title}")
-
+    logging.info(f"Planning submodules for module {idx+1}: {module.title}")
+    
+    # Get progress callback
     progress_callback = state.get("progress_callback")
+    
+    # Send module-specific progress update
     if progress_callback:
         # Calculate overall progress based on module index
         total_modules = len(state.get("modules", []))
-        module_progress = (idx + 0.2) / max(1, total_modules)  # Add 0.2 to avoid 0 progress
-        overall_progress = 0.55 + (module_progress * 0.05)  # submodule planning is 5% of overall
-
+        module_progress = (idx + 0.2) / max(1, total_modules)
+        # submodule planning (now including planning search) is 15% of overall (55% to 70%)
+        overall_progress = 0.55 + (module_progress * 0.15) 
+        
         await progress_callback(
-            f"Planning submodules for module {idx+1}: {module_title}",
+            f"Planning submodules for module {idx+1}: {module.title}",
             phase="submodule_planning",
             phase_progress=module_progress,
             overall_progress=overall_progress,
-            preview_data={"current_module": {"title": module_title, "index": idx}},
+            preview_data={"current_module": {"title": module.title, "index": idx}},
             action="processing"
         )
-
+        
     # Get language from state
     output_language = state.get('language', 'en')
-
-    # Use initial basic modules for overall path context
-    learning_path_context = "\n".join([
-        f"Module {i+1}: {escape_curly_braces(mod.title if hasattr(mod, 'title') else mod.get('title', f'Module {i+1}'))}\n{escape_curly_braces(mod.description if hasattr(mod, 'description') else mod.get('description', 'No description'))}"
-        for i, mod in enumerate(state.get("modules", [])) # Use initial basic modules for context
-    ])
-
-    # Ensure planning_search_context is a non-empty string for the prompt
-    if not planning_search_context:
-        planning_search_context = "No specific structural research was performed or available for this module."
+    
+    # Prepare context
+    learning_path_context = "\n".join([f"Module {i+1}: {m.title}\n{m.description}"
+                                       for i, m in enumerate(state["modules"])])
+    
+    # Add planning context if available
+    planning_context_str = planning_search_context or "(No structural research context available)"
 
     # Check if a specific number of submodules was requested
     submodule_count_instruction = ""
     if state.get("desired_submodule_count"):
         submodule_count_instruction = f"IMPORTANT: Create EXACTLY {state['desired_submodule_count']} submodules for this module. Not more, not less."
-
-    # Modify the prompt to include the submodule count instruction if specified
-    # Base prompt is already updated in prompts file
+    
+    # Modify the prompt to include submodule count and planning context
     base_prompt = SUBMODULE_PLANNING_PROMPT
+    prompt_params = {
+        "user_topic": escape_curly_braces(state["user_topic"]),
+        "module_title": escape_curly_braces(module.title),
+        "module_description": escape_curly_braces(module.description),
+        "learning_path_context": learning_path_context,
+        "language": output_language,
+        "planning_search_context": escape_curly_braces(planning_context_str),
+        "format_instructions": submodule_parser.get_format_instructions() # Ensure format instructions are passed
+    }
+    
+    # Insert the submodule count instruction if specified
     if submodule_count_instruction:
-        # Insert the instruction before the format_instructions placeholder
-        base_prompt = base_prompt.replace("{format_instructions}", f"{submodule_count_instruction}\n\n{{format_instructions}}")
+        base_prompt = base_prompt.replace(
+            "## INSTRUCTIONS & REQUIREMENTS",
+            f"## INSTRUCTIONS & REQUIREMENTS\n\n{submodule_count_instruction}"
+        )
 
     prompt = ChatPromptTemplate.from_template(base_prompt)
+
     try:
-        # Re-extract module title/desc safely for prompt variables
-        module_title_for_prompt = module.title if hasattr(module, 'title') else module.get('title', f'Module {idx+1}')
-        module_description_for_prompt = module.description if hasattr(module, 'description') else module.get('description', 'No description')
-
-        result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider")), submodule_parser, {
-            "user_topic": state["user_topic"],
-            "module_title": module_title_for_prompt,
-            "module_description": module_description_for_prompt,
-            "learning_path_context": learning_path_context,
-            "language": output_language,
-            "planning_search_context": planning_search_context, # Pass the new context here
-            "format_instructions": submodule_parser.get_format_instructions()
-        })
+        result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider")), submodule_parser, prompt_params)
         submodules = result.submodules
-
-        # If a specific number of submodules was requested but not achieved, adjust the list
-        if state.get("desired_submodule_count") and len(submodules) != state["desired_submodule_count"]:
-            logging.warning(f"Requested {state['desired_submodule_count']} submodules but got {len(submodules)} for module {idx+1}")
-            if len(submodules) > state["desired_submodule_count"]:
-                # Trim excess submodules if we got too many
-                submodules = submodules[:state["desired_submodule_count"]]
-                logging.info(f"Trimmed submodules to match requested count of {state['desired_submodule_count']}")
+        
+        # Validate and adjust submodule count if necessary
+        desired_count = state.get("desired_submodule_count")
+        if desired_count and len(submodules) != desired_count:
+            logging.warning(f"Requested {desired_count} submodules but got {len(submodules)} for module {idx+1}: '{module.title}'. Adjusting...")
+            if len(submodules) > desired_count:
+                submodules = submodules[:desired_count]
+            else:
+                # If too few, log it, but proceed with what we have.
+                # Trying to regenerate might be complex and slow down the process.
+                logging.warning(f"Proceeding with {len(submodules)} submodules for '{module.title}' despite requesting {desired_count}.")
 
         # Set order for each submodule
         for i, sub in enumerate(submodules):
             sub.order = i + 1
 
-        # Create the enhanced module - always return EnhancedModule type
-        from backend.models.models import EnhancedModule # Ensure import
-        enhanced_module = EnhancedModule(
-            title=module_title_for_prompt,
-            description=module_description_for_prompt,
-            submodules=submodules
-            # Add other fields if needed from the original module object
-        )
-
+        # Create the enhanced module
+        try:
+            # If 'module' is already an EnhancedModule, copy it
+            enhanced_module = module.model_copy(update={"submodules": submodules})
+        except AttributeError:
+            # If 'module' is likely a basic Module (e.g., from initial state)
+            from backend.models.models import EnhancedModule
+            enhanced_module = EnhancedModule(
+                title=module.title,
+                description=module.description,
+                submodules=submodules
+            )
+            
         logging.info(f"Planned {len(submodules)} submodules for module {idx+1}")
-
+        
         # Send progress update for completed module submodule planning
         if progress_callback:
             submodule_previews = []
@@ -2347,142 +2421,94 @@ async def plan_module_submodules(
                     "title": submodule.title,
                     "description": submodule.description[:100] + "..." if len(submodule.description) > 100 else submodule.description
                 })
-
-            # Calculate slightly more progress
-            total_modules = len(state.get("modules", [])) # Use basic modules count
-            module_progress = (idx + 1) / max(1, total_modules)
-            overall_progress = 0.55 + (module_progress * 0.05)
-
+                
+            # Calculate progress more accurately
+            module_progress_complete = (idx + 1) / max(1, total_modules)
+            overall_progress = 0.55 + (module_progress_complete * 0.15)
+            
             await progress_callback(
-                f"Planned {len(submodules)} submodules for module {idx+1}: {module_title}", # Use safe title
+                f"Planned {len(submodules)} submodules for module {idx+1}: {module.title}",
                 phase="submodule_planning",
-                phase_progress=module_progress,
+                phase_progress=module_progress_complete,
                 overall_progress=overall_progress,
                 preview_data={
                     "current_module": {
-                        "title": module_title, # Use safe title
+                        "title": module.title, 
                         "index": idx,
                         "submodules": submodule_previews
                     }
                 },
-                action="processing" # Keep as processing, completion is handled by plan_submodules
+                action="completed"
             )
-
+        
         return enhanced_module
 
     except Exception as e:
-        module_title_safe = module.title if hasattr(module, 'title') else module.get('title', f'Module {idx+1}')
-        logging.error(f"Error planning submodules for module {idx+1} ('{module_title_safe}'): {str(e)}")
-
-        # Send error progress update
+        logging.exception(f"Error planning submodules for module {idx+1}: {str(e)}")
         if progress_callback:
-            await progress_callback(
-                f"Error planning submodules for module {idx+1} ('{module_title_safe}'): {str(e)}",
-                phase="submodule_planning",
-                phase_progress=(idx + 0.5) / max(1, len(state.get("modules", []))),
-                overall_progress=0.57, # Keep estimate
-                action="error"
-            )
-
-        raise # Propagate the exception to be handled in plan_and_research_module_submodules or plan_submodules
+             # Use the earlier calculated progress for the error update
+             await progress_callback(
+                 f"Error planning submodules for module {idx+1}: {str(e)}",
+                 phase="submodule_planning",
+                 phase_progress=module_progress, 
+                 overall_progress=overall_progress,
+                 action="error"
+             )
+        raise # Propagate the exception
 
 async def plan_and_research_module_submodules(state: LearningPathState, module_id: int, module) -> EnhancedModule:
-    """
-    Wrapper function to perform research and then plan submodules for a specific module.
-    Handles errors during research and falls back to planning without it.
-    Ensures an EnhancedModule is always returned.
-    """
-    logger = logging.getLogger("learning_path.submodule_planner") # Use specific logger
-    module_title_safe = module.title if hasattr(module, 'title') else module.get('title', f'Module {module_id+1}')
-    logger.info(f"Starting research & planning for module {module_id+1}: {module_title_safe}")
-    planning_search_results: Optional[List[SearchServiceResult]] = None
-    formatted_context = "No specific structural research available or search failed." # Default fallback
-
-    try:
-        # Step 1: Generate planning queries
-        planning_queries = await generate_module_specific_planning_queries(state, module_id, module)
-
-        # Step 2: Execute planning searches
-        if planning_queries:
-            planning_search_results = await execute_module_specific_planning_searches(state, module_id, module, planning_queries)
-
-            # Step 3: Format results for prompt (only if search was attempted and yielded results)
-            if planning_search_results:
-                 context_parts = []
-                 max_context_per_query = 3 # Limit results per query for planning context
-                 # Use the constant here
-                 # max_chars_per_result = 2000 # OLD value
-
-                 for report in planning_search_results:
-                      # Ensure report has needed attributes
-                      if not isinstance(report, SearchServiceResult): continue
-                      query = escape_curly_braces(report.query)
-                      context_parts.append(f"\n## Insights from searching for: \"{query}\"\n")
-                      results_included = 0
-                      valid_results_found = False
-                      # Ensure report.results is iterable
-                      report_results = report.results if isinstance(report.results, list) else []
-                      for res in report_results:
-                           # Ensure res has needed attributes
-                           if not isinstance(res, ScrapedResult): continue
-                           if results_included >= max_context_per_query:
-                                break
-                           title = escape_curly_braces(res.title or 'N/A')
-                           url = res.url
-                           content_snippet = None
-                           if res.scraped_content:
-                               content = escape_curly_braces(res.scraped_content)
-                               # Use constant
-                               content_snippet = content[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
-                               if len(content) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT: content_snippet += "... (truncated)"
-                           elif res.tavily_snippet: # Fallback
-                               snippet = escape_curly_braces(res.tavily_snippet)
-                               error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})" if res.scrape_error else ""
-                               # Use constant
-                               truncated_snippet = snippet[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
-                               if len(snippet) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
-                                    truncated_snippet += "... (truncated)"
-                               content_snippet = f"Tavily Snippet:{error_info}\n{truncated_snippet}"
-
-                           if content_snippet: # Only include if we have content
-                                context_parts.append(f"### Source: {url} (Title: {title})")
-                                context_parts.append(f"Content Snippet:\n{content_snippet}")
-                                context_parts.append("---")
-                                results_included += 1
-                                valid_results_found = True
-
-                      if not valid_results_found:
-                           context_parts.append("(No usable content snippets found for this query)")
-
-                 if context_parts: # Only update if we actually added something
-                     formatted_context = "\n".join(context_parts)
-
-        else:
-             logger.warning(f"No planning queries generated for module {module_id+1}, proceeding without structural research.")
-
-    except Exception as e:
-        logger.exception(f"Error during research phase for module {module_id+1}: {str(e)}. Proceeding with planning without research.")
-        # Keep planning_search_results as None and formatted_context as default
-
-    # Step 4: Call the actual planning function, passing the formatted context
-    try:
-        # Pass the formatted context string for the prompt
-        enhanced_module = await plan_module_submodules(
-            state,
-            idx=module_id,
-            module=module,
-            planning_search_context=formatted_context # Pass the formatted string here
-        )
-        return enhanced_module
-    except Exception as planning_error:
-         module_title_safe_inner = module.title if hasattr(module, 'title') else module.get('title', f'Module {module_id+1}')
-         module_desc_safe_inner = module.description if hasattr(module, 'description') else module.get('description', 'No description')
-         logger.exception(f"Error during submodule planning phase for module {module_id+1} ('{module_title_safe_inner}') (after research attempt): {planning_error}")
-         # If planning itself fails, return the original module without submodules as a fallback
-         from backend.models.models import EnhancedModule # Ensure import
-         fallback_module = EnhancedModule(
-              title=module_title_safe_inner,
-              description=module_desc_safe_inner,
-              submodules=[]
-         )
-         return fallback_module
+    """Combines planning search and submodule planning for a single module."""
+    logger = logging.getLogger("learning_path.planner")
+    logger.info(f"Starting combined planning and research for module {module_id+1}: {module.title}")
+    
+    # 1. Generate planning queries
+    planning_queries = await generate_module_specific_planning_queries(state, module_id, module)
+    
+    # 2. Execute planning searches
+    planning_search_results = await execute_module_specific_planning_searches(state, module_id, module, planning_queries)
+    
+    # 3. Format planning search context
+    planning_context_parts = []
+    MAX_CONTEXT_CHARS = 5000 # Limit total context size
+    current_chars = 0
+    
+    for report in planning_search_results:
+        query = escape_curly_braces(report.query)
+        planning_context_parts.append(f"\n## Research for Planning Query: \"{query}\"\n")
+        results_included = 0
+        for res in report.results:
+            if current_chars >= MAX_CONTEXT_CHARS:
+                 planning_context_parts.append("... (Context truncated due to length)")
+                 break
+            
+            title = escape_curly_braces(res.title or 'N/A')
+            url = res.url
+            planning_context_parts.append(f"### Source: {url} (Title: {title})")
+            
+            content_snippet = ""
+            if res.scraped_content:
+                content_snippet = f"Scraped Content Snippet:\n{escape_curly_braces(res.scraped_content)[:1000]}" # Limit snippet length
+            elif res.search_snippet: # Fallback # Renamed tavily_snippet
+                error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
+                content_snippet = f"Search Snippet:{error_info}\n{escape_curly_braces(res.search_snippet)[:1000]}" # Renamed tavily_snippet
+            else:
+                error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
+                content_snippet = f"Content: Not available.{error_info}"
+                
+            planning_context_parts.append(content_snippet)
+            current_chars += len(content_snippet)
+            results_included += 1
+            planning_context_parts.append("---")
+        
+        if results_included == 0:
+             planning_context_parts.append("(No usable content found for this planning query)")
+             
+        if current_chars >= MAX_CONTEXT_CHARS:
+            break
+            
+    planning_search_context = "\n".join(planning_context_parts)
+    
+    # 4. Plan submodules using the context
+    enhanced_module = await plan_module_submodules(state, module_id, module, planning_search_context)
+    
+    return enhanced_module

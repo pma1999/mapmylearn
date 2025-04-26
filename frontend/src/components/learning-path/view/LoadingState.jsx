@@ -16,9 +16,11 @@ import { motion } from 'framer-motion';
  * 
  * @param {Object} props Component props
  * @param {Array} props.progressMessages Progress messages from SSE (potentially with progress percentage)
+ * @param {boolean} props.isReconnecting - Flag indicating if reconnecting
+ * @param {number} props.retryAttempt - Current retry attempt number
  * @returns {JSX.Element} Loading state component
  */
-const LoadingState = ({ progressMessages = [] }) => {
+const LoadingState = ({ progressMessages = [], isReconnecting = false, retryAttempt = 0 }) => {
   const theme = useTheme();
   
   // Retrieve the topic from sessionStorage (for new generations)
@@ -84,6 +86,14 @@ const LoadingState = ({ progressMessages = [] }) => {
             <Typography variant="body1" color="text.secondary" paragraph sx={{ minHeight: '3em', mb: 3 }}> 
               {/* Display the latest message */}
               {latestMessage || 'Please wait while we prepare your learning journey...'}
+              {/* Add reconnection message */}
+              {isReconnecting && (
+                <Box sx={{ mt: 1, color: theme.palette.warning.main }}>
+                  <Typography variant="body2" component="span">
+                    Connection interrupted. Attempting to reconnect... (Attempt {retryAttempt}/{/* Hardcode max retries for now, ideally pass from hook */}5)
+                  </Typography>
+                </Box>
+              )}
             </Typography>
             
             {/* Progress Bar */}
@@ -167,8 +177,8 @@ LoadingState.propTypes = {
     phase: PropTypes.string, // Added phase if available
     progress: PropTypes.number, // Added progress percentage if available
   })),
-  // isPolling prop is no longer used or needed
-  // isPolling: PropTypes.bool 
+  isReconnecting: PropTypes.bool, // Prop for reconnection state
+  retryAttempt: PropTypes.number, // Prop for current retry attempt
 };
 
 export default LoadingState; 

@@ -42,7 +42,7 @@ class KeyProvider:
         Initialize a key provider.
         
         Args:
-            key_type: Type of key ('google', 'perplexity', 'tavily')
+            key_type: Type of key ('google', 'perplexity', 'brave')
             token_or_key: Optional token for retrieving the key or direct API key
                          (if None, uses server-provided keys)
             user_id: Optional user identifier for usage tracking
@@ -57,8 +57,14 @@ class KeyProvider:
                 self._is_direct_key = True
             elif key_type == "perplexity" and token_or_key.startswith("pplx-"):
                 self._is_direct_key = True # Keep for legacy
-            elif key_type == "tavily" and token_or_key.startswith("tvly-"):
-                self._is_direct_key = True
+            # Removed Tavily check as Brave keys don't have a standard prefix
+            # elif key_type == "brave" and token_or_key.startswith("tvly-"): # Example if brave had prefix
+            #    self._is_direct_key = True
+            
+            # Simple check: If it's not a token (usually UUID like), assume it's a direct key for non-prefixed types
+            # This might need refinement if brave keys get a standard format/prefix later.
+            elif key_type == "brave" and len(token_or_key) > 40: # Basic heuristic: keys are usually long
+                 self._is_direct_key = True
 
         self.use_server_keys = True  # Assume server keys unless overridden (logic in get_key checks env first)
         self.operation = "api_call"  # Default operation, can be updated
@@ -168,9 +174,9 @@ class PerplexityKeyProvider(KeyProvider):
         super().__init__("perplexity", token_or_key, user_id)
 
 
-class TavilyKeyProvider(KeyProvider):
-    """Key provider specialized for Tavily API keys."""
+class BraveKeyProvider(KeyProvider):
+    """Key provider specialized for Brave Search API keys."""
     
     def __init__(self, token_or_key: Optional[str] = None, user_id: Optional[str] = None):
-        """Initialize with tavily key type."""
-        super().__init__("tavily", token_or_key, user_id) 
+        """Initialize with brave key type."""
+        super().__init__("brave", token_or_key, user_id) 

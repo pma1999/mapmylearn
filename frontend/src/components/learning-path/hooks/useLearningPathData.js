@@ -7,7 +7,7 @@ import { getLearningPath, getHistoryEntry, API_URL } from '../../../services/api
  * Handles direct history loads or generation via taskId, including SSE progress.
  * 
  * @param {string} source - Optional source override ('history' or null)
- * @returns {Object} { learningPath, loading, error, isFromHistory, savedToHistory, refreshData, temporaryPathId, progressMessages }
+ * @returns {Object} { learningPath, loading, error, isFromHistory, savedToHistory, refreshData, temporaryPathId, progressMessages, isReconnecting, retryAttempt }
  */
 const useLearningPathData = (source = null) => {
   const { taskId, entryId } = useParams();
@@ -17,13 +17,21 @@ const useLearningPathData = (source = null) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isFromHistory, setIsFromHistory] = useState(false);
-  const [savedToHistory, setSavedToHistory] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [temporaryPathId, setTemporaryPathId] = useState(null);
   const [progressMessages, setProgressMessages] = useState([]); 
+  const [persistentPathId, setPersistentPathId] = useState(null);
+  
+  // State for SSE reconnection logic
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const [retryAttempt, setRetryAttempt] = useState(0);
+  const retryTimeoutRef = useRef(null);
+  const MAX_RETRIES = 5; // Max reconnection attempts
   
   // Ref to hold the EventSource instance
   const eventSourceRef = useRef(null);
+  // Ref to track if completion/error was already signaled by onmessage
+  const receivedFinalSignalRef = useRef(false); 
 
   // Determine if data should be loaded from history
   const shouldLoadFromHistory = 
@@ -36,14 +44,73 @@ const useLearningPathData = (source = null) => {
     setRefreshTrigger(prev => prev + 1);
   }, []);
 
+  // Helper function to attempt fetching the final result first
+  const tryFetchFinalResult = async (id) => {
+    console.log('Attempting to fetch final result directly for task:', id);
+    try {
+      const responseData = await getLearningPath(id);
+      
+      // Handle successful fetch (task completed or failed)
+      if (responseData.status === 'completed' && responseData.result) {
+        console.log('Direct fetch successful: Task completed.');
+        setData(responseData.result);
+        const tempId = crypto.randomUUID();
+        setTemporaryPathId(tempId);
+        setIsFromHistory(false);
+        setPersistentPathId(responseData.result.path_id || null);
+        setError(null);
+        setLoading(false);
+        return { status: 'completed' };
+      } else if (responseData.status === 'failed') {
+        console.log('Direct fetch successful: Task failed.');
+        setError(responseData.error?.message || 'Learning path generation failed.');
+        setData(null);
+        setLoading(false);
+        return { status: 'failed' };
+      } else {
+        // Unexpected status in a successful response (e.g., PENDING/RUNNING)
+        console.warn('Unexpected status in successful result fetch:', responseData.status);
+        // Treat as still processing and proceed to SSE
+        return { status: 'processing' };
+      }
+    } catch (err) {
+      // Handle errors during fetch attempt
+      if (err.message === 'Task not found') {
+        // This is the 404 case from getLearningPath
+        // Assume task is still processing or non-existent; SSE will handle it.
+        console.log('Direct fetch resulted in "Task not found" (404), proceeding to SSE.');
+        return { status: 'processing' };
+      } else {
+        // Any other error (network, server error 5xx, etc.)
+        console.error('Error during initial fetch attempt:', err);
+        setError(err.message || 'Failed to check task status.');
+        setData(null);
+        setLoading(false);
+        return { status: 'error' };
+      }
+    }
+  };
+
   // Effect to load data or setup SSE
   useEffect(() => {
-    // Ensure previous EventSource is closed on re-run
-    if (eventSourceRef.current) {
-      console.log('useLearningPathData: Closing previous EventSource due to dependency change.');
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
+    // Ensure previous EventSource is closed AND retry timer is cleared on re-run/unmount
+    const cleanup = () => {
+      if (eventSourceRef.current) {
+        console.log('useLearningPathData: Cleaning up EventSource.');
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      if (retryTimeoutRef.current) {
+        console.log('useLearningPathData: Clearing retry timeout.');
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
+      setIsReconnecting(false);
+      setRetryAttempt(0);
+      receivedFinalSignalRef.current = false; // Reset signal flag
+    };
+    
+    cleanup(); // Clean up before starting
 
     const loadData = async () => {
       console.log('useLearningPathData: Starting load...', { taskId, entryId, shouldLoadFromHistory });
@@ -52,6 +119,9 @@ const useLearningPathData = (source = null) => {
       setData(null); 
       setTemporaryPathId(null);
       setProgressMessages([]); 
+      setIsReconnecting(false); 
+      setRetryAttempt(0);    
+      receivedFinalSignalRef.current = false; 
       
       try {
         if (shouldLoadFromHistory) {
@@ -66,86 +136,23 @@ const useLearningPathData = (source = null) => {
           const pathData = historyResponse.entry.path_data || historyResponse.entry;
           setData(pathData);
           setIsFromHistory(true);
-          setSavedToHistory(true);
+          setPersistentPathId(entryId);
           setLoading(false);
           console.log('useLearningPathData: History load complete.');
         
         } else if (taskId) {
-          // --- Load via Generation Task (SSE) --- 
-          console.log('useLearningPathData: Starting generation tracking...', taskId);
-          setProgressMessages([{ message: 'Initializing learning path generation...', timestamp: Date.now(), phase: 'initialization', progress: 0.0 }]);
-          setLoading(true); // Ensure loading is true
+          // --- Load via Generation Task (Modified) --- 
+          
+          // 1. Attempt to fetch final result directly first
+          const initialResult = await tryFetchFinalResult(taskId);
 
-          // Construct the FULL URL for EventSource using the imported API_URL
-          const apiUrl = `${API_URL}/api/progress/${taskId}`; 
-          console.log(`useLearningPathData: Connecting to SSE: ${apiUrl}`);
-          const es = new EventSource(apiUrl); // Use the full URL
-          eventSourceRef.current = es; // Store instance in ref
-
-          es.onmessage = (event) => {
-            try {
-              // Check for the specific completion signal string first
-              if (event.data === '{"complete": true}') {
-                 console.log('SSE stream signaled completion.');
-                 es.close();
-                 eventSourceRef.current = null;
-                 // Fetch final result *after* completion is signaled
-                 fetchFinalResult(taskId);
-                 return; 
-              }
-
-              // If not the completion string, parse the JSON payload
-              const progressData = JSON.parse(event.data);
-              console.log('SSE Message Received:', progressData);
-              
-              // Add the new message to the list
-              let progressValue = progressData.progress;
-              if (progressValue !== undefined && progressValue !== null) {
-                  progressValue = Math.max(0, Math.min(1, Number(progressValue)));
-                  if (isNaN(progressValue)) progressValue = null; // Handle NaN
-              }
-              
-              setProgressMessages(prev => [...prev, {
-                message: progressData.message || 'Processing...', // Default message
-                timestamp: progressData.timestamp || Date.now(),
-                phase: progressData.phase,
-                progress: progressValue, // Use validated progress
-                action: progressData.action,
-                preview_data: progressData.preview_data
-              }]);
-
-              // Check ONLY for failure signals within the JSON payload
-              // DO NOT treat phase completion (action: 'completed') as overall completion
-              if (progressData.status === 'failed' || progressData.action === 'error' || progressData.level === 'ERROR') {
-                  console.error('SSE JSON signaled failure:', progressData.message);
-                  setError(progressData.message || 'Learning path generation failed during progress updates.');
-                  setLoading(false);
-                  es.close();
-                  eventSourceRef.current = null;
-                  // No need to return here, just stop processing
-              }
-
-            } catch (parseError) {
-              console.error('Error parsing SSE message:', event.data, parseError);
-              // Optional: Set error state on parse failure?
-              // setError('Failed to parse progress update from server.');
-              // setLoading(false);
-              // if (es) es.close(); // Ensure es is defined before closing
-              // eventSourceRef.current = null;
-            }
-          };
-
-          es.onerror = (err) => {
-            console.error('EventSource failed:', err);
-            // Only set error if we are still in loading state and haven't received final data/error yet.
-            // This avoids overriding a completion/failure signal that might have just closed the stream.
-            if (loading && !error && !data) { 
-                setError('Connection to progress updates was lost unexpectedly.');
-                setLoading(false);
-            }
-            es.close(); // Close the connection on error
-            eventSourceRef.current = null;
-          };
+          // 2. Only connect to SSE if the initial fetch indicated processing is needed
+          if (initialResult.status === 'processing') {
+            connectSSE();
+          }
+          // If initialResult status was 'completed', 'failed', or 'error', 
+          // the state (loading, data, error) was already set by tryFetchFinalResult.
+          
         } else {
            // Should not happen if routing is correct (ResultPage requires taskId)
            console.error("useLearningPathData: Missing taskId for generation.");
@@ -171,10 +178,8 @@ const useLearningPathData = (source = null) => {
             const finalResponse = await getLearningPath(id);
             if (finalResponse.status === 'completed' && finalResponse.result) {
                 setData(finalResponse.result);
-                const tempId = crypto.randomUUID();
-                setTemporaryPathId(tempId);
-                setSavedToHistory(false); 
                 setIsFromHistory(false);
+                setPersistentPathId(finalResponse.result.path_id || null);
                 setError(null); // Clear any previous transient errors
             } else if (finalResponse.status === 'failed') {
                  console.error('Final fetch indicated failure:', finalResponse.error?.message);
@@ -192,29 +197,141 @@ const useLearningPathData = (source = null) => {
         }
     };
 
-    // Execute loading logic
-      loadData();
-
-    // Cleanup function for useEffect: Close EventSource if component unmounts
-    return () => {
-      if (eventSourceRef.current) {
-        console.log('useLearningPathData: Cleaning up EventSource on unmount/re-run.');
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
+    // Function to connect to SSE (remains mostly the same, just called conditionally)
+    const connectSSE = () => {
+      console.log('useLearningPathData: Starting generation tracking via SSE...', taskId);
+      // Reset signal flag before connecting
+      receivedFinalSignalRef.current = false; 
+      // Ensure loading is true when connecting/reconnecting (might already be true)
+      if (!loading) setLoading(true); 
+      // Clear previous errors on connection attempt (tryFetchFinalResult might have set one)
+      if (error) setError(null); 
+            
+      // Only show initializing message on first connect, not retries
+      if (retryAttempt === 0 && progressMessages.length === 0) {
+          setProgressMessages([{ message: 'Initializing learning path generation...', timestamp: Date.now(), phase: 'initialization', progress: 0.0 }]);
       }
+
+      // Construct the FULL URL for EventSource using the imported API_URL
+      const apiUrl = `${API_URL}/api/progress/${taskId}`; 
+      console.log(`useLearningPathData: Connecting to SSE: ${apiUrl} (Attempt: ${retryAttempt + 1})`);
+      const es = new EventSource(apiUrl); // Use the full URL
+      eventSourceRef.current = es; // Store instance in ref
+
+      es.onopen = () => {
+        console.log('SSE Connection Opened Successfully.');
+        if (isReconnecting) {
+          setIsReconnecting(false);
+          setRetryAttempt(0);
+          if (retryTimeoutRef.current) {
+            clearTimeout(retryTimeoutRef.current);
+            retryTimeoutRef.current = null;
+          }
+        }
+      };
+      
+      es.onmessage = (event) => {
+        try {
+          if (retryAttempt > 0) { setRetryAttempt(0); }
+          if (isReconnecting) {
+              setIsReconnecting(false); 
+              if (retryTimeoutRef.current) { clearTimeout(retryTimeoutRef.current); retryTimeoutRef.current = null; }
+          }
+          
+          if (event.data === '{\"complete\": true}') {
+             console.log('SSE stream signaled completion.');
+             receivedFinalSignalRef.current = true; 
+             es.close();
+             eventSourceRef.current = null;
+             fetchFinalResult(taskId);
+             return; 
+          }
+
+          const progressData = JSON.parse(event.data);
+          console.log('SSE Message Received:', progressData);
+          
+          let progressValue = progressData.progress;
+          if (progressValue !== undefined && progressValue !== null) {
+              progressValue = Math.max(0, Math.min(1, Number(progressValue)));
+              if (isNaN(progressValue)) progressValue = null;
+          }
+          
+          setProgressMessages(prev => [...prev, {
+            message: progressData.message || 'Processing...',
+            timestamp: progressData.timestamp || Date.now(),
+            phase: progressData.phase,
+            progress: progressValue,
+            action: progressData.action,
+            preview_data: progressData.preview_data
+          }]);
+
+          if (progressData.status === 'failed' || progressData.action === 'error' || progressData.level === 'ERROR') {
+              console.error('SSE JSON signaled failure:', progressData.message);
+              receivedFinalSignalRef.current = true;
+              setError(progressData.message || 'Learning path generation failed during progress updates.');
+              setLoading(false);
+              es.close();
+              eventSourceRef.current = null;
+          }
+
+          if (progressData.persistentPathId) {
+            setPersistentPathId(progressData.persistentPathId);
+          }
+
+        } catch (parseError) {
+          console.error('Error parsing SSE message:', event.data, parseError);
+        }
+      };
+
+      es.onerror = (err) => {
+        console.error('EventSource failed:', err);
+        es.close(); 
+        eventSourceRef.current = null;
+        
+        if (receivedFinalSignalRef.current) {
+            console.log('SSE error occurred after a final signal (complete/fail) was received. Not retrying.');
+            return; 
+        }
+
+        if (retryAttempt < MAX_RETRIES) {
+          const delay = Math.pow(2, retryAttempt) * 1000; 
+          setRetryAttempt(prev => prev + 1);
+          setIsReconnecting(true);
+          console.log(`Attempting to reconnect in ${delay / 1000}s... (Attempt ${retryAttempt + 1}/${MAX_RETRIES})`);
+          
+          if (retryTimeoutRef.current) { clearTimeout(retryTimeoutRef.current); }
+          
+          retryTimeoutRef.current = setTimeout(() => {
+            connectSSE(); 
+          }, delay);
+        } else {
+          console.error('Max retry attempts reached. Setting final error.');
+          setError('Connection lost after multiple retries. Please check the History page for final status.');
+          setLoading(false);
+          setIsReconnecting(false); 
+        }
+      };
     };
+
+    // Execute loading logic
+    loadData();
+
+    // Cleanup function for useEffect
+    return cleanup;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskId, entryId, shouldLoadFromHistory, refreshTrigger]); // Dependencies
+  }, [taskId, entryId, shouldLoadFromHistory, refreshTrigger]); // Keep original dependencies
 
   return {
     learningPath: data,
     loading,
     error,
     isFromHistory,
-    savedToHistory,
+    persistentPathId,
     refreshData,
     temporaryPathId,
-    progressMessages 
+    progressMessages,
+    isReconnecting, 
+    retryAttempt    
   };
 };
 

@@ -59,43 +59,31 @@ def create_retry_prompt(original_prompt, format_instructions: str, failed_respon
     Returns:
         A ChatPromptTemplate instance with enhanced instructions for fixing formatting errors.
     """
-    # Extract the original template more safely
-    try:
-        if hasattr(original_prompt, 'messages'):
-            # For ChatPromptTemplate objects, try to safely extract content from each message
-            message_contents = []
-            for msg in original_prompt.messages:
-                try:
-                    # Try different methods of getting content based on message type
-                    if hasattr(msg, 'prompt') and hasattr(msg.prompt, 'template'):
-                        message_contents.append(f"[{msg.__class__.__name__}]: {msg.prompt.template}")
-                    elif hasattr(msg, 'template'):
-                        message_contents.append(f"[{msg.__class__.__name__}]: {msg.template}")
-                    else:
-                        message_contents.append(str(msg))
-                except Exception:
-                    # If anything fails, use string representation
-                    message_contents.append(str(msg))
-            
-            original_template = "\n".join(message_contents)
-        else:
-            original_template = str(original_prompt)
-    except Exception as e:
-        logger.warning(f"Could not extract original prompt content: {str(e)}")
-        original_template = "Original prompt not available"
+    # Escape braces in potentially problematic inputs to prevent format errors
+    safe_failed_response = failed_response.replace("{", "{{").replace("}", "}}")
+    safe_error_message = error_message.replace("{", "{{").replace("}", "}}")
     
-    # Extract validation error information if available
+    # Extract original template string and validation details (if any)
+    original_template = ""
     validation_details = ""
-    if "validation error" in error_message.lower():
-        validation_match = re.search(r'validation error.+', error_message, re.DOTALL)
-        if validation_match:
-            validation_details = validation_match.group(0)
-    
-    # Create enhanced template with explicit retry instructions
-    retry_template = f"""
-I need you to fix a formatting error in your previous response. 
+    if hasattr(original_prompt, 'template'): # Handle PromptTemplate
+        original_template = original_prompt.template
+    elif hasattr(original_prompt, 'messages'): # Handle ChatPromptTemplate
+        # Concatenate templates from system/user messages, if any
+        original_template = "\n".join([msg.prompt.template for msg in original_prompt.messages if hasattr(msg, 'prompt') and hasattr(msg.prompt, 'template')])
+        
+        # Extract validation error details if present in the error message
+        if "Validation Error" in error_message and "\n" in error_message:
+            parts = error_message.split("\n", 1)
+            if len(parts) > 1:
+                validation_details = f"Validation Error Details:\n--------\n{parts[1]}"
 
-Original prompt:
+    # Construct the retry prompt string, now using escaped inputs
+    retry_template = f"""You failed to format your previous response correctly or the response was invalid.
+Please carefully review the original request, the required format, your previous response, and the error details below.
+Then, try again, ensuring your response strictly adheres to the required format.
+
+Original Request:
 --------
 {original_template}
 --------
@@ -107,12 +95,12 @@ Format required:
 
 Your previous response:
 --------
-{failed_response}
+{safe_failed_response}
 --------
 
 Error details:
 --------
-{error_message}
+{safe_error_message}
 {validation_details}
 --------
 
@@ -188,7 +176,7 @@ async def run_chain(prompt, llm_getter, parser: BaseOutputParser[T], params: Dic
                 raw_chain = retry_prompt | llm | StrOutputParser()
                 
                 logger.info(f"Retrying with formatting fix prompt (attempt {parsing_retries}/{max_parsing_retries})")
-                raw_response = await raw_chain.ainvoke({})
+                raw_response = await raw_chain.ainvoke(escaped_params)
                 
                 # Try to parse the raw response with the original parser
                 try:

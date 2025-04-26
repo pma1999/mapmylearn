@@ -42,7 +42,7 @@ logger = logging.getLogger("learning_path.resources")
 
 async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
     """
-    Generates high-quality resources for the entire learning path topic using Tavily+Scraper.
+    Generates high-quality resources for the entire learning path topic using Brave+Scraper.
     """
     logger.info(f"Generating topic-level resources for: {state['user_topic']}")
 
@@ -113,15 +113,15 @@ async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
             await progress_callback(f"Searching & scraping for high-quality resources on {escaped_topic}...", phase="topic_resources", phase_progress=0.4, overall_progress=0.47, action="processing")
 
         # 2. Execute search and scrape with retry capability
-        tavily_key_provider = state.get("tavily_key_provider")
-        if not tavily_key_provider:
-             raise ValueError("Tavily key provider not found in state for topic resource search.")
+        brave_key_provider = state.get("brave_key_provider")
+        if not brave_key_provider:
+             raise ValueError("Brave key provider not found in state for topic resource search.")
 
         scrape_timeout = int(os.environ.get("SCRAPE_TIMEOUT", 10))
         max_results_per_query = int(os.environ.get("SEARCH_MAX_RESULTS", 5))
 
         # Set operation name for tracking
-        provider = tavily_key_provider.set_operation("topic_resource_search")
+        provider = brave_key_provider.set_operation("topic_resource_search")
         
         # Use the new execute_search_with_llm_retry function
         search_service_result = await execute_search_with_llm_retry(
@@ -129,7 +129,7 @@ async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
             initial_query=resource_query, # Note: This is a ResourceQuery not SearchQuery
             regenerate_query_func=regenerate_resource_query,
             max_retries=1,
-            tavily_key_provider=provider,
+            search_provider_key_provider=provider,
             search_config={
                 "max_results": max_results_per_query,
                 "scrape_timeout": scrape_timeout
@@ -176,13 +176,13 @@ async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
                       truncated_content += "... (truncated)"
                  scraped_context_parts.append(f"Content Snippet:\n{truncated_content}")
                  results_included_llm += 1
-             elif res.tavily_snippet: # Fallback to snippet
-                 snippet = escape_curly_braces(res.tavily_snippet)
+             elif res.search_snippet: # Fallback to snippet
+                 snippet = escape_curly_braces(res.search_snippet)
                  error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
                  truncated_snippet = snippet[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
                  if len(snippet) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
                       truncated_snippet += "... (truncated)"
-                 scraped_context_parts.append(f"Tavily Snippet:{error_info}\n{truncated_snippet}")
+                 scraped_context_parts.append(f"Search Snippet:{error_info}\n{truncated_snippet}")
                  results_included_llm += 1
              else:
                  error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
@@ -254,7 +254,7 @@ async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
 
 async def generate_module_resources(state: LearningPathState, module_id: int, module: EnhancedModule) -> Dict[str, Any]:
     """
-    Generates resources for a specific module using Tavily+Scraper.
+    Generates resources for a specific module using Brave+Scraper.
     """
     logger.info(f"Generating resources for module {module_id+1}: {module.title}")
 
@@ -323,33 +323,30 @@ async def generate_module_resources(state: LearningPathState, module_id: int, mo
              await progress_callback(f"Searching & scraping resources for module '{module.title}'...", phase="module_resources", phase_progress=(module_id + 0.4) / max(1, len(modules)), overall_progress=0.65, action="processing")
 
         # 2. Execute search and scrape with retry capability
-        tavily_key_provider = state.get("tavily_key_provider")
-        if not tavily_key_provider:
-             raise ValueError("Tavily key provider not found in state for module resource search.")
+        brave_key_provider = state.get("brave_key_provider")
+        if not brave_key_provider:
+             raise ValueError("Brave key provider not found in state for module resource search.")
 
         scrape_timeout = int(os.environ.get("SCRAPE_TIMEOUT", 10))
         max_results_per_query = int(os.environ.get("SEARCH_MAX_RESULTS", 5))
 
         # Set operation name for tracking
-        provider = tavily_key_provider.set_operation("module_resource_search")
+        provider = brave_key_provider.set_operation("module_resource_search")
         
         # Use the new execute_search_with_llm_retry function
         search_service_result = await execute_search_with_llm_retry(
             state=state,
-            initial_query=resource_query, # Note: This is a ResourceQuery not SearchQuery
+            initial_query=resource_query,
             regenerate_query_func=regenerate_resource_query,
             max_retries=1,
-            tavily_key_provider=provider,
+            search_provider_key_provider=provider,
             search_config={
                 "max_results": max_results_per_query,
                 "scrape_timeout": scrape_timeout
             },
             regenerate_args={
                 "target_level": "module",
-                "context": {
-                    "module_title": module_title,
-                    "module_description": module_description
-                }
+                "context": {"module_id": module_id, "module_title": module.title, "module_description": module.description}
             }
         )
 
@@ -391,13 +388,13 @@ async def generate_module_resources(state: LearningPathState, module_id: int, mo
                       truncated_content += "... (truncated)"
                  scraped_context_parts.append(f"Content Snippet:\n{truncated_content}")
                  results_included_llm += 1
-             elif res.tavily_snippet: # Fallback to snippet
-                 snippet = escape_curly_braces(res.tavily_snippet)
+             elif res.search_snippet: # Fallback to snippet
+                 snippet = escape_curly_braces(res.search_snippet)
                  error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
                  truncated_snippet = snippet[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
                  if len(snippet) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
                       truncated_snippet += "... (truncated)"
-                 scraped_context_parts.append(f"Tavily Snippet:{error_info}\n{truncated_snippet}")
+                 scraped_context_parts.append(f"Search Snippet:{error_info}\n{truncated_snippet}")
                  results_included_llm += 1
              else:
                  error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
@@ -482,7 +479,7 @@ async def generate_submodule_resources(
     submodule_content: str # Assuming content generation happens before resource finding
 ) -> Dict[str, Any]:
     """
-    Generates resources for a specific submodule using Tavily+Scraper.
+    Generates resources for a specific submodule using Brave+Scraper.
     """
     logger.info(f"Generating resources for submodule {sub_id+1} in module {module_id+1}: {submodule.title}")
 
@@ -576,24 +573,24 @@ async def generate_submodule_resources(
 
 
         # 2. Execute search and scrape with retry capability
-        tavily_key_provider = state.get("tavily_key_provider")
-        if not tavily_key_provider:
-             raise ValueError("Tavily key provider not found in state for submodule resource search.")
+        brave_key_provider = state.get("brave_key_provider")
+        if not brave_key_provider:
+             raise ValueError("Brave key provider not found in state for submodule resource search.")
 
         scrape_timeout = int(os.environ.get("SCRAPE_TIMEOUT", 10))
         # Fewer results for submodules usually
         max_results_per_query = int(os.environ.get("SEARCH_MAX_RESULTS_SUBMODULE", 5))
 
         # Set operation name for tracking
-        provider = tavily_key_provider.set_operation("submodule_resource_search")
+        provider = brave_key_provider.set_operation("submodule_resource_search")
         
         # Use the new execute_search_with_llm_retry function
         search_service_result = await execute_search_with_llm_retry(
             state=state,
-            initial_query=resource_query, # Note: This is a ResourceQuery not SearchQuery
+            initial_query=resource_query,
             regenerate_query_func=regenerate_resource_query,
             max_retries=1,
-            tavily_key_provider=provider,
+            search_provider_key_provider=provider,
             search_config={
                 "max_results": max_results_per_query,
                 "scrape_timeout": scrape_timeout
@@ -601,9 +598,12 @@ async def generate_submodule_resources(
             regenerate_args={
                 "target_level": "submodule",
                 "context": {
+                    "module_id": module_id,
+                    "sub_id": sub_id,
+                    "module_title": module_title,
                     "submodule_title": submodule_title,
                     "submodule_description": submodule_description,
-                    "module_title": module_title
+                    "submodule_content": submodule_content[:5000] # Pass truncated content
                 }
             }
         )
@@ -651,13 +651,13 @@ async def generate_submodule_resources(
                       truncated_content += "... (truncated)"
                  scraped_context_parts.append(f"Content Snippet:\n{truncated_content}")
                  results_included_llm += 1
-             elif res.tavily_snippet: # Fallback to snippet
-                 snippet = escape_curly_braces(res.tavily_snippet)
+             elif res.search_snippet: # Fallback to snippet
+                 snippet = escape_curly_braces(res.search_snippet)
                  error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
                  truncated_snippet = snippet[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
                  if len(snippet) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
                       truncated_snippet += "... (truncated)"
-                 scraped_context_parts.append(f"Tavily Snippet:{error_info}\n{truncated_snippet}")
+                 scraped_context_parts.append(f"Search Snippet:{error_info}\n{truncated_snippet}")
                  results_included_llm += 1
              else:
                  error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"

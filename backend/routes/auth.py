@@ -21,6 +21,9 @@ from backend.utils.token_manager import (
 from backend.services.email_service import send_verification_email, send_password_reset_email, send_password_reset_confirmation_email
 from backend.utils.custom_rate_limiter import rate_limit
 
+# Initialize logger for this file
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
 # Rate limit: 5 requests per 15 minutes per IP
@@ -313,10 +316,11 @@ async def logout(response: Response, request: Request, db: Session = Depends(get
 @router.get("/status")
 async def auth_status(current_user: User = Depends(get_current_user)):
     """
-    Check if the current user's authentication token is valid.
-    Returns the user's information if authenticated.
+    Check if the user is currently authenticated and return user details.
+    Relies on the get_current_user dependency to validate the token.
     """
-    return current_user 
+    logger.info(f"Auth status request processed for user: {current_user.id}") # TEMPORARY LOGGING
+    return current_user
 
 @router.get("/credits")
 async def get_user_credits(current_user: User = Depends(get_current_user)):

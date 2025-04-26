@@ -77,6 +77,7 @@ class LearningPathBase(BaseModel):
 class LearningPathCreate(LearningPathBase):
     """Schema for creating a learning path."""
     pass
+    task_id: Optional[str] = Field(None, description="Optional task ID from generation to link history entry")
 
 
 class LearningPathUpdate(BaseModel):

@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 import logging
 
 from backend.config.database import get_db
-from backend.models.auth_models import User, LearningPath, TransactionType
+from backend.models.auth_models import User, LearningPath, TransactionType, GenerationTask, GenerationTaskStatus
 from backend.schemas.auth_schemas import (
     LearningPathCreate, LearningPathUpdate, LearningPathResponse, 
     LearningPathList, MigrationRequest, MigrationResponse,
@@ -20,6 +20,16 @@ from backend.utils.pdf_generator import generate_pdf, create_filename
 # Import the new audio generation service
 from backend.services.audio_service import generate_submodule_audio 
 from backend.services.credit_service import CreditService # Import CreditService
+from pydantic import BaseModel
+
+# Define a response model for active generations
+class ActiveGenerationResponse(BaseModel):
+    task_id: str
+    status: str
+    created_at: datetime
+    request_topic: str
+    class Config:
+        orm_mode = True # Use orm_mode for compatibility
 
 router = APIRouter(prefix="/v1/learning-paths", tags=["learning-paths"])
 logger = logging.getLogger(__name__) # Add logger instance
@@ -251,85 +261,66 @@ async def create_learning_path(
     db: Session = Depends(get_db)
 ):
     """
-    Create a new learning path.
+    Create a new learning path entry in the history.
+    Also updates the GenerationTask record if a taskId is provided.
     """
-    # Generate a unique ID for the learning path
-    path_id = str(uuid.uuid4())
-    
-    # --- Debugging: Log structure of incoming path_data --- 
-    logger.info(f"Received learning_path object type: {type(learning_path)}")
-    logger.info(f"Received learning_path.path_data type: {type(learning_path.path_data)}")
-    if isinstance(learning_path.path_data, dict):
-        logger.info(f"Received learning_path.path_data keys: {list(learning_path.path_data.keys())}")
-    else:
-        logger.warning(f"Received learning_path.path_data is not a dict: {str(learning_path.path_data)[:200]}...")
-    # --- End Debugging ---
+    # Check if topic is provided
+    if not learning_path.topic:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Topic is required.")
 
-    # Extract the actual learning path content dictionary
-    # The incoming learning_path.path_data might incorrectly contain the entire payload structure
-    actual_content_to_save = None
-    if isinstance(learning_path.path_data, dict):
-        # Look for the nested 'path_data' key which holds the real content
-        if 'path_data' in learning_path.path_data and isinstance(learning_path.path_data['path_data'], dict):
-             actual_content_to_save = learning_path.path_data['path_data']
-             logger.info("Extracted nested 'path_data' from request for saving.")
-        # Fallback: Maybe the structure is already correct? (Shouldn't happen based on logs, but check)
-        elif 'modules' in learning_path.path_data: 
-             actual_content_to_save = learning_path.path_data
-             logger.warning("Incoming learning_path.path_data had direct 'modules' key, using directly.")
-        else:
-             logger.error("Could not find 'modules' or nested 'path_data' in received learning_path.path_data.")
+    # Generate a unique UUID for the new learning path entry
+    new_path_id = str(uuid.uuid4())
     
-    # If extraction failed, log error but proceed with potentially incorrect data to avoid breaking entirely?
-    # Or raise an error? Raising is safer but might break saving if the root cause isn't fixed.
-    # For now, we'll default to the (likely incorrect) full dict if extraction fails, but log heavily.
-    if actual_content_to_save is None:
-        logger.error("Failed to extract actual learning content! Saving raw learning_path.path_data. THIS WILL LIKELY CAUSE NESTING ISSUES.")
-        actual_content_to_save = learning_path.path_data # Fallback to potentially incorrect data
-
-    # Create database entry using the extracted content
+    # Create a new LearningPath record
     db_learning_path = LearningPath(
         user_id=user.id,
-        path_id=path_id,
+        path_id=new_path_id,
         topic=learning_path.topic,
-        language=learning_path.language,
-        path_data=actual_content_to_save,  # Use the correctly extracted content
-        favorite=learning_path.favorite,
-        tags=learning_path.tags,
-        source=learning_path.source,
+        language=learning_path.language or "en",
+        path_data=learning_path.path_data,
         creation_date=datetime.utcnow(),
+        last_modified_date=datetime.utcnow(),
+        favorite=learning_path.favorite or False,
+        tags=learning_path.tags or [],
+        source=learning_path.source or "generated"
     )
     
     try:
-        # --- Debugging: Log structure ACTUALLY being saved --- 
-        logger.info(f"Attempting to save path_data type: {type(actual_content_to_save)}")
-        if isinstance(actual_content_to_save, dict):
-             logger.info(f"Attempting to save path_data keys: {list(actual_content_to_save.keys())}")
-        else:
-             logger.warning(f"Attempting to save non-dict path_data: {str(actual_content_to_save)[:200]}...")
-        # --- End Debugging ---
         db.add(db_learning_path)
         db.commit()
         db.refresh(db_learning_path)
+        logger.info(f"Created history entry {db_learning_path.id} ({new_path_id}) for user {user.id}")
+        
+        # --- Link to GenerationTask if taskId provided --- 
+        if learning_path.task_id:
+            try:
+                task_record = db.query(GenerationTask).filter(
+                    GenerationTask.task_id == learning_path.task_id,
+                    GenerationTask.user_id == user.id # Ensure task belongs to the user
+                ).first()
+                
+                if task_record:
+                    task_record.history_entry_id = db_learning_path.id
+                    task_record.status = GenerationTaskStatus.COMPLETED # Mark as completed now that it's saved
+                    db.commit()
+                    logger.info(f"Linked GenerationTask {learning_path.task_id} to history entry {db_learning_path.id}")
+                else:
+                    logger.warning(f"GenerationTask {learning_path.task_id} not found or doesn't belong to user {user.id} when saving history entry {db_learning_path.id}")
+            except Exception as link_err:
+                logger.error(f"Error linking GenerationTask {learning_path.task_id} to history entry {db_learning_path.id}: {link_err}")
+                # Don't rollback the history save, just log the linking error
+                db.rollback() # Rollback only the linking attempt
+        # --- End Link to GenerationTask ---
+        
+        return db_learning_path
     except IntegrityError as e:
         db.rollback()
-        # Log a concise error message for IntegrityError
-        logger.error(f"Database integrity error for user {user.id} creating learning path '{learning_path.topic}': {e}")
-        # Raise the user-facing exception
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Could not create learning path. Database integrity constraint violated." # Keep informative detail
-        )
-    except Exception as e: # Catch other potential errors during commit
-         db.rollback()
-         # Log unexpected errors with full traceback using exc_info=True
-         logger.error(f"Unexpected error for user {user.id} creating learning path '{learning_path.topic}'.", exc_info=True)
-         raise HTTPException(
-             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-             detail="An unexpected error occurred while saving the learning path."
-         )
-
-    return db_learning_path
+        logger.error(f"IntegrityError creating history entry for user {user.id}: {e}")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Learning path could not be saved due to a conflict.")
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Error creating history entry for user {user.id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save learning path to history.")
 
 
 @router.put("/{path_id}", response_model=LearningPathResponse)
@@ -716,3 +707,22 @@ async def generate_or_get_submodule_audio(
             # Context manager handles refund. Log and raise standard 500.
             logger.exception(f"Unexpected error during credit charge or audio generation for temporary path {path_id}: {e}")
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Audio generation failed unexpectedly for temporary path.") 
+
+@router.get("/generations/active", response_model=List[ActiveGenerationResponse])
+async def get_active_generations(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get a list of currently active (PENDING or RUNNING) learning path generations for the current user.
+    """
+    try:
+        active_tasks = db.query(GenerationTask).filter(
+            GenerationTask.user_id == user.id,
+            GenerationTask.status.in_([GenerationTaskStatus.PENDING, GenerationTaskStatus.RUNNING])
+        ).order_by(GenerationTask.created_at.desc()).all()
+        
+        return active_tasks
+    except Exception as e:
+        logger.exception(f"Error fetching active generations for user {user.id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve active generations.") 

@@ -370,7 +370,7 @@ const HistoryEntryCard = memo(({
 HistoryEntryCard.propTypes = {
   entry: PropTypes.shape({
     id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-    path_id: PropTypes.string.isRequired,
+    path_id: PropTypes.string,
     topic: PropTypes.string.isRequired,
     creation_date: PropTypes.string,
     last_modified_date: PropTypes.string,

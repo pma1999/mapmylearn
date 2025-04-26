@@ -167,3 +167,39 @@ class LearningPath(Base):
         # For frequently used sorting combinations
         Index('idx_learning_path_user_fav_date', user_id, favorite, creation_date.desc()),
     ) 
+
+
+# New Model for Tracking Generation Tasks
+class GenerationTaskStatus:
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+class GenerationTask(Base):
+    __tablename__ = "generation_tasks"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(String, unique=True, index=True, nullable=False, comment="UUID string for task identification")
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String, nullable=False, index=True, default=GenerationTaskStatus.PENDING)
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
+    started_at = Column(DateTime, nullable=True)
+    ended_at = Column(DateTime, nullable=True)
+    request_topic = Column(String, nullable=False)
+    error_message = Column(Text, nullable=True)
+    history_entry_id = Column(Integer, ForeignKey("learning_paths.id", ondelete="SET NULL"), nullable=True)
+    
+    # Relationships
+    user = relationship("User") # Relationship back to User
+    history_entry = relationship("LearningPath") # Relationship to the saved history entry
+    
+    # Indexes
+    __table_args__ = (
+        Index('idx_generation_task_user_id', user_id),
+        Index('idx_generation_task_status', status),
+        Index('idx_generation_task_created_at', created_at.desc()),
+        Index('idx_generation_task_user_status', user_id, status),
+        Index('idx_generation_task_history_entry', history_entry_id), 
+    ) 

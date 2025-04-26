@@ -201,18 +201,20 @@ const useLearningPathActions = (
          console.log('Saving path with temporary_path_id:', temporaryPathId);
       }
 
-      // Call the correct API function: saveToHistory
-      const response = await saveToHistory(payload);
-
-      showNotification('Learning path saved successfully!', 'success');
-      setSaveDialogOpen(false);
-
-      // Return details needed by LearningPathView to update its state
-      // Assuming response directly contains the new entry data
-      return {
-        savedToHistory: true,
-        path_id: response.path_id // <<<< Use path_id from response
-      };
+      showNotification('Saving learning path...', 'info');
+      
+      // Call the API to save the learning path, passing the original taskId
+      const response = await saveToHistory(learningPath, 'generated', taskId); 
+      
+      // Handle response - update state, show success/error
+      if (response && response.path_id) {
+        showNotification('Learning path saved successfully!', 'success');
+        setSaveDialogOpen(false);
+        return {
+          savedToHistory: true,
+          path_id: response.path_id // <<<< Use path_id from response
+        };
+      }
 
     } catch (error) {
       console.error("Error saving learning path:", error);

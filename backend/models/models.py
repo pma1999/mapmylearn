@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Optional, TypedDict, Annotated, Callable, TY
 
 # Import the key provider types but only for type checking
 if TYPE_CHECKING:  
-    from services.key_provider import GoogleKeyProvider, PerplexityKeyProvider, TavilyKeyProvider
+    from services.key_provider import GoogleKeyProvider, PerplexityKeyProvider, BraveKeyProvider
 
 # Topic Analysis Models
 class TopicAnalysis(BaseModel):
@@ -123,18 +123,18 @@ class EnhancedModuleList(BaseModel):
 class SubmoduleList(BaseModel):
     submodules: List[Submodule] = Field(..., description="List of submodules")
 
-# New models for Tavily Search + Scraper results
+# Models for Search Service results (e.g., Brave Search + Scraper)
 class ScrapedResult(BaseModel):
     title: Optional[str] = Field(default=None, description="Title of the web page")
     url: str = Field(..., description="URL of the scraped page")
-    tavily_snippet: Optional[str] = Field(default=None, description="Original snippet from Tavily search result")
+    search_snippet: Optional[str] = Field(default=None, description="Original snippet from search result (e.g., Brave)")
     scraped_content: Optional[str] = Field(default=None, description="Cleaned textual content scraped from the URL")
     scrape_error: Optional[str] = Field(default=None, description="Error message if scraping failed for this URL")
 
 class SearchServiceResult(BaseModel):
     query: str = Field(..., description="The original search query performed")
     results: List[ScrapedResult] = Field(default_factory=list, description="List of scraped results for the query")
-    search_provider_error: Optional[str] = Field(default=None, description="Error from the search provider API (e.g., Tavily)")
+    search_provider_error: Optional[str] = Field(default=None, description="Error from the search provider API (e.g., Brave)")
 
 # Global State for the Graph (TypedDict)
 class LearningPathState(TypedDict):
@@ -170,11 +170,11 @@ class LearningPathState(TypedDict):
     # Key provider references instead of direct API keys
     google_key_provider: Optional[Any]  # GoogleKeyProvider but avoiding import cycles
     pplx_key_provider: Optional[Any]    # PerplexityKeyProvider but avoiding import cycles
-    tavily_key_provider: Optional[Any]  # Add TavilyKeyProvider reference
+    brave_key_provider: Optional[Any]  # Changed TavilyKeyProvider reference to BraveKeyProvider
     # Optional token fields for reference
     google_key_token: Optional[str]
     pplx_key_token: Optional[str]
-    tavily_key_token: Optional[str]
+    brave_key_token: Optional[str] # Changed tavily_key_token to brave_key_token
     # Language settings
     language: Optional[str]  # ISO language code for content generation
     search_language: Optional[str]  # ISO language code for search queries

@@ -262,7 +262,7 @@ Your response should include just ONE search query and a brief rationale for why
 
 async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
     """
-    Execute web searches using Tavily and scrape results for each search query in parallel.
+    Execute web searches using Brave and scrape results for each search query in parallel.
     """
     if not state.get("search_queries"):
         logging.info("No search queries to execute")
@@ -273,11 +273,11 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
     
     search_queries: List[SearchQuery] = state["search_queries"]
     
-    # Get the Tavily key provider from state
-    tavily_key_provider = state.get("tavily_key_provider")
-    if not tavily_key_provider:
+    # Get the Brave key provider from state
+    brave_key_provider = state.get("brave_key_provider")
+    if not brave_key_provider:
         # Critical error if no key provider is found for searching
-        error_msg = "Tavily key provider not found in state. Cannot execute web searches."
+        error_msg = "Brave key provider not found in state. Cannot execute web searches."
         logging.error(error_msg)
         # Optionally send error progress update
         progress_callback = state.get('progress_callback')
@@ -289,7 +289,7 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
             "steps": state.get("steps", []) + [error_msg] 
         } 
     else:
-        logging.debug("Found Tavily key provider in state, using for web searches")
+        logging.debug("Found Brave key provider in state, using for web searches")
     
     # Set up parallel processing based on user configuration
     search_parallel_count = state.get("search_parallel_count", 3)
@@ -298,7 +298,7 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
     # Get max results from env or default
     max_results_per_query = int(os.environ.get("SEARCH_MAX_RESULTS", 5))
     
-    logging.info(f"Executing {len(search_queries)} web searches (Tavily+Scrape) with parallelism={search_parallel_count}, max_results={max_results_per_query}, scrape_timeout={scrape_timeout}")
+    logging.info(f"Executing {len(search_queries)} web searches (Brave+Scrape) with parallelism={search_parallel_count}, max_results={max_results_per_query}, scrape_timeout={scrape_timeout}")
     
     # Send progress update if callback is available
     progress_callback = state.get('progress_callback')
@@ -321,7 +321,7 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
         async def bounded_search_with_retry(query_obj: SearchQuery):
             async with sem:
                 # Set operation name for tracking
-                provider = tavily_key_provider.set_operation("initial_web_search")
+                provider = brave_key_provider.set_operation("initial_web_search")
                 
                 # Use the new function with retry capability
                 return await execute_search_with_llm_retry(
@@ -329,7 +329,7 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
                     initial_query=query_obj,
                     regenerate_query_func=regenerate_initial_structure_query,
                     max_retries=1,
-                    tavily_key_provider=provider,
+                    search_provider_key_provider=provider,
                     search_config={
                         "max_results": max_results_per_query,
                         "scrape_timeout": scrape_timeout
@@ -417,7 +417,7 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
                         action="processing"
                     )
         
-        logging.info(f"Completed {len(all_search_service_results)} web searches (Tavily+Scrape)")
+        logging.info(f"Completed {len(all_search_service_results)} web searches (Brave+Scrape)")
         
         if progress_callback:
             await progress_callback(
@@ -431,7 +431,7 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
         
         return {
             "search_results": all_search_service_results, # Return the list of SearchServiceResult objects
-            "steps": state.get("steps", []) + [f"Executed {len(all_search_service_results)} web searches (Tavily+Scrape)"]
+            "steps": state.get("steps", []) + [f"Executed {len(all_search_service_results)} web searches (Brave+Scrape)"]
         }
     except Exception as e:
         # Catch errors during task setup or semaphore handling
@@ -512,13 +512,13 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
                         truncated_content += "... (truncated)"
                     context_parts.append(f"Scraped Content Snippet:\n{truncated_content}")
                     results_included += 1
-                elif res.tavily_snippet:
-                    snippet = escape_curly_braces(res.tavily_snippet)
+                elif res.search_snippet:
+                    snippet = escape_curly_braces(res.search_snippet)
                     error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
                     truncated_snippet = snippet[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
                     if len(snippet) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
                          truncated_snippet += "... (truncated)"
-                    context_parts.append(f"Tavily Snippet:{error_info}\n{truncated_snippet}")
+                    context_parts.append(f"Search Snippet:{error_info}\n{truncated_snippet}")
                     results_included += 1
                 else:
                      # If scrape failed and no snippet, mention the failure

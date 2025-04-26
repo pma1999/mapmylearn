@@ -737,11 +737,18 @@ export const getHistoryEntry = async (pathId) => {
   }
 };
 
-export const saveToHistory = async (learningPathData, source = 'generated') => {
-   // Ensure user is authenticated
-  if (!authToken) {
-    console.error('saveToHistory Error: Authentication required.');
-    throw new Error('Authentication required to save learning paths.');
+/**
+ * Saves a learning path (potentially temporary) to the user's history.
+ * @param {Object} learningPathData The complete learning path data object to save.
+ * @param {string} [source='generated'] The source of the learning path ('generated', 'imported').
+ * @param {string} [taskId=null] The optional task ID if saving from a generation result.
+ * @returns {Promise<Object>} Response data including the saved entry.
+ * @throws {Error} If the save operation fails.
+ */
+export const saveToHistory = async (learningPathData, source = 'generated', taskId = null) => {
+  if (!learningPathData) {
+    console.error('saveToHistory Error: Invalid learning path data.');
+    throw new Error('Invalid learning path data.');
   }
   
   try {
@@ -750,10 +757,11 @@ export const saveToHistory = async (learningPathData, source = 'generated') => {
     // Prepare payload according to LearningPathCreate schema
     const payload = {
       topic: learningPathData.topic || 'Untitled',
-      path_data: learningPathData, // Assuming learningPathData is the full path_data object
-      favorite: learningPathData.favorite || false, // Allow setting initial favorite status? Check schema/API. Defaulting to false.
-      tags: learningPathData.tags || [], // Allow setting initial tags? Defaulting to empty.
-      source: source,
+      path_data: learningPathData, // Send the full object as path_data
+      favorite: learningPathData.favorite || false,
+      tags: learningPathData.tags || [],
+      source: source || 'generated', // Default source if not provided
+      task_id: taskId, // Include the task ID if provided
       language: learningPathData.language || 'en' // Use provided language or default
     };
     
@@ -1210,6 +1218,17 @@ export const getCheckoutSession = async (sessionId) => {
   }
 };
 
+// Fetch active (PENDING or RUNNING) generations for the current user
+export const getActiveGenerations = async () => {
+  try {
+    const response = await api.get('/v1/learning-paths/generations/active');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching active generations:', error);
+    throw error; // Re-throw to be handled by calling component/hook
+  }
+};
+
 export default {
   generateLearningPath,
   getLearningPath,
@@ -1252,5 +1271,6 @@ export default {
   clearAllHistoryAPI,
   createCheckoutSession,
   getCheckoutSession,
+  getActiveGenerations,
 };
 

@@ -5,9 +5,10 @@ import asyncio
 import aiohttp
 import io # Added for BytesIO
 import fitz # Added for PyMuPDF
+import json # Added for parsing Brave response
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_tavily import TavilySearch
+from langchain_community.tools import BraveSearch # Replaced TavilySearch
 from typing import Optional, Union, Tuple, Any
 from bs4 import BeautifulSoup
 import trafilatura # Added for HTML extraction
@@ -18,7 +19,7 @@ from backend.models.models import SearchServiceResult, ScrapedResult
 # Import key provider for type hints but with proper import protection
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from backend.services.key_provider import KeyProvider, GoogleKeyProvider, TavilyKeyProvider
+    from backend.services.key_provider import KeyProvider, GoogleKeyProvider, BraveKeyProvider # Renamed TavilyKeyProvider
     # Keep models here for type checking if needed, but they are already imported above
     # from backend.models.models import SearchServiceResult, ScrapedResult 
 
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 # TODO: Consider moving constants to a config file/object
-SEARCH_SERVICE = "tavily"
+SEARCH_SERVICE = "brave" # Updated from "tavily"
 # Maximum characters to extract from scraped content (HTML or PDF)
 MAX_SCRAPE_LENGTH = 100000
 # Minimum content length threshold for Trafilatura fallback
@@ -351,70 +352,73 @@ async def _scrape_single_url(session: aiohttp.ClientSession, url: str, timeout: 
 
 async def perform_search_and_scrape(
     query: str,
-    tavily_key_provider: 'TavilyKeyProvider',
+    brave_key_provider: 'BraveKeyProvider', # Renamed provider
     max_results: int = 5,
     scrape_timeout: int = 10
 ) -> 'SearchServiceResult':
-    """Performs Tavily search and scrapes results concurrently.
+    """Performs Brave search and scrapes results concurrently. # Updated docstring
 
     Args:
         query: The search query.
-        tavily_key_provider: The key provider instance for Tavily.
-        max_results: Maximum number of search results to retrieve from Tavily.
+        brave_key_provider: The key provider instance for Brave Search. # Updated docstring
+        max_results: Maximum number of search results to retrieve from Brave. # Updated docstring
         scrape_timeout: Timeout in seconds for each scrape request.
 
     Returns:
         A SearchServiceResult object containing the query, scraped results,
         and any potential errors.
     """
-    logger.info(f"Performing search and scrape for query: '{query}'")
+    logger.info(f"Performing search and scrape for query: '{query}' using Brave Search")
     service_result = SearchServiceResult(query=query)
     api_key = None
 
     try:
-        api_key = await tavily_key_provider.get_key()
-        tavily_search = TavilySearch(
-            max_results=max_results,
-            include_raw_content=False,
-            include_answer=False,
-            tavily_api_key=api_key
+        api_key = await brave_key_provider.get_key()
+        # Use BraveSearch.from_api_key and pass max_results via search_kwargs
+        brave_search = BraveSearch.from_api_key(
+            api_key=api_key, 
+            search_kwargs={"count": max_results}
         )
 
-        logger.debug(f"Invoking Tavily search for: '{query}'")
-        tavily_response = await tavily_search.ainvoke({"query": query})
-        logger.debug(f"Received Tavily response for: '{query}'")
+        logger.debug(f"Invoking Brave search for: '{query}'")
+        # BraveSearch returns a JSON string
+        brave_response_str = await brave_search.ainvoke({"query": query})
+        logger.debug(f"Received Brave response for: '{query}'")
 
-        if not isinstance(tavily_response, dict):
-            error_msg = f"Tavily search returned non-dict response: {tavily_response}"
+        # Parse the JSON string response from Brave
+        try:
+            brave_results_list = json.loads(brave_response_str)
+            if not isinstance(brave_results_list, list):
+                 raise ValueError("Brave search response is not a list")
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
+            error_msg = f"Brave search returned invalid JSON or unexpected format: {e}. Response: {brave_response_str[:500]}..."
             logger.error(error_msg)
             service_result.search_provider_error = error_msg
             return service_result
 
         scrape_tasks = []
-        tavily_results = tavily_response.get("results", [])
-
-        if not isinstance(tavily_results, list):
-            # More robust error logging
-            error_msg = f"Unexpected Tavily response format: 'results' is not a list. Response: {tavily_response}"
-            logger.error(error_msg)
-            service_result.search_provider_error = error_msg # Record error in result
-            # Potentially raise or return depending on desired strictness
-            # For now, return the result object with the error
-            return service_result 
-
+        # Process the parsed list from Brave
+        # Rename tavily_result_map -> search_result_map
+        search_result_map = {} 
         urls_to_scrape = []
-        tavily_result_map = {}
-        for result in tavily_results:
-            if isinstance(result, dict) and "url" in result and result["url"]:
-                url = result["url"]
+
+        for result in brave_results_list:
+            # Brave uses 'link' for URL and 'snippet' for content snippet
+            if isinstance(result, dict) and "link" in result and result["link"] and "title" in result and "snippet" in result:
+                url = result["link"]
                 if url not in urls_to_scrape:
                     urls_to_scrape.append(url)
-                    tavily_result_map[url] = result
+                    # Store the necessary mapped info
+                    search_result_map[url] = {
+                        "url": url, 
+                        "title": result.get("title"), 
+                        "search_snippet": result.get("snippet") # Map brave 'snippet' to internal 'search_snippet'
+                    }
             else:
-                logger.warning(f"Skipping invalid or incomplete Tavily result item: {result}")
+                logger.warning(f"Skipping invalid or incomplete Brave Search result item: {result}")
 
         if not urls_to_scrape:
-            logger.warning(f"No valid URLs found in Tavily results for query '{query}'")
+            logger.warning(f"No valid URLs found in Brave Search results for query '{query}'")
             return service_result
 
         logger.debug(f"Prepared {len(urls_to_scrape)} unique URLs for scraping.")
@@ -429,7 +433,6 @@ async def perform_search_and_scrape(
                 scrape_tasks.append((url, task))
 
             logger.debug(f"Gathering results for {len(scrape_tasks)} scraping tasks.")
-            # Use return_exceptions=True to handle individual task failures
             scrape_results_tuples = await asyncio.gather(*(task for _, task in scrape_tasks), return_exceptions=True)
             logger.debug(f"Completed gathering scrape results.")
 
@@ -440,7 +443,6 @@ async def perform_search_and_scrape(
                         logger.warning(f"Scraping task for {url} was cancelled.")
                         scraped_data_map[url] = (None, "Scraping task cancelled")
                     else:
-                        # Log the actual exception from the task
                         logger.error(f"Gather caught exception for scrape task {url}: {scrape_outcome}", exc_info=isinstance(scrape_outcome, Exception))
                         scraped_data_map[url] = (None, f"Gather error: {type(scrape_outcome).__name__}")
                 elif isinstance(scrape_outcome, tuple) and len(scrape_outcome) == 2:
@@ -449,40 +451,37 @@ async def perform_search_and_scrape(
                     logger.error(f"Unexpected scrape outcome type for {url}: {type(scrape_outcome)} - {scrape_outcome}")
                     scraped_data_map[url] = (None, f"Unexpected scrape result type: {type(scrape_outcome).__name__}")
 
-        # Populate the final result object
+        # Populate the final result object using the mapped search_info
         for url in urls_to_scrape:
-            tavily_info = tavily_result_map.get(url) # Get corresponding Tavily info
-            if tavily_info:
+            search_info = search_result_map.get(url) # Get corresponding mapped Brave info
+            if search_info:
                 content, error = scraped_data_map.get(url, (None, "Scraping task result missing"))
                 service_result.results.append(
                     ScrapedResult(
-                        title=tavily_info.get("title"),
+                        title=search_info.get("title"),
                         url=url,
-                        tavily_snippet=tavily_info.get("content"), # Use 'content' field from Tavily
+                        search_snippet=search_info.get("search_snippet"), # Use the standardized field name
                         scraped_content=content,
                         scrape_error=error
                     )
                 )
             else:
-                 # This shouldn't happen if logic is correct, but log defensively
-                 logger.error(f"Could not find original Tavily result info for scraped URL: {url}")
+                 logger.error(f"Could not find original Brave Search result info for scraped URL: {url}")
 
         logger.info(f"Successfully processed search and scrape for query: '{query}', found {len(service_result.results)} results.")
 
-    # Catch potential errors retrieving Tavily key or during Tavily API call
     except aiohttp.ClientError as http_err:
-        logger.exception(f"Network error during Tavily search/scrape for query '{query}': {http_err}")
+        logger.exception(f"Network error during Brave Search/scrape for query '{query}': {http_err}")
         service_result.search_provider_error = f"Network Error: {type(http_err).__name__}"
     except Exception as e:
         logger.exception(f"General error during search/scrape for query '{query}': {e}")
-        # Distinguish API key retrieval error from other errors
-        if api_key is None and isinstance(e, (ValueError, AttributeError)): # Check if key provider failed
+        if api_key is None and isinstance(e, (ValueError, AttributeError)): 
              service_result.search_provider_error = f"Key Provider Error: {type(e).__name__}: {str(e)}"
-             logger.error(f"Failed to retrieve Tavily API key: {e}")
-        elif api_key and "401" in str(e): # Check for common auth failure after getting key
-             service_result.search_provider_error = "Tavily API key seems invalid (401 Unauthorized)"
+             logger.error(f"Failed to retrieve Brave Search API key: {e}") # Updated message
+        elif api_key and ("401" in str(e) or "Unauthorized" in str(e)): # Check for common auth failure
+             service_result.search_provider_error = "Brave Search API key seems invalid (401 Unauthorized)" # Updated message
              logger.error(service_result.search_provider_error)
-        else: # General error during search or processing
+        else: 
              service_result.search_provider_error = f"{type(e).__name__}: {str(e)}"
 
     return service_result
@@ -533,36 +532,34 @@ def validate_google_key(api_key):
         # Default error message
         return False, f"API key validation failed: Check key and permissions."
 
-async def validate_tavily_key(api_key: str) -> Tuple[bool, Optional[str]]:
-    """Validate if the Tavily API key is correctly formatted and functional."""
+async def validate_brave_key(api_key: str) -> Tuple[bool, Optional[str]]: # Renamed function
+    """Validate if the Brave Search API key is correctly formatted and functional.""" # Updated docstring
     if not api_key or not isinstance(api_key, str):
         return False, "API key must be a non-empty string"
 
-    # Tavily API key format validation
-    pattern = r'^tvly-[0-9A-Za-z-]{10,}$'
-    if not re.match(pattern, api_key):
-        return False, "Invalid Tavily API key format - must start with 'tvly-'"
+    # No standard prefix check for Brave keys based on docs
 
     try:
-        # Minimal test call to Tavily API
-        search = TavilySearch(max_results=1, tavily_api_key=api_key)
-        # Use a simple, common query that is likely to succeed if the key is valid
-        await search.ainvoke({"query": "weather today"}) 
+        # Minimal test call to Brave Search API
+        search = BraveSearch.from_api_key(api_key=api_key) # Use BraveSearch
+        # Use a simple, common query
+        await search.ainvoke({"query": "test"}) 
         return True, None
     except Exception as e:
         error_str = str(e)
-        logger.warning(f"Tavily API key validation failed: {error_str}")
+        logger.warning(f"Brave Search API key validation failed: {error_str}") # Updated message
 
-        # Provide clearer error messages based on common issues
-        if "401" in error_str and "Unauthorized" in error_str:
-            return False, "API key error: Unauthorized. The API key is likely invalid or revoked."
-        if "400" in error_str and "query is required" in error_str.lower():
-             # This might indicate an API change or unexpected issue, but less likely a key problem
-             return False, "API key validation returned Bad Request (400). Check Tavily API status or query format."
+        # Provide clearer error messages based on common issues for Brave (adapt as needed)
+        # Langchain might wrap HTTP errors, check the error message content
+        if "401" in error_str or "Unauthorized" in error_str or "invalid api key" in error_str.lower():
+            return False, "API key error: Unauthorized. The Brave Search API key is likely invalid or revoked." # Updated message
+        # Add checks for other potential Brave errors if known (e.g., 400, rate limits)
+        # if "400" in error_str ... :
+        #     return False, "API key validation returned Bad Request (400). Check Brave API status or query format."
         if "rate limit" in error_str.lower():
             return False, "API key error: Rate limit exceeded."
         if "connection error" in error_str.lower() or "cannot connect" in error_str.lower():
             return False, "Network error during API key validation. Check connectivity."
 
         # Default error message for other exceptions
-        return False, f"API key validation failed: {type(e).__name__}. Check key and Tavily service status."
+        return False, f"API key validation failed: {type(e).__name__}. Check key and Brave Search service status." # Updated message

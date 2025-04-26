@@ -44,6 +44,8 @@ const LearningPathView = ({ source }) => {
     savedToHistory: initialSavedToHistory,
     temporaryPathId,
     progressMessages, // <-- Get progress messages from the hook
+    isReconnecting, // <-- Get reconnection state from hook
+    retryAttempt,   // <-- Get retry attempt number from hook
     refreshData // Keep refresh function if needed elsewhere
   } = useLearningPathData(source);
   
@@ -169,8 +171,12 @@ const LearningPathView = ({ source }) => {
   // Use `loading` directly from hook
   if (loading) {
     return (
-      // Pass progressMessages to LoadingState
-      <LoadingState progressMessages={progressMessages} /> 
+      // Pass progressMessages, isReconnecting, and retryAttempt to LoadingState
+      <LoadingState 
+        progressMessages={progressMessages} 
+        isReconnecting={isReconnecting}
+        retryAttempt={retryAttempt}
+      /> 
     );
   }
   
@@ -275,4 +281,4 @@ LearningPathView.propTypes = {
   source: PropTypes.oneOf(['history', null]),
 };
 
-export default LearningPathView; 
+export default LearningPathView;

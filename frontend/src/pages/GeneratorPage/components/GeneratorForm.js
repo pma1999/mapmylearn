@@ -12,7 +12,6 @@ import BoltIcon from '@mui/icons-material/Bolt';
 import LanguageSelector from '../../../components/LanguageSelector';
 import ApiKeySettings from '../../../components/organisms/ApiKeySettings';
 import AdvancedSettings from '../../../components/organisms/AdvancedSettings';
-import HistorySettings from '../../../components/organisms/HistorySettings';
 import ProgressDisplay from './ProgressDisplay';
 
 /**
@@ -20,7 +19,6 @@ import ProgressDisplay from './ProgressDisplay';
  * @param {Object} props - Component props
  * @param {Object} props.formState - Form state from useGeneratorForm hook
  * @param {Object} props.apiKeyState - API key state from useApiKeyManagement hook
- * @param {Object} props.historyState - History state from useHistoryManagement hook
  * @param {Object} props.progressState - Progress state from useProgressTracking hook
  * @param {boolean} props.isMobile - Whether the display is in mobile viewport
  * @returns {JSX.Element} Generator form component
@@ -28,7 +26,6 @@ import ProgressDisplay from './ProgressDisplay';
 const GeneratorForm = ({
   formState,
   apiKeyState,
-  historyState,
   progressState,
   isMobile
 }) => {
@@ -79,20 +76,6 @@ const GeneratorForm = ({
     handleValidateApiKeys,
     handleClearApiKeys
   } = apiKeyState;
-
-  const {
-    autoSaveToHistory,
-    setAutoSaveToHistory,
-    initialTags,
-    setInitialTags,
-    initialFavorite,
-    setInitialFavorite,
-    newTag,
-    setNewTag,
-    handleAddTag,
-    handleDeleteTag,
-    handleTagKeyDown
-  } = historyState;
 
   const {
     progressUpdates,
@@ -199,23 +182,6 @@ const GeneratorForm = ({
       <ApiKeySettings 
         apiSettingsOpen={apiSettingsOpen}
         setApiSettingsOpen={setApiSettingsOpen}
-        isMobile={isMobile}
-      />
-      
-      {/* History Settings */}
-      <HistorySettings 
-        autoSaveToHistory={autoSaveToHistory}
-        setAutoSaveToHistory={setAutoSaveToHistory}
-        initialFavorite={initialFavorite}
-        setInitialFavorite={setInitialFavorite}
-        initialTags={initialTags}
-        setInitialTags={setInitialTags}
-        newTag={newTag}
-        setNewTag={setNewTag}
-        handleAddTag={handleAddTag}
-        handleDeleteTag={handleDeleteTag}
-        handleTagKeyDown={handleTagKeyDown}
-        isGenerating={isGenerating}
         isMobile={isMobile}
       />
       

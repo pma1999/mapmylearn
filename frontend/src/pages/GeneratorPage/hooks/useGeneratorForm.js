@@ -7,14 +7,12 @@ import * as languageService from '../../../services/languageService';
  * Custom hook for managing generator form state and submission
  * @param {Object} apiKeyState - API key state from useApiKeyManagement hook
  * @param {Object} progressTrackingState - Progress tracking state from useProgressTracking hook
- * @param {Object} historyState - History management state from useHistoryManagement hook
  * @param {Function} showNotification - Function to display notifications
  * @returns {Object} Form state and management functions
  */
 const useGeneratorForm = (
   { googleKeyToken, pplxKeyToken, rememberApiKeys, hasValidApiKey },
   { connectToProgressUpdates, resetProgress, setTaskId },
-  { savePreferencesToSessionStorage },
   showNotification
 ) => {
   const navigate = useNavigate();
@@ -56,12 +54,9 @@ const useGeneratorForm = (
     // Connect to progress updates
     connectToProgressUpdates(taskId);
     
-    // Save preferences for the result page
-    savePreferencesToSessionStorage(topic);
-    
     // Navigate to result page
     navigate(`/result/${taskId}`);
-  }, [connectToProgressUpdates, navigate, savePreferencesToSessionStorage, topic]);
+  }, [connectToProgressUpdates, navigate, topic]);
 
   /**
    * Handle form submission

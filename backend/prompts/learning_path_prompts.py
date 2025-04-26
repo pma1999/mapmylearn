@@ -351,7 +351,7 @@ This search query aims to find top-tier external learning materials providing br
 ## SEARCH QUERY REQUIREMENTS
 
 ### 1. Keyword-Focused Format for Finding Quality Resources
-Your query MUST be optimized for a search engine API (like Google or Tavily) to find **excellent learning materials**:
+Your query MUST be optimized for a search engine API (like Google or Brave Search) to find **excellent learning materials**:
 - Combine the core topic "{user_topic}" with a smart combination of quality indicators and resource type keywords.
 - Use a mix like: **best {user_topic} tutorial**, **comprehensive {user_topic} guide**, **recommended {user_topic} online course**, **definitive {user_topic} book**, **official {user_topic} documentation**, **essential {user_topic} reference**, **{user_topic} video course**, **authoritative {user_topic} article**.
 - **QUOTE USAGE RULE: NEVER use more than ONE quoted phrase per query.** Quotes are ONLY appropriate if the core "{user_topic}" itself is an essential multi-word phrase (e.g., "machine learning").
@@ -413,7 +413,7 @@ This module is part of a larger learning path:
 ## SEARCH QUERY REQUIREMENTS
 
 ### 1. Keyword-Focused Format for Finding Quality Resources
-Your query MUST be optimized for a search engine API (like Google or Tavily) to find **excellent learning materials** relevant to this module:
+Your query MUST be optimized for a search engine API (like Google or Brave Search) to find **excellent learning materials** relevant to this module:
 - Combine specific keywords from "{module_title}" and its description with terms indicating resource types or learning goals. Ensure the query reflects the key concepts and objectives mentioned in the module description: {module_description}.
 - Use keywords like: **tutorial {module_title}**, **practical guide {module_title}**, **{module_title} applied examples**, **{module_title} key concepts**, **detailed tutorial {module_title}**, **{module_title} exercises**, **article {module_title}**, **{module_title} video lecture**, **documentation {module_title}**, **best practices {module_title}**.
 - **QUOTE USAGE RULE: NEVER use more than ONE quoted phrase per query.** Quotes are ONLY for the most essential multi-word technical term specific to this module (e.g., "React Hooks"), if absolutely necessary.
@@ -472,7 +472,7 @@ Adjacent submodules: {adjacent_context}
 ## SEARCH QUERY REQUIREMENTS
 
 ### 1. Keyword-Focused Format for Finding Specific Resources
-Your query MUST be optimized for a search engine API (like Google or Tavily) to find **specific, high-quality learning materials** for this submodule:
+Your query MUST be optimized for a search engine API (like Google or Brave Search) to find **specific, high-quality learning materials** for this submodule:
 - Combine very specific technical terms from "{submodule_title}" and its description with terms indicating resource types, application, or specific content areas.
 - Use keywords like: **tutorial {submodule_title}**, **{submodule_title} code example**, **{submodule_title} explanation**, **{submodule_title} case study**, **implement {submodule_title}**, **apply {submodule_title}**, **debug {submodule_title}**, **{submodule_title} common issues**, **{submodule_title} practical example**, **how to use {submodule_title}**, **{submodule_title} video tutorial**, **official documentation {submodule_title}**, **{submodule_title} practice exercise**.
 - **QUOTE USAGE RULE: NEVER use more than ONE quoted phrase per query.** Quotes are ONLY for the SINGLE most critical multi-word technical term defining this submodule (e.g., a specific API name like "useState Hook"), IF ABSOLUTELY NECESSARY.

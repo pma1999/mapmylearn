@@ -2,6 +2,7 @@ from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from typing import Optional
+import logging
 
 from backend.config.database import get_db
 from backend.utils.auth import decode_access_token, TokenData
@@ -9,6 +10,9 @@ from backend.models.auth_models import User
 
 # Security scheme for JWT Bearer authentication
 security = HTTPBearer()
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 
 async def get_current_user(
@@ -19,6 +23,7 @@ async def get_current_user(
     Dependency that returns the current authenticated user.
     Raises an HTTPException if authentication fails.
     """
+    logger.info(f"Attempting to get current user from token...")
     token = credentials.credentials
     token_data = decode_access_token(token)
     

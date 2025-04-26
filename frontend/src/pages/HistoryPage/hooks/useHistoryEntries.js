@@ -3,6 +3,7 @@ import * as api from '../../../services/api';
 
 /**
  * Custom hook for managing history entries data with optimized loading and pagination
+ * Now fetches both active generations and completed history entries.
  * @param {Object} filterOptions - Options for filtering history entries
  * @param {string} filterOptions.sortBy - Sort criteria
  * @param {string|null} filterOptions.filterSource - Filter by source
@@ -37,10 +38,10 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
   }, [sortBy, filterSource, searchTerm, page, perPage]);
   
   /**
-   * Load history entries from API with current filter and pagination settings
+   * Load history entries and active generations from API
    * Implements stale-while-revalidate pattern and aborts ongoing requests
    */
-  const loadHistory = useCallback(async (forceRefresh = false) => {
+  const loadHistoryAndGenerations = useCallback(async (forceRefresh = false) => {
     // Prevent too frequent refreshes (throttle to at most once per second)
     const now = Date.now();
     if (!forceRefresh && now - lastLoadTimeRef.current < 1000) {
@@ -98,6 +99,26 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
       requestRef.current = api.getHistoryPreview(sortBy, filterSource, searchTerm, page, perPage);
       const response = await requestRef.current;
       
+      // Fetch active generations in parallel
+      let activeGenerations = [];
+      let activeGenerationsError = null;
+      try {
+        // We don't need to cache active generations as aggressively, fetch them fresh
+        const activeResponse = await api.getActiveGenerations();
+        activeGenerations = activeResponse.map(task => ({ ...task, isActive: true })); // Mark active tasks
+        // Normalize the topic field: rename request_topic to topic
+        activeGenerations = activeResponse.map(task => ({
+          ...task,
+          topic: task.request_topic, // Map request_topic to topic
+          isActive: true // Mark active tasks
+        }));
+      } catch (genError) {
+        console.error("Error fetching active generations:", genError);
+        activeGenerationsError = genError; // Store error to potentially show later
+        // Don't block showing history if active generations fail
+        showNotification('Could not load active generations: ' + (genError.message || 'Unknown error'), 'warning');
+      }
+      
       // If this is a stale request (a newer one has started), ignore the results
       if (currentLoadCount < loadCountRef.current) {
         console.log('Ignoring stale response from previous request');
@@ -118,17 +139,22 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
         setStats({ 
           loadTime, 
           fromCache: false,
-          initialLoad: !initialLoadComplete 
+          initialLoad: !initialLoadComplete,
+          total: response.total // Add total count to stats
         });
       } else {
         // Only update state if the data has actually changed
-        const entriesChanged = JSON.stringify(entries) !== JSON.stringify(response.entries);
+        const mergedEntries = [
+          ...activeGenerations, // Prepend active generations
+          ...(response.entries || []) // Append history entries
+        ];
+        const entriesChanged = JSON.stringify(entries) !== JSON.stringify(mergedEntries);
         const paginationChanged = pagination.total !== response.total || pagination.page !== response.page || pagination.perPage !== response.perPage;
 
         if (entriesChanged || paginationChanged || forceRefresh) {
-          setEntries(response.entries);
+          setEntries(mergedEntries);
           setPagination({ 
-            total: response.total || 0, 
+            total: response.total || 0, // Pagination info still comes from history preview
             page: response.page || page, 
             perPage: response.perPage || perPage 
           });
@@ -136,7 +162,8 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
             loadTime, 
             fromCache: false,
             serverTime: response.request_time_ms,
-            initialLoad: !initialLoadComplete
+            initialLoad: !initialLoadComplete,
+            total: response.total // Add total count to stats
           });
         }
       }
@@ -164,7 +191,7 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
   
   // Load history when filter or pagination options change
   useEffect(() => {
-    loadHistory();
+    loadHistoryAndGenerations();
     
     // Remove polling logic - refresh should be triggered explicitly or by cache invalidation
     /*
@@ -182,7 +209,7 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
       }
       // clearInterval(pollingInterval);
     };
-  }, [sortBy, filterSource, searchTerm, page, perPage, loadHistory]);
+  }, [sortBy, filterSource, searchTerm, page, perPage, loadHistoryAndGenerations]);
   
   /**
    * Force reload the history entries (resets to page 1 potentially, or current page?)
@@ -190,8 +217,8 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
    */
   const refreshEntries = useCallback(() => {
     setLoading(true);
-    loadHistory(true);
-  }, [loadHistory]);
+    loadHistoryAndGenerations(true);
+  }, [loadHistoryAndGenerations]);
   
   return {
     entries,

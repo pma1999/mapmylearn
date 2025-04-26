@@ -26,7 +26,8 @@ from backend.routes.learning_paths import router as learning_paths_router
 from backend.routes.admin import router as admin_router
 from backend.routes.chatbot import router as chatbot_router
 from backend.routes.payments import router as payments_router
-from backend.models.auth_models import User, CreditTransaction, TransactionType
+from backend.models.auth_models import User, CreditTransaction, TransactionType, GenerationTask, GenerationTaskStatus, LearningPath
+from backend.models.models import Resource
 from backend.utils.auth import decode_access_token
 
 # Import rate limiter and backend
@@ -48,15 +49,15 @@ try:
     # Import the backend functionality - try both approaches
     try:
         from main import generate_learning_path
-        from services.services import validate_google_key, validate_tavily_key
+        from services.services import validate_google_key, validate_brave_key
         from services.key_management import ApiKeyManager
-        from services.key_provider import GoogleKeyProvider, PerplexityKeyProvider, TavilyKeyProvider
+        from services.key_provider import GoogleKeyProvider, PerplexityKeyProvider, BraveKeyProvider
     except ImportError:
         # If that fails, try with backend prefix (when run as a package)
         from backend.main import generate_learning_path
-        from backend.services.services import validate_google_key, validate_tavily_key
+        from backend.services.services import validate_google_key, validate_brave_key
         from backend.services.key_management import ApiKeyManager
-        from backend.services.key_provider import GoogleKeyProvider, PerplexityKeyProvider, TavilyKeyProvider
+        from backend.services.key_provider import GoogleKeyProvider, PerplexityKeyProvider, BraveKeyProvider
 except ImportError as e:
     # If all import approaches fail, log the error
     logging.error(f"Import error: {str(e)}")
@@ -70,6 +71,21 @@ logging.basicConfig(
     datefmt="%Y-%m-%dT%H:%M:%S.%f"
 )
 logger = logging.getLogger(__name__)
+
+def make_path_data_serializable(data: Any) -> Any:
+    """Recursively converts Pydantic Resource models within data to dictionaries."""
+    if isinstance(data, dict):
+        return {k: make_path_data_serializable(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [make_path_data_serializable(item) for item in data]
+    elif isinstance(data, Resource):
+        # Use model_dump() for Pydantic v2, fallback to dict() for v1
+        if hasattr(data, 'model_dump'):
+            return data.model_dump()
+        else:
+            return data.dict()
+    else:
+        return data
 
 # Initialize the API Key Manager singleton
 key_manager = ApiKeyManager()
@@ -270,6 +286,12 @@ else:
 @app.middleware("http")
 async def apply_rate_limiting(request: Request, call_next):
     """Apply rate limiting to protect against abuse"""
+    # TEMPORARY LOGGING
+    if request.method == "OPTIONS":
+        logger.info(f"Received OPTIONS request for: {request.url.path} from {request.client.host}")
+        logger.info(f"OPTIONS Headers: {request.headers}")
+    # END TEMPORARY LOGGING
+    
     if os.getenv("ENABLE_RATE_LIMITING", "false").lower() == "true":
         return await rate_limiting_middleware(request, call_next)
     return await call_next(request)
@@ -280,7 +302,7 @@ app.add_middleware(
     allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "Origin"],
     max_age=86400,  # Cachear resultados de pre-vuelo por 24 horas
 )
 # --------------------------------------------------------------------------------
@@ -304,24 +326,24 @@ class LearningPathRequest(BaseModel):
     desired_module_count: Optional[int] = None
     desired_submodule_count: Optional[int] = None
     google_key_token: Optional[str] = Field(None, description="Token for Google API key")
-    tavily_key_token: Optional[str] = Field(None, description="Token for Tavily Search API key")
+    brave_key_token: Optional[str] = Field(None, description="Token for Brave Search API key")
     language: Optional[str] = Field("en", description="ISO language code for content generation (e.g., 'en', 'es')")
 
 class ApiKeyAuthRequest(BaseModel):
     google_api_key: Optional[str] = Field(None, description="Google API key for LLM operations")
-    tavily_api_key: Optional[str] = Field(None, description="Tavily Search API key for search operations")
+    brave_api_key: Optional[str] = Field(None, description="Brave Search API key for search operations")
     
 class ApiKeyAuthResponse(BaseModel):
     google_key_token: Optional[str] = None
-    tavily_key_token: Optional[str] = None
+    brave_key_token: Optional[str] = None
     google_key_valid: bool = False
-    tavily_key_valid: bool = False
+    brave_key_valid: bool = False
     google_key_error: Optional[str] = None
-    tavily_key_error: Optional[str] = None
+    brave_key_error: Optional[str] = None
 
 class ApiKeyValidationRequest(BaseModel):
     google_api_key: Optional[str] = None
-    tavily_api_key: Optional[str] = None
+    brave_api_key: Optional[str] = None
 
 # Enhanced structured progress update model
 class PreviewData(BaseModel):
@@ -390,27 +412,27 @@ async def authenticate_api_keys(request: ApiKeyAuthRequest, req: Request):
             response.google_key_error = error_message
             logger.info(f"Invalid Google API key from {client_ip}: {error_message}")
     
-    # Validate and store Tavily API key if provided
-    if request.tavily_api_key:
-        is_valid, error_message = validate_tavily_key(request.tavily_api_key)
-        response.tavily_key_valid = is_valid
+    # Validate and store Brave Search API key if provided
+    if request.brave_api_key:
+        is_valid, error_message = validate_brave_key(request.brave_api_key)
+        response.brave_key_valid = is_valid
         if is_valid:
             try:
                 # Only store the key if validation passed
-                response.tavily_key_token = key_manager.store_key(
-                    key_manager.KEY_TYPE_TAVILY, 
-                    request.tavily_api_key,
+                response.brave_key_token = key_manager.store_key(
+                    "brave",
+                    request.brave_api_key,
                     ip_address=client_ip
                 )
-                logger.info(f"Generated token for Tavily API key from {client_ip}")
+                logger.info(f"Generated token for Brave Search API key from {client_ip}")
             except Exception as e:
                 # In case of storage error
-                response.tavily_key_valid = False
-                response.tavily_key_error = "Error generating token: " + str(e)
-                logger.error(f"Error storing Tavily API key: {str(e)}")
+                response.brave_key_valid = False
+                response.brave_key_error = "Error generating token: " + str(e)
+                logger.error(f"Error storing Brave Search API key: {str(e)}")
         else:
-            response.tavily_key_error = error_message
-            logger.info(f"Invalid Tavily API key from {client_ip}: {error_message}")
+            response.brave_key_error = error_message
+            logger.info(f"Invalid Brave Search API key from {client_ip}: {error_message}")
     
     return response
 
@@ -436,10 +458,10 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
     
     if not user:
         # Handle case where authentication is strictly required (e.g., if credits are mandatory)
-        # If anonymous generation isn\'t allowed, raise an error here.
+        # If anonymous generation isn't allowed, raise an error here.
         # For now, we proceed, but credit check will fail if user is None.
         logger.warning("Learning path generation requested without authentication.")
-        # Optionally raise: HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=\"Authentication required to generate learning paths.\")
+        # Optionally raise: HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required to generate learning paths.")
     else:
         # --- Refactored Credit Handling --- 
         try:
@@ -467,6 +489,30 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
     # Create a unique task ID
     task_id = str(uuid.uuid4())
     
+    # --- Create GenerationTask record --- 
+    try:
+        new_task = GenerationTask(
+            task_id=task_id,
+            user_id=user_id, # This will be None if user is not authenticated
+            status=GenerationTaskStatus.PENDING,
+            request_topic=request.topic
+        )
+        db.add(new_task)
+        db.commit()
+        logger.info(f"Created GenerationTask record for task_id: {task_id}, user_id: {user_id}")
+    except Exception as db_err:
+        logger.exception(f"Database error creating GenerationTask for task {task_id}: {db_err}")
+        db.rollback() # Rollback credit deduction if task creation fails
+        # Also rollback the credit deduction if necessary
+        # Re-raise a 500 error as something went wrong saving the task state
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to initialize generation task state."
+        )
+    finally:
+        db.close() # Close the session obtained from get_db()
+    # --- End Create GenerationTask record --- 
+    
     # Create a queue for progress updates
     progress_queue = asyncio.Queue()
     async with progress_queues_lock:
@@ -492,8 +538,8 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
         user_id=user_id
     ).set_operation("generate_learning_path")
     
-    tavily_provider = TavilyKeyProvider(
-        token_or_key=request.tavily_key_token,
+    brave_provider = BraveKeyProvider(
+        token_or_key=request.brave_key_token,
         user_id=user_id
     ).set_operation("generate_learning_path")
     
@@ -508,7 +554,7 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
         desiredModuleCount=request.desired_module_count,
         desiredSubmoduleCount=request.desired_submodule_count,
         googleKeyProvider=google_provider,
-        tavilyKeyProvider=tavily_provider,
+        braveKeyProvider=brave_provider,
         progressCallback=progress_callback,
         language=request.language,
         user_id=user_id
@@ -532,7 +578,7 @@ async def generate_learning_path_task(
     submoduleParallelCount: int = 2,
     progressCallback = None,
     googleKeyProvider = None,
-    tavilyKeyProvider = None,
+    braveKeyProvider = None,
     desiredModuleCount: Optional[int] = None,
     desiredSubmoduleCount: Optional[int] = None,
     language: str = "en",
@@ -586,6 +632,29 @@ async def generate_learning_path_task(
             await progressCallback(update)
     
     try:
+        # Get database session using SessionLocal within the task
+        from backend.config.database import SessionLocal
+        db = SessionLocal()
+        
+        # --- Update GenerationTask status to RUNNING --- 
+        try:
+            task_record = db.query(GenerationTask).filter(GenerationTask.task_id == task_id).first()
+            if task_record:
+                task_record.status = GenerationTaskStatus.RUNNING
+                task_record.started_at = datetime.utcnow()
+                db.commit()
+                logger.info(f"Updated GenerationTask {task_id} status to RUNNING")
+            else:
+                logger.error(f"Could not find GenerationTask record for task_id: {task_id} to set status to RUNNING.")
+                # If we can't find the task, we probably shouldn't proceed
+                raise Exception(f"Task record {task_id} not found.") 
+        except Exception as db_err:
+            logger.exception(f"DB error updating GenerationTask {task_id} to RUNNING: {db_err}")
+            db.rollback()
+            # Don't re-raise here, let the outer finally block handle status update to FAILED
+            # But log it and proceed to ensure the finally block runs
+        # --- End Update Status --- 
+        
         logging.info(f"Starting learning path generation for: {topic} in language: {language}")
         
         # Send initial progress message
@@ -601,8 +670,8 @@ async def generate_learning_path_task(
         if not googleKeyProvider:
             googleKeyProvider = GoogleKeyProvider()
             
-        if not tavilyKeyProvider:
-            tavilyKeyProvider = TavilyKeyProvider()
+        if not braveKeyProvider:
+            braveKeyProvider = BraveKeyProvider()
         
         await enhanced_progress_callback(
             "API keys ready. Using server-provided API keys.",
@@ -630,7 +699,7 @@ async def generate_learning_path_task(
                 submodule_parallel_count=submoduleParallelCount,
                 progress_callback=enhanced_progress_callback,
                 google_key_provider=googleKeyProvider,
-                tavily_key_provider=tavilyKeyProvider,
+                brave_key_provider=braveKeyProvider,
                 desired_module_count=desiredModuleCount,
                 desired_submodule_count=desiredSubmoduleCount,
                 language=language
@@ -651,35 +720,59 @@ async def generate_learning_path_task(
                 action="error"
             )
             
+            # Automatically save failed learning path to history
+            try:
+                error_path_id = str(uuid.uuid4())
+                err_lp = LearningPath(
+                    user_id=user_id,
+                    path_id=error_path_id,
+                    topic=topic,
+                    language=language,
+                    path_data={"status": "failed", "error": user_error_msg},
+                    source="generated-failed",
+                    tags=["[Failed Generation]"]
+                )
+                db.add(err_lp)
+                db.commit()
+                db.refresh(err_lp)
+                # Link generation task to history entry
+                tr = db.query(GenerationTask).filter(GenerationTask.task_id == task_id).first()
+                if tr:
+                    tr.history_entry_id = err_lp.id
+                    db.commit()
+                if progressCallback:
+                    await progressCallback({
+                        "message": "Failed learning path saved to history.",
+                        "persistentPathId": error_path_id,
+                        "action": "history_saved",
+                        "timestamp": datetime.now().isoformat()
+                    })
+            except Exception as save_err2:
+                logger.error(f"Failed to save failed LearningPath for task {task_id}: {save_err2}")
+                db.rollback()
+            
             # Restore credit to user if the generation failed and record the transaction
             if user_id is not None:
                 try:
-                    # Get a new DB session
-                    from backend.config.database import get_db
-                    # Ensure db session handling is robust
-                    db_session = next(get_db())
-                    try:
-                        # Find the user and restore credit
-                        user = db_session.query(User).filter(User.id == user_id).first()
-                        if user is not None:
-                            user.credits += 1
-                            
-                            # Create credit transaction record for the refund
-                            transaction = CreditTransaction(
-                                user_id=user.id,
-                                amount=1,  # Positive amount for refund
-                                transaction_type="refund",
-                                notes=f"Refunded 1 credit due to failed generation for topic: {topic}"
-                            )
-                            db_session.add(transaction)
-                            db_session.commit()
-                            logger.info(f"Restored 1 credit to user {user_id} due to generation error")
-                        else:
-                            logger.warning(f"User {user_id} not found for credit refund.")
-                    finally:
-                        db_session.close() # Ensure session is closed
+                    # Find the user and restore credit
+                    user = db.query(User).filter(User.id == user_id).first()
+                    if user is not None:
+                        user.credits += 1
+                        
+                        # Create credit transaction record for the refund
+                        transaction = CreditTransaction(
+                            user_id=user.id,
+                            amount=1,  # Positive amount for refund
+                            transaction_type="refund",
+                            notes=f"Refunded 1 credit due to failed generation for topic: {topic}"
+                        )
+                        db.add(transaction)
+                        db.commit()
+                        logger.info(f"Restored 1 credit to user {user_id} due to generation error")
+                    else:
+                        logger.warning(f"User {user_id} not found for credit refund.")
                 except Exception as credit_error:
-                    logger.error(f"Failed to restore credit to user {user_id}: {str(credit_error)}")
+                    logger.error(f"Failed to restore credit to user {user_id} after unexpected error: {str(credit_error)}")
             
             # Update task status with sanitized error info - this is an unexpected error
             async with active_generations_lock:
@@ -699,17 +792,54 @@ async def generate_learning_path_task(
             overall_progress=1.0,
             action="completed"
         )
+        # Automatically save generated learning path to history
+        try:
+            serializable_result = make_path_data_serializable(result)
+            new_lp = LearningPath(
+                user_id=user_id,
+                path_id=serializable_result.get("path_id"),
+                topic=serializable_result.get("topic", topic),
+                language=language,
+                path_data=serializable_result,
+                source="generated"
+            )
+            db.add(new_lp)
+            db.commit()
+            db.refresh(new_lp)
+            # Link generation task to history entry
+            task_record = db.query(GenerationTask).filter(GenerationTask.task_id == task_id).first()
+            if task_record:
+                task_record.history_entry_id = new_lp.id
+                db.commit()
+            # Notify frontend of the persistent history path ID via SSE
+            if progressCallback:
+                await progressCallback({
+                    "message": "Learning path saved to history.",
+                    "persistentPathId": new_lp.path_id,
+                    "action": "history_saved",
+                    "timestamp": datetime.now().isoformat()
+                })
+        except Exception as save_err:
+            logger.error(f"Failed to save LearningPath for task {task_id}: {save_err}")
+            db.rollback() # Rollback on save failure
         
         # Store result in active_generations
         async with active_generations_lock:
             if task_id in active_generations:
                 active_generations[task_id]["result"] = result
+                # Status will be updated in DB in finally block
                 active_generations[task_id]["status"] = "completed"
             
         logging.info(f"Learning path generation completed for: {topic}")
         
     except LearningPathGenerationError as e:
-        # Handle specific, anticipated generation errors
+        # Handle specific, anticipated generation errors and auto-save to history
+        # Send failure signal to frontend
+        await enhanced_progress_callback(
+            f"Error: {e.message}",
+            phase="error",
+            action="error"
+        )
         async with active_generations_lock:
             if task_id in active_generations:
                 active_generations[task_id]["status"] = "failed"
@@ -719,28 +849,54 @@ async def generate_learning_path_task(
                     "details": e.details
                 }
             
+        # Automatically save known error learning path to history
+        try:
+            error_path_id = str(uuid.uuid4())
+            err_lp = LearningPath(
+                user_id=user_id,
+                path_id=error_path_id,
+                topic=topic,
+                language=language,
+                path_data={"status": "failed", "error": e.message},
+                source="generated-failed",
+                tags=["[Failed Generation]"]
+            )
+            db.add(err_lp)
+            db.commit()
+            db.refresh(err_lp)
+            tr = db.query(GenerationTask).filter(GenerationTask.task_id == task_id).first()
+            if tr:
+                tr.history_entry_id = err_lp.id
+                db.commit()
+            if progressCallback:
+                await progressCallback({
+                    "message": "Failed learning path saved to history.",
+                    "persistentPathId": error_path_id,
+                    "action": "history_saved",
+                    "timestamp": datetime.now().isoformat()
+                })
+        except Exception as save_err3:
+            logger.error(f"Failed to save known error LearningPath for task {task_id}: {save_err3}")
+            db.rollback()
+        
         # Restore credit for anticipated errors too
         if user_id is not None:
              try:
-                 from backend.config.database import get_db
-                 db_session = next(get_db())
-                 try:
-                     user = db_session.query(User).filter(User.id == user_id).first()
-                     if user is not None:
-                         user.credits += 1
-                         transaction = CreditTransaction(
-                             user_id=user.id,
-                             amount=1,
-                             transaction_type="refund",
-                             notes=f"Refunded 1 credit due to known error: {e.message[:100]}"
-                         )
-                         db_session.add(transaction)
-                         db_session.commit()
-                         logger.info(f"Restored 1 credit to user {user_id} due to known error: {e.message[:100]}")
-                     else:
-                         logger.warning(f"User {user_id} not found for credit refund.")
-                 finally:
-                     db_session.close()
+                 # Find the user and restore credit
+                 user = db.query(User).filter(User.id == user_id).first()
+                 if user is not None:
+                     user.credits += 1
+                     transaction = CreditTransaction(
+                         user_id=user.id,
+                         amount=1,
+                         transaction_type="refund",
+                         notes=f"Refunded 1 credit due to known error: {e.message[:100]}"
+                     )
+                     db.add(transaction)
+                     db.commit()
+                     logger.info(f"Restored 1 credit to user {user_id} due to known error: {e.message[:100]}")
+                 else:
+                     logger.warning(f"User {user_id} not found for credit refund.")
              except Exception as credit_error:
                  logger.error(f"Failed to restore credit to user {user_id} after known error: {str(credit_error)}")
                  
@@ -765,29 +921,84 @@ async def generate_learning_path_task(
         # Attempt to restore credit here as well
         if user_id is not None:
             try:
-                 from backend.config.database import get_db
-                 db_session = next(get_db())
-                 try:
-                     user = db_session.query(User).filter(User.id == user_id).first()
-                     if user is not None:
-                         user.credits += 1
-                         transaction = CreditTransaction(
-                             user_id=user.id,
-                             amount=1,
-                             transaction_type="refund",
-                             notes=f"Refunded 1 credit due to outer task error."
-                         )
-                         db_session.add(transaction)
-                         db_session.commit()
-                         logger.info(f"Restored 1 credit to user {user_id} due to outer task error.")
-                     else:
-                         logger.warning(f"User {user_id} not found for credit refund.")
-                 finally:
-                     db_session.close()
+                 # Find the user and restore credit
+                 user = db.query(User).filter(User.id == user_id).first()
+                 if user is not None:
+                     user.credits += 1
+                     transaction = CreditTransaction(
+                         user_id=user.id,
+                         amount=1,
+                         transaction_type="refund",
+                         notes=f"Refunded 1 credit due to outer task error."
+                     )
+                     db.add(transaction)
+                     db.commit()
+                     logger.info(f"Restored 1 credit to user {user_id} due to outer task error.")
+                 else:
+                     logger.warning(f"User {user_id} not found for credit refund.")
             except Exception as credit_error:
                  logger.error(f"Failed to restore credit to user {user_id} after outer task error: {str(credit_error)}")
 
     finally:
+        # --- Update GenerationTask final status --- 
+        final_status = GenerationTaskStatus.FAILED # Default to FAILED
+        error_msg_to_save = None
+        history_entry_id_to_link = None # Variable to hold the history ID
+        try:
+            # Check the status from the (potentially outdated) in-memory dict first
+            # We rely on the DB as the source of truth, but this might give context
+            task_info = None
+            async with active_generations_lock:
+                 task_info = active_generations.get(task_id)
+                 
+            if task_info and task_info["status"] == "completed":
+                final_status = GenerationTaskStatus.COMPLETED
+            elif task_info and task_info["status"] == "failed":
+                error_msg_to_save = json.dumps(task_info.get("error")) # Store error dict as JSON string
+                
+            # If outer_e occurred, mark as failed regardless of in-memory state
+            if 'outer_e' in locals() and outer_e:
+                final_status = GenerationTaskStatus.FAILED
+                if not error_msg_to_save:
+                     user_error_msg = "An unexpected error occurred before generation could complete."
+                     error_msg_to_save = json.dumps({"message": user_error_msg, "type": "outer_task_error"})
+                     
+            # If an inner exception occurred (not caught by outer_e)
+            elif 'e' in locals() and e:
+                final_status = GenerationTaskStatus.FAILED
+                if not error_msg_to_save:
+                     # Try to capture specific error message if possible
+                    if isinstance(e, LearningPathGenerationError):
+                        user_error_msg = e.message
+                        error_type = "learning_path_generation_error"
+                    else:
+                        user_error_msg = "An error occurred during learning path generation. Please try again later."
+                        error_type = "unexpected_error"
+                    error_msg_to_save = json.dumps({"message": user_error_msg, "type": error_type})
+
+            # Find the recently saved history entry ID (if save was successful)
+            if 'new_lp' in locals() and new_lp:
+                history_entry_id_to_link = new_lp.id
+            elif 'err_lp' in locals() and err_lp:
+                history_entry_id_to_link = err_lp.id
+
+            task_record = db.query(GenerationTask).filter(GenerationTask.task_id == task_id).first()
+            if task_record:
+                task_record.status = final_status
+                task_record.ended_at = datetime.utcnow()
+                task_record.error_message = error_msg_to_save
+                task_record.history_entry_id = history_entry_id_to_link # Link task to history
+                db.commit()
+                logger.info(f"Updated GenerationTask {task_id} final status to {final_status}")
+            else:
+                 logger.error(f"Could not find GenerationTask record for task_id: {task_id} to set final status.")
+        except Exception as db_err:
+             logger.exception(f"DB error updating GenerationTask {task_id} final status: {db_err}")
+             db.rollback()
+        finally:
+             db.close() # Close the session created for the background task
+        # --- End Update Status --- 
+        
         # --- Add finally block to signal SSE completion --- 
         logging.debug(f"Task {task_id} entering finally block.")
         async with progress_queues_lock:
@@ -808,9 +1019,9 @@ async def validate_api_keys(request: ApiKeyValidationRequest):
     """
     response = {
         "google_key_valid": False, 
-        "tavily_key_valid": False,
+        "brave_key_valid": False,
         "google_key_error": None,
-        "tavily_key_error": None
+        "brave_key_error": None
     }
     
     # Validate Google API key if provided
@@ -821,13 +1032,13 @@ async def validate_api_keys(request: ApiKeyValidationRequest):
             response["google_key_error"] = error_message
             logger.info(f"Google API key validation failed: {error_message}")
     
-    # Validate Tavily API key if provided
-    if request.tavily_api_key:
-        is_valid, error_message = validate_tavily_key(request.tavily_api_key)
-        response["tavily_key_valid"] = is_valid
+    # Validate Brave Search API key if provided
+    if request.brave_api_key:
+        is_valid, error_message = validate_brave_key(request.brave_api_key)
+        response["brave_key_valid"] = is_valid
         if not is_valid:
-            response["tavily_key_error"] = error_message
-            logger.info(f"Tavily API key validation failed: {error_message}")
+            response["brave_key_error"] = error_message
+            logger.info(f"Brave Search API key validation failed: {error_message}")
     
     return response
 
