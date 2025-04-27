@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Routes, Route, Navigate } from 'react-router';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { Container, Box } from '@mui/material';
 import { Analytics } from "@vercel/analytics/react";
@@ -19,28 +19,8 @@ import routesConfig from './routesConfig';
 // Import new components
 import WelcomeModal from './components/shared/WelcomeModal';
 
-// Create theme
-const theme = createTheme({
-  palette: {
-    primary: {
-      main: '#1976d2',
-    },
-    secondary: {
-      main: '#f50057',
-    },
-    background: {
-      default: '#f5f5f5',
-    },
-  },
-  typography: {
-    fontFamily: [
-      'Roboto',
-      '"Helvetica Neue"',
-      'Arial',
-      'sans-serif',
-    ].join(','),
-  },
-});
+// Import the theme
+import theme from './theme/theme';
 
 // New component to render routes and modal
 const AppContent = () => {
@@ -101,7 +81,6 @@ function App() {
           display: 'flex', 
           flexDirection: 'column', 
           minHeight: '100vh',
-          backgroundColor: 'background.default'
         }}>
           <Navbar />
           <AppContent />

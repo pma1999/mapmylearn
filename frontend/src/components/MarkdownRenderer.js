@@ -1,16 +1,18 @@
 import React, { useMemo } from 'react';
-import { Box } from '@mui/material';
+import { Box, useTheme } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
 import { sanitizeContent } from '../utils/sanitizer';
 
 /**
  * StyledMarkdown component for rendering markdown content with proper styling
- * and syntax highlighting for code blocks
+ * and syntax highlighting for code blocks using the application theme.
  */
 const MarkdownRenderer = ({ children }) => {
+  const theme = useTheme();
+
   // Process the content to handle "```markdown\n" at the beginning
   // and sanitize the content to prevent XSS attacks
   const processedContent = useMemo(() => {
@@ -31,123 +33,172 @@ const MarkdownRenderer = ({ children }) => {
 
   return (
     <Box sx={{
-      '& h1': { 
-        fontSize: '1.8rem',
-        fontWeight: 'bold',
-        my: 2,
-        borderBottom: '1px solid',
-        borderColor: 'grey.300',
-        pb: 1
+      color: theme.palette.text.primary,
+      fontSize: theme.typography.body1.fontSize,
+      lineHeight: theme.typography.body1.lineHeight,
+      wordWrap: 'break-word',
+
+      '& h1, & h2, & h3, & h4, & h5, & h6': {
+        mt: theme.spacing(4),
+        mb: theme.spacing(2),
+        fontWeight: theme.typography.fontWeightBold,
+        lineHeight: 1.3,
+        color: theme.palette.text.primary,
+        paddingBottom: theme.spacing(1),
+        borderBottom: `1px solid ${theme.palette.divider}`,
       },
-      '& h2': { 
-        fontSize: '1.5rem',
-        fontWeight: 'bold',
-        my: 1.8,
-        borderBottom: '1px solid',
-        borderColor: 'grey.200',
-        pb: 0.5
-      },
+      '& h1': { fontSize: theme.typography.h2.fontSize },
+      '& h2': { fontSize: theme.typography.h3.fontSize },
       '& h3': { 
-        fontSize: '1.3rem',
-        fontWeight: 'bold',
-        my: 1.5 
+        fontSize: theme.typography.h4.fontSize, 
+        borderBottom: 'none',
+        pb: 0,
+        mt: theme.spacing(3),
+        mb: theme.spacing(1.5),
+        fontWeight: theme.typography.fontWeightMedium,
+      },
+      '& h4': { 
+        fontSize: theme.typography.h5.fontSize, 
+        borderBottom: 'none', 
+        pb: 0, 
+        mt: theme.spacing(3),
+        mb: theme.spacing(1.5),
+        fontWeight: theme.typography.fontWeightMedium,
+      },
+      '& h5': { 
+        fontSize: theme.typography.h6.fontSize, 
+        borderBottom: 'none', 
+        pb: 0, 
+        mt: theme.spacing(3),
+        mb: theme.spacing(1.5),
+        fontWeight: theme.typography.fontWeightMedium,
+      },
+      '& h6': { 
+        fontSize: theme.typography.subtitle1.fontSize, 
+        borderBottom: 'none', 
+        pb: 0, 
+        mt: theme.spacing(3),
+        mb: theme.spacing(1.5),
+        color: theme.palette.text.secondary,
+        fontWeight: theme.typography.fontWeightMedium,
       },
       '& p': { 
-        my: 1,
-        lineHeight: 1.6
+        my: theme.spacing(1.5),
+        lineHeight: theme.typography.body1.lineHeight,
       },
       '& ul, & ol': { 
-        pl: 4,
-        my: 1.5
+        pl: theme.spacing(4),
+        my: theme.spacing(1.5),
+        '& ul, & ol': { 
+           my: theme.spacing(1),
+        }
       },
       '& li': { 
-        mb: 0.8,
-        pl: 0.5
+        mb: theme.spacing(1),
+        pl: theme.spacing(0.5),
+        lineHeight: theme.typography.body1.lineHeight,
+        '&::marker': {
+           color: theme.palette.text.secondary,
+        }
       },
       '& blockquote': { 
-        borderLeft: '4px solid',
-        borderColor: 'grey.400',
-        pl: 2,
-        py: 0.5,
-        my: 1.5,
-        fontStyle: 'italic',
-        bgcolor: 'grey.100',
-        borderRadius: 1
+        borderLeft: `4px solid ${theme.palette.primary.light}`,
+        pl: theme.spacing(2),
+        pr: theme.spacing(2),
+        py: theme.spacing(1),
+        my: theme.spacing(2.5),
+        fontStyle: 'normal',
+        color: theme.palette.text.secondary,
+        backgroundColor: theme.palette.action.hover,
+        borderRadius: theme.shape.borderRadius / 2,
+        '& p': { 
+          my: theme.spacing(1),
+        }
       },
       '& code': {
-        fontFamily: 'monospace',
-        bgcolor: 'grey.100',
-        p: 0.5,
-        borderRadius: 0.5,
-        fontSize: '0.9em'
+        fontFamily: '\'SFMono-Regular\', Consolas, \'Liberation Mono\', Menlo, Courier, monospace',
+        backgroundColor: theme.palette.action.hover,
+        color: theme.palette.text.primary,
+        padding: '0.2em 0.4em',
+        borderRadius: theme.shape.borderRadius / 2,
+        fontSize: '0.9em',
+        wordBreak: 'break-word',
       },
       '& pre': {
-        bgcolor: 'grey.900',
-        color: 'common.white',
-        p: 2,
-        borderRadius: 1,
+        padding: theme.spacing(2),
+        borderRadius: theme.shape.borderRadius,
         overflowX: 'auto',
-        my: 2,
+        my: theme.spacing(2.5),
+        border: `1px solid ${theme.palette.divider}`,
+        backgroundColor: theme.palette.mode === 'dark' ? theme.palette.grey[900] : '#f8f9fa',
         '& code': {
-          bgcolor: 'transparent',
+          fontFamily: 'inherit',
+          backgroundColor: 'transparent',
           color: 'inherit',
-          p: 0
+          padding: 0,
+          borderRadius: 0,
+          fontSize: '0.875em',
+          lineHeight: 1.5,
         }
       },
       '& a': {
-        color: 'primary.main',
+        color: theme.palette.primary.main,
         textDecoration: 'none',
+        fontWeight: theme.typography.fontWeightMedium,
         '&:hover': {
-          textDecoration: 'underline'
+          textDecoration: 'underline',
+          color: theme.palette.primary.dark,
         }
       },
       '& img': {
         maxWidth: '100%',
         height: 'auto',
-        borderRadius: 1,
+        borderRadius: theme.shape.borderRadius,
         display: 'block',
-        my: 2
+        my: theme.spacing(2.5),
+        border: `1px solid ${theme.palette.divider}`,
       },
       '& table': {
-        borderCollapse: 'collapse',
+        borderCollapse: 'separate',
+        borderSpacing: 0,
         width: '100%',
-        my: 2,
-        borderRadius: 1,
+        my: theme.spacing(2.5),
+        borderRadius: theme.shape.borderRadius,
+        border: `1px solid ${theme.palette.divider}`,
         overflow: 'hidden',
-        boxShadow: '0 0 0 1px rgba(0,0,0,0.1)'
+      },
+      '& th, & td': {
+        padding: theme.spacing(1.5),
+        textAlign: 'left',
+        borderBottom: `1px solid ${theme.palette.divider}`,
+        lineHeight: 1.5,
       },
       '& th': {
-        bgcolor: 'grey.100',
-        fontWeight: 'bold',
-        p: 1.5,
-        textAlign: 'left',
-        borderBottom: '2px solid',
-        borderColor: 'grey.300'
+        backgroundColor: theme.palette.background.default,
+        fontWeight: theme.typography.fontWeightBold,
+        color: theme.palette.text.primary,
       },
       '& td': {
-        p: 1.5,
-        borderBottom: '1px solid',
-        borderColor: 'grey.200'
+         color: theme.palette.text.primary,
       },
-      '& tr:last-child td': {
-        borderBottom: 'none'
+      '& tr:last-child th, & tr:last-child td': {
+        borderBottom: 'none',
       },
       '& tr:nth-of-type(even)': {
-        bgcolor: 'grey.50'
       },
       '& hr': {
-        my: 3,
+        my: theme.spacing(4),
         border: 'none',
         height: '1px',
-        bgcolor: 'grey.300'
+        backgroundColor: theme.palette.divider,
       },
       '& input[type="checkbox"]': {
-        mr: 1
+        mr: theme.spacing(1),
+        transform: 'translateY(2px)',
       }
     }}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        // Disable raw HTML in markdown
         rehypePlugins={[]}
         disallowedElements={['script', 'style', 'iframe']}
         skipHtml={true}
@@ -156,7 +207,7 @@ const MarkdownRenderer = ({ children }) => {
             const match = /language-(\w+)/.exec(className || '');
             return !inline && match ? (
               <SyntaxHighlighter
-                style={vscDarkPlus}
+                style={oneLight}
                 language={match[1]}
                 PreTag="div"
                 {...props}

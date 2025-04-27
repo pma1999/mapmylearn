@@ -9,13 +9,15 @@ import {
   Stack,
   useTheme,
   useMediaQuery,
-  Tooltip
+  Tooltip,
+  IconButton
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
 import SaveIcon from '@mui/icons-material/Save';
 import SchoolIcon from '@mui/icons-material/School';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import MenuIcon from '@mui/icons-material/Menu';
 import { motion } from 'framer-motion';
 import InfoTooltip from '../../shared/InfoTooltip';
 import { helpTexts } from '../../../constants/helpTexts';
@@ -31,6 +33,8 @@ import { helpTexts } from '../../../constants/helpTexts';
  * @param {Function} props.onDownloadPDF Handler for PDF download
  * @param {Function} props.onSaveToHistory Handler for opening save details dialog
  * @param {Function} props.onNewLearningPath Handler for creating a new learning path
+ * @param {Function} [props.onOpenMobileNav] Optional handler to open mobile navigation
+ * @param {boolean} [props.showMobileNavButton] Optional flag to show the mobile nav button
  * @returns {JSX.Element} Header component
  */
 const LearningPathHeader = ({ 
@@ -40,7 +44,9 @@ const LearningPathHeader = ({
   onDownload, 
   onDownloadPDF,
   onSaveToHistory, 
-  onNewLearningPath 
+  onNewLearningPath,
+  onOpenMobileNav,
+  showMobileNavButton
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -81,203 +87,203 @@ const LearningPathHeader = ({
 
   return (
     <Paper 
-      elevation={2} 
+      elevation={0} 
+      variant="outlined"
       sx={{ 
-        p: { xs: 2, sm: 3, md: 4 }, 
-        borderRadius: 2, 
-        mb: 4,
-        background: `linear-gradient(145deg, ${theme.palette.primary.light}10, ${theme.palette.background.paper})`,
+        p: { xs: 2, sm: 3 },
+        borderRadius: 2,
+        borderColor: theme.palette.divider,
+        background: theme.palette.background.paper,
         position: 'relative',
         overflow: 'hidden'
       }}
     >
-      <Box
-        sx={{
-          position: 'absolute',
-          top: 0,
-          right: 0,
-          width: { xs: '120px', sm: '150px', md: '200px' },
-          height: { xs: '120px', sm: '150px', md: '200px' },
-          background: `linear-gradient(135deg, transparent 50%, ${theme.palette.primary.light}30 50%)`,
-          zIndex: 0
-        }}
-      />
-      
       <motion.div
         initial="hidden"
         animate="visible"
         variants={headerVariants}
       >
         <Box sx={{ position: 'relative', zIndex: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-            <SchoolIcon 
-              sx={{ 
-                fontSize: { xs: 32, sm: 36, md: 40 }, 
-                color: theme.palette.primary.main,
-                mr: 2 
-              }} 
-            />
-            <Typography 
-              variant="h4" 
-              component="h1" 
-              sx={{ 
-                fontWeight: 700,
-                fontSize: { xs: '1.5rem', sm: '1.8rem', md: '2.125rem' },
-                color: theme.palette.text.primary
-              }}
-            >
-              Learning Path
-            </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: { xs: 1.5, md: 2 }, justifyContent: 'space-between' }}>
+            {showMobileNavButton && (
+              <motion.div variants={buttonVariants}>
+                <Tooltip title="Modules Navigation">
+                  <IconButton 
+                    color="primary"
+                    onClick={onOpenMobileNav}
+                    sx={{ mr: 1 }} 
+                    aria-label="Open module navigation"
+                  >
+                    <MenuIcon />
+                  </IconButton>
+                </Tooltip>
+              </motion.div>
+            )}
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <SchoolIcon 
+                sx={{ 
+                  fontSize: { xs: 28, sm: 32, md: 40 }, 
+                  color: theme.palette.primary.main,
+                  mr: 1.5 
+                }} 
+              />
+              <Typography 
+                variant="h4" 
+                component="h1" 
+                sx={{ 
+                  fontWeight: theme.typography.fontWeightBold,
+                  color: theme.palette.text.primary
+                }}
+              >
+                Learning Path
+              </Typography>
+            </Box>
           </Box>
           
-          <Box sx={{ mt: 2 }}>
+          <Box sx={{ mt: 1, mb: 2 }}>
             <Typography 
               variant="h5"
               color="primary"
               sx={{ 
-                fontWeight: 600,
-                fontSize: { xs: '1.25rem', sm: '1.5rem', md: '1.6rem' },
-                mb: 2,
-                wordBreak: 'break-word'
+                fontWeight: theme.typography.fontWeightMedium,
+                mb: 1,
+                wordBreak: 'break-word',
+                textAlign: { xs: 'center', sm: 'left' }
               }}
             >
               {topic}
             </Typography>
-            
-            <Divider sx={{ mt: 3, mb: 3 }} />
-            
-            <motion.div
-              variants={buttonContainerVariants}
-              initial="hidden"
-              animate="visible"
-            >
-              {/* Mobile view - Stack buttons vertically */}
-              {isMedium ? (
-                <Stack direction="column" spacing={1.5} sx={{ width: '100%' }}>
-                  <Box sx={{ display: 'flex', flexDirection: 'row', gap: 1 }}>
-                    <motion.div variants={buttonVariants} sx={{ flex: 1 }}>
-                      <Tooltip title="Download as JSON">
-                        <Button
-                          variant="outlined"
-                          fullWidth
-                          startIcon={<DownloadIcon />}
-                          onClick={onDownload}
-                          size={isMobile ? "small" : "medium"}
-                        >
-                          JSON
-                        </Button>
-                      </Tooltip>
-                    </motion.div>
-                    
-                    <motion.div variants={buttonVariants} sx={{ flex: 1 }}>
-                      <Tooltip title={!isPdfReady ? "PDF download available after generation completes" : "Download as PDF"}>
-                        <span>
-                          <Button
-                            variant="outlined"
-                            fullWidth
-                            startIcon={<PictureAsPdfIcon />}
-                            onClick={onDownloadPDF}
-                            size={isMobile ? "small" : "medium"}
-                            disabled={!isPdfReady}
-                          >
-                            PDF
-                          </Button>
-                        </span>
-                      </Tooltip>
-                    </motion.div>
-                  </Box>
-                  
-                  <motion.div variants={buttonVariants}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+          </Box>
+          
+          <Divider sx={{ mt: 2, mb: 3 }} />
+          
+          <motion.div
+            variants={buttonContainerVariants}
+            initial="hidden"
+            animate="visible"
+          >
+            {isMedium ? (
+              <Stack direction="column" spacing={1.5} sx={{ width: '100%' }}>
+                <Box sx={{ display: 'flex', flexDirection: 'row', gap: 1 }}>
+                  <motion.div variants={buttonVariants} sx={{ flex: 1 }}>
+                    <Tooltip title="Download as JSON">
                       <Button
                         variant="outlined"
                         fullWidth
-                        color="secondary"
-                        startIcon={<SaveIcon />}
-                        onClick={onSaveToHistory}
-                        disabled={detailsHaveBeenSet}
+                        startIcon={<DownloadIcon />}
+                        onClick={onDownload}
                         size={isMobile ? "small" : "medium"}
                       >
-                        {detailsHaveBeenSet ? "Details Set" : "Save Details"}
+                        JSON
                       </Button>
-                      <InfoTooltip title={helpTexts.lphSaveTooltip} />
-                    </Box>
+                    </Tooltip>
                   </motion.div>
                   
-                  <motion.div variants={buttonVariants}>
-                    <Button
-                      variant="contained"
-                      fullWidth
-                      color="primary"
-                      startIcon={<BookmarkIcon />}
-                      onClick={onNewLearningPath}
-                      size={isMobile ? "small" : "medium"}
-                    >
-                      Create New Path
-                    </Button>
-                  </motion.div>
-                </Stack>
-              ) : (
-                /* Desktop view - Horizontal button layout */
-                <Stack direction="row" spacing={2} alignItems="center">
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <motion.div variants={buttonVariants}>
-                      <Tooltip title="Download as JSON">
+                  <motion.div variants={buttonVariants} sx={{ flex: 1 }}>
+                    <Tooltip title={!isPdfReady ? "PDF download available after generation completes" : "Download as PDF"}>
+                      <span>
                         <Button
                           variant="outlined"
-                          startIcon={<DownloadIcon />}
-                          onClick={onDownload}
+                          fullWidth
+                          startIcon={<PictureAsPdfIcon />}
+                          onClick={onDownloadPDF}
+                          size={isMobile ? "small" : "medium"}
+                          disabled={!isPdfReady}
                         >
-                          JSON
+                          PDF
                         </Button>
-                      </Tooltip>
-                    </motion.div>
-                    
-                    <motion.div variants={buttonVariants}>
-                      <Tooltip title={!isPdfReady ? "PDF download available after generation completes" : "Download as PDF"}>
-                        <span>
-                          <Button
-                            variant="outlined"
-                            startIcon={<PictureAsPdfIcon />}
-                            onClick={onDownloadPDF}
-                            disabled={!isPdfReady}
-                          >
-                            PDF
-                          </Button>
-                        </span>
-                      </Tooltip>
-                    </motion.div>
+                      </span>
+                    </Tooltip>
+                  </motion.div>
+                </Box>
+                
+                <motion.div variants={buttonVariants}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                    <Button
+                      variant="outlined"
+                      fullWidth
+                      color="secondary"
+                      startIcon={<SaveIcon />}
+                      onClick={onSaveToHistory}
+                      disabled={detailsHaveBeenSet}
+                      size={isMobile ? "small" : "medium"}
+                    >
+                      {detailsHaveBeenSet ? "Details Set" : "Save Details"}
+                    </Button>
+                    <InfoTooltip title={helpTexts.lphSaveTooltip} />
                   </Box>
-                  
-                  <motion.div variants={buttonVariants}>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                </motion.div>
+                
+                <motion.div variants={buttonVariants}>
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    color="primary"
+                    startIcon={<BookmarkIcon />}
+                    onClick={onNewLearningPath}
+                    size={isMobile ? "small" : "medium"}
+                  >
+                    Create New Path
+                  </Button>
+                </motion.div>
+              </Stack>
+            ) : (
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems="center">
+                <motion.div variants={buttonVariants}>
+                  <Tooltip title="Download as JSON">
+                    <Button
+                      variant="outlined"
+                      startIcon={<DownloadIcon />}
+                      onClick={onDownload}
+                    >
+                      JSON
+                    </Button>
+                  </Tooltip>
+                </motion.div>
+                
+                <motion.div variants={buttonVariants}>
+                  <Tooltip title={!isPdfReady ? "PDF download available after generation completes" : "Download as PDF"}>
+                    <span>
                       <Button
                         variant="outlined"
-                        color="secondary"
-                        startIcon={<SaveIcon />}
+                        startIcon={<PictureAsPdfIcon />}
+                        onClick={onDownloadPDF}
+                        disabled={!isPdfReady}
+                      >
+                        PDF
+                      </Button>
+                    </span>
+                  </Tooltip>
+                </motion.div>
+                
+                <motion.div variants={buttonVariants}>
+                  <Tooltip title={detailsHaveBeenSet ? "Details Saved" : "Save to History (Add Tags/Favorite)"}>
+                    <span>
+                      <Button
+                        variant="contained"
+                        startIcon={detailsHaveBeenSet ? <BookmarkIcon /> : <SaveIcon />}
                         onClick={onSaveToHistory}
                         disabled={detailsHaveBeenSet}
                       >
-                        {detailsHaveBeenSet ? "Details Set" : "Save Details"}
+                        {detailsHaveBeenSet ? 'Saved' : 'Save Path'}
                       </Button>
-                      <InfoTooltip title={helpTexts.lphSaveTooltip} />
-                    </Box>
-                  </motion.div>
-                  
-                  <motion.div variants={buttonVariants}>
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      startIcon={<BookmarkIcon />}
-                      onClick={onNewLearningPath}
-                    >
-                      Create New Path
-                    </Button>
-                  </motion.div>
-                </Stack>
-              )}
-            </motion.div>
-          </Box>
+                    </span>
+                  </Tooltip>
+                </motion.div>
+                <Box sx={{ flexGrow: { xs: 0, sm: 1 } }} />
+                <motion.div variants={buttonVariants}>
+                  <Button
+                    variant="text"
+                    color="secondary"
+                    startIcon={<SchoolIcon />}
+                    onClick={onNewLearningPath}
+                  >
+                    New Path
+                  </Button>
+                </motion.div>
+              </Stack>
+            )}
+          </motion.div>
         </Box>
       </motion.div>
     </Paper>
@@ -291,7 +297,9 @@ LearningPathHeader.propTypes = {
   onDownload: PropTypes.func.isRequired,
   onDownloadPDF: PropTypes.func.isRequired,
   onSaveToHistory: PropTypes.func.isRequired,
-  onNewLearningPath: PropTypes.func.isRequired
+  onNewLearningPath: PropTypes.func.isRequired,
+  onOpenMobileNav: PropTypes.func,
+  showMobileNavButton: PropTypes.bool,
 };
 
 export default LearningPathHeader; 

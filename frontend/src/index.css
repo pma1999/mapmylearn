@@ -1,17 +1,15 @@
 * {
   box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+  /* Removed margin and padding, handled by CssBaseline */
 }
 
 body {
-  font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
+  /* font-family is set by theme */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f5f5f5;
-  color: #333;
+  /* background-color and color are set by theme */
 }
 
 #root {
-  min-height: 100vh;
+  /* min-height is set by theme MuiCssBaseline override */
 } 

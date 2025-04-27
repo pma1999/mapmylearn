@@ -1,0 +1,455 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import PropTypes from 'prop-types';
+import { 
+  Box, 
+  Typography, 
+  Paper, 
+  Tabs, 
+  Tab, 
+  CircularProgress, 
+  Alert, 
+  Snackbar, 
+  Button, 
+  IconButton,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Tooltip,
+  Zoom,
+  useTheme,
+  Grid,
+} from '@mui/material';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
+import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
+import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
+import QuestionAnswerIcon from '@mui/icons-material/QuestionAnswer';
+import GraphicEqIcon from '@mui/icons-material/GraphicEq';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
+import NavigateNextIcon from '@mui/icons-material/NavigateNext';
+import SkipNextIcon from '@mui/icons-material/SkipNext'; // For next module
+
+// Shared components
+import MarkdownRenderer from '../../MarkdownRenderer';
+import ResourcesSection from '../../shared/ResourcesSection';
+import SubmoduleChat from '../../chat/SubmoduleChat';
+import { QuizContainer } from '../../quiz';
+
+// Hooks & API
+import { useAuth } from '../../../services/authContext';
+import { api, API_URL } from '../../../services/api';
+import { helpTexts } from '../../../constants/helpTexts';
+
+// TabPanel component (can be kept internal or moved to shared utils)
+const TabPanel = (props) => {
+  const { children, value, index, sx, ...other } = props;
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`submodule-tabpanel-${index}`}
+      aria-labelledby={`submodule-tab-${index}`}
+      {...other}
+    >
+      {value === index && <Box sx={{ p: { xs: 2, sm: 3 }, ...sx }}>{children}</Box>}
+    </div>
+  );
+};
+
+TabPanel.propTypes = {
+  children: PropTypes.node,
+  index: PropTypes.number.isRequired,
+  value: PropTypes.number.isRequired,
+  sx: PropTypes.object,
+};
+
+// Define supported languages (should match backend)
+const supportedLanguages = [
+  { code: 'en', name: 'English' },
+  { code: 'es', name: 'Español' },
+  { code: 'fr', name: 'Français' },
+  { code: 'de', name: 'Deutsch' },
+  { code: 'it', name: 'Italiano' },
+  { code: 'pt', name: 'Português' },
+];
+const defaultLanguageCode = 'en';
+const AUDIO_CREDIT_COST = 1; // Define or import this
+
+const ContentPanel = ({ 
+  module, 
+  moduleIndex, 
+  submodule, 
+  submoduleIndex, 
+  pathId, 
+  isTemporaryPath, 
+  actualPathData,
+  onNavigate, // Callback: (direction: 'prev' | 'next' | 'nextModule') => void
+  totalModules,
+  totalSubmodulesInModule,
+}) => {
+  const theme = useTheme();
+  const [activeTab, setActiveTab] = useState(0);
+  const { user, fetchUserCredits } = useAuth();
+
+  // --- Audio state logic extracted from SubmoduleCard ---
+  const getAbsoluteAudioUrl = useCallback((relativeUrl) => {
+      if (!relativeUrl) return null;
+      if (relativeUrl.startsWith('http')) return relativeUrl;
+      if (relativeUrl.startsWith('/static/')) {
+          const baseUrl = API_URL.replace(/\/api$/, ''); 
+          return `${baseUrl}${relativeUrl}`;
+      }
+      console.warn('Could not construct absolute URL for audio:', relativeUrl);
+      return relativeUrl; 
+  }, []);
+
+  const [audioUrl, setAudioUrl] = useState(null); 
+  const [isAudioLoading, setIsAudioLoading] = useState(false);
+  const [audioError, setAudioError] = useState(null);
+  const [notification, setNotification] = useState({ open: false, message: '', severity: 'info' });
+
+  // --- Language State ---
+  const getInitialLanguage = useCallback(() => {
+    const pathLang = actualPathData?.language;
+    if (pathLang && supportedLanguages.some(l => l.code === pathLang)) {
+      return pathLang;
+    }
+    return defaultLanguageCode;
+  }, [actualPathData?.language]);
+
+  const [selectedLanguage, setSelectedLanguage] = useState(getInitialLanguage);
+
+  // Effect to update audioUrl and language when submodule changes
+  useEffect(() => {
+      setAudioUrl(getAbsoluteAudioUrl(submodule?.audio_url));
+      setSelectedLanguage(getInitialLanguage());
+      setAudioError(null); // Reset error on submodule change
+      setActiveTab(0); // Reset to content tab on submodule change
+  }, [submodule, getAbsoluteAudioUrl, getInitialLanguage]);
+
+  // --- Effect to Adjust Active Tab --- 
+  // Moved before the early return
+  useEffect(() => {
+      // Only run the check if submodule is available to calculate tab config
+      if (submodule) {
+          const hasQuiz = submodule.quiz_questions && submodule.quiz_questions.length > 0;
+          const hasResources = submodule.resources && submodule.resources.length > 0;
+          
+          // Calculate the expected number of tabs based on the current submodule
+          let currentTabsLength = 1; // Content tab
+          if (hasQuiz) currentTabsLength++;
+          if (hasResources) currentTabsLength++;
+          currentTabsLength++; // Chat tab
+          currentTabsLength++; // Audio tab
+          
+          // Reset to first tab if the current activeTab index is no longer valid
+          if (activeTab >= currentTabsLength) {
+              setActiveTab(0); 
+          }
+      }
+  // This effect depends on the submodule (to determine tab count) and activeTab
+  }, [submodule, activeTab]); 
+
+  // --- Audio Generation Logic ---
+  const handleGenerateAudio = async () => {
+      if (!submodule || !pathId) return; // Safety check
+
+      setIsAudioLoading(true);
+      setAudioError(null);
+      setNotification({ open: false, message: '', severity: 'info' });
+
+      const requestBody = {
+          path_data: isTemporaryPath ? actualPathData : undefined,
+          language: selectedLanguage
+      };
+
+      try {
+          const response = await api.post(
+              `/v1/learning-paths/${pathId}/modules/${moduleIndex}/submodules/${submoduleIndex}/audio`,
+              requestBody
+          );
+          
+          if (response.data?.audio_url) {
+              const fullUrl = getAbsoluteAudioUrl(response.data.audio_url);
+              if (fullUrl) {
+                   setAudioUrl(fullUrl);
+                   setNotification({ open: true, message: 'Audio generated successfully!', severity: 'success' });
+                   if (fetchUserCredits) {
+                       fetchUserCredits();
+                       console.log('Fetched updated credits after audio generation.');
+                   }
+                   // Update the submodule data in the main state if possible? Or rely on refresh?
+                   // This part is tricky without a direct way to update actualPathData here.
+                   // For now, the URL is updated locally. A full refresh might be needed elsewhere
+                   // to persist this audio_url if the user navigates away and comes back.
+              } else {
+                  throw new Error("Failed to construct absolute audio URL");
+              }
+          } else {
+              throw new Error("Invalid response from server");
+          }
+      } catch (err) {
+          console.error("Audio generation failed:", err);
+          let errorMsg = err.response?.data?.error?.message || err.message || 'Failed to generate audio.';
+          let errorSeverity = err.response?.status === 403 ? 'warning' : 'error'; // Handle insufficient credits specifically
+          setAudioError(errorMsg);
+          setNotification({ open: true, message: errorMsg, severity: errorSeverity });
+      } finally {
+          setIsAudioLoading(false);
+      }
+  };
+  
+  const handleLanguageChange = (event) => {
+    setSelectedLanguage(event.target.value);
+    // Reset audio URL when language changes to force re-generation if desired
+    // setAudioUrl(null); 
+    setAudioError(null); 
+  };
+
+  const handleNotificationClose = (event, reason) => {
+    if (reason === 'clickaway') return;
+    setNotification({ ...notification, open: false });
+  };
+
+  // --- Tab Handling ---
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
+    if (newValue !== 4) { // Reset audio error if navigating away from audio tab
+      setAudioError(null);
+    }
+  };
+
+  // --- Render Logic ---
+  if (!submodule) {
+    return (
+      <Paper elevation={2} sx={{ p: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', height: 'calc(100vh - 180px)', textAlign: 'center' }}>
+        <Box>
+           <MenuBookIcon sx={{ fontSize: 60, color: 'grey.400', mb: 2 }} />
+           <Typography variant="h6" color="text.secondary">
+              Select a submodule from the left to view its content.
+           </Typography>
+        </Box>
+      </Paper>
+    );
+  }
+
+  // Determine available tabs
+  const hasQuiz = submodule.quiz_questions && submodule.quiz_questions.length > 0;
+  const hasResources = submodule.resources && submodule.resources.length > 0;
+  
+  let tabIndexCounter = 0;
+  const tabsConfig = [
+      { index: tabIndexCounter++, label: 'Content', icon: <MenuBookIcon />, component: 'Content', tooltip: null },
+      ...(hasQuiz ? [{ index: tabIndexCounter++, label: 'Quiz', icon: <FitnessCenterIcon />, component: 'Quiz', tooltip: helpTexts.submoduleTabQuiz }] : []),
+      ...(hasResources ? [{ index: tabIndexCounter++, label: 'Resources', icon: <CollectionsBookmarkIcon />, component: 'Resources', tooltip: null }] : []),
+      { index: tabIndexCounter++, label: 'Chat', icon: <QuestionAnswerIcon />, component: 'Chat', tooltip: helpTexts.submoduleTabChat },
+      { index: tabIndexCounter++, label: 'Audio', icon: <GraphicEqIcon />, component: 'Audio', tooltip: helpTexts.submoduleTabAudio(AUDIO_CREDIT_COST) },
+  ];
+  
+  return (
+    <Paper 
+      variant="outlined"
+      sx={{ 
+        display: 'flex',
+        flexDirection: 'column',
+        borderColor: theme.palette.divider, 
+      }}
+    >
+      {/* Submodule Header */}
+      <Box sx={{ p: { xs: 2, sm: 2.5 }, borderBottom: `1px solid ${theme.palette.divider}`, bgcolor: 'transparent' }}>
+          <Typography variant="h6" component="h3" sx={{ fontWeight: theme.typography.fontWeightMedium, mb: 0.5 }}>
+              {moduleIndex + 1}.{submoduleIndex + 1}: {submodule.title}
+          </Typography>
+          {submodule.description && (
+              <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                  {submodule.description}
+              </Typography>
+          )}
+      </Box>
+
+      {/* MOVED: Navigation Controls */}
+      <Box sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}`, bgcolor: 'transparent' }}>
+         <Grid container justifyContent="space-between" alignItems="center">
+            <Grid item>
+               <Button 
+                  size="small"
+                  variant="text"
+                  startIcon={<NavigateBeforeIcon />} 
+                  onClick={() => onNavigate('prev')}
+                  disabled={moduleIndex === 0 && submoduleIndex === 0}
+               >
+                  Previous
+               </Button>
+            </Grid>
+            <Grid item>
+                 <Typography variant="caption" color="text.secondary">
+                    Module {moduleIndex + 1}/{totalModules} | Submodule {submoduleIndex + 1}/{totalSubmodulesInModule}
+                 </Typography>
+            </Grid>
+            <Grid item>
+               <Button 
+                  size="small"
+                  variant="text"
+                  endIcon={<NavigateNextIcon />} 
+                  onClick={() => onNavigate('next')}
+                  disabled={moduleIndex === totalModules - 1 && submoduleIndex === totalSubmodulesInModule - 1}
+                  sx={{ mr: 1 }}
+               >
+                  Next
+               </Button>
+               <Button 
+                  size="small"
+                  variant="outlined"
+                  endIcon={<SkipNextIcon />} 
+                  onClick={() => onNavigate('nextModule')}
+                  disabled={moduleIndex === totalModules - 1} // Disable if last module
+               >
+                  Next Module
+               </Button>
+            </Grid>
+         </Grid>
+      </Box>
+
+      {/* Tabs Navigation */}
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'transparent' }}>
+        <Tabs 
+          value={activeTab} 
+          onChange={handleTabChange} 
+          aria-label="submodule content tabs"
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
+        >
+          {tabsConfig.map((tab) => (
+            <Tab
+              key={tab.index}
+              icon={tab.icon}
+              iconPosition="start"
+              label={
+                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    {tab.label}
+                    {tab.tooltip &&
+                      <Tooltip title={tab.tooltip} arrow placement="top" TransitionComponent={Zoom} enterDelay={300}>
+                         <InfoOutlinedIcon sx={{ ml: 0.5, fontSize: 'small', verticalAlign: 'middle', color: 'text.secondary' }}/>
+                      </Tooltip>
+                    }
+                 </Box>
+              }
+              id={`submodule-tab-${tab.index}`}
+              aria-controls={`submodule-tabpanel-${tab.index}`}
+              sx={{ 
+                 py: 1.5 
+              }}
+            />
+          ))}
+        </Tabs>
+      </Box>
+
+      {/* Tab Content Area */}
+      <Box >
+         {tabsConfig.map((tab) => {
+             const tabContentSx = tab.component === 'Chat' ? { p: 0 } : {}; 
+             return (
+                <TabPanel key={tab.index} value={activeTab} index={tab.index} sx={tabContentSx}>
+                   {tab.component === 'Content' && (
+                       <MarkdownRenderer>{submodule.content || "No content available."}</MarkdownRenderer>
+                   )}
+                   {tab.component === 'Quiz' && hasQuiz && (
+                       <QuizContainer 
+                         quizQuestions={submodule.quiz_questions}
+                         submoduleId={`${moduleIndex}-${submoduleIndex}`} // Consistent ID
+                         pathId={pathId} 
+                         isTemporaryPath={isTemporaryPath}
+                       />
+                   )}
+                   {tab.component === 'Resources' && hasResources && (
+                       <ResourcesSection 
+                           resources={submodule.resources} 
+                           title="Submodule Resources" 
+                           type="submodule" 
+                           collapsible={false}
+                       />
+                   )}
+                   {tab.component === 'Chat' && (
+                       <SubmoduleChat 
+                           pathId={pathId} 
+                           moduleIndex={moduleIndex} 
+                           submoduleIndex={submoduleIndex}
+                           isTemporaryPath={isTemporaryPath}
+                           actualPathData={actualPathData} 
+                           submoduleTitle={submodule.title}
+                       />
+                   )}
+                   {tab.component === 'Audio' && (
+                       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, p: 2 }}>
+                           <FormControl fullWidth sx={{ maxWidth: '300px' }} disabled={isAudioLoading}>
+                               <InputLabel id={`language-select-label-panel`}>Script Language</InputLabel>
+                               <Select
+                                   labelId={`language-select-label-panel`}
+                                   value={selectedLanguage}
+                                   label="Script Language"
+                                   onChange={handleLanguageChange}
+                                   variant="outlined"
+                                   size="small"
+                               >
+                                   {supportedLanguages.map((lang) => (
+                                       <MenuItem key={lang.code} value={lang.code}>{lang.name}</MenuItem>
+                                   ))}
+                               </Select>
+                           </FormControl>
+
+                           {isAudioLoading && <CircularProgress sx={{ my: 2 }} />}
+                           {audioError && !isAudioLoading && <Alert severity="error" sx={{ width: '100%', mb: 1 }}>{audioError}</Alert>}
+                           
+                           {audioUrl && !isAudioLoading && (
+                               <audio controls src={audioUrl} style={{ width: '100%', maxWidth: '500px' }}>
+                                   Your browser does not support the audio element.
+                               </audio>
+                           )}
+
+                           <Button
+                               variant={audioUrl ? "outlined" : "contained"}
+                               onClick={handleGenerateAudio}
+                               disabled={isAudioLoading || !pathId} // Disable if no pathId
+                               startIcon={<GraphicEqIcon />}
+                               sx={{ mt: 1 }}
+                           >
+                               {isAudioLoading ? 'Generating...' : (audioUrl ? `Re-generate in ${supportedLanguages.find(l => l.code === selectedLanguage)?.name || selectedLanguage}` : 'Generate Audio')}
+                           </Button>
+                       </Box>
+                   )}
+                </TabPanel>
+             );
+         })}
+      </Box>
+      
+      {/* Snackbar for notifications (e.g., audio) */}
+      <Snackbar 
+        open={notification.open} 
+        autoHideDuration={6000} 
+        onClose={handleNotificationClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert onClose={handleNotificationClose} severity={notification.severity} sx={{ width: '100%' }}>
+          {notification.message}
+        </Alert>
+      </Snackbar>
+    </Paper>
+  );
+};
+
+ContentPanel.propTypes = {
+  module: PropTypes.object, // Can be null if no module selected
+  moduleIndex: PropTypes.number, // Index of the active module
+  submodule: PropTypes.object, // Can be null if no submodule selected
+  submoduleIndex: PropTypes.number, // Index of the active submodule within the module
+  pathId: PropTypes.string,
+  isTemporaryPath: PropTypes.bool,
+  actualPathData: PropTypes.object, // Full path data needed for context (e.g., audio generation)
+  onNavigate: PropTypes.func.isRequired, // Navigation callback
+  totalModules: PropTypes.number.isRequired,
+  totalSubmodulesInModule: PropTypes.number.isRequired,
+};
+
+export default ContentPanel; 
