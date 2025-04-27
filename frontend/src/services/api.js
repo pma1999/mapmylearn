@@ -729,6 +729,7 @@ export const getHistoryEntry = async (pathId) => {
     console.log('Fetching learning path with path_id:', pathId);
     // Add /v1 prefix
     const response = await api.get(`/v1/learning-paths/${pathId}`); 
+    // The response.data should now contain { ..., progress_map: {}, last_visited_module_idx: N, last_visited_submodule_idx: M }
     return { entry: response.data }; 
   } catch (error) {
     console.error('Server error fetching history entry:', error);
@@ -829,6 +830,42 @@ export const deleteHistoryEntry = async (pathId) => {
     console.error('Error deleting history entry via API:', error);
      // Re-throw the error for the hook to handle
     throw error;
+  }
+};
+
+// Rename and modify: POST -> PUT, add 'completed' parameter
+export const updateSubmoduleProgress = async (entryId, moduleIndex, submoduleIndex, completed) => {
+  try {
+    const response = await api.put(`/v1/learning-paths/${entryId}/progress`, { // Use PUT
+      module_index: moduleIndex,
+      submodule_index: submoduleIndex,
+      completed: completed // Send completion status
+    });
+    // Returns { message: "..." } on success (200)
+    return response.data;
+  } catch (error) {
+    console.error('API Error: Failed to update submodule progress:', error);
+    // Re-throw the formatted error from the interceptor
+    throw error; 
+  }
+};
+
+// Add new function to update last visited position
+export const updateLastVisited = async (entryId, moduleIndex, submoduleIndex) => {
+  try {
+    await api.put(`/v1/learning-paths/${entryId}/last-visited`, {
+      module_index: moduleIndex,
+      submodule_index: submoduleIndex,
+    });
+    // PUT request, usually no content or just a success message, 
+    // which we don't necessarily need to return here.
+    console.debug(`Updated last visited to M:${moduleIndex}, S:${submoduleIndex} for path ${entryId}`);
+    return { success: true };
+  } catch (error) {
+    // Don't necessarily throw, as this is a non-critical UX enhancement
+    console.warn('API Warning: Failed to update last visited position:', error);
+    // Return failure indicator if needed by caller, but don't block other UI updates
+    return { success: false, error: error }; 
   }
 };
 
@@ -1272,5 +1309,7 @@ export default {
   createCheckoutSession,
   getCheckoutSession,
   getActiveGenerations,
+  updateSubmoduleProgress,
+  updateLastVisited,
 };
 

@@ -168,6 +168,10 @@ class LearningPath(Base):
         Index('idx_learning_path_user_fav_date', user_id, favorite, creation_date.desc()),
     ) 
 
+    # Add columns for last visited state
+    last_visited_module_idx = Column(Integer, nullable=True)
+    last_visited_submodule_idx = Column(Integer, nullable=True)
+
 
 # New Model for Tracking Generation Tasks
 class GenerationTaskStatus:
@@ -203,3 +207,35 @@ class GenerationTask(Base):
         Index('idx_generation_task_user_status', user_id, status),
         Index('idx_generation_task_history_entry', history_entry_id), 
     ) 
+
+
+# New Model for Tracking User Progress in Learning Paths
+class LearningPathProgress(Base):
+    __tablename__ = "learning_path_progress"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    learning_path_id = Column(Integer, ForeignKey("learning_paths.id", ondelete="CASCADE"), nullable=False)
+    module_index = Column(Integer, nullable=False)
+    submodule_index = Column(Integer, nullable=False)
+    completed_at = Column(DateTime, nullable=False, server_default=func.now())
+    
+    # New column to explicitly track completion status
+    is_completed = Column(Boolean, nullable=False, server_default='false', default=False)
+    
+    # Relationships (optional, but can be useful)
+    user = relationship("User") 
+    learning_path = relationship("LearningPath") 
+    
+    # Indexes and Constraints
+    __table_args__ = (
+        # Index for efficient querying by user and path
+        Index('idx_lp_progress_user_path', user_id, learning_path_id),
+        # Unique constraint to prevent duplicate entries for the same submodule
+        Index('uq_user_path_submodule', 
+              user_id, 
+              learning_path_id, 
+              module_index, 
+              submodule_index, 
+              unique=True), 
+    )

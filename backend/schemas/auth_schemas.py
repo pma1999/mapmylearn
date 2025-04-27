@@ -93,6 +93,9 @@ class LearningPathResponse(LearningPathBase):
     user_id: int
     creation_date: datetime
     last_modified_date: Optional[datetime] = None
+    progress_map: Optional[Dict[str, bool]] = Field(None, description="Map of submodule keys to completion status (e.g., {'0_0': true, '0_1': false})")
+    last_visited_module_idx: Optional[int] = Field(None, description="Index of the last module visited by the user for this path")
+    last_visited_submodule_idx: Optional[int] = Field(None, description="Index of the last submodule visited by the user for this path")
 
     @field_serializer('creation_date', 'last_modified_date')
     def serialize_dates(self, dt: Optional[datetime]) -> Optional[str]:

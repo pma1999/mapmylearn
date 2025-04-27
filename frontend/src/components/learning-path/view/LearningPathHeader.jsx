@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import PropTypes from 'prop-types';
 import {
   Box,
@@ -10,7 +10,8 @@ import {
   useTheme,
   useMediaQuery,
   Tooltip,
-  IconButton
+  IconButton,
+  LinearProgress
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
@@ -35,6 +36,8 @@ import { helpTexts } from '../../../constants/helpTexts';
  * @param {Function} props.onNewLearningPath Handler for creating a new learning path
  * @param {Function} [props.onOpenMobileNav] Optional handler to open mobile navigation
  * @param {boolean} [props.showMobileNavButton] Optional flag to show the mobile nav button
+ * @param {Object} [props.progressMap] Optional map of submodule completion status
+ * @param {Object} [props.actualPathData] Optional full learning path data for calculating totals
  * @returns {JSX.Element} Header component
  */
 const LearningPathHeader = ({ 
@@ -46,11 +49,24 @@ const LearningPathHeader = ({
   onSaveToHistory, 
   onNewLearningPath,
   onOpenMobileNav,
-  showMobileNavButton
+  showMobileNavButton,
+  progressMap,
+  actualPathData
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isMedium = useMediaQuery(theme.breakpoints.down('md'));
+
+  // Calculate progress
+  const { completedCount, totalSubmodules, progressPercent } = useMemo(() => {
+    if (!progressMap || !actualPathData?.modules) {
+      return { completedCount: 0, totalSubmodules: 0, progressPercent: 0 };
+    }
+    const completed = Object.values(progressMap).filter(Boolean).length;
+    const total = actualPathData.modules.reduce((sum, mod) => sum + (mod.submodules?.length || 0), 0);
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return { completedCount: completed, totalSubmodules: total, progressPercent: percent };
+  }, [progressMap, actualPathData]);
 
   // Animation variants
   const headerVariants = {
@@ -154,6 +170,25 @@ const LearningPathHeader = ({
               {topic}
             </Typography>
           </Box>
+
+          {/* Progress Bar Section (Only if totalSubmodules > 0) */}
+          {totalSubmodules > 0 && (
+              <Box sx={{ mt: 2, mb: 2 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                      <Typography variant="body2" color="text.secondary">
+                          Progress
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ fontWeight: theme.typography.fontWeightMedium }}>
+                          {completedCount} / {totalSubmodules} ({progressPercent}%)
+                      </Typography>
+                  </Box>
+                  <LinearProgress 
+                      variant="determinate" 
+                      value={progressPercent} 
+                      sx={{ height: 8, borderRadius: 4 }}
+                  />
+              </Box>
+          )}
           
           <Divider sx={{ mt: 2, mb: 3 }} />
           
@@ -300,6 +335,8 @@ LearningPathHeader.propTypes = {
   onNewLearningPath: PropTypes.func.isRequired,
   onOpenMobileNav: PropTypes.func,
   showMobileNavButton: PropTypes.bool,
+  progressMap: PropTypes.object,
+  actualPathData: PropTypes.object,
 };
 
 export default LearningPathHeader; 

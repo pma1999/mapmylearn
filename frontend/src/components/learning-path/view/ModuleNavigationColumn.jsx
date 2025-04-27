@@ -1,6 +1,6 @@
 import React from 'react';
 import PropTypes from 'prop-types';
-import { Box, Typography, Paper, List, ListItem, ListItemButton, ListItemText, Collapse, useTheme, Chip, Stack } from '@mui/material';
+import { Box, Typography, Paper, List, ListItem, ListItemButton, ListItemText, Collapse, useTheme, Chip, Stack, Checkbox, FormControlLabel, IconButton, Tooltip } from '@mui/material';
 import { motion, AnimatePresence } from 'framer-motion';
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
@@ -12,6 +12,8 @@ const ModuleNavigationColumn = ({
   activeSubmoduleIndex,
   setActiveSubmoduleIndex,
   onSubmoduleSelect,
+  progressMap,
+  onToggleProgress
 }) => {
   const theme = useTheme();
 
@@ -120,28 +122,67 @@ const ModuleNavigationColumn = ({
                      <List component="div" disablePadding>
                       {(module.submodules || []).map((submodule, subIndex) => {
                          const isActiveSubmodule = isActiveModule && subIndex === activeSubmoduleIndex;
+                         const progressKey = `${modIndex}_${subIndex}`;
+                         const isCompleted = progressMap[progressKey] || false;
+
+                         const handleCheckboxClick = (event) => {
+                            event.stopPropagation();
+                            onToggleProgress(modIndex, subIndex);
+                         };
+
                          return (
-                           <ListItemButton 
+                           <ListItem 
                               key={subIndex} 
-                              dense 
-                              selected={isActiveSubmodule}
-                              onClick={() => handleSubmoduleClick(modIndex, subIndex)}
+                              disablePadding
+                              secondaryAction={
+                                 <Tooltip title={isCompleted ? "Mark as Incomplete" : "Mark as Complete"}>
+                                     <Checkbox
+                                         edge="end"
+                                         checked={isCompleted}
+                                         onChange={handleCheckboxClick}
+                                         onClick={handleCheckboxClick}
+                                         inputProps={{ 'aria-labelledby': `submodule-label-${modIndex}-${subIndex}` }}
+                                         size="small"
+                                         sx={{ 
+                                             color: isCompleted ? theme.palette.success.main : theme.palette.action.active,
+                                             '&.Mui-checked': {
+                                                 color: theme.palette.success.main,
+                                             },
+                                             mr: -1
+                                         }}
+                                     />
+                                 </Tooltip>
+                              }
                               sx={{ 
-                                 pl: 2, 
-                                 py: 0.5,
-                                 mb: 0.5,
+                                 mb: 0.5, 
                                  borderLeft: isActiveSubmodule ? `3px solid ${theme.palette.secondary.main}` : 'none',
+                                 backgroundColor: isActiveSubmodule ? theme.palette.action.selected : 'transparent',
+                                 '&:hover': {
+                                      backgroundColor: isActiveSubmodule ? theme.palette.action.selected : theme.palette.action.hover,
+                                 }
                               }}
                            >
-                             <ListItemText 
-                               primary={`${modIndex + 1}.${subIndex + 1} ${submodule.title}`} 
-                               primaryTypographyProps={{ 
-                                 fontWeight: isActiveSubmodule ? theme.typography.fontWeightBold : theme.typography.fontWeightRegular, 
-                                 variant: 'body2',
-                                 color: isActiveSubmodule ? theme.palette.secondary.dark : theme.palette.text.primary,
-                               }} 
-                             />
-                           </ListItemButton>
+                             <ListItemButton 
+                                dense 
+                                selected={isActiveSubmodule}
+                                onClick={() => handleSubmoduleClick(modIndex, subIndex)}
+                                sx={{ pl: 2, py: 0.5 }}
+                             >
+                                 <ListItemText 
+                                     id={`submodule-label-${modIndex}-${subIndex}`}
+                                     primary={`${modIndex + 1}.${subIndex + 1} ${submodule.title}`} 
+                                     primaryTypographyProps={{ 
+                                     fontWeight: isActiveSubmodule ? theme.typography.fontWeightBold : theme.typography.fontWeightRegular, 
+                                     variant: 'body2',
+                                     color: isActiveSubmodule ? theme.palette.secondary.dark : theme.palette.text.primary,
+                                     }}
+                                     sx={{ 
+                                         textDecoration: isCompleted ? 'line-through' : 'none', 
+                                         color: isCompleted ? theme.palette.text.disabled : 'inherit' 
+                                     }}
+                                 />
+                             </ListItemButton>
+                           </ListItem>
                          );
                       })}
                      </List>
@@ -170,6 +211,8 @@ ModuleNavigationColumn.propTypes = {
   activeSubmoduleIndex: PropTypes.number,
   setActiveSubmoduleIndex: PropTypes.func.isRequired,
   onSubmoduleSelect: PropTypes.func,
+  progressMap: PropTypes.object.isRequired,
+  onToggleProgress: PropTypes.func.isRequired,
 };
 
 export default ModuleNavigationColumn; 

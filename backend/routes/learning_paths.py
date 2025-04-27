@@ -7,9 +7,12 @@ import os
 from datetime import datetime
 from fastapi.responses import FileResponse
 import logging
+from sqlalchemy import update, select, insert
+from sqlalchemy.dialects.postgresql import insert as pg_insert # For UPSERT
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert # For UPSERT
 
 from backend.config.database import get_db
-from backend.models.auth_models import User, LearningPath, TransactionType, GenerationTask, GenerationTaskStatus
+from backend.models.auth_models import User, LearningPath, LearningPathProgress, TransactionType, GenerationTask, GenerationTaskStatus
 from backend.schemas.auth_schemas import (
     LearningPathCreate, LearningPathUpdate, LearningPathResponse, 
     LearningPathList, MigrationRequest, MigrationResponse,
@@ -237,7 +240,7 @@ async def get_learning_path(
     db: Session = Depends(get_db)
 ):
     """
-    Get a specific learning path by ID. 
+    Get a specific learning path by ID, including user progress map and last visited position.
     The LearningPathResponse schema automatically includes the full path_data.
     """
     learning_path = db.query(LearningPath).filter(
@@ -248,10 +251,48 @@ async def get_learning_path(
     if not learning_path:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Learning path not found"
+            detail="Learning path not found or access denied"
         )
+
+    # Fetch user progress for this path
+    progress_entries = db.query(
+        LearningPathProgress.module_index,
+        LearningPathProgress.submodule_index,
+        LearningPathProgress.is_completed # Fetch the completion status
+    ).filter(
+        LearningPathProgress.user_id == user.id,
+        LearningPathProgress.learning_path_id == learning_path.id
+    ).all()
     
-    return learning_path
+    # Build the progress map
+    progress_map = {}
+    # Get all possible submodules to ensure map is complete
+    try:
+        path_data_json = learning_path.path_data
+        if isinstance(path_data_json, dict):
+            modules = path_data_json.get('modules', [])
+            for mod_idx, module in enumerate(modules):
+                submodules = module.get('submodules', [])
+                for sub_idx, _ in enumerate(submodules):
+                    progress_map[f"{mod_idx}_{sub_idx}"] = False # Default to False
+    except Exception as e:
+        logger.warning(f"Could not parse path_data to build full progress map for {path_id}: {e}")
+        # If parsing fails, the map will only contain entries from the DB
+
+    # Update map with actual completion status from DB
+    for entry in progress_entries:
+        progress_key = f"{entry.module_index}_{entry.submodule_index}"
+        progress_map[progress_key] = entry.is_completed
+
+    # Create the response object - Pydantic will handle serialization
+    response_data = LearningPathResponse.from_orm(learning_path)
+    
+    # Add the progress map and last visited data to the response object
+    response_data.progress_map = progress_map 
+    response_data.last_visited_module_idx = learning_path.last_visited_module_idx
+    response_data.last_visited_submodule_idx = learning_path.last_visited_submodule_idx
+    
+    return response_data
 
 
 @router.post("", response_model=LearningPathResponse, status_code=status.HTTP_201_CREATED)
@@ -726,3 +767,156 @@ async def get_active_generations(
     except Exception as e:
         logger.exception(f"Error fetching active generations for user {user.id}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve active generations.") 
+
+# --- NEW Progress Tracking Endpoint (Replaces old POST) ---
+
+class SubmoduleProgressUpdateRequest(BaseModel):
+    module_index: int
+    submodule_index: int
+    completed: bool # New field to set completion status
+
+@router.put("/{path_id}/progress", status_code=status.HTTP_200_OK)
+async def update_submodule_progress(
+    path_id: str,
+    progress_data: SubmoduleProgressUpdateRequest, # Use new schema
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update the completion status for a specific submodule.
+    Uses UPSERT logic: creates the record if it doesn't exist and completed=true,
+    updates it if it exists, does nothing if it doesn't exist and completed=false.
+    """
+    logger.info(f"User {user.id} updating progress for path {path_id}, mod {progress_data.module_index}, sub {progress_data.submodule_index} to completed={progress_data.completed}")
+
+    # Find the learning path ID (integer PK)
+    learning_path = db.query(LearningPath.id).filter(
+        LearningPath.path_id == path_id,
+        LearningPath.user_id == user.id
+    ).scalar() # Use scalar() to get just the ID or None
+    
+    if not learning_path:
+        logger.warning(f"Learning path {path_id} not found for user {user.id} during progress update.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Learning path not found or access denied"
+        )
+        
+    learning_path_db_id = learning_path
+
+    # Data to insert or update
+    values_to_set = {
+        "user_id": user.id,
+        "learning_path_id": learning_path_db_id,
+        "module_index": progress_data.module_index,
+        "submodule_index": progress_data.submodule_index,
+        "is_completed": progress_data.completed,
+        # Update completed_at only if marking as completed
+        "completed_at": datetime.utcnow() if progress_data.completed else None 
+    }
+    
+    # --- UPSERT Logic --- 
+    # This is database-specific. We'll try a common pattern using merge,
+    # but ideally, you'd use ON CONFLICT for PostgreSQL or ON CONFLICT for SQLite.
+    # For broader compatibility, we'll query first, then insert/update.
+
+    try:
+        # 1. Check if the record exists
+        existing_progress = db.query(LearningPathProgress).filter_by(
+            user_id=user.id,
+            learning_path_id=learning_path_db_id,
+            module_index=progress_data.module_index,
+            submodule_index=progress_data.submodule_index
+        ).first()
+
+        if existing_progress:
+            # 2. Update if exists
+            existing_progress.is_completed = progress_data.completed
+            if progress_data.completed:
+                existing_progress.completed_at = datetime.utcnow()
+            # SQLAlchemy tracks changes, commit will update
+            logger.info(f"Updated progress for {path_id}, user {user.id}, mod {progress_data.module_index}, sub {progress_data.submodule_index}")
+            message = "Progress updated"
+        elif progress_data.completed:
+            # 3. Insert if not exists AND completed is True
+            # If completed_at is None from values_to_set, remove it for insert if needed,
+            # or rely on the model's default/nullable property.
+            # The model has server_default for completed_at, but we set it explicitly when true.
+            if values_to_set["completed_at"] is None:
+                 del values_to_set["completed_at"] # Let DB handle default/null
+                 
+            new_progress = LearningPathProgress(**values_to_set)
+            db.add(new_progress)
+            logger.info(f"Inserted new progress record for {path_id}, user {user.id}, mod {progress_data.module_index}, sub {progress_data.submodule_index}")
+            message = "Progress recorded"
+        else:
+            # 4. Do nothing if not exists AND completed is False
+            logger.info(f"No progress record exists and request is to mark as incomplete. No action needed for {path_id}, user {user.id}, mod {progress_data.module_index}, sub {progress_data.submodule_index}")
+            message = "Progress status remains unchanged (incomplete)"
+        
+        db.commit()
+        return {"message": message}
+        
+    except IntegrityError as e:
+        db.rollback()
+        # This might happen in race conditions if not using proper DB-level UPSERT
+        logger.error(f"IntegrityError during progress update for path {path_id}, user {user.id}: {e}")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Database conflict during progress update.")
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Error updating progress for path {path_id}, user {user.id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update progress due to a server error"
+        ) 
+
+# --- NEW Endpoint to update last visited position ---
+
+class LastVisitedRequest(BaseModel):
+    module_index: int
+    submodule_index: int
+
+@router.put("/{path_id}/last-visited", status_code=status.HTTP_200_OK)
+async def update_last_visited(
+    path_id: str,
+    visited_data: LastVisitedRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update the last visited module and submodule index for a learning path.
+    """
+    logger.debug(f"User {user.id} updating last visited for path {path_id} to M:{visited_data.module_index}, S:{visited_data.submodule_index}")
+
+    # Use SQLAlchemy Core update statement for efficiency
+    stmt = (
+        update(LearningPath)
+        .where(LearningPath.path_id == path_id)
+        .where(LearningPath.user_id == user.id)
+        .values(
+            last_visited_module_idx=visited_data.module_index,
+            last_visited_submodule_idx=visited_data.submodule_index
+        )
+    )
+    
+    try:
+        result = db.execute(stmt)
+        db.commit()
+        
+        if result.rowcount == 0:
+            # Path might not exist or belong to user
+            logger.warning(f"Attempted to update last visited for non-existent or unauthorized path {path_id} for user {user.id}")
+            # We could raise 404, but maybe just failing silently is okay for this non-critical update
+            # raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Learning path not found")
+            return {"message": "Last visited position not updated (path not found or unauthorized)."}
+        else:
+            logger.debug(f"Successfully updated last visited for path {path_id}, user {user.id}")
+            return {"message": "Last visited position updated."}
+            
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Error updating last visited for path {path_id}, user {user.id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update last visited position due to a server error"
+        ) 

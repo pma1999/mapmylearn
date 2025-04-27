@@ -19,6 +19,9 @@ import {
   Zoom,
   useTheme,
   Grid,
+  Divider,
+  Checkbox,
+  FormControlLabel
 } from '@mui/material';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
@@ -92,6 +95,8 @@ const ContentPanel = forwardRef(({
   activeTab,      
   setActiveTab,
   sx, // Accept sx prop to allow styling from parent (e.g., height)
+  progressMap, // New prop
+  onToggleProgress // New prop
 }, ref) => { // <-- Accept ref as second argument
   const theme = useTheme();
   const { user, fetchUserCredits } = useAuth();
@@ -232,6 +237,16 @@ const ContentPanel = forwardRef(({
       { index: tabIndexCounter++, label: 'Audio', icon: <GraphicEqIcon />, component: 'Audio', tooltip: helpTexts.submoduleTabAudio(AUDIO_CREDIT_COST) },
   ];
   
+  // Get current completion status for checkbox
+  const progressKey = `${moduleIndex}_${submoduleIndex}`;
+  const isCompleted = progressMap && progressMap[progressKey] || false;
+
+  const handleCheckboxToggle = () => {
+      if (onToggleProgress) {
+          onToggleProgress(moduleIndex, submoduleIndex);
+      }
+  };
+
   return (
     // Attach ref to the main Paper component
     <Paper 
@@ -341,13 +356,39 @@ const ContentPanel = forwardRef(({
       )}
 
       {/* Tab Content Area */}
-      <Box >
+      <Box sx={{ flexGrow: 1, overflowY: 'auto' }} > {/* Make content area scrollable */}
          {tabsConfig.map((tab) => {
-             const tabContentSx = tab.component === 'Chat' ? { p: 0 } : {}; 
+             const tabContentSx = tab.component === 'Chat' ? { p: 0, height: '100%' } : {}; 
              return (
                 <TabPanel key={tab.index} value={activeTab} index={tab.index} sx={tabContentSx}>
                    {tab.component === 'Content' && (
-                       <MarkdownRenderer>{submodule.content || "No content available."}</MarkdownRenderer>
+                       <>
+                          <MarkdownRenderer>{submodule.content || "No content available."}</MarkdownRenderer>
+                          {/* Add Progress Checkbox at the end of content */} 
+                          <Divider sx={{ my: 2 }} />
+                          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1, mb: 1 }}>
+                              <FormControlLabel
+                                  control={
+                                      <Checkbox 
+                                          checked={isCompleted} 
+                                          onChange={handleCheckboxToggle}
+                                          name="progressCheckbox"
+                                          color="primary"
+                                          sx={{ 
+                                              color: isCompleted ? theme.palette.success.main : theme.palette.action.active,
+                                              '&.Mui-checked': {
+                                                  color: theme.palette.success.main,
+                                              },
+                                          }}
+                                      />
+                                  }
+                                  label={isCompleted ? "Mark as Incomplete" : "Mark as Complete"}
+                                  sx={{ 
+                                      color: isCompleted ? theme.palette.text.secondary : theme.palette.text.primary
+                                  }}
+                              />
+                          </Box>
+                       </>
                    )}
                    {tab.component === 'Quiz' && hasQuiz && (
                        <QuizContainer 
@@ -448,6 +489,8 @@ ContentPanel.propTypes = {
   activeTab: PropTypes.number.isRequired,
   setActiveTab: PropTypes.func.isRequired,
   sx: PropTypes.object, // Add sx propType
+  progressMap: PropTypes.object, // Added prop type
+  onToggleProgress: PropTypes.func, // Added prop type (optional here? Maybe required)
 };
 
 // Add display name for DevTools

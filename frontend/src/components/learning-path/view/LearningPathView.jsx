@@ -4,6 +4,9 @@ import { useParams } from 'react-router';
 import { Container, Snackbar, Alert, AlertTitle, useMediaQuery, useTheme, Box, Typography, Grid, Drawer } from '@mui/material';
 import { helpTexts } from '../../../constants/helpTexts'; // Corrected path
 
+// Import API service
+import * as apiService from '../../../services/api'; 
+
 // Import necessary icons for availableTabs calculation
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
@@ -55,22 +58,26 @@ const LearningPathView = ({ source }) => {
     loading,      
     error,        
     isFromHistory,
-    initialDetailsWereSet, // <-- Destructure new value
+    initialDetailsWereSet,
     persistentPathId, 
     temporaryPathId,
     progressMessages, 
     isReconnecting, 
     retryAttempt,   
-    refreshData 
+    refreshData, 
+    progressMap,
+    setProgressMap,
+    lastVisitedModuleIdx,
+    lastVisitedSubmoduleIdx
   } = useLearningPathData(source); 
   
   // State for Focus Flow navigation
   const [activeModuleIndex, setActiveModuleIndex] = useState(null);
   const [activeSubmoduleIndex, setActiveSubmoduleIndex] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
   // Local state for tracking if details (tags/favorites) have been set via dialog
-  // Initialize based on whether the loaded path (if from history) already had details
   const [localDetailsHaveBeenSet, setLocalDetailsHaveBeenSet] = useState(false);
   const [localEntryId, setLocalEntryId] = useState(null);
 
@@ -80,67 +87,81 @@ const LearningPathView = ({ source }) => {
   // Effect to initialize local state once loading is done and we have initial data
   useEffect(() => {
     if (!loading) {
+        setInitialLoadComplete(true);
         setLocalDetailsHaveBeenSet(initialDetailsWereSet || false);
-        // Also set localEntryId if we loaded from history and have a persistentId
         if (isFromHistory && persistentPathId) {
             setLocalEntryId(persistentPathId);
         } else {
-            // Reset if not loading from history or no persistentId yet
             setLocalEntryId(null);
         }
     }
   }, [loading, initialDetailsWereSet, isFromHistory, persistentPathId]);
   
   // Derived states based on hook values and local actions
-  const isPdfReady = !loading && !!persistentPathId; // Determine if PDF can be downloaded
-  const isPersisted = isFromHistory || localDetailsHaveBeenSet || isPdfReady; // Determine if path is generally considered persistent (for other UI logic?)
-  const isTemporaryPath = !loading && !!temporaryPathId && !persistentPathId; // Path has temporary ID but not yet persistent one
+  const isPdfReady = !loading && !!persistentPathId;
+  const isPersisted = isFromHistory || localDetailsHaveBeenSet || isPdfReady;
+  const isTemporaryPath = !loading && !!temporaryPathId && !persistentPathId;
   
   // Determine the correct pathId to use for component interactions
   let derivedPathId = null;
-  const currentEntryId = localEntryId || entryId || persistentPathId; // Use persistentId as fallback
+  const currentEntryId = localEntryId || entryId || persistentPathId;
   
   if (!loading && learningPath) { 
     if (isTemporaryPath) {
       derivedPathId = temporaryPathId;
     } else {
-      derivedPathId = currentEntryId; // Use the combined entryId / persistentId
+      derivedPathId = currentEntryId; 
     }
-    // Additional safety checks (if derivedPathId is still null, log warning)
     if (!derivedPathId) {
       console.warn('Could not reliably determine pathId for LearningPathView interactions.');
     }
   }
   
-  // Extract the actual path data object, handling both history and generation cases
-  // Checks if the newer nested structure (learningPath.path_data) exists when loading from history.
+  // Extract the actual path data object
   const actualPathData = isFromHistory
-    ? (learningPath?.path_data ? learningPath.path_data : learningPath) // Handle both old/new history structures
-    : learningPath; // Use learningPath directly for generation
+    ? (learningPath?.path_data ? learningPath.path_data : learningPath)
+    : learningPath;
 
-  // Effect to set initial active module/submodule once data loads
+  // Effect to set initial active module/submodule from last visited or default
   useEffect(() => {
-      // Only run this logic once when data first loads or path changes
-      if (!loading && actualPathData && actualPathData.modules && actualPathData.modules.length > 0) {
-          // Set default active indexes only if they haven't been set by the user yet
-          // (This assumes initial state is null, which it is)
-          if (activeModuleIndex === null) {
+      // Only run once after the initial load is complete
+      if (initialLoadComplete && actualPathData && actualPathData.modules && actualPathData.modules.length > 0) {
+          // Check if last visited indices are valid
+          const isValidLastVisited = 
+              lastVisitedModuleIdx !== null && lastVisitedModuleIdx >= 0 && lastVisitedModuleIdx < actualPathData.modules.length &&
+              lastVisitedSubmoduleIdx !== null && lastVisitedSubmoduleIdx >= 0 && 
+              actualPathData.modules[lastVisitedModuleIdx]?.submodules?.length > lastVisitedSubmoduleIdx;
+
+          if (isValidLastVisited) {
+              console.log('Setting initial navigation from last visited:', lastVisitedModuleIdx, lastVisitedSubmoduleIdx);
+              setActiveModuleIndex(lastVisitedModuleIdx);
+              setActiveSubmoduleIndex(lastVisitedSubmoduleIdx);
+          } else if (activeModuleIndex === null) {
+              // Default to first module/submodule if last visited is invalid or not set
+              console.log('Setting initial navigation to default (0, 0)');
               setActiveModuleIndex(0);
+              if (actualPathData.modules[0]?.submodules?.length > 0) {
+                  setActiveSubmoduleIndex(0);
+              }
           }
-          // Default to the first submodule of the *first* module initially,
-          // only if submodule index is also null.
-          if (activeSubmoduleIndex === null && actualPathData.modules[0]?.submodules?.length > 0) {
-              setActiveSubmoduleIndex(0);
-          }
-      } else if (!loading && (!actualPathData || !actualPathData.modules || actualPathData.modules.length === 0)) {
-          // Reset if data loads but is empty or invalid
+      } else if (initialLoadComplete && (!actualPathData || !actualPathData.modules || actualPathData.modules.length === 0)) {
           setActiveModuleIndex(null);
           setActiveSubmoduleIndex(null);
       }
-  // Dependencies: Run when loading finishes or the actual path data object changes.
-  // We intentionally omit activeModuleIndex and activeSubmoduleIndex here
-  // to prevent this effect from overriding user selections made via clicks.
-  }, [actualPathData, loading]); // REMOVED activeModuleIndex from dependency array
+  // Run ONLY when initial load completes, or if path data/last visited changes AFTER initial load
+  }, [initialLoadComplete, actualPathData, lastVisitedModuleIdx, lastVisitedSubmoduleIdx]);
+
+  // Effect to update the last visited position on the backend when navigation changes
+  useEffect(() => {
+    // Only run if the path is persisted and navigation indices are valid
+    if (currentEntryId && activeModuleIndex !== null && activeSubmoduleIndex !== null) {
+      // Debounce or throttle this call if needed, but for now, call directly
+      console.log(`Updating last visited API: M ${activeModuleIndex}, S ${activeSubmoduleIndex}`);
+      apiService.updateLastVisited(currentEntryId, activeModuleIndex, activeSubmoduleIndex)
+        .catch(warn => console.warn("Failed to update last visited position:", warn)); // Log warning on failure
+    }
+  // Depend on the navigation indices and the persisted ID
+  }, [currentEntryId, activeModuleIndex, activeSubmoduleIndex]);
 
   // Callback for when save is confirmed in the action hook
   const handleSaveSuccess = useCallback((result) => {
@@ -148,7 +169,7 @@ const LearningPathView = ({ source }) => {
       setLocalDetailsHaveBeenSet(true);
       setLocalEntryId(result.entryId);
     }
-  }, []); // Dependencies: none, relies on setters
+  }, []);
 
   // Setup actions for the learning path
   const {
@@ -167,24 +188,60 @@ const LearningPathView = ({ source }) => {
     handleNewLearningPathClick,
     handleSaveToHistory,
     handleSaveDialogClose,
-    handleSaveConfirm, // Keep this if SaveDialog calls it directly
+    handleSaveConfirm,
     handleAddTag,
     handleDeleteTag,
     handleTagKeyDown,
     handleNotificationClose,
-    showNotification // Make showNotification available if needed directly
+    showNotification
   } = useLearningPathActions(
     actualPathData, 
     isFromHistory,
-    localDetailsHaveBeenSet, // Pass renamed state
+    localDetailsHaveBeenSet,
     currentEntryId, 
     taskId,         
     temporaryPathId, 
-    handleSaveSuccess // Pass the callback
+    handleSaveSuccess
   );
   
-  // Adjust action handlers if they directly used `learningPath` expecting the wrong structure
-  // e.g., handleDownloadJSON likely needs `actualPathData` now
+  // Handler to toggle progress state
+  const handleToggleProgress = useCallback(async (modIndex, subIndex) => {
+    if (!currentEntryId) {
+      console.warn('Cannot toggle progress: Path is not persisted yet.');
+      // Optionally show a notification to save the path first
+      showNotification('Please save the learning path to track progress.', 'warning');
+      return;
+    }
+
+    const progressKey = `${modIndex}_${subIndex}`;
+    const currentCompletionStatus = progressMap[progressKey] || false;
+    const newCompletionStatus = !currentCompletionStatus;
+
+    // Optimistic UI Update
+    setProgressMap(prevMap => ({
+      ...prevMap,
+      [progressKey]: newCompletionStatus
+    }));
+
+    // API Call
+    try {
+      await apiService.updateSubmoduleProgress(currentEntryId, modIndex, subIndex, newCompletionStatus);
+      console.log(`Progress updated successfully for ${progressKey} to ${newCompletionStatus}`);
+      // Optional: Success notification
+      // showNotification(`Submodule ${modIndex + 1}.${subIndex + 1} marked as ${newCompletionStatus ? 'complete' : 'incomplete'}.`, 'success');
+    } catch (error) {
+      console.error(`Failed to update progress for ${progressKey}:`, error);
+      // Revert Optimistic Update on error
+      setProgressMap(prevMap => ({
+        ...prevMap,
+        [progressKey]: currentCompletionStatus // Revert to original state
+      }));
+      // Show error notification
+      showNotification(`Failed to update progress for submodule ${modIndex + 1}.${subIndex + 1}.`, 'error');
+    }
+  }, [currentEntryId, progressMap, setProgressMap, showNotification]);
+
+  // Adjust action handlers
   const handleDownloadJSONAdjusted = () => {
       if (!actualPathData) return;
       try {
@@ -218,7 +275,6 @@ const LearningPathView = ({ source }) => {
       }
   };
 
-  // Update PDF download handler: remove incorrect state update
   const handleDownloadPDFWithUpdate = async () => {
     // Call original function from hook
     await handleDownloadPDF(); // Removed state updates based on result
@@ -274,7 +330,7 @@ const LearningPathView = ({ source }) => {
       }
   }, [actualPathData, activeModuleIndex, activeSubmoduleIndex, setActiveModuleIndex, setActiveSubmoduleIndex]);
 
-  // --- Mobile Navigation Handlers ---
+  // Mobile Navigation Handlers
   const handleMobileNavToggle = () => {
     setMobileNavOpen(!mobileNavOpen);
   };
@@ -283,7 +339,6 @@ const LearningPathView = ({ source }) => {
     setMobileNavOpen(false);
   };
 
-  // Callback for ModuleNavigationColumn when used in Drawer
   const handleSubmoduleSelectFromDrawer = (modIndex, subIndex) => {
      // No need to setActiveModuleIndex/setActiveSubmoduleIndex, 
      // as the component itself already did that onClick.
@@ -291,7 +346,7 @@ const LearningPathView = ({ source }) => {
      handleMobileNavClose();
   };
 
-  // --- Determine current submodule for calculating available tabs ---
+  // Calculate current submodule and available tabs
   const modules = actualPathData?.modules || [];
   const totalModules = modules.length;
   const currentModule = (activeModuleIndex !== null && activeModuleIndex >= 0 && activeModuleIndex < totalModules)
@@ -301,9 +356,7 @@ const LearningPathView = ({ source }) => {
   const currentSubmodule = (currentModule && activeSubmoduleIndex !== null && activeSubmoduleIndex >= 0 && activeSubmoduleIndex < totalSubmodulesInModule)
                          ? currentModule.submodules[activeSubmoduleIndex]
                          : null;
-  // --- End submodule calculation ---
 
-  // --- Calculate available tabs for the current submodule ---
   const availableTabs = useMemo(() => {
     if (!currentSubmodule) return [];
 
@@ -321,9 +374,8 @@ const LearningPathView = ({ source }) => {
     ];
     return tabs;
   }, [currentSubmodule]);
-  // --- End available tabs calculation ---
 
-  // --- Effect to reset activeTab if it becomes invalid ---
+  // Effect to reset activeTab if it becomes invalid
   useEffect(() => {
       // Only reset if the current tab index is out of bounds for the *new* set of available tabs
       if (availableTabs.length > 0 && activeTab >= availableTabs.length) {
@@ -335,7 +387,6 @@ const LearningPathView = ({ source }) => {
       }
   // Depend on availableTabs array (which depends on currentSubmodule) and the current activeTab index itself.
   }, [availableTabs, activeTab]);
-  // --- End effect ---
 
   // Use `loading` directly from hook
   if (loading) {
@@ -361,9 +412,6 @@ const LearningPathView = ({ source }) => {
   }
   
   // Success state - Render Focus Flow Layout
-  // Moved calculation of modules, totalModules, currentModule, totalSubmodulesInModule, currentSubmodule higher up
-  // ... (remove duplicate calculation here)
-
   return (
     // Use theme background implicitly via CssBaseline
     <Container maxWidth="xl" sx={{ pt: { xs: 2, md: 3 }, pb: { xs: theme.spacing(8), md: 4 }, display: 'flex', flexDirection: 'column', flexGrow: 1 }}> 
@@ -396,6 +444,8 @@ const LearningPathView = ({ source }) => {
                onNewLearningPath={handleNewLearningPathClick}
                onOpenMobileNav={handleMobileNavToggle} // Pass handler
                showMobileNavButton={isMobileLayout} // Show button only on mobile layout
+               progressMap={progressMap}
+               actualPathData={actualPathData}
              />
              {/* Optional: Add overall progress bar here */}
              {/* Optional: Add Topic Resources link/button here */}
@@ -433,6 +483,8 @@ const LearningPathView = ({ source }) => {
                          isMobileLayout={isMobileLayout}
                          activeTab={activeTab}
                          setActiveTab={setActiveTab}
+                         progressMap={progressMap}
+                         onToggleProgress={handleToggleProgress}
                       />
                   </Box>
 
@@ -457,7 +509,8 @@ const LearningPathView = ({ source }) => {
                          setActiveModuleIndex={setActiveModuleIndex}
                          activeSubmoduleIndex={activeSubmoduleIndex}
                          setActiveSubmoduleIndex={setActiveSubmoduleIndex}
-                         onSubmoduleSelect={handleSubmoduleSelectFromDrawer}
+                         progressMap={progressMap}
+                         onToggleProgress={handleToggleProgress}
                       />
                   </Drawer>
                   
@@ -479,9 +532,7 @@ const LearningPathView = ({ source }) => {
                // Use theme spacing 
                <Grid container spacing={{ xs: 0, md: 2 }} sx={{ height: '100%', flexGrow: 1 }}> 
                   <Grid item xs={12} md={4} sx={{ 
-                     height: { xs: 'auto', md: '100%' }, // Allow natural height on mobile
-                     maxHeight: { md: 'calc(100vh - 150px)'}, // Example max height, adjust as needed
-                     overflowY: { md: 'auto' }, // Scroll only nav column on desktop
+                     height: { xs: 'auto', md: '100%' }, // Allow natural height on mobile, full height on desktop
                      pb: { xs: 2, md: 0 } // Add bottom padding on mobile
                   }}> 
                      <ModuleNavigationColumn
@@ -490,7 +541,8 @@ const LearningPathView = ({ source }) => {
                         setActiveModuleIndex={setActiveModuleIndex}
                         activeSubmoduleIndex={activeSubmoduleIndex}
                         setActiveSubmoduleIndex={setActiveSubmoduleIndex}
-                        // No onSubmoduleSelect needed here
+                        progressMap={progressMap}
+                        onToggleProgress={handleToggleProgress}
                      />
                   </Grid>
                   <Grid item xs={12} md={8} sx={{ 
@@ -512,6 +564,8 @@ const LearningPathView = ({ source }) => {
                         isMobileLayout={isMobileLayout}
                         activeTab={activeTab}
                         setActiveTab={setActiveTab}
+                        progressMap={progressMap}
+                        onToggleProgress={handleToggleProgress}
                      />
                   </Grid>
                </Grid>

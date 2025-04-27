@@ -7,7 +7,7 @@ import { getLearningPath, getHistoryEntry, API_URL } from '../../../services/api
  * Handles direct history loads or generation via taskId, including SSE progress.
  * 
  * @param {string} source - Optional source override ('history' or null)
- * @returns {Object} { learningPath, loading, error, isFromHistory, savedToHistory, refreshData, temporaryPathId, progressMessages, isReconnecting, retryAttempt }
+ * @returns {Object} { learningPath, loading, error, isFromHistory, savedToHistory, refreshData, temporaryPathId, progressMessages, isReconnecting, retryAttempt, progressMap, setProgressMap, lastVisitedModuleIdx, lastVisitedSubmoduleIdx }
  */
 const useLearningPathData = (source = null) => {
   const { taskId, entryId } = useParams();
@@ -22,6 +22,9 @@ const useLearningPathData = (source = null) => {
   const [progressMessages, setProgressMessages] = useState([]); 
   const [persistentPathId, setPersistentPathId] = useState(null);
   const [initialDetailsWereSet, setInitialDetailsWereSet] = useState(false);
+  const [progressMap, setProgressMap] = useState({});
+  const [lastVisitedModuleIdx, setLastVisitedModuleIdx] = useState(null);
+  const [lastVisitedSubmoduleIdx, setLastVisitedSubmoduleIdx] = useState(null);
   
   // State for SSE reconnection logic
   const [isReconnecting, setIsReconnecting] = useState(false);
@@ -121,34 +124,47 @@ const useLearningPathData = (source = null) => {
       setIsReconnecting(false); 
       setRetryAttempt(0);    
       receivedFinalSignalRef.current = false; 
+      setProgressMap({});
+      setLastVisitedModuleIdx(null);
+      setLastVisitedSubmoduleIdx(null);
       
       try {
         if (shouldLoadFromHistory) {
           // --- Load from History --- 
           console.log('useLearningPathData: Loading from history...', entryId);
           setInitialDetailsWereSet(false); // Reset on new load
-          const historyResponse = await getHistoryEntry(entryId);
+          const historyResponse = await getHistoryEntry(entryId); // Returns { entry: { ... } }
           
-          // Log the entire entry object to inspect its structure
-          console.log('API History Entry Response:', historyResponse?.entry);
+          // Log the raw response structure
+          // console.log('API History Entry Response Object:', historyResponse); // <-- REMOVE/COMMENT THIS LOG
           
+          // Corrected Check: Check for the nested entry object
           if (!historyResponse || !historyResponse.entry) {
-            throw new Error('Learning path not found in history.');
+            throw new Error('Learning path not found in history or invalid response format.');
           }
+
+          // Corrected Extraction: Access the nested entry object
+          const entry = historyResponse.entry; 
+          const pathData = entry.path_data || entry; // Use path_data if present, otherwise the entry itself
+          const fetchedProgressMap = entry.progress_map || {}; // Extract new progress map
+          const fetchedLastVisitedModIdx = entry.last_visited_module_idx;
+          const fetchedLastVisitedSubIdx = entry.last_visited_submodule_idx;
           
-          // Check if details were previously set
-          const entry = historyResponse.entry;
+          // Check details on the actual entry object
           if ((entry.tags && entry.tags.length > 0) || entry.favorite === true) {
             console.log('useLearningPathData: History entry has existing details (tags/favorite).');
             setInitialDetailsWereSet(true);
           }
           
-          const pathData = entry.path_data || entry; // Use the full entry object
-          setData(pathData); // Consider setting the full entry to data? Check usage.
+          // Set state with the correct path data object
+          setData(pathData);
           setIsFromHistory(true);
           setPersistentPathId(entryId);
+          setProgressMap(fetchedProgressMap);
+          setLastVisitedModuleIdx(fetchedLastVisitedModIdx);
+          setLastVisitedSubmoduleIdx(fetchedLastVisitedSubIdx);
           setLoading(false);
-          console.log('useLearningPathData: History load complete.');
+          console.log('useLearningPathData: History load complete. Progress Map:', fetchedProgressMap, 'Last Visited:', fetchedLastVisitedModIdx, fetchedLastVisitedSubIdx);
         
         } else if (taskId) {
           // --- Load via Generation Task (Modified) --- 
@@ -359,11 +375,15 @@ const useLearningPathData = (source = null) => {
     isFromHistory,
     initialDetailsWereSet,
     persistentPathId,
-    refreshData,
     temporaryPathId,
     progressMessages,
     isReconnecting, 
-    retryAttempt    
+    retryAttempt,
+    refreshData,
+    progressMap,
+    setProgressMap,
+    lastVisitedModuleIdx,
+    lastVisitedSubmoduleIdx
   };
 };
 
