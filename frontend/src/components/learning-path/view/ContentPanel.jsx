@@ -89,10 +89,11 @@ const ContentPanel = forwardRef(({
   totalModules,
   totalSubmodulesInModule,
   isMobileLayout, // <-- Accept new prop
+  activeTab,      
+  setActiveTab,
   sx, // Accept sx prop to allow styling from parent (e.g., height)
 }, ref) => { // <-- Accept ref as second argument
   const theme = useTheme();
-  const [activeTab, setActiveTab] = useState(0);
   const { user, fetchUserCredits } = useAuth();
 
   // --- Audio state logic extracted from SubmoduleCard ---
@@ -128,31 +129,7 @@ const ContentPanel = forwardRef(({
       setAudioUrl(getAbsoluteAudioUrl(submodule?.audio_url));
       setSelectedLanguage(getInitialLanguage());
       setAudioError(null); // Reset error on submodule change
-      setActiveTab(0); // Reset to content tab on submodule change
   }, [submodule, getAbsoluteAudioUrl, getInitialLanguage]);
-
-  // --- Effect to Adjust Active Tab --- 
-  // Moved before the early return
-  useEffect(() => {
-      // Only run the check if submodule is available to calculate tab config
-      if (submodule) {
-          const hasQuiz = submodule.quiz_questions && submodule.quiz_questions.length > 0;
-          const hasResources = submodule.resources && submodule.resources.length > 0;
-          
-          // Calculate the expected number of tabs based on the current submodule
-          let currentTabsLength = 1; // Content tab
-          if (hasQuiz) currentTabsLength++;
-          if (hasResources) currentTabsLength++;
-          currentTabsLength++; // Chat tab
-          currentTabsLength++; // Audio tab
-          
-          // Reset to first tab if the current activeTab index is no longer valid
-          if (activeTab >= currentTabsLength) {
-              setActiveTab(0); 
-          }
-      }
-  // This effect depends on the submodule (to determine tab count) and activeTab
-  }, [submodule, activeTab]); 
 
   // --- Audio Generation Logic ---
   const handleGenerateAudio = async () => {
@@ -213,14 +190,6 @@ const ContentPanel = forwardRef(({
   const handleNotificationClose = (event, reason) => {
     if (reason === 'clickaway') return;
     setNotification({ ...notification, open: false });
-  };
-
-  // --- Tab Handling ---
-  const handleTabChange = (event, newValue) => {
-    setActiveTab(newValue);
-    if (newValue !== 4) { // Reset audio error if navigating away from audio tab
-      setAudioError(null);
-    }
   };
 
   // --- Render Logic ---
@@ -334,40 +303,42 @@ const ContentPanel = forwardRef(({
         </Box>
       )}
 
-      {/* Tabs Navigation */}
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'transparent' }}>
-        <Tabs 
-          value={activeTab} 
-          onChange={handleTabChange} 
-          aria-label="submodule content tabs"
-          variant="scrollable"
-          scrollButtons="auto"
-          allowScrollButtonsMobile
-        >
-          {tabsConfig.map((tab) => (
-            <Tab
-              key={tab.index}
-              icon={tab.icon}
-              iconPosition="start"
-              label={
-                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    {tab.label}
-                    {tab.tooltip &&
-                      <Tooltip title={tab.tooltip} arrow placement="top" TransitionComponent={Zoom} enterDelay={300}>
-                         <InfoOutlinedIcon sx={{ ml: 0.5, fontSize: 'small', verticalAlign: 'middle', color: 'text.secondary' }}/>
-                      </Tooltip>
-                    }
-                 </Box>
-              }
-              id={`submodule-tab-${tab.index}`}
-              aria-controls={`submodule-tabpanel-${tab.index}`}
-              sx={{ 
-                 py: 1.5 
-              }}
-            />
-          ))}
-        </Tabs>
-      </Box>
+      {/* Tabs Navigation - Only show on Desktop */}
+      {!isMobileLayout && (
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'transparent' }}>
+          <Tabs 
+            value={activeTab} 
+            onChange={(event, newValue) => setActiveTab(newValue)} 
+            aria-label="submodule content tabs"
+            variant="scrollable"
+            scrollButtons="auto"
+            allowScrollButtonsMobile
+          >
+            {tabsConfig.map((tab) => (
+              <Tab
+                key={tab.index}
+                icon={tab.icon}
+                iconPosition="start"
+                label={
+                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      {tab.label}
+                      {tab.tooltip &&
+                        <Tooltip title={tab.tooltip} arrow placement="top" TransitionComponent={Zoom} enterDelay={300}>
+                           <InfoOutlinedIcon sx={{ ml: 0.5, fontSize: 'small', verticalAlign: 'middle', color: 'text.secondary' }}/>
+                        </Tooltip>
+                      }
+                   </Box>
+                }
+                id={`submodule-tab-${tab.index}`}
+                aria-controls={`submodule-tabpanel-${tab.index}`}
+                sx={{ 
+                   py: 1.5 
+                }}
+              />
+            ))}
+          </Tabs>
+        </Box>
+      )}
 
       {/* Tab Content Area */}
       <Box >
@@ -474,6 +445,8 @@ ContentPanel.propTypes = {
   totalModules: PropTypes.number.isRequired,
   totalSubmodulesInModule: PropTypes.number.isRequired,
   isMobileLayout: PropTypes.bool, // Add new propType
+  activeTab: PropTypes.number.isRequired,
+  setActiveTab: PropTypes.func.isRequired,
   sx: PropTypes.object, // Add sx propType
 };
 

@@ -1,8 +1,15 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { useParams } from 'react-router';
 import { Container, Snackbar, Alert, AlertTitle, useMediaQuery, useTheme, Box, Typography, Grid, Drawer } from '@mui/material';
 import { helpTexts } from '../../../constants/helpTexts'; // Corrected path
+
+// Import necessary icons for availableTabs calculation
+import MenuBookIcon from '@mui/icons-material/MenuBook';
+import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
+import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
+import QuestionAnswerIcon from '@mui/icons-material/QuestionAnswer';
+import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 
 // Custom hooks
 import useLearningPathData from '../hooks/useLearningPathData';
@@ -23,6 +30,7 @@ import ContentPanel from './ContentPanel';
 import MobileBottomNavigation from './MobileBottomNavigation.jsx';
 
 const DRAWER_WIDTH = 300; // Define a width for the mobile drawer
+const AUDIO_CREDIT_COST = 1; // Define or import this
 
 /**
  * Main component for viewing a learning path using the Focus Flow layout.
@@ -59,6 +67,7 @@ const LearningPathView = ({ source }) => {
   // State for Focus Flow navigation
   const [activeModuleIndex, setActiveModuleIndex] = useState(null);
   const [activeSubmoduleIndex, setActiveSubmoduleIndex] = useState(null);
+  const [activeTab, setActiveTab] = useState(0);
 
   // Local state for tracking if details (tags/favorites) have been set via dialog
   // Initialize based on whether the loaded path (if from history) already had details
@@ -282,6 +291,52 @@ const LearningPathView = ({ source }) => {
      handleMobileNavClose();
   };
 
+  // --- Determine current submodule for calculating available tabs ---
+  const modules = actualPathData?.modules || [];
+  const totalModules = modules.length;
+  const currentModule = (activeModuleIndex !== null && activeModuleIndex >= 0 && activeModuleIndex < totalModules)
+                        ? modules[activeModuleIndex]
+                        : null;
+  const totalSubmodulesInModule = currentModule?.submodules?.length || 0;
+  const currentSubmodule = (currentModule && activeSubmoduleIndex !== null && activeSubmoduleIndex >= 0 && activeSubmoduleIndex < totalSubmodulesInModule)
+                         ? currentModule.submodules[activeSubmoduleIndex]
+                         : null;
+  // --- End submodule calculation ---
+
+  // --- Calculate available tabs for the current submodule ---
+  const availableTabs = useMemo(() => {
+    if (!currentSubmodule) return [];
+
+    const hasQuiz = currentSubmodule.quiz_questions && currentSubmodule.quiz_questions.length > 0;
+    const hasResources = currentSubmodule.resources && currentSubmodule.resources.length > 0;
+
+    let tabIndexCounter = 0;
+    const tabs = [
+        // Match the structure expected by MobileBottomNavigation (index, label, icon)
+        { index: tabIndexCounter++, label: 'Content', icon: <MenuBookIcon />, tooltip: "View submodule content" },
+        ...(hasQuiz ? [{ index: tabIndexCounter++, label: 'Quiz', icon: <FitnessCenterIcon />, tooltip: helpTexts.submoduleTabQuiz }] : []),
+        ...(hasResources ? [{ index: tabIndexCounter++, label: 'Resources', icon: <CollectionsBookmarkIcon />, tooltip: "View submodule resources" }] : []),
+        { index: tabIndexCounter++, label: 'Chat', icon: <QuestionAnswerIcon />, tooltip: helpTexts.submoduleTabChat },
+        { index: tabIndexCounter++, label: 'Audio', icon: <GraphicEqIcon />, tooltip: helpTexts.submoduleTabAudio(AUDIO_CREDIT_COST) },
+    ];
+    return tabs;
+  }, [currentSubmodule]);
+  // --- End available tabs calculation ---
+
+  // --- Effect to reset activeTab if it becomes invalid ---
+  useEffect(() => {
+      // Only reset if the current tab index is out of bounds for the *new* set of available tabs
+      if (availableTabs.length > 0 && activeTab >= availableTabs.length) {
+          setActiveTab(0); // Reset to the first tab (Content)
+      }
+      // If there are no tabs (e.g., no submodule selected), also reset (though activeTab=0 is fine)
+      else if (availableTabs.length === 0 && activeTab !== 0) {
+          setActiveTab(0);
+      }
+  // Depend on availableTabs array (which depends on currentSubmodule) and the current activeTab index itself.
+  }, [availableTabs, activeTab]);
+  // --- End effect ---
+
   // Use `loading` directly from hook
   if (loading) {
     return (
@@ -306,17 +361,8 @@ const LearningPathView = ({ source }) => {
   }
   
   // Success state - Render Focus Flow Layout
-  const modules = actualPathData?.modules || [];
-  const totalModules = modules.length;
-  // Check if activeModuleIndex is valid before accessing modules array
-  const currentModule = (activeModuleIndex !== null && activeModuleIndex >= 0 && activeModuleIndex < totalModules)
-                        ? modules[activeModuleIndex]
-                        : null;
-  const totalSubmodulesInModule = currentModule?.submodules?.length || 0;
-  // Check if activeSubmoduleIndex is valid before accessing submodules array
-  const currentSubmodule = (currentModule && activeSubmoduleIndex !== null && activeSubmoduleIndex >= 0 && activeSubmoduleIndex < totalSubmodulesInModule)
-                         ? currentModule.submodules[activeSubmoduleIndex]
-                         : null;
+  // Moved calculation of modules, totalModules, currentModule, totalSubmodulesInModule, currentSubmodule higher up
+  // ... (remove duplicate calculation here)
 
   return (
     // Use theme background implicitly via CssBaseline
@@ -385,6 +431,8 @@ const LearningPathView = ({ source }) => {
                          totalModules={totalModules}
                          totalSubmodulesInModule={totalSubmodulesInModule}
                          isMobileLayout={isMobileLayout}
+                         activeTab={activeTab}
+                         setActiveTab={setActiveTab}
                       />
                   </Box>
 
@@ -416,11 +464,14 @@ const LearningPathView = ({ source }) => {
                   {/* Render Mobile Bottom Navigation */} 
                   <MobileBottomNavigation 
                      onNavigate={handleNavigation}
-                     onOpenMobileNav={handleMobileNavToggle}
                      activeModuleIndex={activeModuleIndex}
                      activeSubmoduleIndex={activeSubmoduleIndex}
                      totalModules={totalModules}
                      totalSubmodulesInModule={totalSubmodulesInModule}
+                     activeTab={activeTab}
+                     setActiveTab={setActiveTab}
+                     availableTabs={availableTabs}
+                     onOpenMobileNav={handleMobileNavToggle}
                   />
                </>
             ) : (
@@ -459,6 +510,8 @@ const LearningPathView = ({ source }) => {
                         totalModules={totalModules}
                         totalSubmodulesInModule={totalSubmodulesInModule}
                         isMobileLayout={isMobileLayout}
+                        activeTab={activeTab}
+                        setActiveTab={setActiveTab}
                      />
                   </Grid>
                </Grid>
