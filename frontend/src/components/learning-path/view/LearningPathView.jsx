@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { useParams } from 'react-router';
 import { Container, Snackbar, Alert, AlertTitle, useMediaQuery, useTheme, Box, Typography, Grid, Drawer } from '@mui/material';
@@ -20,6 +20,7 @@ import ResourcesSection from '../../shared/ResourcesSection';
 // Import the new layout components
 import ModuleNavigationColumn from './ModuleNavigationColumn';
 import ContentPanel from './ContentPanel';
+import MobileBottomNavigation from './MobileBottomNavigation.jsx';
 
 const DRAWER_WIDTH = 300; // Define a width for the mobile drawer
 
@@ -63,6 +64,9 @@ const LearningPathView = ({ source }) => {
   // Initialize based on whether the loaded path (if from history) already had details
   const [localDetailsHaveBeenSet, setLocalDetailsHaveBeenSet] = useState(false);
   const [localEntryId, setLocalEntryId] = useState(null);
+
+  // Ref for ContentPanel scrolling
+  const contentPanelRef = useRef(null);
 
   // Effect to initialize local state once loading is done and we have initial data
   useEffect(() => {
@@ -226,7 +230,7 @@ const LearningPathView = ({ source }) => {
     setShowFirstViewAlert(false);
   };
 
-  // Navigation Handler for ContentPanel
+  // Navigation Handler for ContentPanel and MobileBottomNavigation
   const handleNavigation = useCallback((direction) => {
       if (!actualPathData || activeModuleIndex === null || activeSubmoduleIndex === null) return;
 
@@ -316,7 +320,7 @@ const LearningPathView = ({ source }) => {
 
   return (
     // Use theme background implicitly via CssBaseline
-    <Container maxWidth="xl" sx={{ pt: { xs: 2, md: 3 }, pb: 4, display: 'flex', flexDirection: 'column', flexGrow: 1 }}> 
+    <Container maxWidth="xl" sx={{ pt: { xs: 2, md: 3 }, pb: { xs: theme.spacing(8), md: 4 }, display: 'flex', flexDirection: 'column', flexGrow: 1 }}> 
       {/* Render the dismissible alert */}
       {showFirstViewAlert && (
         <Alert 
@@ -361,14 +365,14 @@ const LearningPathView = ({ source }) => {
           </Box>
 
           {/* Main Content Area: Conditional Layout */} 
-          <Box sx={{ flexGrow: 1, overflow: 'hidden', position: 'relative' /* Needed for potential fixed elements */ }}> 
+          <Box sx={{ flexGrow: 1, overflow: 'hidden', position: 'relative' }}> 
             {isMobileLayout ? (
-               // --- Mobile Layout (Content Panel + Drawer for Nav) --- 
+               // --- Mobile Layout (Content Panel + Drawer for Nav + Bottom Nav) --- 
                <> 
-                  {/* Render Content Panel directly */} 
+                  {/* Content Panel fills available space */} 
                   <Box sx={{ height: '100%' }}> 
                       <ContentPanel
-                         // Adjust height dynamically, remove fixed calc(100vh - X)
+                         ref={contentPanelRef}
                          sx={{ height: '100%' }}
                          module={currentModule}
                          moduleIndex={activeModuleIndex}
@@ -380,6 +384,7 @@ const LearningPathView = ({ source }) => {
                          onNavigate={handleNavigation}
                          totalModules={totalModules}
                          totalSubmodulesInModule={totalSubmodulesInModule}
+                         isMobileLayout={isMobileLayout}
                       />
                   </Box>
 
@@ -404,9 +409,19 @@ const LearningPathView = ({ source }) => {
                          setActiveModuleIndex={setActiveModuleIndex}
                          activeSubmoduleIndex={activeSubmoduleIndex}
                          setActiveSubmoduleIndex={setActiveSubmoduleIndex}
-                         onSubmoduleSelect={handleSubmoduleSelectFromDrawer} // Use specific handler
+                         onSubmoduleSelect={handleSubmoduleSelectFromDrawer}
                       />
                   </Drawer>
+                  
+                  {/* Render Mobile Bottom Navigation */} 
+                  <MobileBottomNavigation 
+                     onNavigate={handleNavigation}
+                     onOpenMobileNav={handleMobileNavToggle}
+                     activeModuleIndex={activeModuleIndex}
+                     activeSubmoduleIndex={activeSubmoduleIndex}
+                     totalModules={totalModules}
+                     totalSubmodulesInModule={totalSubmodulesInModule}
+                  />
                </>
             ) : (
                // --- Desktop Layout (Two Columns Grid) ---
@@ -428,13 +443,11 @@ const LearningPathView = ({ source }) => {
                      />
                   </Grid>
                   <Grid item xs={12} md={8} sx={{ 
-                     // Remove height, maxHeight and overflowY to allow content to determine height
-                     // height: { xs: 'auto', md: '100%' },
-                     // maxHeight: { md: 'calc(100vh - 150px)'}, 
-                     // overflowY: { md: 'auto' } 
+                     // No height/overflow needed here, ContentPanel handles it
                    }}> 
                      <ContentPanel
-                        // Remove redundant height sx prop if Panel handles its own height/scroll
+                        ref={contentPanelRef}
+                        sx={{ height: '100%' }}
                         module={currentModule}
                         moduleIndex={activeModuleIndex}
                         submodule={currentSubmodule}
@@ -445,6 +458,7 @@ const LearningPathView = ({ source }) => {
                         onNavigate={handleNavigation}
                         totalModules={totalModules}
                         totalSubmodulesInModule={totalSubmodulesInModule}
+                        isMobileLayout={isMobileLayout}
                      />
                   </Grid>
                </Grid>

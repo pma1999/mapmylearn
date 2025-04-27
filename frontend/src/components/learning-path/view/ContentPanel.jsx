@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, forwardRef } from 'react';
 import PropTypes from 'prop-types';
 import { 
   Box, 
@@ -76,7 +76,8 @@ const supportedLanguages = [
 const defaultLanguageCode = 'en';
 const AUDIO_CREDIT_COST = 1; // Define or import this
 
-const ContentPanel = ({ 
+// Wrap component definition with forwardRef
+const ContentPanel = forwardRef(({ 
   module, 
   moduleIndex, 
   submodule, 
@@ -87,7 +88,9 @@ const ContentPanel = ({
   onNavigate, // Callback: (direction: 'prev' | 'next' | 'nextModule') => void
   totalModules,
   totalSubmodulesInModule,
-}) => {
+  isMobileLayout, // <-- Accept new prop
+  sx, // Accept sx prop to allow styling from parent (e.g., height)
+}, ref) => { // <-- Accept ref as second argument
   const theme = useTheme();
   const [activeTab, setActiveTab] = useState(0);
   const { user, fetchUserCredits } = useAuth();
@@ -223,7 +226,20 @@ const ContentPanel = ({
   // --- Render Logic ---
   if (!submodule) {
     return (
-      <Paper elevation={2} sx={{ p: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', height: 'calc(100vh - 180px)', textAlign: 'center' }}>
+      <Paper 
+        ref={ref} // Attach ref here for placeholder case as well
+        elevation={2} 
+        sx={{ 
+          p: 3, 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          height: '100%', // Use 100% height
+          textAlign: 'center',
+          overflowY: 'auto', // Ensure placeholder is also scrollable if needed
+           ...sx 
+        }}
+      >
         <Box>
            <MenuBookIcon sx={{ fontSize: 60, color: 'grey.400', mb: 2 }} />
            <Typography variant="h6" color="text.secondary">
@@ -248,12 +264,17 @@ const ContentPanel = ({
   ];
   
   return (
+    // Attach ref to the main Paper component
     <Paper 
+      ref={ref} 
       variant="outlined"
       sx={{ 
         display: 'flex',
         flexDirection: 'column',
         borderColor: theme.palette.divider, 
+        height: '100%', // Ensure Paper takes full height of its container
+        overflowY: 'auto', // Make the Paper itself scrollable
+        ...sx // Apply parent styles
       }}
     >
       {/* Submodule Header */}
@@ -268,48 +289,50 @@ const ContentPanel = ({
           )}
       </Box>
 
-      {/* MOVED: Navigation Controls */}
-      <Box sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}`, bgcolor: 'transparent' }}>
-         <Grid container justifyContent="space-between" alignItems="center">
-            <Grid item>
-               <Button 
-                  size="small"
-                  variant="text"
-                  startIcon={<NavigateBeforeIcon />} 
-                  onClick={() => onNavigate('prev')}
-                  disabled={moduleIndex === 0 && submoduleIndex === 0}
-               >
-                  Previous
-               </Button>
-            </Grid>
-            <Grid item>
-                 <Typography variant="caption" color="text.secondary">
-                    Module {moduleIndex + 1}/{totalModules} | Submodule {submoduleIndex + 1}/{totalSubmodulesInModule}
-                 </Typography>
-            </Grid>
-            <Grid item>
-               <Button 
-                  size="small"
-                  variant="text"
-                  endIcon={<NavigateNextIcon />} 
-                  onClick={() => onNavigate('next')}
-                  disabled={moduleIndex === totalModules - 1 && submoduleIndex === totalSubmodulesInModule - 1}
-                  sx={{ mr: 1 }}
-               >
-                  Next
-               </Button>
-               <Button 
-                  size="small"
-                  variant="outlined"
-                  endIcon={<SkipNextIcon />} 
-                  onClick={() => onNavigate('nextModule')}
-                  disabled={moduleIndex === totalModules - 1} // Disable if last module
-               >
-                  Next Module
-               </Button>
-            </Grid>
-         </Grid>
-      </Box>
+      {/* MOVED: Navigation Controls - Conditionally hide on mobile */}
+      {!isMobileLayout && (
+        <Box sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}`, bgcolor: 'transparent' }}>
+           <Grid container justifyContent="space-between" alignItems="center">
+              <Grid item>
+                 <Button 
+                    size="small"
+                    variant="text"
+                    startIcon={<NavigateBeforeIcon />} 
+                    onClick={() => onNavigate('prev')}
+                    disabled={moduleIndex === 0 && submoduleIndex === 0}
+                 >
+                    Previous
+                 </Button>
+              </Grid>
+              <Grid item>
+                   <Typography variant="caption" color="text.secondary">
+                      Module {moduleIndex + 1}/{totalModules} | Submodule {submoduleIndex + 1}/{totalSubmodulesInModule}
+                   </Typography>
+              </Grid>
+              <Grid item>
+                 <Button 
+                    size="small"
+                    variant="text"
+                    endIcon={<NavigateNextIcon />} 
+                    onClick={() => onNavigate('next')}
+                    disabled={moduleIndex === totalModules - 1 && submoduleIndex === totalSubmodulesInModule - 1}
+                    sx={{ mr: 1 }}
+                 >
+                    Next
+                 </Button>
+                 <Button 
+                    size="small"
+                    variant="outlined"
+                    endIcon={<SkipNextIcon />} 
+                    onClick={() => onNavigate('nextModule')}
+                    disabled={moduleIndex === totalModules - 1} // Disable if last module
+                 >
+                    Next Module
+                 </Button>
+              </Grid>
+           </Grid>
+        </Box>
+      )}
 
       {/* Tabs Navigation */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'transparent' }}>
@@ -437,7 +460,7 @@ const ContentPanel = ({
       </Snackbar>
     </Paper>
   );
-};
+}); // <-- Close the forwardRef HOC
 
 ContentPanel.propTypes = {
   module: PropTypes.object, // Can be null if no module selected
@@ -450,6 +473,11 @@ ContentPanel.propTypes = {
   onNavigate: PropTypes.func.isRequired, // Navigation callback
   totalModules: PropTypes.number.isRequired,
   totalSubmodulesInModule: PropTypes.number.isRequired,
+  isMobileLayout: PropTypes.bool, // Add new propType
+  sx: PropTypes.object, // Add sx propType
 };
+
+// Add display name for DevTools
+ContentPanel.displayName = 'ContentPanel';
 
 export default ContentPanel; 
