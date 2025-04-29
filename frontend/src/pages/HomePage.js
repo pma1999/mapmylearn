@@ -261,7 +261,7 @@ function HomePage() {
             </Typography>
             <Button
               component={RouterLink}
-              to="/generator"
+              to="/register"
               variant="contained"
               sx={{
                 bgcolor: 'white',
