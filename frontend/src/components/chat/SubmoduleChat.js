@@ -13,17 +13,20 @@ import {
   Button,
   Divider,
   Link,
-  ListItemIcon
+  ListItemIcon,
+  Snackbar
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import ReactMarkdown from 'react-markdown';
 
 // Correct the import path for the API service again
-import { sendMessage, clearChatHistory } from '../../services/api'; 
+import { sendMessage, clearChatHistory, purchaseChatAllowance } from '../../services/api';
+import { useAuth } from '../../services/authContext';
 
 // Define the component map for react-markdown -> MUI integration
 const markdownComponents = {
@@ -92,10 +95,15 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isPurchasing, setIsPurchasing] = useState(false);
   const [error, setError] = useState(null);
-  // Generate a unique thread ID based on path, submodule, and user
-  // IMPORTANT: Ensure userId is available and stable
-  const [threadId, setThreadId] = useState(`user-${userId || 'anon'}-path-${pathId}-mod-${moduleIndex}-sub-${submoduleIndex}`);
+  const [showPurchasePrompt, setShowPurchasePrompt] = useState(false);
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
+  const { fetchUserCredits } = useAuth();
+
+  const [threadId, setThreadId] = useState(() => 
+    pathId ? `user-${userId || 'anon'}-path-${pathId}-mod-${moduleIndex}-sub-${submoduleIndex}` : null
+  );
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -106,36 +114,32 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
     scrollToBottom();
   }, [messages]);
 
-  // Regenerate threadId and clear state if the context (path/submodule) changes
   useEffect(() => {
-    // Ensure pathId is present before creating threadId or clearing state
     if (pathId) {
       setThreadId(`user-${userId || 'anon'}-path-${pathId}-mod-${moduleIndex}-sub-${submoduleIndex}`);
-      setMessages([]); // Clear messages when context changes
+      setMessages([]);
       setError(null);
       setIsLoading(false);
+      setShowPurchasePrompt(false);
+      setIsPurchasing(false);
     } else {
-      // Handle case where pathId is initially null/undefined if necessary
-      // e.g., show a message or disable chat input
       setError("Chat context (pathId) is not available.");
+      setThreadId(null);
     }
-  }, [pathId, moduleIndex, submoduleIndex, userId]); // Dependencies are correct
+  }, [pathId, moduleIndex, submoduleIndex, userId]);
 
   const handleSendMessage = useCallback(async () => {
     const messageText = inputValue.trim();
-    // Ensure pathId exists before sending
-    if (!pathId || !messageText || isLoading) return;
+    if (!pathId || !messageText || isLoading || isPurchasing) return;
 
     const userMessage = { sender: 'user', text: messageText, timestamp: new Date() };
-    // Use functional update to ensure we have the latest messages state
     setMessages((prevMessages) => [...prevMessages, userMessage]);
-    const currentMessages = [...messages, userMessage]; // Use updated messages for condition check
     setInputValue('');
     setIsLoading(true);
     setError(null);
+    setShowPurchasePrompt(false);
 
     try {
-      // Base payload for the API call
       const payload = {
         path_id: pathId,
         module_index: moduleIndex,
@@ -144,61 +148,86 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
         thread_id: threadId,
       };
 
-      // Attach full ephemeral path data for every chat request on a temporary path
-      if (isTemporaryPath) {
-        if (pathData && typeof pathData === 'object') {
-          payload.path_data = pathData;
-        }
+      if (isTemporaryPath && pathData && typeof pathData === 'object') {
+        payload.path_data = pathData;
         console.debug('Attaching ephemeral path_data to chat payload', payload.path_data);
       }
 
-      // Call the API service function
       const response = await sendMessage(payload);
-
       const aiMessage = { sender: 'ai', text: response.ai_response, timestamp: new Date() };
       setMessages((prev) => [...prev, aiMessage]);
-      // Backend might refine/return thread_id, update if necessary (though likely stable with this format)
-      // setThreadId(response.thread_id);
+
     } catch (err) {
       console.error("Error sending message:", err);
-      setError(err.response?.data?.error?.message || err.message || 'Failed to get response from the assistant.');
-      // Optionally remove the user's message if the send failed catastrophically
-      // setMessages((prev) => prev.slice(0, -1));
+      if (err.response?.status === 429) {
+        setError("You've reached your daily free message limit.");
+        setShowPurchasePrompt(true);
+        setMessages((prev) => prev.slice(0, -1));
+      } else {
+        setError(err.message || 'Failed to get response from the assistant.');
+        setMessages((prev) => prev.slice(0, -1)); 
+      }
     } finally {
       setIsLoading(false);
     }
-    // Update dependencies for useCallback
-  }, [inputValue, isLoading, pathId, moduleIndex, submoduleIndex, threadId, userId, isTemporaryPath, submoduleContent, pathData, messages]);
+  }, [inputValue, isLoading, isPurchasing, pathId, moduleIndex, submoduleIndex, threadId, userId, isTemporaryPath, pathData, messages]);
 
   const handleClearChat = useCallback(async () => {
     setError(null);
+    setShowPurchasePrompt(false);
     setIsLoading(true);
     try {
-      // Call backend to potentially clear server-side state if using persistent storage
-      // With MemorySaver, this might not be strictly needed, but good practice
       await clearChatHistory({ thread_id: threadId });
-      setMessages([]); // Clear frontend state regardless
-      // Optionally reset threadId if backend confirms deletion or if desired
-      // setThreadId(`user-${userId || 'anon'}-path-${pathId}-mod-${moduleIndex}-sub-${submoduleIndex}-cleared-${Date.now()}`);
+      setMessages([]);
     } catch (err) {
       console.error("Error clearing chat history:", err);
-      setError(err.response?.data?.error?.message || err.message || 'Failed to clear chat history.');
+      setError(err.message || 'Failed to clear chat history.');
     } finally {
       setIsLoading(false);
     }
-    // Update dependencies for useCallback
-  }, [threadId, pathId, moduleIndex, submoduleIndex, userId]);
+  }, [threadId]);
+
+  const handlePurchaseAllowance = useCallback(async () => {
+    setError(null);
+    setIsPurchasing(true);
+    try {
+      const response = await purchaseChatAllowance();
+      setShowPurchasePrompt(false);
+      setSnackbar({
+        open: true,
+        message: response.message || 'Chat allowance purchased successfully!',
+        severity: 'success',
+      });
+      fetchUserCredits();
+    } catch (err) {
+      console.error("Error purchasing chat allowance:", err);
+      setError(err.message || 'Failed to purchase chat allowance. Do you have enough credits?');
+      setSnackbar({
+        open: true,
+        message: err.message || 'Failed to purchase allowance.',
+        severity: 'error',
+      });
+    } finally {
+      setIsPurchasing(false);
+    }
+  }, [fetchUserCredits]);
 
   const handleKeyPress = (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault(); // Prevent new line on Enter
+      event.preventDefault();
       handleSendMessage();
     }
   };
 
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === 'clickaway') {
+      return;
+    }
+    setSnackbar({ ...snackbar, open: false });
+  };
+
   return (
-    <Box data-tut="submodule-chat" sx={{ display: 'flex', flexDirection: 'column', height: 'calc(80vh - 200px)', maxHeight: '600px', p: 1 }}> {/* Adjust height as needed */}
-      {/* Header/Clear Button */} 
+    <Box data-tut="submodule-chat" sx={{ display: 'flex', flexDirection: 'column', height: 'calc(80vh - 200px)', maxHeight: '600px', p: 1 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
         <Typography variant="subtitle1">Chat with Submodule Assistant</Typography>
         <Button
@@ -213,7 +242,6 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
         </Button>
       </Box>
 
-      {/* Message List */} 
       <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2 }}>
         <List>
           {messages.map((msg, index) => (
@@ -231,7 +259,6 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
                   mr: msg.sender === 'ai' ? 1 : 0,
                 }}
               >
-                {/* Conditionally render Markdown for AI, plain text for user */}
                 {msg.sender === 'ai' ? (
                   <ReactMarkdown components={markdownComponents}>
                     {msg.text}
@@ -239,10 +266,9 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
                 ) : (
                   <ListItemText
                     primary={msg.text}
-                    sx={{ margin: 0 }} // Ensure no extra margin from ListItemText
+                    sx={{ margin: 0 }}
                   />
                 )}
-                {/* Display timestamp separately for both message types */}
                 <Typography
                   variant="caption"
                   display="block"
@@ -258,26 +284,42 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
               </Paper>
             </ListItem>
           ))}
-          {/* Invisible element to scroll to */} 
           <div ref={messagesEndRef} /> 
         </List>
       </Box>
 
-      {/* Loading Indicator */} 
       {isLoading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', p: 1 }}>
           <CircularProgress size={24} />
         </Box>
       )}
 
-      {/* Error Display */} 
-      {error && (
+      {showPurchasePrompt && (
+        <Alert 
+          severity="warning" 
+          sx={{ mt: 1, mx: 1, display: 'flex', alignItems: 'center' }} 
+          action={
+            <Button 
+              color="primary" 
+              size="small" 
+              onClick={handlePurchaseAllowance} 
+              disabled={isPurchasing}
+              startIcon={isPurchasing ? <CircularProgress size={16} color="inherit" /> : <ShoppingCartIcon />}
+            >
+              {isPurchasing ? 'Purchasing...' : 'Purchase More (10 Credits)'} 
+            </Button>
+          }
+        >
+          {error || "You've reached your daily free message limit."}
+        </Alert>
+      )}
+
+      {error && !showPurchasePrompt && (
         <Alert severity="error" sx={{ mt: 1, mx: 1 }}>
           {error}
         </Alert>
       )}
 
-      {/* Input Area */} 
       <Divider sx={{ my: 1 }} />
       <Box sx={{ p: 1, display: 'flex', alignItems: 'center' }}>
         <TextField
@@ -288,7 +330,7 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyPress={handleKeyPress}
-          disabled={isLoading}
+          disabled={isLoading || isPurchasing || showPurchasePrompt}
           multiline
           maxRows={4}
           sx={{ mr: 1 }}
@@ -296,11 +338,22 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
         <IconButton 
           color="primary" 
           onClick={handleSendMessage} 
-          disabled={!inputValue.trim() || isLoading}
+          disabled={!inputValue.trim() || isLoading || isPurchasing || showPurchasePrompt}
         >
           <SendIcon />
         </IconButton>
       </Box>
+      
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

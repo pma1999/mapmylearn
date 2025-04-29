@@ -5,6 +5,8 @@ import uuid # Add uuid import
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 import os # Import os
+import redis.asyncio as redis
+from datetime import datetime, timedelta, timezone # Import timezone
 
 # Langchain & LangGraph imports
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -14,15 +16,38 @@ from langgraph.checkpoint.memory import MemorySaver # Using memory saver for now
 
 # Local imports
 from backend.config.database import get_db
-from backend.models.auth_models import User, LearningPath
+from backend.models.auth_models import User, LearningPath, TransactionType # Import TransactionType
 from backend.schemas.chatbot_schemas import ChatRequest, ChatResponse, ClearChatRequest
 from backend.utils.auth_middleware import get_current_user
 from backend.services.services import get_llm # Assuming user API key is available via user model or context
 from backend.prompts.learning_path_prompts import CHATBOT_SYSTEM_PROMPT
+from backend.services.credit_service import CreditService # Import CreditService
 
 router = APIRouter(prefix="/chatbot", tags=["chatbot"])
 
 logger = logging.getLogger(__name__)
+
+# --- Redis Client (Assuming REDIS_URL is set in env) ---
+redis_client = None
+try:
+    redis_url = os.getenv("REDIS_URL")
+    if redis_url:
+        redis_client = redis.from_url(redis_url, encoding="utf-8", decode_responses=True)
+        logger.info("Chatbot Redis client initialized.")
+    else:
+        logger.warning("REDIS_URL not set. Chatbot allowance purchase will not work.")
+except Exception as e:
+    logger.error(f"Failed to initialize Redis client for chatbot: {e}")
+    # App can continue, but allowance purchase will fail
+
+# --- Configuration Constants (Read from environment) ---
+try:
+    CHAT_ALLOWANCE_COST = int(os.getenv("CHAT_ALLOWANCE_COST", "10"))
+    CHAT_ALLOWANCE_MESSAGES = int(os.getenv("CHAT_ALLOWANCE_MESSAGES", "100"))
+except ValueError:
+    logger.error("Invalid value for CHAT_ALLOWANCE_COST or CHAT_ALLOWANCE_MESSAGES in environment. Using defaults.")
+    CHAT_ALLOWANCE_COST = 10
+    CHAT_ALLOWANCE_MESSAGES = 100
 
 # --- Helper function to convert language code to full language name --- #
 def get_full_language_name(language_code):
@@ -307,4 +332,79 @@ async def clear_chat(
             detail=f"Failed to clear chat history for thread {thread_id}"
         )
 
-    return Response(status_code=status.HTTP_204_NO_CONTENT) 
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+# --- Purchase Chat Allowance Endpoint --- #
+@router.post("/purchase-allowance", status_code=status.HTTP_200_OK)
+async def purchase_chat_allowance(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    credit_service: CreditService = Depends(CreditService) # Inject CreditService
+):
+    """Allows users to purchase additional chat message allowance using credits."""
+    logger.info(f"User {user.id} attempting to purchase chat allowance.")
+
+    if not redis_client:
+        logger.error("Redis client not available. Cannot purchase chat allowance.")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Chat allowance purchase service is temporarily unavailable.",
+        )
+
+    try:
+        # 1. Deduct credits using the direct method
+        await credit_service.direct_deduct(
+            user=user,
+            amount=CHAT_ALLOWANCE_COST,
+            transaction_type=TransactionType.CHAT_ALLOWANCE_PURCHASE,
+            notes=f"Purchased {CHAT_ALLOWANCE_MESSAGES} additional chat messages."
+        )
+        logger.info(f"Successfully deducted {CHAT_ALLOWANCE_COST} credits from user {user.id} for chat allowance.")
+
+    except HTTPException as http_exc:
+        # Re-raise 403 (Insufficient Credits) or 500 (DB Error) from direct_deduct
+        logger.warning(f"Credit deduction failed for user {user.id} during allowance purchase: {http_exc.detail}")
+        raise http_exc
+    except Exception as e:
+        # Catch any other unexpected errors during deduction
+        logger.error(f"Unexpected error during credit deduction for user {user.id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred while processing credits.",
+        )
+
+    try:
+        # 2. Grant allowance in Redis
+        today_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        allowance_key = f"chat_allowance:{user.id}:{today_utc}"
+        
+        # Use INCRBY to add to existing allowance or create if not present
+        current_allowance = await redis_client.incrby(allowance_key, CHAT_ALLOWANCE_MESSAGES)
+        
+        # Set expiry to end of current UTC day
+        now_utc = datetime.now(timezone.utc)
+        end_of_day_utc = datetime.combine(now_utc.date() + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
+        ttl_seconds = int((end_of_day_utc - now_utc).total_seconds())
+        
+        # Ensure TTL is positive, set expiry only if key was just created or needs refresh
+        if ttl_seconds > 0:
+             await redis_client.expire(allowance_key, ttl_seconds)
+
+        logger.info(f"Granted {CHAT_ALLOWANCE_MESSAGES} message allowance to user {user.id} for {today_utc}. New allowance: {current_allowance}. TTL set to {ttl_seconds}s.")
+
+        return {"message": f"Successfully purchased {CHAT_ALLOWANCE_MESSAGES} chat messages.", "new_allowance_today": current_allowance}
+
+    except redis.RedisError as e:
+        logger.error(f"Redis error granting chat allowance for user {user.id}: {e}", exc_info=True)
+        # Note: Credits were already deducted. This is a state inconsistency.
+        # For now, we inform the user but don't automatically refund. Manual intervention might be needed.
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Allowance grant failed after credit deduction. Please contact support.",
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error granting chat allowance for user {user.id} after deduction: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred after credit deduction. Please contact support.",
+        ) 

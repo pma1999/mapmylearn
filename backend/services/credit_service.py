@@ -165,4 +165,67 @@ class CreditService:
         async with context_manager as cm:
              yield cm # Yield control to the `async with` block
 
+    async def direct_deduct(self, user: User, amount: int, transaction_type: str, notes: Optional[str] = None):
+        """
+        Directly deducts credits without automatic refund on context exit.
+
+        Performs check, deduct, log, and commit.
+        Raises HTTPException on insufficient credits or DB errors.
+        """
+        if amount <= 0:
+            raise ValueError("Deduction amount must be positive")
+
+        logger.debug(f"Attempting direct credit deduction for user {user.id}, type: {transaction_type}, amount: {amount}")
+        try:
+            # Ensure user object is available in the session if needed (may not be required depending on usage)
+            # await asyncio.to_thread(self.db.refresh, user)
+
+            # 1. Check Credits
+            if user.credits < amount:
+                logger.warning(f"Insufficient credits for user {user.id}. Required: {amount}, Available: {user.credits}")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Insufficient credits. You need {amount} credit(s) for this operation, but have {user.credits}."
+                )
+
+            # 2. Deduct Credit
+            user.credits -= amount
+            balance_after_deduction = user.credits
+            logger.info(f"Directly deducting {amount} credits from user {user.id}. New balance: {balance_after_deduction}")
+
+            # 3. Log Deduction Transaction
+            deduction_transaction = CreditTransaction(
+                user_id=user.id,
+                amount=-amount,
+                transaction_type=transaction_type,
+                notes=notes,
+                balance_after=balance_after_deduction
+            )
+            self.db.add(deduction_transaction)
+
+            # 4. Commit Deduction
+            # Using asyncio.to_thread for sync commit in async function
+            await asyncio.to_thread(self.db.commit)
+            logger.info(f"Committed direct credit deduction for user {user.id}, type: {transaction_type}")
+            
+            # Optional: Refresh user state after commit if needed downstream
+            # await asyncio.to_thread(self.db.refresh, user)
+            
+        except SQLAlchemyError as e:
+            logger.exception(f"Database error during direct credit deduction for user {user.id}: {e}")
+            await asyncio.to_thread(self.db.rollback)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Database error during credit deduction."
+            )
+        except HTTPException: # Re-raise HTTP exceptions (like 403)
+            raise
+        except Exception as e:
+            logger.exception(f"Unexpected error during direct credit deduction for user {user.id}: {e}")
+            await asyncio.to_thread(self.db.rollback)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="An unexpected error occurred while processing credits."
+            )
+
     # Potential future methods: grant_credits, check_balance, etc. 

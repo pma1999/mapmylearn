@@ -12,7 +12,7 @@ import json
 import os
 import sys
 from typing import Optional, List, Dict, Any, Callable, Awaitable, Union
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import uuid
 import time
 import httpx
@@ -31,9 +31,10 @@ from backend.models.models import Resource
 from backend.utils.auth import decode_access_token
 
 # Import rate limiter and backend
-from backend.utils.auth_middleware import get_optional_user
+from backend.utils.auth_middleware import get_optional_user, get_current_user
 from backend.utils.rate_limiter import rate_limiting_middleware
 from fastapi_limiter import FastAPILimiter
+from fastapi_limiter.depends import RateLimiter
 
 # Import CreditService
 from backend.services.credit_service import CreditService
@@ -151,6 +152,26 @@ app.include_router(learning_paths_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(chatbot_router, prefix="/api")
 app.include_router(payments_router, prefix="/api")
+
+# Initialize Redis client for middleware (ensure REDIS_URL is set)
+redis_client_middleware = None
+try:
+    redis_url_mw = os.getenv("REDIS_URL")
+    if redis_url_mw:
+        redis_client_middleware = redis.from_url(redis_url_mw, encoding="utf-8", decode_responses=True)
+        logger.info("Rate Limiter Redis client initialized.")
+    else:
+        logger.warning("REDIS_URL not set. Rate limiting features requiring Redis will be disabled.")
+except Exception as e:
+    logger.error(f"Failed to initialize Redis client for rate limiter middleware: {e}")
+
+# Configuration Constants
+CHAT_FREE_LIMIT_PER_DAY_STR = os.getenv("CHAT_FREE_LIMIT_PER_DAY", "100")
+try:
+    CHAT_FREE_LIMIT_PER_DAY = int(CHAT_FREE_LIMIT_PER_DAY_STR)
+except ValueError:
+    logger.error(f"Invalid CHAT_FREE_LIMIT_PER_DAY: '{CHAT_FREE_LIMIT_PER_DAY_STR}'. Using default 100.")
+    CHAT_FREE_LIMIT_PER_DAY = 100
 
 # --------------------------------------------------------------------------------
 # Global exception handler middleware
@@ -285,16 +306,151 @@ else:
 # Add rate limiting middleware before CORS middleware
 @app.middleware("http")
 async def apply_rate_limiting(request: Request, call_next):
-    """Apply rate limiting to protect against abuse"""
-    # TEMPORARY LOGGING
+    """Apply rate limiting: Custom for chat, standard (IP-based) otherwise."""
+    # Skip OPTIONS requests
     if request.method == "OPTIONS":
-        logger.info(f"Received OPTIONS request for: {request.url.path} from {request.client.host}")
-        logger.info(f"OPTIONS Headers: {request.headers}")
-    # END TEMPORARY LOGGING
-    
-    if os.getenv("ENABLE_RATE_LIMITING", "false").lower() == "true":
-        return await rate_limiting_middleware(request, call_next)
-    return await call_next(request)
+        return await call_next(request)
+
+    # Check if Redis is available for any rate limiting
+    if not redis_client_middleware or not FastAPILimiter.redis:
+        # If Redis isn't configured globally via FastAPILimiter.init, bypass all rate limits
+        if not FastAPILimiter.redis:
+             logger.debug("FastAPILimiter redis not initialized, skipping rate limiting.")
+        else:
+             logger.debug("Middleware redis client not available, skipping rate limiting.")
+        return await call_next(request)
+
+    # --- Custom Logic for /api/chatbot/chat --- 
+    if request.url.path == "/api/chatbot/chat":
+        user_id: Optional[int] = None
+        token = None
+        
+        # Attempt to extract token and user_id without full dependency injection
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split("Bearer ")[1]
+            token_data = decode_access_token(token) # Assuming this doesn't hit DB
+            if token_data:
+                user_id = token_data.user_id
+
+        if user_id:
+            try:
+                today_utc_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                allowance_key = f"chat_allowance:{user_id}:{today_utc_str}"
+                
+                # Check if allowance exists and is greater than 0
+                current_allowance = await redis_client_middleware.get(allowance_key)
+                
+                if current_allowance and int(current_allowance) > 0:
+                    # Decrement allowance and proceed
+                    await redis_client_middleware.decr(allowance_key)
+                    logger.debug(f"User {user_id} used chat allowance. Remaining: {int(current_allowance) - 1}")
+                    return await call_next(request)
+                else:
+                    # No allowance or allowance depleted, proceed to free limit check
+                    logger.debug(f"User {user_id} has no remaining chat allowance for today. Checking free limit.")
+
+            except redis.RedisError as e:
+                logger.error(f"Redis error checking chat allowance for user {user_id}: {e}. Allowing request.")
+                # Fail open on Redis error during check
+                return await call_next(request)
+            except Exception as e:
+                 logger.error(f"Error checking allowance for user {user_id}: {e}. Allowing request.")
+                 # Fail open on other errors during check
+                 return await call_next(request)
+
+            # --- Apply Free Daily Limit (User-Based) if no allowance was used --- 
+            try:
+                limit_key = f"chat_limit:{user_id}:{today_utc_str}"
+                # Key identifier for fastapi-limiter
+                # identifier = f"user:{user_id}" # <-- This identifier isn't actually used
+
+                # --- CORRECTED LOGIC using redis-py async client --- 
+
+                # 1. Get current count
+                # Use the specific redis client for the middleware
+                current_count_str = await redis_client_middleware.get(limit_key)
+                current_count = int(current_count_str) if current_count_str else 0
+
+                # 2. Check if limit exceeded BEFORE incrementing
+                if current_count >= CHAT_FREE_LIMIT_PER_DAY:
+                    logger.warning(f"User {user_id} exceeded free chat limit ({current_count}/{CHAT_FREE_LIMIT_PER_DAY}) for {today_utc_str}.")
+                    ttl = await redis_client_middleware.ttl(limit_key)
+                    # --- MODIFIED PART: Return JSONResponse instead of raising --- 
+                    error_response_content = {
+                        "status": "failed",
+                        "error": {
+                            "message": f"Daily chat limit reached. Purchase allowance or try again tomorrow.",
+                            "type": "rate_limit_exceeded"
+                        }
+                    }
+                    response_headers = {"Retry-After": str(ttl)} if ttl >= 0 else {}
+                    return JSONResponse(
+                        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                        content=error_response_content,
+                        headers=response_headers
+                    )
+                    # --- END MODIFIED PART --- 
+                
+                # 3. Increment the count (Hit)
+                new_count = await redis_client_middleware.incr(limit_key, amount=1)
+
+                # 4. Set expiry only if the key was just created (i.e., count is 1 after incr)
+                if new_count == 1:
+                    now_utc = datetime.now(timezone.utc)
+                    end_of_day_utc = datetime.combine(now_utc.date() + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
+                    ttl_seconds = int((end_of_day_utc - now_utc).total_seconds())
+                    if ttl_seconds > 0:
+                        await redis_client_middleware.expire(limit_key, ttl_seconds)
+                
+                logger.debug(f"User {user_id} used free chat message. Count: {new_count}/{CHAT_FREE_LIMIT_PER_DAY}")
+                # Limit check passed and hit recorded
+                return await call_next(request)
+
+            except redis.RedisError as e:
+                logger.error(f"Redis error during free chat limit check for user {user_id}: {e}. Allowing request.")
+                # Fail open on Redis error
+                return await call_next(request)
+            except HTTPException as http_exc: # Re-raise 429
+                raise http_exc
+            except Exception as e:
+                logger.error(f"Error during free limit check/hit for user {user_id}: {e}. Allowing request.")
+                # Fail open on other errors
+                return await call_next(request)
+        else:
+            # Unauthenticated user trying to chat - block?
+            # Or apply IP-based limit? For now, let's block unauthenticated chat.
+            logger.warning(f"Unauthenticated request to /api/chatbot/chat from {request.client.host}. Blocking.")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required for chat."
+            )
+
+    # --- Standard Rate Limiting for other paths (IP-based example) ---
+    else:
+        # Apply a default IP-based limit to other routes if desired
+        # Example: 60 requests per minute per IP
+        # identifier = request.client.host
+        # limit_key = f"ip_limit:{identifier}"
+        # try:
+        #     can_request = await FastAPILimiter.redis.check(limit_key)
+        #     if not can_request:
+        #         ttl = await FastAPILimiter.redis.ttl(limit_key)
+        #         raise HTTPException(
+        #             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        #             detail="Rate limit exceeded for this endpoint.",
+        #             headers={"Retry-After": str(ttl)} if ttl > 0 else None
+        #         )
+        #     await FastAPILimiter.redis.incr(limit_key, expire=60, amount=1) # 60 seconds expiry
+        # except redis.RedisError as e:
+        #     logger.error(f"Redis error during IP rate limit check for {identifier}: {e}. Allowing request.")
+        #     # Fail open
+        # except Exception as e:
+        #     logger.error(f"Error during IP rate limit check/hit for {identifier}: {e}. Allowing request.")
+        #     # Fail open
+        
+        # Pass through if no standard limit is defined or Redis fails
+        return await call_next(request)
 
 # Añadir middleware CORS con la configuración apropiada
 app.add_middleware(

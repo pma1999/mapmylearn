@@ -1233,6 +1233,29 @@ export const clearChatHistory = async (data) => {
   }
 };
 
+/**
+ * Purchases additional chat allowance for the current user.
+ * @returns {Promise<object>} The API response, likely including a success message.
+ */
+export const purchaseChatAllowance = async () => {
+  try {
+    // Ensure auth token is set
+    if (!authToken) {
+      if (!initAuthFromStorage()) {
+        console.error('purchaseChatAllowance Error: No auth token available.');
+        throw new Error('Authentication required.');
+      }
+    }
+    const response = await api.post('/chatbot/purchase-allowance');
+    console.log('Chat allowance purchase successful:', response.data);
+    return response.data; // Should contain { message: string, new_allowance_today: number }
+  } catch (error) {
+    console.error('Error purchasing chat allowance:', error);
+    // The interceptor should have already formatted the error
+    throw error;
+  }
+};
+
 // Create a Stripe Checkout session
 export const createCheckoutSession = async (quantity) => {
   try {
@@ -1311,5 +1334,6 @@ export default {
   getActiveGenerations,
   updateSubmoduleProgress,
   updateLastVisited,
+  purchaseChatAllowance,
 };
 

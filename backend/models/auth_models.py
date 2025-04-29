@@ -15,6 +15,7 @@ class TransactionType:
     AUDIO_GENERATION_USE = "audio_generation_use" # New type
     REFUND = "refund"
     PURCHASE = "purchase"
+    CHAT_ALLOWANCE_PURCHASE = "chat_allowance_purchase" # Added for chat limits
 
 class User(Base):
     """
