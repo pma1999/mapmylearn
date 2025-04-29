@@ -72,6 +72,11 @@ def decode_access_token(token: str) -> Optional[TokenData]:
         if user_id is None or email is None:
             return None
         
-        return TokenData(user_id=int(user_id), email=email, exp=datetime.fromtimestamp(exp))
+        # Convert user_id to int and exp to datetime, handling potential errors
+        try:
+            return TokenData(user_id=int(user_id), email=email, exp=datetime.fromtimestamp(exp))
+        except ValueError:
+             # Handle cases where user_id is not a valid int or exp is not a valid timestamp
+             return None
     except JWTError:
         return None 
