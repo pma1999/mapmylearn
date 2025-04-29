@@ -32,14 +32,15 @@
     "prismjs": "1.30.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-helmet-async": "^2.0.5",
+    "react-joyride": "^2.9.3",
     "react-markdown": "^10.1.0",
     "react-router": "^7.5.2",
     "react-syntax-highlighter": "^15.5.0",
     "react-virtualized-auto-sizer": "^1.0.26",
     "react-window": "^1.8.11",
     "remark-gfm": "^4.0.1",
-    "yocto-queue": "^1.2.0",
-    "react-helmet-async": "^2.0.5"
+    "yocto-queue": "^1.2.0"
   },
   "devDependencies": {
     "eslint-plugin-react-hooks": "^5.2.0",
