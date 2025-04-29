@@ -197,7 +197,7 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(80vh - 200px)', maxHeight: '600px', p: 1 }}> {/* Adjust height as needed */}
+    <Box data-tut="submodule-chat" sx={{ display: 'flex', flexDirection: 'column', height: 'calc(80vh - 200px)', maxHeight: '600px', p: 1 }}> {/* Adjust height as needed */}
       {/* Header/Clear Button */} 
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
         <Typography variant="subtitle1">Chat with Submodule Assistant</Typography>

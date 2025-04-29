@@ -46,6 +46,7 @@ const MobileBottomNavigation = ({
       <Toolbar sx={{ justifyContent: 'space-between', px: { xs: 0.5, sm: 1 } }}>
         <Tooltip title="Modules Navigation" arrow>
           <IconButton
+            data-tut="mobile-nav-open-button"
             color="primary"
             aria-label="open module navigation"
             onClick={onOpenMobileNav} 
@@ -56,7 +57,7 @@ const MobileBottomNavigation = ({
         </Tooltip>
 
         <Tooltip title="Previous Submodule" arrow>
-          <span>
+          <span data-tut="mobile-prev-button">
             <IconButton
               color="primary"
               aria-label="previous submodule"
@@ -70,6 +71,7 @@ const MobileBottomNavigation = ({
         </Tooltip>
 
         <ToggleButtonGroup
+          data-tut="mobile-tab-buttons"
           value={activeTab}
           exclusive
           onChange={handleTabChange}
@@ -98,17 +100,17 @@ const MobileBottomNavigation = ({
         </ToggleButtonGroup>
         
         <Tooltip title="Next Submodule" arrow>
-           <span>
-             <IconButton
-               color="primary"
-               aria-label="next submodule"
-               onClick={() => onNavigate('next')}
-               disabled={isLastSubmodule}
-               size="large"
-             >
-               <NavigateNextIcon />
-             </IconButton>
-           </span>
+          <span data-tut="mobile-next-button">
+            <IconButton
+              color="primary"
+              aria-label="next submodule"
+              onClick={() => onNavigate('next')}
+              disabled={isLastSubmodule}
+              size="large"
+            >
+              <NavigateNextIcon />
+            </IconButton>
+          </span>
         </Tooltip>
       </Toolbar>
     </AppBar>

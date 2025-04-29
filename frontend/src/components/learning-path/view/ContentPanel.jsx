@@ -252,6 +252,7 @@ const ContentPanel = forwardRef(({
     <Paper 
       ref={ref} 
       variant="outlined"
+      data-tut="content-panel"
       sx={{ 
         display: 'flex',
         flexDirection: 'column',
@@ -277,7 +278,7 @@ const ContentPanel = forwardRef(({
       {!isMobileLayout && (
         <Box sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}`, bgcolor: 'transparent' }}>
            <Grid container justifyContent="space-between" alignItems="center">
-              <Grid item>
+              <Grid item data-tut="content-panel-prev-button">
                  <Button 
                     size="small"
                     variant="text"
@@ -293,7 +294,7 @@ const ContentPanel = forwardRef(({
                       Module {moduleIndex + 1}/{totalModules} | Submodule {submoduleIndex + 1}/{totalSubmodulesInModule}
                    </Typography>
               </Grid>
-              <Grid item>
+              <Grid item data-tut="content-panel-next-button">
                  <Button 
                     size="small"
                     variant="text"
@@ -305,6 +306,7 @@ const ContentPanel = forwardRef(({
                     Next
                  </Button>
                  <Button 
+                    data-tut="content-panel-next-module-button"
                     size="small"
                     variant="outlined"
                     endIcon={<SkipNextIcon />} 
@@ -322,6 +324,7 @@ const ContentPanel = forwardRef(({
       {!isMobileLayout && (
         <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'transparent' }}>
           <Tabs 
+            data-tut="content-panel-tabs"
             value={activeTab} 
             onChange={(event, newValue) => setActiveTab(newValue)} 
             aria-label="submodule content tabs"
@@ -360,38 +363,39 @@ const ContentPanel = forwardRef(({
          {tabsConfig.map((tab) => {
              const tabContentSx = tab.component === 'Chat' ? { p: 0, height: '100%' } : {}; 
              return (
-                <TabPanel key={tab.index} value={activeTab} index={tab.index} sx={tabContentSx}>
+                <TabPanel key={tab.index} value={activeTab} index={tab.index} sx={tabContentSx} >
                    {tab.component === 'Content' && (
-                       <>
-                          <MarkdownRenderer>{submodule.content || "No content available."}</MarkdownRenderer>
-                          {/* Add Progress Checkbox at the end of content */} 
-                          <Divider sx={{ my: 2 }} />
-                          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1, mb: 1 }}>
-                              <FormControlLabel
-                                  control={
-                                      <Checkbox 
-                                          checked={isCompleted} 
-                                          onChange={handleCheckboxToggle}
-                                          name="progressCheckbox"
-                                          color="primary"
-                                          sx={{ 
-                                              color: isCompleted ? theme.palette.success.main : theme.palette.action.active,
-                                              '&.Mui-checked': {
-                                                  color: theme.palette.success.main,
-                                              },
-                                          }}
-                                      />
-                                  }
-                                  label={isCompleted ? "Mark as Incomplete" : "Mark as Complete"}
-                                  sx={{ 
-                                      color: isCompleted ? theme.palette.text.secondary : theme.palette.text.primary
-                                  }}
-                              />
-                          </Box>
-                       </>
+                       <Box data-tut="content-panel-tab-content">
+                           <MarkdownRenderer>{submodule.content || "No content available."}</MarkdownRenderer>
+                           {/* Add Progress Checkbox at the end of content */} 
+                           <Divider sx={{ my: 2 }} />
+                           <Box data-tut="content-panel-progress-checkbox-container" sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1, mb: 1 }}>
+                               <FormControlLabel
+                                   control={
+                                       <Checkbox 
+                                           checked={isCompleted} 
+                                           onChange={handleCheckboxToggle}
+                                           name="progressCheckbox"
+                                           color="primary"
+                                           sx={{ 
+                                               color: isCompleted ? theme.palette.success.main : theme.palette.action.active,
+                                               '&.Mui-checked': {
+                                                   color: theme.palette.success.main,
+                                               },
+                                           }}
+                                       />
+                                   }
+                                   label={isCompleted ? "Mark as Incomplete" : "Mark as Complete"}
+                                   sx={{ 
+                                       color: isCompleted ? theme.palette.text.secondary : theme.palette.text.primary
+                                   }}
+                               />
+                           </Box>
+                       </Box>
                    )}
                    {tab.component === 'Quiz' && hasQuiz && (
                        <QuizContainer 
+                         data-tut="content-panel-tab-quiz"
                          quizQuestions={submodule.quiz_questions}
                          submoduleId={`${moduleIndex}-${submoduleIndex}`} // Consistent ID
                          pathId={pathId} 
@@ -400,6 +404,7 @@ const ContentPanel = forwardRef(({
                    )}
                    {tab.component === 'Resources' && hasResources && (
                        <ResourcesSection 
+                           data-tut="content-panel-tab-resources"
                            resources={submodule.resources} 
                            title="Submodule Resources" 
                            type="submodule" 
@@ -408,6 +413,7 @@ const ContentPanel = forwardRef(({
                    )}
                    {tab.component === 'Chat' && (
                        <SubmoduleChat 
+                           data-tut="content-panel-tab-chat"
                            pathId={pathId} 
                            moduleIndex={moduleIndex} 
                            submoduleIndex={submoduleIndex}
@@ -417,7 +423,7 @@ const ContentPanel = forwardRef(({
                        />
                    )}
                    {tab.component === 'Audio' && (
-                       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, p: 2 }}>
+                       <Box data-tut="content-panel-tab-audio" sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, p: 2 }}>
                            <FormControl fullWidth sx={{ maxWidth: '300px' }} disabled={isAudioLoading}>
                                <InputLabel id={`language-select-label-panel`}>Script Language</InputLabel>
                                <Select

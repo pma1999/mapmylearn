@@ -164,6 +164,7 @@ const ResourcesSection = ({
       variants={containerVariants}
     >
       <Paper 
+        data-tut="resources-section"
         elevation={0} 
         sx={getContainerSx()}
       >

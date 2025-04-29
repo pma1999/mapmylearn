@@ -49,6 +49,7 @@ const ModuleNavigationColumn = ({
 
   return (
     <Box 
+      data-tut="module-navigation-column"
       component={motion.div} 
       variants={containerVariants}
       initial="hidden"
@@ -70,6 +71,7 @@ const ModuleNavigationColumn = ({
           return (
             <motion.div key={modIndex} variants={itemVariants}>
               <Paper 
+                data-tut={modIndex === 0 ? "module-item-0" : undefined}
                 variant="outlined"
                 sx={{ 
                   mb: 1.5,
@@ -134,9 +136,11 @@ const ModuleNavigationColumn = ({
                            <ListItem 
                               key={subIndex} 
                               disablePadding
+                              data-tut={modIndex === 0 && subIndex === 0 ? "submodule-item-0-0" : undefined}
                               secondaryAction={
                                  <Tooltip title={isCompleted ? "Mark as Incomplete" : "Mark as Complete"}>
                                      <Checkbox
+                                         data-tut={modIndex === 0 && subIndex === 0 ? "progress-checkbox-0-0" : undefined}
                                          edge="end"
                                          checked={isCompleted}
                                          onChange={handleCheckboxClick}

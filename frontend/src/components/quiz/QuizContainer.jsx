@@ -127,6 +127,7 @@ const QuizContainer = ({ quizQuestions }) => {
   // Render main quiz interface
   return (
     <Paper 
+      data-tut="quiz-container"
       elevation={0}
       sx={{ 
         p: 3, 

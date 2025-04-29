@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import { useParams } from 'react-router';
 import { Container, Snackbar, Alert, AlertTitle, useMediaQuery, useTheme, Box, Typography, Grid, Drawer } from '@mui/material';
 import { helpTexts } from '../../../constants/helpTexts'; // Corrected path
+import Joyride, { ACTIONS, EVENTS, STATUS } from 'react-joyride'; // Import Joyride
 
 // Import API service
 import * as apiService from '../../../services/api'; 
@@ -34,6 +35,7 @@ import MobileBottomNavigation from './MobileBottomNavigation.jsx';
 
 const DRAWER_WIDTH = 300; // Define a width for the mobile drawer
 const AUDIO_CREDIT_COST = 1; // Define or import this
+const TUTORIAL_STORAGE_KEY = 'learniTutorialCompleted'; // Key for localStorage
 
 /**
  * Main component for viewing a learning path using the Focus Flow layout.
@@ -51,6 +53,10 @@ const LearningPathView = ({ source }) => {
   
   // Mobile drawer state
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // Tutorial State
+  const [runTutorial, setRunTutorial] = useState(false);
+  const [tutorialStepIndex, setTutorialStepIndex] = useState(0);
 
   // Load learning path data using the hook
   const {
@@ -366,11 +372,11 @@ const LearningPathView = ({ source }) => {
     let tabIndexCounter = 0;
     const tabs = [
         // Match the structure expected by MobileBottomNavigation (index, label, icon)
-        { index: tabIndexCounter++, label: 'Content', icon: <MenuBookIcon />, tooltip: "View submodule content" },
-        ...(hasQuiz ? [{ index: tabIndexCounter++, label: 'Quiz', icon: <FitnessCenterIcon />, tooltip: helpTexts.submoduleTabQuiz }] : []),
-        ...(hasResources ? [{ index: tabIndexCounter++, label: 'Resources', icon: <CollectionsBookmarkIcon />, tooltip: "View submodule resources" }] : []),
-        { index: tabIndexCounter++, label: 'Chat', icon: <QuestionAnswerIcon />, tooltip: helpTexts.submoduleTabChat },
-        { index: tabIndexCounter++, label: 'Audio', icon: <GraphicEqIcon />, tooltip: helpTexts.submoduleTabAudio(AUDIO_CREDIT_COST) },
+        { index: tabIndexCounter++, label: 'Content', icon: <MenuBookIcon />, tooltip: "View submodule content", dataTut: 'content-panel-tab-content' },
+        ...(hasQuiz ? [{ index: tabIndexCounter++, label: 'Quiz', icon: <FitnessCenterIcon />, tooltip: helpTexts.submoduleTabQuiz, dataTut: 'content-panel-tab-quiz' }] : []),
+        ...(hasResources ? [{ index: tabIndexCounter++, label: 'Resources', icon: <CollectionsBookmarkIcon />, tooltip: "View submodule resources", dataTut: 'content-panel-tab-resources' }] : []),
+        { index: tabIndexCounter++, label: 'Chat', icon: <QuestionAnswerIcon />, tooltip: helpTexts.submoduleTabChat, dataTut: 'content-panel-tab-chat' },
+        { index: tabIndexCounter++, label: 'Audio', icon: <GraphicEqIcon />, tooltip: helpTexts.submoduleTabAudio(AUDIO_CREDIT_COST), dataTut: 'content-panel-tab-audio' },
     ];
     return tabs;
   }, [currentSubmodule]);
@@ -387,6 +393,247 @@ const LearningPathView = ({ source }) => {
       }
   // Depend on availableTabs array (which depends on currentSubmodule) and the current activeTab index itself.
   }, [availableTabs, activeTab]);
+
+  // Effect to check for first visit and start tutorial
+  useEffect(() => {
+    const tutorialCompleted = localStorage.getItem(TUTORIAL_STORAGE_KEY);
+    if (!loading && !tutorialCompleted) {
+      // Delay slightly to allow layout to settle?
+      setTimeout(() => setRunTutorial(true), 500); 
+    }
+  }, [loading]); // Run only when loading status changes
+
+  // --- Tutorial Logic ---
+  const startTutorial = () => {
+    setTutorialStepIndex(0);
+    setRunTutorial(true);
+  };
+
+  const handleJoyrideCallback = (data) => {
+    const { action, index, status, type } = data;
+
+    if ([EVENTS.STEP_AFTER, EVENTS.TARGET_NOT_FOUND].includes(type)) {
+      // Update the step index
+      setTutorialStepIndex(index + (action === ACTIONS.PREV ? -1 : 1));
+    } else if ([STATUS.FINISHED, STATUS.SKIPPED].includes(status)) {
+      // Tutorial finished or skipped
+      setRunTutorial(false);
+      setTutorialStepIndex(0);
+      localStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
+    }
+
+    console.log('Joyride callback:', data);
+  };
+
+  // Define Tutorial Steps
+  const getTutorialSteps = (isMobile) => {
+    // Helper to find tab index by dataTut attribute
+    const findTabIndex = (dataTut) => availableTabs.findIndex(t => t.dataTut === dataTut);
+
+    const commonSteps = [
+      {
+        target: '[data-tut="lp-header"]',
+        content: 'Welcome to your Learning Path! This header shows the main topic.',
+        placement: 'bottom',
+        disableBeacon: true,
+      },
+    ];
+
+    const desktopSteps = [
+      ...commonSteps,
+      {
+        target: '[data-tut="module-navigation-column"]',
+        content: 'On the left, you have the modules. Click a module to see its submodules.',
+        placement: 'right',
+        disableBeacon: true,
+      },
+      {
+        target: '[data-tut="module-item-0"]',
+        content: 'Click here to expand the first module.',
+        placement: 'right',
+        disableBeacon: true,
+        // Callback to expand the first module before showing next step
+        callback: () => setActiveModuleIndex(0),
+      },
+      {
+        target: '[data-tut="submodule-item-0-0"]',
+        content: 'Now click the first submodule to view its content.',
+        placement: 'right',
+        disableBeacon: true,
+        // Callback to select the first submodule
+        callback: () => {
+          setActiveModuleIndex(0);
+          setActiveSubmoduleIndex(0);
+        }
+      },
+      {
+        target: '[data-tut="content-panel"]',
+        content: 'The main content area shows details for the selected submodule.',
+        placement: 'left',
+        disableBeacon: true,
+      },
+      {
+        target: '[data-tut="content-panel-tabs"]',
+        content: 'Use these tabs to explore different aspects of the submodule.',
+        placement: 'bottom',
+        disableBeacon: true,
+      },
+      {
+        target: '[data-tut="content-panel-tab-content"]',
+        content: 'This is the main learning material for the submodule.',
+        placement: 'top',
+        disableBeacon: true,
+        callback: () => setActiveTab(findTabIndex('content-panel-tab-content') ?? 0)
+      },
+      // Add steps for other tabs if they exist, using callbacks to switch activeTab
+      ...(availableTabs.some(t => t.dataTut === 'content-panel-tab-quiz') ? [{
+        target: '[data-tut="content-panel-tab-quiz"]',
+        content: 'Test your understanding with a short quiz.',
+        placement: 'top',
+        disableBeacon: true,
+        callback: () => setActiveTab(findTabIndex('content-panel-tab-quiz'))
+      }] : []),
+      ...(availableTabs.some(t => t.dataTut === 'content-panel-tab-resources') ? [{
+        target: '[data-tut="content-panel-tab-resources"]',
+        content: 'Find additional resources like articles or videos here.',
+        placement: 'top',
+        disableBeacon: true,
+        callback: () => setActiveTab(findTabIndex('content-panel-tab-resources'))
+      }] : []),
+       {
+        target: '[data-tut="content-panel-tab-chat"]',
+        content: 'Chat with an AI assistant about this specific submodule.',
+        placement: 'top',
+        disableBeacon: true,
+        callback: () => setActiveTab(findTabIndex('content-panel-tab-chat'))
+      },
+       {
+        target: '[data-tut="content-panel-tab-audio"]',
+        content: 'Generate an audio version of the submodule content (costs credits!).',
+        placement: 'top',
+        disableBeacon: true,
+        callback: () => setActiveTab(findTabIndex('content-panel-tab-audio'))
+      },
+      {
+        target: '[data-tut="content-panel-progress-checkbox-container"]',
+        content: 'Once you\'ve finished a submodule, check this box to mark it complete!',
+        placement: 'top',
+        disableBeacon: true,
+        callback: () => setActiveTab(findTabIndex('content-panel-tab-content') ?? 0) // Switch back to content tab
+      },
+      {
+        target: '[data-tut="progress-checkbox-0-0"]',
+        content: 'You can also mark submodules complete directly in the navigation list.',
+        placement: 'right',
+        disableBeacon: true,
+      },
+      {
+        target: '[data-tut="content-panel-prev-button"]',
+        content: 'Use these buttons to navigate between submodules...',
+        placement: 'bottom',
+        disableBeacon: true,
+      },
+      {
+        target: '[data-tut="content-panel-next-module-button"]',
+        content: '...or jump to the next module entirely.',
+        placement: 'bottom',
+        disableBeacon: true,
+      },
+      {
+        target: '[data-tut="save-path-button"]',
+        content: 'Remember to save your path to track progress and access it later!',
+        placement: 'bottom',
+        disableBeacon: true,
+      },
+      {
+        target: '[data-tut="help-icon"]',
+        content: 'Click this icon anytime to see this tutorial again.',
+        placement: 'bottom',
+        disableBeacon: true,
+      },
+    ];
+
+    const mobileSteps = [
+      ...commonSteps,
+      {
+        target: '[data-tut="mobile-nav-open-button"]',
+        content: 'Tap here to open the module navigation drawer.',
+        placement: 'top',
+        disableBeacon: true,
+        callback: () => setMobileNavOpen(true) // Open drawer for next step
+      },
+      {
+        target: '[data-tut="module-navigation-column"]',
+        content: 'Select modules and submodules here. Tap the first module.',
+        placement: 'right',
+        isFixed: true, // Important for elements inside drawers/modals
+        disableBeacon: true,
+        callback: () => setActiveModuleIndex(0) // Expand module
+      },
+      {
+        target: '[data-tut="submodule-item-0-0"]',
+        content: 'Now tap the first submodule to view it and close the drawer.',
+        placement: 'right',
+        isFixed: true,
+        disableBeacon: true,
+        callback: () => { // Select submodule and close drawer
+          setActiveModuleIndex(0);
+          setActiveSubmoduleIndex(0);
+          setMobileNavOpen(false);
+        }
+      },
+      {
+        target: '[data-tut="content-panel"]',
+        content: 'The main content for the selected submodule is shown here.',
+        placement: 'top',
+        disableBeacon: true,
+      },
+      {
+        target: '[data-tut="mobile-tab-buttons"]',
+        content: 'Use these icons to switch between Content, Quiz, Resources, Chat, and Audio for this submodule.',
+        placement: 'top',
+        disableBeacon: true,
+      },
+      // Add steps for mobile tabs if needed, similar to desktop, using setActiveTab callback
+      // ... (example: focus on content tab first)
+      {
+        target: '[data-tut="content-panel-tab-content"]',
+        content: 'This is the main learning material.',
+        placement: 'top',
+        disableBeacon: true,
+        callback: () => setActiveTab(findTabIndex('content-panel-tab-content') ?? 0)
+      },
+      // Add step for mobile progress checkbox (inside content)
+      {
+        target: '[data-tut="content-panel-progress-checkbox-container"]',
+        content: 'Mark the submodule complete here when you\'re done.',
+        placement: 'top',
+        disableBeacon: true,
+      },
+      {
+        target: '[data-tut="mobile-prev-button"]',
+        content: 'Tap these buttons to navigate to the previous or next submodule.',
+        placement: 'top',
+        disableBeacon: true,
+      },
+       {
+        target: '[data-tut="save-path-button"]',
+        content: 'Remember to save your path to track progress and access it later!',
+        placement: 'bottom',
+        disableBeacon: true,
+      },
+       {
+        target: '[data-tut="help-icon"]',
+        content: 'Tap the help icon in the header anytime to see this tutorial again.',
+        placement: 'bottom',
+        disableBeacon: true,
+      },
+    ];
+
+    return isMobile ? mobileSteps : desktopSteps;
+  };
+
+  const tutorialSteps = useMemo(() => getTutorialSteps(isMobileLayout), [isMobileLayout, availableTabs, actualPathData]);
 
   // Use `loading` directly from hook
   if (loading) {
@@ -446,6 +693,7 @@ const LearningPathView = ({ source }) => {
                showMobileNavButton={isMobileLayout} // Show button only on mobile layout
                progressMap={progressMap}
                actualPathData={actualPathData}
+               onStartTutorial={startTutorial} // Pass tutorial trigger
              />
              {/* Optional: Add overall progress bar here */}
              {/* Optional: Add Topic Resources link/button here */}
@@ -587,6 +835,45 @@ const LearningPathView = ({ source }) => {
         </>
       )}
       
+      {/* Joyride Component */}
+      <Joyride 
+        steps={tutorialSteps}
+        run={runTutorial}
+        stepIndex={tutorialStepIndex}
+        callback={handleJoyrideCallback}
+        continuous={true}
+        showProgress={true}
+        showSkipButton={true}
+        scrollToFirstStep={true}
+        // Styling to somewhat match MUI
+        styles={{
+          options: {
+            arrowColor: theme.palette.background.paper,
+            backgroundColor: theme.palette.background.paper,
+            overlayColor: 'rgba(0, 0, 0, 0.6)',
+            primaryColor: theme.palette.primary.main,
+            textColor: theme.palette.text.primary,
+            zIndex: theme.zIndex.tooltip + 1, // Ensure it's above most elements
+          },
+          buttonNext: {
+            backgroundColor: theme.palette.primary.main,
+            borderRadius: theme.shape.borderRadius,
+          },
+          buttonBack: {
+            color: theme.palette.primary.main,
+          },
+           buttonSkip: {
+             color: theme.palette.text.secondary,
+           },
+          tooltip: {
+             borderRadius: theme.shape.borderRadius,
+          },
+          tooltipContent: {
+             padding: theme.spacing(2),
+          },
+        }}
+      />
+
       {/* Save Dialog and Snackbar remain outside the main layout */} 
       <SaveDialog
         open={saveDialogOpen}

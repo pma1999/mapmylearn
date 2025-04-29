@@ -19,6 +19,7 @@ import SaveIcon from '@mui/icons-material/Save';
 import SchoolIcon from '@mui/icons-material/School';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import MenuIcon from '@mui/icons-material/Menu';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { motion } from 'framer-motion';
 import InfoTooltip from '../../shared/InfoTooltip';
 import { helpTexts } from '../../../constants/helpTexts';
@@ -38,6 +39,7 @@ import { helpTexts } from '../../../constants/helpTexts';
  * @param {boolean} [props.showMobileNavButton] Optional flag to show the mobile nav button
  * @param {Object} [props.progressMap] Optional map of submodule completion status
  * @param {Object} [props.actualPathData] Optional full learning path data for calculating totals
+ * @param {Function} props.onStartTutorial Callback to start the interactive tutorial
  * @returns {JSX.Element} Header component
  */
 const LearningPathHeader = ({ 
@@ -51,7 +53,8 @@ const LearningPathHeader = ({
   onOpenMobileNav,
   showMobileNavButton,
   progressMap,
-  actualPathData
+  actualPathData,
+  onStartTutorial
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -103,6 +106,7 @@ const LearningPathHeader = ({
 
   return (
     <Paper 
+      data-tut="lp-header"
       elevation={0} 
       variant="outlined"
       sx={{ 
@@ -135,7 +139,7 @@ const LearningPathHeader = ({
                 </Tooltip>
               </motion.div>
             )}
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
               <SchoolIcon 
                 sx={{ 
                   fontSize: { xs: 28, sm: 32, md: 40 }, 
@@ -154,6 +158,19 @@ const LearningPathHeader = ({
                 Learning Path
               </Typography>
             </Box>
+            <motion.div variants={buttonVariants}>
+                <Tooltip title="Show Tutorial">
+                  <IconButton 
+                      data-tut="help-icon"
+                      color="default"
+                      onClick={onStartTutorial}
+                      aria-label="show tutorial"
+                      sx={{ ml: 1 }}
+                  >
+                      <HelpOutlineIcon />
+                  </IconButton>
+                </Tooltip>
+            </motion.div>
           </Box>
           
           <Box sx={{ mt: 1, mb: 2 }}>
@@ -203,6 +220,7 @@ const LearningPathHeader = ({
                   <motion.div variants={buttonVariants} sx={{ flex: 1 }}>
                     <Tooltip title="Download as JSON">
                       <Button
+                        data-tut="download-json-button"
                         variant="outlined"
                         fullWidth
                         startIcon={<DownloadIcon />}
@@ -218,6 +236,7 @@ const LearningPathHeader = ({
                     <Tooltip title={!isPdfReady ? "PDF download available after generation completes" : "Download as PDF"}>
                       <span>
                         <Button
+                          data-tut="download-pdf-button"
                           variant="outlined"
                           fullWidth
                           startIcon={<PictureAsPdfIcon />}
@@ -235,6 +254,7 @@ const LearningPathHeader = ({
                 <motion.div variants={buttonVariants}>
                   <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
                     <Button
+                      data-tut="save-path-button"
                       variant="outlined"
                       fullWidth
                       color="secondary"
@@ -251,6 +271,7 @@ const LearningPathHeader = ({
                 
                 <motion.div variants={buttonVariants}>
                   <Button
+                    data-tut="create-new-button"
                     variant="contained"
                     fullWidth
                     color="primary"
@@ -267,6 +288,7 @@ const LearningPathHeader = ({
                 <motion.div variants={buttonVariants}>
                   <Tooltip title="Download as JSON">
                     <Button
+                      data-tut="download-json-button"
                       variant="outlined"
                       startIcon={<DownloadIcon />}
                       onClick={onDownload}
@@ -280,6 +302,7 @@ const LearningPathHeader = ({
                   <Tooltip title={!isPdfReady ? "PDF download available after generation completes" : "Download as PDF"}>
                     <span>
                       <Button
+                        data-tut="download-pdf-button"
                         variant="outlined"
                         startIcon={<PictureAsPdfIcon />}
                         onClick={onDownloadPDF}
@@ -295,6 +318,7 @@ const LearningPathHeader = ({
                   <Tooltip title={detailsHaveBeenSet ? "Details Saved" : "Save to History (Add Tags/Favorite)"}>
                     <span>
                       <Button
+                        data-tut="save-path-button"
                         variant="contained"
                         startIcon={detailsHaveBeenSet ? <BookmarkIcon /> : <SaveIcon />}
                         onClick={onSaveToHistory}
@@ -308,6 +332,7 @@ const LearningPathHeader = ({
                 <Box sx={{ flexGrow: { xs: 0, sm: 1 } }} />
                 <motion.div variants={buttonVariants}>
                   <Button
+                    data-tut="create-new-button"
                     variant="text"
                     color="secondary"
                     startIcon={<SchoolIcon />}
@@ -337,6 +362,7 @@ LearningPathHeader.propTypes = {
   showMobileNavButton: PropTypes.bool,
   progressMap: PropTypes.object,
   actualPathData: PropTypes.object,
+  onStartTutorial: PropTypes.func.isRequired,
 };
 
 export default LearningPathHeader; 

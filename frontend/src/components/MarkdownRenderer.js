@@ -32,7 +32,9 @@ const MarkdownRenderer = ({ children }) => {
   }, [children]);
 
   return (
-    <Box sx={{
+    <Box 
+      data-tut="markdown-content"
+      sx={{
       color: theme.palette.text.primary,
       fontSize: theme.typography.body1.fontSize,
       lineHeight: theme.typography.body1.lineHeight,
