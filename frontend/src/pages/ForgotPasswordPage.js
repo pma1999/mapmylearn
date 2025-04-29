@@ -44,8 +44,8 @@ const ForgotPasswordPage = () => {
   return (
     <Container maxWidth="sm">
       <Helmet>
-        <title>Forgot Password | Learnì</title>
-        <meta name="description" content="Reset your Learnì account password. Enter your email to receive a password reset link." />
+        <title>Forgot Password | MapMyLearn</title>
+        <meta name="description" content="Reset your MapMyLearn account password. Enter your email to receive a password reset link." />
       </Helmet>
       <Paper elevation={3} sx={{ p: 4, mt: 6 }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>

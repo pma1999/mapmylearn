@@ -112,8 +112,8 @@ const RegisterPage = () => {
   return (
     <Container maxWidth="sm">
       <Helmet>
-        <title>Create Account | Learnì</title>
-        <meta name="description" content="Sign up for Learnì to start generating personalized learning paths and save your progress." />
+        <title>Create Account | MapMyLearn</title>
+        <meta name="description" content="Sign up for MapMyLearn to start generating personalized learning paths and save your progress." />
       </Helmet>
       <Paper elevation={3} sx={{ p: 4, mt: 6 }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
