@@ -537,6 +537,24 @@ class DateTimeEncoder(json.JSONEncoder):
             return obj.isoformat()
         return super().default(obj)
 
+# --- Helper Function to Get Redis Client ---
+async def get_redis_client():
+    """Creates and returns an async Redis client instance."""
+    redis_url = os.getenv("REDIS_URL")
+    if not redis_url:
+        logger.warning("REDIS_URL not set. Progress snapshotting will be disabled.")
+        return None
+    try:
+        # Use decode_responses=True for easier handling of strings
+        client = redis.from_url(redis_url, decode_responses=True) 
+        await client.ping() # Verify connection
+        logger.debug("Redis client created successfully.")
+        return client
+    except Exception as e:
+        logger.error(f"Failed to create Redis client: {e}")
+        return None
+# --- End Helper Function ---
+
 @app.post("/api/auth/api-keys")
 async def authenticate_api_keys(request: ApiKeyAuthRequest, req: Request):
     """
@@ -743,10 +761,10 @@ async def generate_learning_path_task(
     """
     Execute the learning path generation task with comprehensive error handling.
     Ensures all exceptions are caught, logged, and reported through progress updates.
-    
-    Now using server-provided API keys by default, with backward compatibility
-    for user-provided keys.
+    Stores the latest progress update in Redis.
     """
+    redis_client = await get_redis_client() # Get Redis client for this task
+
     # Define a wrapper progress callback to ensure messages are logged and structured
     async def enhanced_progress_callback(message: str, 
                                          phase: Optional[str] = None, 
@@ -755,23 +773,21 @@ async def generate_learning_path_task(
                                          preview_data: Optional[Dict[str, Any]] = None,
                                          action: Optional[str] = None):
         """
-        Enhanced progress callback that supports structured progress updates.
-        
-        Args:
-            message: The progress message
-            phase: Current generation phase (search_queries, web_searches, modules, submodules, content)
-            phase_progress: Progress within the current phase (0.0 to 1.0)
-            overall_progress: Estimated overall progress (0.0 to 1.0)
-            preview_data: Preview data for modules and submodules
-            action: Action being performed (started, processing, completed, error)
+        Enhanced progress callback that supports structured progress updates and Redis storage.
         """
+        nonlocal redis_client # Allow modification of the outer scope variable
         timestamp = datetime.now().isoformat()
         
-        # Create the enhanced progress update
         preview_data_model = None
         if preview_data:
-            preview_data_model = PreviewData(**preview_data)
-            
+            try:
+                # Ensure preview_data is serializable before creating the model
+                serializable_preview = make_path_data_serializable(preview_data)
+                preview_data_model = PreviewData(**serializable_preview)
+            except Exception as preview_err:
+                 logger.error(f"Error creating PreviewData model for task {task_id}: {preview_err}")
+                 preview_data_model = None # Set to None if validation fails
+
         update = ProgressUpdate(
             message=message, 
             timestamp=timestamp,
@@ -782,8 +798,25 @@ async def generate_learning_path_task(
             action=action
         )
         
-        logging.info(f"Progress update for task {task_id}: {message} (Phase: {phase}, Progress: {phase_progress})")
+        logging.info(f"Progress update for task {task_id}: {message} (Phase: {phase}, Progress: {overall_progress})")
         
+        # Store latest update in Redis
+        if redis_client:
+            try:
+                # Convert model to dict, then to JSON string
+                update_dict = update.dict(exclude_none=True) # Exclude None values for cleaner JSON
+                update_json = json.dumps(update_dict, cls=DateTimeEncoder) 
+                await redis_client.set(f"progress:{task_id}", update_json, ex=86400) # 24-hour expiry
+                logger.debug(f"Stored progress snapshot for task {task_id} in Redis.")
+            except redis.RedisError as redis_err:
+                logger.error(f"Redis error storing progress snapshot for task {task_id}: {redis_err}. Disabling Redis for this task.")
+                await redis_client.aclose() # Close potentially broken connection
+                redis_client = None # Disable further Redis attempts for this task run
+            except Exception as e:
+                logger.error(f"Error serializing/storing progress snapshot for task {task_id}: {e}")
+                # Optionally disable Redis here too if serialization errors are frequent
+        
+        # Send update via asyncio queue
         if progressCallback:
             await progressCallback(update)
     
@@ -802,18 +835,14 @@ async def generate_learning_path_task(
                 logger.info(f"Updated GenerationTask {task_id} status to RUNNING")
             else:
                 logger.error(f"Could not find GenerationTask record for task_id: {task_id} to set status to RUNNING.")
-                # If we can't find the task, we probably shouldn't proceed
                 raise Exception(f"Task record {task_id} not found.") 
         except Exception as db_err:
             logger.exception(f"DB error updating GenerationTask {task_id} to RUNNING: {db_err}")
             db.rollback()
-            # Don't re-raise here, let the outer finally block handle status update to FAILED
-            # But log it and proceed to ensure the finally block runs
-        # --- End Update Status --- 
-        
+            # Let outer finally handle status update
+
         logging.info(f"Starting learning path generation for: {topic} in language: {language}")
         
-        # Send initial progress message
         await enhanced_progress_callback(
             f"Starting learning path generation for: {topic} in language: {language}",
             phase="initialization",
@@ -822,15 +851,11 @@ async def generate_learning_path_task(
             action="started"
         )
         
-        # Verify that we have valid key providers
-        if not googleKeyProvider:
-            googleKeyProvider = GoogleKeyProvider()
-            
-        if not braveKeyProvider:
-            braveKeyProvider = BraveKeyProvider()
+        if not googleKeyProvider: googleKeyProvider = GoogleKeyProvider()
+        if not braveKeyProvider: braveKeyProvider = BraveKeyProvider()
         
         await enhanced_progress_callback(
-            "API keys ready. Using server-provided API keys.",
+            "API keys ready.",
             phase="initialization",
             phase_progress=0.6,
             overall_progress=0.1,
@@ -838,15 +863,13 @@ async def generate_learning_path_task(
         )
         
         await enhanced_progress_callback(
-            f"Preparing to generate learning path for '{topic}' with {parallelCount} modules in parallel",
+            f"Preparing to generate learning path for '{topic}'",
             phase="search_queries",
             phase_progress=0.0,
             overall_progress=0.15,
             action="started"
         )
         
-        # Pass callback to update front-end with progress
-        # Nested try/except specifically for the core generation logic
         try:
             result = await generate_learning_path(
                 topic,
@@ -872,7 +895,7 @@ async def generate_learning_path_task(
             # Send error message to frontend
             await enhanced_progress_callback(
                 f"Error: {user_error_msg}",
-                phase="unknown",
+                phase="error",
                 action="error"
             )
             
@@ -938,9 +961,8 @@ async def generate_learning_path_task(
                         "message": user_error_msg,
                         "type": "unexpected_error"
                     }
-            return # Stop further execution in this outer try block on inner failure
-        
-        # If generate_learning_path completed without raising an exception
+            return 
+
         await enhanced_progress_callback(
             "Learning path generation completed successfully!",
             phase="completion",
@@ -1063,7 +1085,7 @@ async def generate_learning_path_task(
         user_error_msg = "An unexpected error occurred before generation could complete."
         await enhanced_progress_callback(
             f"Error: {user_error_msg}",
-            phase="unknown",
+            phase="error",
             action="error"
         )
         async with active_generations_lock:
@@ -1169,6 +1191,14 @@ async def generate_learning_path_task(
             else:
                 logging.warning(f"Progress queue for task {task_id} not found in finally block.")
 
+        # --- Close Redis client ---
+        if redis_client:
+            try:
+                await redis_client.aclose()
+                logger.debug(f"Redis client closed for task {task_id}.")
+            except Exception as redis_close_err:
+                logger.error(f"Error closing Redis client for task {task_id}: {redis_close_err}")
+
 @app.post("/api/validate-api-keys")
 async def validate_api_keys(request: ApiKeyValidationRequest):
     """
@@ -1235,74 +1265,153 @@ async def get_learning_path(task_id: str):
 async def get_progress(task_id: str):
     """
     Get progress updates for a learning path generation task using Server-Sent Events.
-    Returns structured progress data including phase information, completion percentages,
-    and early preview data.
+    Sends the latest snapshot from Redis on connection, then streams live updates.
     """
+    redis_client = await get_redis_client() # Get Redis client for this request
+
     try:
-        # Safely check if task exists
         async with progress_queues_lock:
             if task_id not in progress_queues:
-                raise HTTPException(
-                    status_code=404, 
-                    detail="Progress updates not available. The task ID may be invalid or the task has been completed."
-                )
+                # If queue doesn't exist, maybe task is done? Check active_generations? Or just 404?
+                # Let's check active_generations briefly before 404ing
+                async with active_generations_lock:
+                    if task_id not in active_generations:
+                         raise HTTPException(
+                             status_code=404, 
+                             detail="Progress updates not available. Task not found or already cleaned up."
+                         )
+                    # If task exists in active_generations but not progress_queues, it might be finished
+                    # or had an error during setup. We can still try sending snapshot.
+                    pass # Proceed to try sending snapshot even if queue is missing initially
             
-            queue = progress_queues[task_id]
+            # Get the queue reference IF it exists, otherwise it's None
+            queue = progress_queues.get(task_id) 
         
         async def event_generator():
+            nonlocal redis_client # Allow modification if needed
+            connected = True
             try:
-                # Send initial message to establish connection
-                initial_update = ProgressUpdate(
-                    message="Connection established", 
-                    timestamp=datetime.now().isoformat(),
-                    phase="connection",
-                    phase_progress=0.0,
-                    overall_progress=0.0,
-                    action="connected"
-                )
-                yield f"data: {json.dumps(initial_update.dict())}\n\n"
-                
-                while True:
-                    update = await queue.get()
-                    if update is None:  # Sentinel to indicate completion
-                        yield "data: {\"complete\": true}\n\n"
-                        break
-                    
-                    # Convert ProgressUpdate model to dict before sending
-                    if hasattr(update, 'dict'):
-                        update_dict = update.dict()
-                    else:
-                        # For backward compatibility with simple string messages
-                        if isinstance(update, str):
-                            update_dict = {
-                                "message": update,
-                                "timestamp": datetime.now().isoformat()
-                            }
+                # 1. Send latest snapshot from Redis first (if available)
+                if redis_client:
+                    try:
+                        snapshot_json = await redis_client.get(f"progress:{task_id}")
+                        if snapshot_json:
+                            try:
+                                snapshot_data = json.loads(snapshot_json)
+                                # Validate if it looks like a ProgressUpdate (optional)
+                                if isinstance(snapshot_data, dict) and 'message' in snapshot_data and 'timestamp' in snapshot_data:
+                                     yield f"data: {json.dumps(snapshot_data)}\n\n"
+                                     logger.info(f"Sent progress snapshot from Redis for task {task_id}")
+                                else:
+                                     logger.warning(f"Invalid snapshot data structure in Redis for task {task_id}")
+                            except json.JSONDecodeError:
+                                logger.error(f"Failed to parse progress snapshot JSON from Redis for task {task_id}")
+                            except Exception as parse_err:
+                                logger.error(f"Error processing snapshot data for task {task_id}: {parse_err}")
                         else:
-                            update_dict = update
-                    
-                    # Format as SSE data line with proper line endings
-                    yield f"data: {json.dumps(update_dict)}\n\n"
+                            logger.info(f"No progress snapshot found in Redis for task {task_id}. Sending initial message.")
+                            # Send initial message only if no snapshot exists
+                            initial_update = ProgressUpdate(
+                                message="Connection established. Waiting for progress...", 
+                                timestamp=datetime.now().isoformat(),
+                                phase="connection", action="connected"
+                            )
+                            yield f"data: {json.dumps(initial_update.dict())}\n\n"
+                    except redis.RedisError as redis_err:
+                        logger.error(f"Redis error fetching snapshot for task {task_id}: {redis_err}. Will rely on queue.")
+                        # Send initial message if Redis fails
+                        initial_update = ProgressUpdate(
+                            message="Connection established (Redis snapshot unavailable). Waiting for progress...", 
+                            timestamp=datetime.now().isoformat(),
+                            phase="connection", action="connected"
+                        )
+                        yield f"data: {json.dumps(initial_update.dict())}\n\n"
+                else:
+                     # Send initial message if Redis is disabled
+                    initial_update = ProgressUpdate(
+                        message="Connection established (Redis disabled). Waiting for progress...", 
+                        timestamp=datetime.now().isoformat(),
+                        phase="connection", action="connected"
+                    )
+                    yield f"data: {json.dumps(initial_update.dict())}\n\n"
+
+                # 2. Listen for live updates from the queue (if queue exists)
+                if queue:
+                    while connected: # Check connection status
+                        try:
+                            # Use asyncio.wait_for to handle client disconnects potentially faster
+                            update = await asyncio.wait_for(queue.get(), timeout=60.0) # Example timeout
+                        except asyncio.TimeoutError:
+                            # No message received in timeout period, send a keep-alive comment or check connection?
+                            # yield ": keep-alive\n\n" # Standard SSE keep-alive comment
+                            # Or just continue waiting? For now, let's just continue.
+                            continue 
+                        except Exception as q_get_err:
+                             logger.error(f"Error getting from queue for task {task_id}: {q_get_err}")
+                             break # Exit loop on queue error
+
+                        if update is None:
+                            yield "data: {\"complete\": true}\n\n"
+                            break # Exit loop on completion signal
+
+                        if hasattr(update, 'dict'):
+                            update_dict = update.dict(exclude_none=True)
+                        else:
+                            update_dict = update # Assume it's already a dict or basic type
+
+                        yield f"data: {json.dumps(update_dict, cls=DateTimeEncoder)}\n\n"
+                else:
+                    # If queue was missing initially, check active_generations status.
+                    # If task is completed/failed, send the final signal now.
+                    async with active_generations_lock:
+                        task_info = active_generations.get(task_id)
+                        if task_info and task_info["status"] in ["completed", "failed"]:
+                            logger.info(f"Task {task_id} finished, sending complete signal as queue was missing.")
+                            yield "data: {\"complete\": true}\n\n"
+                        else:
+                            logger.warning(f"Progress queue for task {task_id} not found, and task not marked as finished. Stream ending.")
+                            # Optionally send an error message here?
+                    # End the stream if no queue exists and task isn't finished
+                    pass 
+
             except asyncio.CancelledError:
-                logger.info(f"SSE connection for task {task_id} was cancelled")
-                raise
+                logger.info(f"SSE connection for task {task_id} cancelled by client.")
+                connected = False # Mark as disconnected
             except Exception as e:
-                logger.error(f"Error in SSE stream for task {task_id}: {str(e)}")
-                yield f"data: {{\"error\": \"{str(e)}\"}}\n\n"
+                logger.error(f"Error in SSE stream for task {task_id}: {str(e)}\n{traceback.format_exc()}")
+                try:
+                    # Attempt to send an error message to the client
+                    error_data = {"error": "An internal error occurred in the progress stream.", "type": "stream_error"}
+                    yield f"data: {json.dumps(error_data)}\n\n"
+                except Exception:
+                    logger.error(f"Failed to send error message to SSE client for task {task_id}")
+            finally:
+                logger.info(f"SSE event_generator loop finished for task {task_id}. Connected: {connected}")
+                # Close Redis client used by this generator
+                if redis_client:
+                    try:
+                        await redis_client.aclose()
+                        logger.debug(f"Redis client closed for SSE stream {task_id}.")
+                    except Exception as redis_close_err:
+                        logger.error(f"Error closing Redis client for SSE stream {task_id}: {redis_close_err}")
         
         return StreamingResponse(
             event_generator(),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
-                "Connection": "keep-alive"
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no" # Useful for Nginx buffering issues
             }
         )
     except HTTPException:
-        # Re-raise HTTP exceptions to be handled by our custom handler
+        # Close Redis client if HTTP exception occurs *before* generator starts
+        if redis_client: await redis_client.aclose()
         raise
     except Exception as e:
         logger.exception(f"Error setting up progress stream for task {task_id}: {str(e)}")
+        # Close Redis client on setup error
+        if redis_client: await redis_client.aclose()
         raise HTTPException(
             status_code=500,
             detail="Failed to set up progress updates stream. Please try again later."
