@@ -84,3 +84,5 @@ stripe
 # For Audio Concatenation
 pydub>=0.25.1
 audioop-lts>=0.1.0; python_version >= "3.13" 
+
+nanoid>=2.0.0
