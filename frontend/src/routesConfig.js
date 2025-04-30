@@ -41,6 +41,7 @@ const componentMap = {
   '/purchase/cancel': PurchaseCancelPage,
   '/terms': TermsPage,
   '/privacy': PrivacyPolicyPage,
+  '/public/:shareId': LearningPathView,
 };
 
 const routesConfig = routesData.map(routeData => ({

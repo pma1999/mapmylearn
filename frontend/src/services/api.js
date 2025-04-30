@@ -1289,6 +1289,38 @@ export const getActiveGenerations = async () => {
   }
 };
 
+// --- NEW: Update learning path publicity ---
+export const updateLearningPathPublicity = async (pathId, isPublic) => {
+  try {
+    const response = await api.patch(`/v1/learning-paths/${pathId}/publicity`, {
+      is_public: isPublic,
+    });
+    // Return the updated learning path data (including share_id if generated)
+    return response.data; 
+  } catch (error) {
+    console.error('API Error updating learning path publicity:', error);
+    throw error; // Re-throw the formatted error
+  }
+};
+
+// --- NEW: Get public learning path ---
+export const getPublicLearningPath = async (shareId) => {
+  try {
+    // Note: This uses the base API URL, not the prefixed one, assuming /public is at the root
+    // Adjust if /public is under /api
+    // const publicApi = axios.create({ baseURL: API_URL }); // Use root URL
+    // const response = await publicApi.get(`/public/${shareId}`);
+    
+    // Assuming /public is under /api for consistency with other routes
+    const response = await api.get(`/public/${shareId}`);
+    
+    return response.data; // Returns the LearningPathResponse
+  } catch (error) {
+    console.error('API Error fetching public learning path:', error);
+    throw error; // Re-throw the formatted error
+  }
+};
+
 export default {
   generateLearningPath,
   getLearningPath,
@@ -1335,5 +1367,7 @@ export default {
   updateSubmoduleProgress,
   updateLastVisited,
   purchaseChatAllowance,
+  updateLearningPathPublicity,
+  getPublicLearningPath,
 };
 

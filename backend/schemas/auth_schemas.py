@@ -86,6 +86,11 @@ class LearningPathUpdate(BaseModel):
     tags: Optional[List[str]] = None
 
 
+class LearningPathPublicityUpdate(BaseModel):
+    """Schema for updating the public status of a learning path."""
+    is_public: bool
+
+
 class LearningPathResponse(LearningPathBase):
     """Schema for learning path in responses."""
     id: int
@@ -96,6 +101,8 @@ class LearningPathResponse(LearningPathBase):
     progress_map: Optional[Dict[str, bool]] = Field(None, description="Map of submodule keys to completion status (e.g., {'0_0': true, '0_1': false})")
     last_visited_module_idx: Optional[int] = Field(None, description="Index of the last module visited by the user for this path")
     last_visited_submodule_idx: Optional[int] = Field(None, description="Index of the last submodule visited by the user for this path")
+    is_public: bool = False
+    share_id: Optional[str] = None
 
     @field_serializer('creation_date', 'last_modified_date')
     def serialize_dates(self, dt: Optional[datetime]) -> Optional[str]:

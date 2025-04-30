@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import * as api from '../../../services/api';
+import usePathSharingActions from '../../../hooks/usePathSharingActions';
 
 /**
  * Custom hook for managing history entry actions
@@ -104,13 +105,20 @@ const useHistoryActions = (showNotification, refreshEntries) => {
     }
   };
 
+  // --- Use the shared hook for sharing actions ---
+  // Pass refreshEntries as the onComplete callback
+  const { handleTogglePublic, handleCopyShareLink } = usePathSharingActions(showNotification, refreshEntries);
+
   return {
     // Actions
     handleViewLearningPath,
     handleDeleteLearningPath,
     handleToggleFavorite,
     handleUpdateTags,
-    handleDownloadPDF
+    handleDownloadPDF,
+    // Add new actions from the shared hook
+    handleTogglePublic,
+    handleCopyShareLink
   };
 };
 

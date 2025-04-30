@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import PropTypes from 'prop-types';
-import { useParams } from 'react-router';
-import { Container, Snackbar, Alert, AlertTitle, useMediaQuery, useTheme, Box, Typography, Grid, Drawer } from '@mui/material';
+import { useParams, useNavigate } from 'react-router';
+import { Container, Snackbar, Alert, AlertTitle, useMediaQuery, useTheme, Box, Typography, Grid, Drawer, Button } from '@mui/material';
 import { helpTexts } from '../../../constants/helpTexts'; // Corrected path
 import Joyride, { ACTIONS, EVENTS, STATUS } from 'react-joyride'; // Import Joyride
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import { motion } from 'framer-motion';
 
 // Import API service
 import * as apiService from '../../../services/api'; 
@@ -14,10 +16,13 @@ import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
 import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
 import QuestionAnswerIcon from '@mui/icons-material/QuestionAnswer';
 import GraphicEqIcon from '@mui/icons-material/GraphicEq';
+import LoginIcon from '@mui/icons-material/Login';
 
 // Custom hooks
 import useLearningPathData from '../hooks/useLearningPathData';
 import useLearningPathActions from '../hooks/useLearningPathActions';
+import usePathSharingActions from '../../../hooks/usePathSharingActions';
+import { useAuth } from '../../../services/authContext';
 
 // View components
 import LearningPathHeader from './LearningPathHeader';
@@ -41,7 +46,7 @@ const TUTORIAL_STORAGE_KEY = 'learniTutorialCompleted'; // Key for localStorage
  * Main component for viewing a learning path using the Focus Flow layout.
  * 
  * @param {Object} props Component props
- * @param {string} props.source Source of the learning path ('history' or null/undefined for generation)
+ * @param {string} props.source Source of the learning path ('history', 'public' or null/undefined for generation)
  * @returns {JSX.Element} Learning path view component
  */
 const LearningPathView = ({ source }) => {
@@ -57,6 +62,10 @@ const LearningPathView = ({ source }) => {
   // Tutorial State
   const [runTutorial, setRunTutorial] = useState(false);
   const [tutorialStepIndex, setTutorialStepIndex] = useState(0);
+
+  // --- NEW: Get auth state --- 
+  const { user, isAuthenticated } = useAuth();
+  const navigate = useNavigate(); // For login/register buttons
 
   // Load learning path data using the hook
   const {
@@ -74,7 +83,8 @@ const LearningPathView = ({ source }) => {
     progressMap,
     setProgressMap,
     lastVisitedModuleIdx,
-    lastVisitedSubmoduleIdx
+    lastVisitedSubmoduleIdx,
+    isPublicView // Get public view status from hook
   } = useLearningPathData(source); 
   
   // State for Focus Flow navigation
@@ -104,9 +114,9 @@ const LearningPathView = ({ source }) => {
   }, [loading, initialDetailsWereSet, isFromHistory, persistentPathId]);
   
   // Derived states based on hook values and local actions
-  const isPdfReady = !loading && !!persistentPathId;
-  const isPersisted = isFromHistory || localDetailsHaveBeenSet || isPdfReady;
-  const isTemporaryPath = !loading && !!temporaryPathId && !persistentPathId;
+  const isPdfReady = !loading && !!persistentPathId && !isPublicView; // PDF might not be ready/allowed in public view initially
+  const isPersisted = (isFromHistory || localDetailsHaveBeenSet || isPdfReady) && !isPublicView; // Public views are not persisted *for the viewer*
+  const isTemporaryPath = !loading && !!temporaryPathId && !persistentPathId && !isPublicView; // Public views aren't temporary generation results
   
   // Determine the correct pathId to use for component interactions
   let derivedPathId = null;
@@ -118,15 +128,24 @@ const LearningPathView = ({ source }) => {
     } else {
       derivedPathId = currentEntryId; 
     }
+    // For public view, derivedPathId will be the persistentPathId from the loaded data
+    if (isPublicView && learningPath?.path_id) {
+      derivedPathId = learningPath.path_id;
+    }
     if (!derivedPathId) {
       console.warn('Could not reliably determine pathId for LearningPathView interactions.');
     }
   }
   
-  // Extract the actual path data object
-  const actualPathData = isFromHistory
-    ? (learningPath?.path_data ? learningPath.path_data : learningPath)
-    : learningPath;
+  // Extract the actual path data object (core content: modules, submodules, etc.)
+  // The top-level learningPath state holds the full response (topic, is_public, share_id, path_data, etc.)
+  const actualPathData = learningPath?.path_data || learningPath || {}; 
+
+  // Extract top-level info directly from learningPath state
+  const topic = learningPath?.topic || 'Loading Topic...'; // Use directly from learningPath
+  const topicResources = learningPath?.topic_resources || []; // Use directly from learningPath
+  const isPublic = learningPath?.is_public || false;
+  const shareId = learningPath?.share_id || null;
 
   // Effect to set initial active module/submodule from last visited or default
   useEffect(() => {
@@ -160,14 +179,15 @@ const LearningPathView = ({ source }) => {
   // Effect to update the last visited position on the backend when navigation changes
   useEffect(() => {
     // Only run if the path is persisted and navigation indices are valid
-    if (currentEntryId && activeModuleIndex !== null && activeSubmoduleIndex !== null) {
+    // --- Disable for public view --- 
+    if (!isPublicView && currentEntryId && activeModuleIndex !== null && activeSubmoduleIndex !== null) {
       // Debounce or throttle this call if needed, but for now, call directly
       console.log(`Updating last visited API: M ${activeModuleIndex}, S ${activeSubmoduleIndex}`);
       apiService.updateLastVisited(currentEntryId, activeModuleIndex, activeSubmoduleIndex)
         .catch(warn => console.warn("Failed to update last visited position:", warn)); // Log warning on failure
     }
   // Depend on the navigation indices and the persisted ID
-  }, [currentEntryId, activeModuleIndex, activeSubmoduleIndex]);
+  }, [currentEntryId, activeModuleIndex, activeSubmoduleIndex, isPublicView]);
 
   // Callback for when save is confirmed in the action hook
   const handleSaveSuccess = useCallback((result) => {
@@ -210,8 +230,20 @@ const LearningPathView = ({ source }) => {
     handleSaveSuccess
   );
   
+  // --- NEW: Setup sharing actions --- 
+  const { 
+    handleTogglePublic, 
+    handleCopyShareLink 
+  } = usePathSharingActions(showNotification, refreshData);
+
   // Handler to toggle progress state
   const handleToggleProgress = useCallback(async (modIndex, subIndex) => {
+    // --- Disable for public view --- 
+    if (isPublicView) {
+      console.warn('Cannot toggle progress in public view.');
+      return;
+    }
+
     if (!currentEntryId) {
       console.warn('Cannot toggle progress: Path is not persisted yet.');
       // Optionally show a notification to save the path first
@@ -245,19 +277,21 @@ const LearningPathView = ({ source }) => {
       // Show error notification
       showNotification(`Failed to update progress for submodule ${modIndex + 1}.${subIndex + 1}.`, 'error');
     }
-  }, [currentEntryId, progressMap, setProgressMap, showNotification]);
+  }, [currentEntryId, progressMap, setProgressMap, showNotification, isPublicView]);
 
   // Adjust action handlers
   const handleDownloadJSONAdjusted = () => {
-      if (!actualPathData) return;
+      // Use the *actualPathData* for JSON download content
+      if (!actualPathData) return; 
       try {
           const json = JSON.stringify(actualPathData, null, 2);
           const blob = new Blob([json], { type: 'application/json' });
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          const fileName = actualPathData.topic
-              ? `learning_path_${actualPathData.topic.replace(/\s+/g, '_').substring(0, 30)}.json`
+          // Use the *topic* from the top-level learningPath state for the filename
+          const fileName = topic 
+              ? `learning_path_${topic.replace(/\s+/g, '_').substring(0, 30)}.json`
               : 'learning_path.json';
           a.download = fileName;
           document.body.appendChild(a);
@@ -290,10 +324,11 @@ const LearningPathView = ({ source }) => {
   // Show dismissible alert on first view of a newly generated path
   useEffect(() => {
     const alertDismissedKey = `mapmylearn_alert_dismissed_${taskId}`;
-    if (!loading && !error && taskId && !isFromHistory && !sessionStorage.getItem(alertDismissedKey)) {
+    // --- Disable for public view --- 
+    if (!isPublicView && !loading && !error && taskId && !isFromHistory && !sessionStorage.getItem(alertDismissedKey)) {
       setShowFirstViewAlert(true);
     }
-  }, [loading, error, taskId, isFromHistory]);
+  }, [loading, error, taskId, isFromHistory, isPublicView]);
 
   const handleDismissFirstViewAlert = () => {
     const alertDismissedKey = `mapmylearn_alert_dismissed_${taskId}`;
@@ -675,14 +710,36 @@ const LearningPathView = ({ source }) => {
         </Alert>
       )}
 
-      {/* Use actualPathData for rendering */} 
-      {actualPathData && (
+      {/* --- NEW: Login/Signup Prompt for Public View --- */}
+      {isPublicView && !isAuthenticated && (
+        <Alert 
+          severity="info" 
+          sx={{ mb: 2, flexShrink: 0 }} 
+          action={
+            <Box>
+              <Button color="inherit" size="small" onClick={() => navigate('/login')} startIcon={<LoginIcon/>}>
+                Log In
+              </Button>
+              <Button color="inherit" size="small" onClick={() => navigate('/register')}>
+                Sign Up
+              </Button>
+            </Box>
+          }
+        >
+          <AlertTitle>Explore More!</AlertTitle>
+          Log in or sign up to save this path, track your progress, and create your own learning journeys.
+        </Alert>
+      )}
+
+      {/* Use actualPathData for rendering */}
+      {/* Check if learningPath (full object) exists before rendering */} 
+      {learningPath && (
         <>
           {/* Header: Pass mobile nav props */}
           {/* Use theme spacing */} 
           <Box sx={{ flexShrink: 0, mb: { xs: 2, md: 3 } }}> 
              <LearningPathHeader 
-               topic={actualPathData.topic} 
+               topic={topic} // Pass extracted topic
                detailsHaveBeenSet={localDetailsHaveBeenSet} 
                isPdfReady={isPdfReady} 
                onDownload={handleDownloadJSONAdjusted} 
@@ -692,23 +749,33 @@ const LearningPathView = ({ source }) => {
                onOpenMobileNav={handleMobileNavToggle} // Pass handler
                showMobileNavButton={isMobileLayout} // Show button only on mobile layout
                progressMap={progressMap}
-               actualPathData={actualPathData}
+               actualPathData={actualPathData} // Pass the core path data for progress calculation
                onStartTutorial={startTutorial} // Pass tutorial trigger
+               isPublicView={isPublicView} // Pass public view status
+               // --- NEW PROPS for Sharing ---
+               isPublic={isPublic} // Pass extracted isPublic
+               shareId={shareId} // Pass extracted shareId
+               entryId={currentEntryId} // Pass the determined entry ID
+               isLoggedIn={isAuthenticated} // Pass login status
+               onTogglePublic={() => handleTogglePublic(currentEntryId, !isPublic)} // Pass bound toggle handler
+               onCopyShareLink={() => handleCopyShareLink(shareId)} // Pass bound copy handler
              />
              {/* Optional: Add overall progress bar here */}
              {/* Optional: Add Topic Resources link/button here */}
-              {actualPathData.topic_resources && actualPathData.topic_resources.length > 0 && (
+              {/* Use extracted topicResources */}
+              {topicResources && topicResources.length > 0 && (
                 <Box sx={{ mt: 2 }}>
                    {/* Simple link for now, could be a button opening a modal/drawer */}
                    <Typography variant="caption">
                       {/* Maybe link to a dedicated section/modal */}
-                      {actualPathData.topic_resources.length} topic resource(s) available. 
+                      {topicResources.length} topic resource(s) available. 
                    </Typography>
                 </Box>
               )}
           </Box>
 
-          {/* Main Content Area: Conditional Layout */} 
+          {/* Main Content Area: Conditional Layout */}
+          {/* Pass actualPathData (core content) to children like ContentPanel, ModuleNavigationColumn */} 
           <Box sx={{ flexGrow: 1, overflow: 'hidden', position: 'relative' }}> 
             {isMobileLayout ? (
                // --- Mobile Layout (Content Panel + Drawer for Nav + Bottom Nav) --- 
@@ -724,7 +791,7 @@ const LearningPathView = ({ source }) => {
                          submoduleIndex={activeSubmoduleIndex}
                          pathId={derivedPathId}
                          isTemporaryPath={isTemporaryPath}
-                         actualPathData={actualPathData}
+                         actualPathData={actualPathData} // Pass core path data
                          onNavigate={handleNavigation}
                          totalModules={totalModules}
                          totalSubmodulesInModule={totalSubmodulesInModule}
@@ -733,6 +800,7 @@ const LearningPathView = ({ source }) => {
                          setActiveTab={setActiveTab}
                          progressMap={progressMap}
                          onToggleProgress={handleToggleProgress}
+                         isPublicView={isPublicView} // Pass public view status
                       />
                   </Box>
 
@@ -752,17 +820,18 @@ const LearningPathView = ({ source }) => {
                          <Typography variant="h6">Modules</Typography>
                      </Box>
                      <ModuleNavigationColumn
-                         modules={modules}
+                         modules={actualPathData?.modules || []} // Get modules from core path data
                          activeModuleIndex={activeModuleIndex}
                          setActiveModuleIndex={setActiveModuleIndex}
                          activeSubmoduleIndex={activeSubmoduleIndex}
                          setActiveSubmoduleIndex={setActiveSubmoduleIndex}
                          progressMap={progressMap}
                          onToggleProgress={handleToggleProgress}
+                         isPublicView={isPublicView} // Pass public view status
                       />
                   </Drawer>
                   
-                  {/* Render Mobile Bottom Navigation */} 
+                  {/* Render Mobile Bottom Navigation */}
                   <MobileBottomNavigation 
                      onNavigate={handleNavigation}
                      activeModuleIndex={activeModuleIndex}
@@ -771,7 +840,7 @@ const LearningPathView = ({ source }) => {
                      totalSubmodulesInModule={totalSubmodulesInModule}
                      activeTab={activeTab}
                      setActiveTab={setActiveTab}
-                     availableTabs={availableTabs}
+                     availableTabs={availableTabs} // Use calculated tabs
                      onOpenMobileNav={handleMobileNavToggle}
                   />
                </>
@@ -784,13 +853,14 @@ const LearningPathView = ({ source }) => {
                      pb: { xs: 2, md: 0 } // Add bottom padding on mobile
                   }}> 
                      <ModuleNavigationColumn
-                        modules={modules}
+                        modules={actualPathData?.modules || []} // Get modules from core path data
                         activeModuleIndex={activeModuleIndex}
                         setActiveModuleIndex={setActiveModuleIndex}
                         activeSubmoduleIndex={activeSubmoduleIndex}
                         setActiveSubmoduleIndex={setActiveSubmoduleIndex}
                         progressMap={progressMap}
                         onToggleProgress={handleToggleProgress}
+                        isPublicView={isPublicView} // Pass public view status
                      />
                   </Grid>
                   <Grid item xs={12} md={8} sx={{ 
@@ -805,7 +875,7 @@ const LearningPathView = ({ source }) => {
                         submoduleIndex={activeSubmoduleIndex}
                         pathId={derivedPathId}
                         isTemporaryPath={isTemporaryPath}
-                        actualPathData={actualPathData}
+                        actualPathData={actualPathData} // Pass core path data
                         onNavigate={handleNavigation}
                         totalModules={totalModules}
                         totalSubmodulesInModule={totalSubmodulesInModule}
@@ -814,6 +884,7 @@ const LearningPathView = ({ source }) => {
                         setActiveTab={setActiveTab}
                         progressMap={progressMap}
                         onToggleProgress={handleToggleProgress}
+                        isPublicView={isPublicView} // Pass public view status
                      />
                   </Grid>
                </Grid>
@@ -875,20 +946,22 @@ const LearningPathView = ({ source }) => {
       />
 
       {/* Save Dialog and Snackbar remain outside the main layout */} 
-      <SaveDialog
-        open={saveDialogOpen}
-        onClose={handleSaveDialogClose}
-        onConfirm={handleSaveConfirm} 
-        tags={tags} 
-        newTag={newTag} 
-        favorite={favorite} 
-        onAddTag={handleAddTag} 
-        onDeleteTag={handleDeleteTag} 
-        onTagChange={setNewTag} 
-        onTagKeyDown={handleTagKeyDown} 
-        onFavoriteChange={setFavorite} 
-        isMobile={isMobile} // Keep for dialog responsiveness
-      />
+      {!isPublicView && (
+        <SaveDialog
+          open={saveDialogOpen}
+          onClose={handleSaveDialogClose}
+          onConfirm={handleSaveConfirm} 
+          tags={tags} 
+          newTag={newTag} 
+          favorite={favorite} 
+          onAddTag={handleAddTag} 
+          onDeleteTag={handleDeleteTag} 
+          onTagChange={setNewTag} 
+          onTagKeyDown={handleTagKeyDown} 
+          onFavoriteChange={setFavorite} 
+          isMobile={isMobile} // Keep for dialog responsiveness
+        />
+      )}
       {notification && notification.open && (
           <Snackbar
             open={notification.open}
@@ -924,7 +997,7 @@ const LearningPathView = ({ source }) => {
 }
 
 LearningPathView.propTypes = {
-  source: PropTypes.string, // 'history' or null/undefined
+  source: PropTypes.oneOf(['history', 'public', null, undefined]),
 };
 
 export default LearningPathView;

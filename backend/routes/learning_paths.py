@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Response, Path
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Response, Path, Body
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional, Dict, Any
@@ -16,7 +16,7 @@ from backend.models.auth_models import User, LearningPath, LearningPathProgress,
 from backend.schemas.auth_schemas import (
     LearningPathCreate, LearningPathUpdate, LearningPathResponse, 
     LearningPathList, MigrationRequest, MigrationResponse,
-    GenerateAudioRequest, GenerateAudioResponse # Import new schemas
+    GenerateAudioRequest, GenerateAudioResponse, LearningPathPublicityUpdate # Import new schema
 )
 from backend.utils.auth_middleware import get_current_user
 from backend.utils.pdf_generator import generate_pdf, create_filename
@@ -24,6 +24,9 @@ from backend.utils.pdf_generator import generate_pdf, create_filename
 from backend.services.audio_service import generate_submodule_audio 
 from backend.services.credit_service import CreditService # Import CreditService
 from pydantic import BaseModel
+
+# Import sharing utility
+from backend.utils.sharing import generate_unique_share_id
 
 # Define a response model for active generations
 class ActiveGenerationResponse(BaseModel):
@@ -74,7 +77,9 @@ async def get_learning_paths(
             LearningPath.last_modified_date,
             LearningPath.favorite,
             LearningPath.tags,
-            LearningPath.source
+            LearningPath.source,
+            LearningPath.is_public,
+            LearningPath.share_id
         )
     
     # Apply user filter - this should be the first filter for index usage
@@ -152,7 +157,9 @@ async def get_learning_paths(
                     favorite=row.favorite,
                     tags=row.tags,
                     source=row.source,
-                    path_data={} if not include_full_data else row.path_data
+                    path_data={} if not include_full_data else row.path_data,
+                    is_public=row.is_public,
+                    share_id=row.share_id
                 )
                 for row in results
             ]
@@ -182,7 +189,9 @@ async def get_learning_paths(
                         favorite=row.favorite,
                         tags=row.tags,
                         source=row.source,
-                        path_data={}
+                        path_data={},
+                        is_public=row.is_public,
+                        share_id=row.share_id
                     )
                     for row in results
                 ]
@@ -920,3 +929,95 @@ async def update_last_visited(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update last visited position due to a server error"
         ) 
+
+# --- NEW: Endpoint to update public sharing status ---
+@router.patch("/{path_id}/publicity", response_model=LearningPathResponse)
+async def update_learning_path_publicity(
+    path_id: str,
+    update_data: LearningPathPublicityUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update the public sharing status of a learning path.
+    Only the owner can perform this action.
+    Generates a share_id when made public for the first time.
+    """
+    learning_path = db.query(LearningPath).filter(
+        LearningPath.path_id == path_id,
+        LearningPath.user_id == user.id
+    ).first()
+    
+    if not learning_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Learning path not found or you do not have permission to modify it."
+        )
+    
+    try:
+        if update_data.is_public and not learning_path.is_public:
+            # Making public
+            if not learning_path.share_id:
+                learning_path.share_id = generate_unique_share_id(db)
+            learning_path.is_public = True
+            learning_path.last_modified_date = datetime.utcnow()
+            logger.info(f"User {user.id} made learning path {path_id} public (share_id: {learning_path.share_id})")
+        elif not update_data.is_public and learning_path.is_public:
+            # Making private
+            learning_path.is_public = False
+            # Optional: Clear share_id when making private? Let's keep it for potential re-sharing.
+            # learning_path.share_id = None 
+            learning_path.last_modified_date = datetime.utcnow()
+            logger.info(f"User {user.id} made learning path {path_id} private.")
+        # No change if requested state is the same as current state
+        
+        db.commit()
+        db.refresh(learning_path)
+        return learning_path
+    except IntegrityError as e:
+        # This could potentially happen if share_id generation collides (extremely rare)
+        db.rollback()
+        logger.error(f"IntegrityError updating publicity for path {path_id}, user {user.id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not update sharing status due to a database conflict.")
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Error updating publicity for path {path_id}, user {user.id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update sharing status.")
+
+# --- NEW: Public endpoint to get a shared learning path ---
+# Note: This uses a separate router or prefix if needed, but adding here for simplicity
+# It should NOT have the /v1 prefix if intended to be truly public without API key assumptions
+# For now, adding under the same router but with a distinct path.
+public_router = APIRouter(prefix="/public", tags=["public"])
+
+@public_router.get("/{share_id}", response_model=LearningPathResponse)
+async def get_public_learning_path(
+    share_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get a publicly shared learning path by its share_id.
+    Does not require authentication.
+    """
+    learning_path = db.query(LearningPath).filter(
+        LearningPath.share_id == share_id,
+        LearningPath.is_public == True
+    ).first()
+    
+    if not learning_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Public learning path not found or is not shared."
+        )
+
+    # TODO: Decide if progress_map and last_visited should be included for public view?
+    # For now, the LearningPathResponse includes them, but they won't be user-specific.
+    # We might need a different response model or logic to exclude them for public views.
+    
+    # For simplicity, return the standard response. Frontend will handle UI differences.
+    return learning_path
+
+# Need to include the public_router in the main FastAPI app in main.py or api.py
+# Example (in main.py or wherever app = FastAPI() is):
+# from backend.routes.learning_paths import public_router as public_learning_paths_router
+# app.include_router(public_learning_paths_router) 

@@ -96,7 +96,8 @@ const ContentPanel = forwardRef(({
   setActiveTab,
   sx, // Accept sx prop to allow styling from parent (e.g., height)
   progressMap, // New prop
-  onToggleProgress // New prop
+  onToggleProgress, // New prop
+  isPublicView = false // Add prop with default
 }, ref) => { // <-- Accept ref as second argument
   const theme = useTheme();
   const { user, fetchUserCredits } = useAuth();
@@ -138,6 +139,11 @@ const ContentPanel = forwardRef(({
 
   // --- Audio Generation Logic ---
   const handleGenerateAudio = async () => {
+      // --- Disable for public view ---
+      if (isPublicView) {
+          setNotification({ open: true, message: 'Audio generation is disabled for public views.', severity: 'info' });
+          return;
+      }
       if (!submodule || !pathId) return; // Safety check
 
       setIsAudioLoading(true);
@@ -243,7 +249,10 @@ const ContentPanel = forwardRef(({
 
   const handleCheckboxToggle = () => {
       if (onToggleProgress) {
-          onToggleProgress(moduleIndex, submoduleIndex);
+          // Disable toggle if in public view (already handled in parent, but belt-and-suspenders)
+          if (!isPublicView) {
+             onToggleProgress(moduleIndex, submoduleIndex);
+          }
       }
   };
 
@@ -324,7 +333,6 @@ const ContentPanel = forwardRef(({
       {!isMobileLayout && (
         <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'transparent' }}>
           <Tabs 
-            data-tut="content-panel-tabs"
             value={activeTab} 
             onChange={(event, newValue) => setActiveTab(newValue)} 
             aria-label="submodule content tabs"
@@ -369,27 +377,30 @@ const ContentPanel = forwardRef(({
                            <MarkdownRenderer>{submodule.content || "No content available."}</MarkdownRenderer>
                            {/* Add Progress Checkbox at the end of content */} 
                            <Divider sx={{ my: 2 }} />
-                           <Box data-tut="content-panel-progress-checkbox-container" sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1, mb: 1 }}>
-                               <FormControlLabel
+                           <Box 
+                             sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }} 
+                             data-tut="content-panel-progress-checkbox-container"
+                           >
+                             <Tooltip title={isPublicView ? "Progress tracking disabled for public view" : (isCompleted ? "Mark as Incomplete" : "Mark as Complete")}>
+                               {/* Wrap Checkbox in span for Tooltip when disabled */}
+                               <span> 
+                                 <FormControlLabel
                                    control={
-                                       <Checkbox 
-                                           checked={isCompleted} 
-                                           onChange={handleCheckboxToggle}
-                                           name="progressCheckbox"
-                                           color="primary"
-                                           sx={{ 
-                                               color: isCompleted ? theme.palette.success.main : theme.palette.action.active,
-                                               '&.Mui-checked': {
-                                                   color: theme.palette.success.main,
-                                               },
-                                           }}
-                                       />
+                                     <Checkbox
+                                       checked={isCompleted}
+                                       onChange={handleCheckboxToggle}
+                                       disabled={isPublicView} // Disable if public view
+                                       inputProps={{ 'aria-label': isCompleted ? 'Mark as incomplete' : 'Mark as complete' }}
+                                       size="small"
+                                     />
                                    }
-                                   label={isCompleted ? "Mark as Incomplete" : "Mark as Complete"}
-                                   sx={{ 
-                                       color: isCompleted ? theme.palette.text.secondary : theme.palette.text.primary
-                                   }}
-                               />
+                                   label={<Typography variant="body2" sx={{ fontSize: '0.8rem' }}>Complete</Typography>}
+                                   sx={{ ml: 0 }} // Adjust margin if needed
+                                   // Add data-tut attribute specific to checkbox if needed for tutorial
+                                   data-tut={`progress-checkbox-${moduleIndex}-${submoduleIndex}`}
+                                 />
+                               </span>
+                             </Tooltip>
                            </Box>
                        </Box>
                    )}
@@ -400,6 +411,7 @@ const ContentPanel = forwardRef(({
                          submoduleId={`${moduleIndex}-${submoduleIndex}`} // Consistent ID
                          pathId={pathId} 
                          isTemporaryPath={isTemporaryPath}
+                         disabled={isPublicView} // Disable quiz interaction in public view
                        />
                    )}
                    {tab.component === 'Resources' && hasResources && (
@@ -420,6 +432,7 @@ const ContentPanel = forwardRef(({
                            isTemporaryPath={isTemporaryPath}
                            actualPathData={actualPathData} 
                            submoduleTitle={submodule.title}
+                           disabled={isPublicView} // Disable chat input in public view
                        />
                    )}
                    {tab.component === 'Audio' && (
@@ -452,7 +465,7 @@ const ContentPanel = forwardRef(({
                            <Button
                                variant={audioUrl ? "outlined" : "contained"}
                                onClick={handleGenerateAudio}
-                               disabled={isAudioLoading || !pathId} // Disable if no pathId
+                               disabled={isAudioLoading || !pathId || isPublicView} // Disable if no pathId or public view
                                startIcon={<GraphicEqIcon />}
                                sx={{ mt: 1 }}
                            >
@@ -497,6 +510,7 @@ ContentPanel.propTypes = {
   sx: PropTypes.object, // Add sx propType
   progressMap: PropTypes.object, // Added prop type
   onToggleProgress: PropTypes.func, // Added prop type (optional here? Maybe required)
+  isPublicView: PropTypes.bool, // Added prop type
 };
 
 // Add display name for DevTools

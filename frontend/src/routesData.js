@@ -88,6 +88,12 @@ const routesData = [
     requiresAuth: false,
     isPublic: true,
   },
+  // Add new public route
+  {
+    path: '/public/:shareId',
+    requiresAuth: false,
+    isPublic: true, // Allow indexing? Maybe false initially.
+  },
 ];
 
 // Export using module.exports for compatibility with require()

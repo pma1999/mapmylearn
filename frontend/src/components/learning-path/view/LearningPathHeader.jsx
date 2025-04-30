@@ -11,7 +11,11 @@ import {
   useMediaQuery,
   Tooltip,
   IconButton,
-  LinearProgress
+  LinearProgress,
+  FormControlLabel,
+  Switch,
+  Chip,
+  Grid
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
@@ -20,6 +24,9 @@ import SchoolIcon from '@mui/icons-material/School';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import MenuIcon from '@mui/icons-material/Menu';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import LinkIcon from '@mui/icons-material/Link';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
+import LockIcon from '@mui/icons-material/Lock';
 import { motion } from 'framer-motion';
 import InfoTooltip from '../../shared/InfoTooltip';
 import { helpTexts } from '../../../constants/helpTexts';
@@ -40,6 +47,13 @@ import { helpTexts } from '../../../constants/helpTexts';
  * @param {Object} [props.progressMap] Optional map of submodule completion status
  * @param {Object} [props.actualPathData] Optional full learning path data for calculating totals
  * @param {Function} props.onStartTutorial Callback to start the interactive tutorial
+ * @param {boolean} [props.isPublicView=false] Flag indicating if this is a public view
+ * @param {boolean} [props.isPublic=false] Current public status of the path
+ * @param {string|null} [props.shareId=null] Share ID if public
+ * @param {Function} [props.onTogglePublic] Handler to toggle public status
+ * @param {Function} [props.onCopyShareLink] Handler to copy share link
+ * @param {string|null} [props.entryId=null] Persistent ID of the path (if saved)
+ * @param {boolean} [props.isLoggedIn=false] Whether the current user is logged in
  * @returns {JSX.Element} Header component
  */
 const LearningPathHeader = ({ 
@@ -54,11 +68,21 @@ const LearningPathHeader = ({
   showMobileNavButton,
   progressMap,
   actualPathData,
-  onStartTutorial
+  onStartTutorial,
+  isPublicView = false,
+  isPublic = false,
+  shareId = null,
+  onTogglePublic,
+  onCopyShareLink,
+  entryId = null,
+  isLoggedIn = false
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isMedium = useMediaQuery(theme.breakpoints.down('md'));
+
+  // Determine if sharing controls should be shown
+  const showSharingControls = isLoggedIn && entryId && !isPublicView;
 
   // Calculate progress
   const { completedCount, totalSubmodules, progressPercent } = useMemo(() => {
@@ -125,7 +149,7 @@ const LearningPathHeader = ({
       >
         <Box sx={{ position: 'relative', zIndex: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: { xs: 1.5, md: 2 }, justifyContent: 'space-between' }}>
-            {showMobileNavButton && (
+            {showMobileNavButton && !isPublicView && (
               <motion.div variants={buttonVariants}>
                 <Tooltip title="Modules Navigation">
                   <IconButton 
@@ -158,7 +182,8 @@ const LearningPathHeader = ({
                 Learning Path
               </Typography>
             </Box>
-            <motion.div variants={buttonVariants}>
+            {!isPublicView && (
+              <motion.div variants={buttonVariants}>
                 <Tooltip title="Show Tutorial">
                   <IconButton 
                       data-tut="help-icon"
@@ -170,7 +195,8 @@ const LearningPathHeader = ({
                       <HelpOutlineIcon />
                   </IconButton>
                 </Tooltip>
-            </motion.div>
+              </motion.div>
+            )}
           </Box>
           
           <Box sx={{ mt: 1, mb: 2 }}>
@@ -189,7 +215,7 @@ const LearningPathHeader = ({
           </Box>
 
           {/* Progress Bar Section (Only if totalSubmodules > 0) */}
-          {totalSubmodules > 0 && (
+          {!isPublicView && totalSubmodules > 0 && (
               <Box sx={{ mt: 2, mb: 2 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
                       <Typography variant="body2" color="text.secondary">
@@ -208,6 +234,53 @@ const LearningPathHeader = ({
           )}
           
           <Divider sx={{ mt: 2, mb: 3 }} />
+          
+          {/* --- Sharing Controls Section (conditionally rendered) --- */}
+          {showSharingControls && (
+            <Box sx={{ mb: 3 }}>
+              <Grid container spacing={1} alignItems="center">
+                <Grid item>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={isPublic}
+                        onChange={onTogglePublic}
+                        color="primary"
+                        size="small"
+                        disabled={!onTogglePublic}
+                      />
+                    }
+                    label={isPublic ? 'Public' : 'Private'}
+                    labelPlacement="start"
+                    sx={{ ml: 0, mr: 1 }}
+                  />
+                </Grid>
+                <Grid item>
+                  {isPublic ? <LockOpenIcon fontSize="small" color="primary" /> : <LockIcon fontSize="small" color="disabled" />}
+                </Grid>
+                {isPublic && shareId && (
+                  <Grid item xs>
+                    <Chip 
+                      label={`ID: ${shareId}`}
+                      size="small" 
+                      variant="outlined"
+                      sx={{ mr: 1 }}
+                    />
+                    <Button 
+                      size="small" 
+                      variant="text"
+                      startIcon={<LinkIcon />}
+                      onClick={onCopyShareLink}
+                      disabled={!onCopyShareLink}
+                    >
+                      Copy Link
+                    </Button>
+                  </Grid>
+                )}
+              </Grid>
+              <Divider sx={{ mt: 2 }} /> 
+            </Box>
+          )}
           
           <motion.div
             variants={buttonContainerVariants}
@@ -251,23 +324,25 @@ const LearningPathHeader = ({
                   </motion.div>
                 </Box>
                 
-                <motion.div variants={buttonVariants}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                    <Button
-                      data-tut="save-path-button"
-                      variant="outlined"
-                      fullWidth
-                      color="secondary"
-                      startIcon={<SaveIcon />}
-                      onClick={onSaveToHistory}
-                      disabled={detailsHaveBeenSet}
-                      size={isMobile ? "small" : "medium"}
-                    >
-                      {detailsHaveBeenSet ? "Details Set" : "Save Details"}
-                    </Button>
-                    <InfoTooltip title={helpTexts.lphSaveTooltip} />
-                  </Box>
-                </motion.div>
+                {!isPublicView && (
+                  <motion.div variants={buttonVariants}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                      <Button
+                        data-tut="save-path-button"
+                        variant="outlined"
+                        fullWidth
+                        color="secondary"
+                        startIcon={<SaveIcon />}
+                        onClick={onSaveToHistory}
+                        disabled={detailsHaveBeenSet}
+                        size={isMobile ? "small" : "medium"}
+                      >
+                        {detailsHaveBeenSet ? "Details Set" : "Save Details"}
+                      </Button>
+                      <InfoTooltip title={helpTexts.lphSaveTooltip} />
+                    </Box>
+                  </motion.div>
+                )}
                 
                 <motion.div variants={buttonVariants}>
                   <Button
@@ -314,21 +389,23 @@ const LearningPathHeader = ({
                   </Tooltip>
                 </motion.div>
                 
-                <motion.div variants={buttonVariants}>
-                  <Tooltip title={detailsHaveBeenSet ? "Details Saved" : "Save to History (Add Tags/Favorite)"}>
-                    <span>
-                      <Button
-                        data-tut="save-path-button"
-                        variant="contained"
-                        startIcon={detailsHaveBeenSet ? <BookmarkIcon /> : <SaveIcon />}
-                        onClick={onSaveToHistory}
-                        disabled={detailsHaveBeenSet}
-                      >
-                        {detailsHaveBeenSet ? 'Saved' : 'Save Path'}
-                      </Button>
-                    </span>
-                  </Tooltip>
-                </motion.div>
+                {!isPublicView && (
+                  <motion.div variants={buttonVariants}>
+                    <Tooltip title={detailsHaveBeenSet ? "Details Saved" : "Save to History (Add Tags/Favorite)"}>
+                      <span>
+                        <Button
+                          data-tut="save-path-button"
+                          variant="contained"
+                          startIcon={detailsHaveBeenSet ? <BookmarkIcon /> : <SaveIcon />}
+                          onClick={onSaveToHistory}
+                          disabled={detailsHaveBeenSet}
+                        >
+                          {detailsHaveBeenSet ? 'Saved' : 'Save Path'}
+                        </Button>
+                      </span>
+                    </Tooltip>
+                  </motion.div>
+                )}
                 <Box sx={{ flexGrow: { xs: 0, sm: 1 } }} />
                 <motion.div variants={buttonVariants}>
                   <Button
@@ -363,6 +440,13 @@ LearningPathHeader.propTypes = {
   progressMap: PropTypes.object,
   actualPathData: PropTypes.object,
   onStartTutorial: PropTypes.func.isRequired,
+  isPublicView: PropTypes.bool,
+  isPublic: PropTypes.bool,
+  shareId: PropTypes.string,
+  onTogglePublic: PropTypes.func,
+  onCopyShareLink: PropTypes.func,
+  entryId: PropTypes.string,
+  isLoggedIn: PropTypes.bool,
 };
 
 export default LearningPathHeader; 

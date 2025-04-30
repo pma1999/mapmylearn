@@ -26,7 +26,7 @@ import * as api from '../../services/api';
  * Virtualized grid cell renderer for history entries
  */
 const EntryCell = ({ columnIndex, rowIndex, style, data }) => {
-  const { entries, columnCount, onView, onDelete, onToggleFavorite, onUpdateTags, onDownloadPDF, onExport } = data;
+  const { entries, columnCount, onView, onDelete, onToggleFavorite, onUpdateTags, onDownloadPDF, onExport, onTogglePublic, onCopyShareLink } = data;
   const index = rowIndex * columnCount + columnIndex;
   
   if (index >= entries.length) {
@@ -55,6 +55,8 @@ const EntryCell = ({ columnIndex, rowIndex, style, data }) => {
           onUpdateTags={onUpdateTags}
           onDownloadPDF={onDownloadPDF}
           onExport={onExport}
+          onTogglePublic={onTogglePublic}
+          onCopyShareLink={onCopyShareLink}
           virtualized={true}
         />
       )}
@@ -249,6 +251,8 @@ const HistoryPage = () => {
     handleToggleFavorite,
     handleUpdateTags,
     handleDownloadPDF,
+    handleTogglePublic,
+    handleCopyShareLink
   } = useHistoryActions(showNotification, refreshEntries);
   
   // Calculate grid dimensions based on screen size
@@ -272,7 +276,7 @@ const HistoryPage = () => {
     return 270;
   }, [isMobile, isTablet, isSmallScreen]);
   
-  const itemHeight = 320; // Fixed height for cards
+  const itemHeight = 400; // Increased height for cards to accommodate new elements
   
   // Computed value to check if any filters are applied
   const hasFiltersApplied = !!filterSource || !!searchTerm || sortBy !== 'creation_date';
@@ -286,7 +290,9 @@ const HistoryPage = () => {
     onToggleFavorite: handleToggleFavorite,
     onUpdateTags: handleUpdateTags,
     onDownloadPDF: handleDownloadPDF,
-    onExport: handleExportEntry
+    onExport: handleExportEntry,
+    onTogglePublic: handleTogglePublic,
+    onCopyShareLink: handleCopyShareLink
   }), [
     entries, 
     columnCount, 
@@ -295,7 +301,9 @@ const HistoryPage = () => {
     handleToggleFavorite, 
     handleUpdateTags, 
     handleDownloadPDF,
-    handleExportEntry
+    handleExportEntry,
+    handleTogglePublic,
+    handleCopyShareLink
   ]);
   
   // Reference to AutoSizer for recalculating dimensions when entries change

@@ -3,7 +3,7 @@ import bcrypt
 import os
 import secrets
 from datetime import datetime, timedelta
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime, Text, JSON, func, Index
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime, Text, JSON, func, Index, UniqueConstraint
 from sqlalchemy.orm import relationship
 from backend.config.database import Base
 
@@ -26,28 +26,49 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
-    full_name = Column(String)
-    is_active = Column(Boolean, default=True)
-    is_admin = Column(Boolean, default=False)  # New field to identify admin users
-    is_email_verified = Column(Boolean, nullable=False, server_default='false') # Added for email verification status
+    full_name = Column(String, nullable=True) # Explicitly nullable
+    is_active = Column(Boolean, default=True, server_default='true') # Ensure server_default matches default
+    is_admin = Column(Boolean, default=False, server_default='false') # Ensure server_default matches default
+    is_email_verified = Column(Boolean, nullable=False, server_default='false')
     created_at = Column(DateTime, nullable=False, server_default=func.now())
-    last_login = Column(DateTime)
+    last_login = Column(DateTime, nullable=True) # Explicitly nullable
+    
+    # API Keys - Adding them back as they exist in production
+    encrypted_google_api_key = Column(String, nullable=True)
+    encrypted_perplexity_api_key = Column(String, nullable=True)
+    
     credits = Column(Integer, nullable=False, server_default='0')
-    last_monthly_credit_granted_at = Column(DateTime, nullable=True) # Added for monthly credit tracking
+    last_monthly_credit_granted_at = Column(DateTime, nullable=True) # Explicitly nullable
+    
     # Password reset fields
     password_reset_token_hash = Column(String, nullable=True, index=True)
-    password_reset_token_expires_at = Column(DateTime, nullable=True)
+    password_reset_token_expires_at = Column(DateTime, nullable=True) # Explicitly nullable
 
     # Relationships
     learning_paths = relationship("LearningPath", back_populates="user", cascade="all, delete-orphan")
     sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
-    credit_transactions = relationship("CreditTransaction", foreign_keys="[CreditTransaction.user_id]", back_populates="user", cascade="all, delete-orphan")
+    # Specify primaryjoin for CreditTransaction relationships to avoid ambiguity
+    credit_transactions = relationship(
+        "CreditTransaction", 
+        primaryjoin="User.id==CreditTransaction.user_id", 
+        back_populates="user", 
+        cascade="all, delete-orphan"
+    )
+    admin_transactions = relationship(
+        "CreditTransaction", 
+        primaryjoin="User.id==CreditTransaction.admin_user_id", 
+        back_populates="admin"
+    )
+    
 
-    # Index for email lookups during authentication
+    # Index definitions
     __table_args__ = (
-        Index('idx_user_email', email),
-        # Index for password reset token hash
-        Index('idx_user_reset_token', password_reset_token_hash),
+        Index('ix_users_email', email, unique=True), # Match inspected index name and uniqueness
+        Index('ix_users_password_reset_token_hash', password_reset_token_hash), # Match inspected index name
+        Index('idx_user_email', email), # Keep original for potential compatibility? Or remove?
+        Index('idx_user_reset_token', password_reset_token_hash), # Keep original?
+        # Add other potentially useful indexes if needed, e.g., on is_admin?
+        # Index('idx_user_is_admin', is_admin),
     )
 
 
@@ -58,21 +79,20 @@ class Session(Base):
     __tablename__ = "sessions"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True) # Added index=True based on inspection
     refresh_token = Column(String, unique=True, index=True, nullable=False)
     expires_at = Column(DateTime, nullable=False)
     created_at = Column(DateTime, default=func.now(), nullable=False)
-    last_used_at = Column(DateTime, server_default=func.now(), nullable=False)
-    device_info = Column(String)
-    ip_address = Column(String)
+    last_used_at = Column(DateTime, server_default=func.now(), nullable=False) # Inspection shows NOT NULL
+    device_info = Column(String, nullable=True)
+    ip_address = Column(String, nullable=True)
 
-    # Relationships
     user = relationship("User", back_populates="sessions")
 
-    # Index for token lookups
     __table_args__ = (
-        Index('idx_session_token', refresh_token),
-        Index('idx_session_user_id', user_id),
+        Index('ix_sessions_refresh_token', refresh_token, unique=True), # Match inspected index
+        Index('idx_session_token', refresh_token), # Keep original?
+        Index('idx_session_user_id', user_id), # Original index
     )
 
     @classmethod
@@ -99,35 +119,28 @@ class CreditTransaction(Base):
     __tablename__ = "credit_transactions"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    admin_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    amount = Column(Integer, nullable=False)  # Positive for additions, negative for usage
-    transaction_type = Column(String, nullable=False)  # Use constants from TransactionType class
-    created_at = Column(DateTime, default=func.now(), nullable=False)
-    
-    # SQLite requires this column, used to store user's balance after the transaction
-    balance_after = Column(Integer, nullable=True) # Making this nullable for flexibility, can be updated
-    
-    # Use 'notes' for PostgreSQL, 'description' was for SQLite
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True) # Added index=True
+    admin_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True) # Added index=True
+    amount = Column(Integer, nullable=False)
+    transaction_type = Column(String, nullable=False, index=True) # Added index=True
+    created_at = Column(DateTime, default=func.now(), nullable=False, index=True) # Added index=True
+    balance_after = Column(Integer, nullable=True)
     notes = Column(String, nullable=True)
-    
-    # Optional field for tracking related learning paths (if applicable to purchase)
-    learning_path_id = Column(Integer, nullable=True)
-    
+    learning_path_id = Column(Integer, nullable=True) # Potentially add FK to learning_paths? And index?
     # Add Stripe related fields
-    stripe_checkout_session_id = Column(String, unique=True, nullable=True, index=True)
-    stripe_payment_intent_id = Column(String, unique=True, nullable=True, index=True)
-    purchase_metadata = Column(JSON, nullable=True) # Use JSONB for PostgreSQL, JSON for SQLite
+    stripe_checkout_session_id = Column(String, nullable=True, index=True)
+    stripe_payment_intent_id = Column(String, nullable=True, index=True)
+    purchase_metadata = Column(JSON, nullable=True) # Keep as standard JSON
     
-    # Relationships
     user = relationship("User", foreign_keys=[user_id], back_populates="credit_transactions")
-    admin = relationship("User", foreign_keys=[admin_user_id])
+    admin = relationship("User", foreign_keys=[admin_user_id], back_populates="admin_transactions")
     
-    # Indexes for efficient querying (add indexes for Stripe columns)
     __table_args__ = (
-        Index('idx_credit_transaction_user_id', user_id),
+        UniqueConstraint('stripe_checkout_session_id', name='credit_transactions_stripe_checkout_session_id_key'),
+        UniqueConstraint('stripe_payment_intent_id', name='credit_transactions_stripe_payment_intent_id_key'),
+        Index('idx_credit_transaction_user_id', user_id), 
         Index('idx_credit_transaction_admin_id', admin_user_id),
-        Index('idx_credit_transaction_created_at', created_at.desc()),
+        Index('idx_credit_transaction_created_at', created_at.desc()), # Keep desc order?
         Index('idx_credit_transaction_action_type', transaction_type),
         Index('idx_credit_transaction_checkout_session', stripe_checkout_session_id),
         Index('idx_credit_transaction_payment_intent', stripe_payment_intent_id),
@@ -141,37 +154,41 @@ class LearningPath(Base):
     __tablename__ = "learning_paths"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    path_id = Column(String, index=True, nullable=False)  # UUID string for path identification
-    topic = Column(String, nullable=False)
-    language = Column(String(10), nullable=False, comment="ISO 639-1 language code for the learning path content")
-    path_data = Column(JSON, nullable=False)  # Store the entire learning path data as JSON
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True) # Added index=True
+    path_id = Column(String, index=True, nullable=False)
+    topic = Column(String, nullable=False, index=True) # Added index=True
+    language = Column(String(10), nullable=False, index=True) # Added index=True
+    path_data = Column(JSON, nullable=False)
     creation_date = Column(DateTime, default=func.now(), nullable=False)
     last_modified_date = Column(DateTime, default=func.now(), onupdate=func.now())
-    favorite = Column(Boolean, default=False)
-    tags = Column(JSON, default=list)  # Store tags as JSON array
-    source = Column(String, default="generated")  # 'generated' or 'imported'
+    favorite = Column(Boolean, default=False, server_default='false')
+    tags = Column(JSON, default=list, server_default='[]')
+    source = Column(String, default="generated", server_default='generated')
+    last_visited_module_idx = Column(Integer, nullable=True)
+    last_visited_submodule_idx = Column(Integer, nullable=True)
+    
+    # Sharing fields
+    is_public = Column(Boolean, nullable=False, server_default='false', default=False, index=True)
+    share_id = Column(String, unique=True, nullable=True, index=True)
 
-    # Relationships
     user = relationship("User", back_populates="learning_paths")
 
-    # Indexes for efficient querying
     __table_args__ = (
         Index('idx_learning_path_user_id', user_id),
         Index('idx_learning_path_path_id', path_id),
         Index('idx_learning_path_topic', topic),
-        # Composite indexes for common query patterns
+        Index('idx_learning_path_language', language), # Match inspected index
         Index('idx_learning_path_user_date', user_id, creation_date.desc()),
         Index('idx_learning_path_user_favorite', user_id, favorite),
         Index('idx_learning_path_user_modified', user_id, last_modified_date.desc()),
         Index('idx_learning_path_user_source', user_id, source),
-        # For frequently used sorting combinations
         Index('idx_learning_path_user_fav_date', user_id, favorite, creation_date.desc()),
-    ) 
-
-    # Add columns for last visited state
-    last_visited_module_idx = Column(Integer, nullable=True)
-    last_visited_submodule_idx = Column(Integer, nullable=True)
+        # Indices for sharing fields
+        Index('idx_learning_path_share_id', share_id, unique=True),
+        Index('idx_learning_path_is_public', is_public),
+        # Index for querying public paths efficiently
+        Index('idx_learning_path_public_share_id', share_id, is_public, unique=True, postgresql_where=(is_public == True)), # Use boolean True
+    )
 
 
 # New Model for Tracking Generation Tasks
@@ -186,28 +203,27 @@ class GenerationTask(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     task_id = Column(String, unique=True, index=True, nullable=False, comment="UUID string for task identification")
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     status = Column(String, nullable=False, index=True, default=GenerationTaskStatus.PENDING)
-    created_at = Column(DateTime, default=func.now(), nullable=False)
+    created_at = Column(DateTime, default=func.now(), nullable=False, index=True)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
     started_at = Column(DateTime, nullable=True)
     ended_at = Column(DateTime, nullable=True)
     request_topic = Column(String, nullable=False)
     error_message = Column(Text, nullable=True)
-    history_entry_id = Column(Integer, ForeignKey("learning_paths.id", ondelete="SET NULL"), nullable=True)
+    history_entry_id = Column(Integer, ForeignKey("learning_paths.id", ondelete="SET NULL"), nullable=True, index=True)
     
-    # Relationships
-    user = relationship("User") # Relationship back to User
-    history_entry = relationship("LearningPath") # Relationship to the saved history entry
+    user = relationship("User")
+    history_entry = relationship("LearningPath")
     
-    # Indexes
     __table_args__ = (
+        Index('ix_generation_tasks_task_id', task_id, unique=True), # Match inspected index
         Index('idx_generation_task_user_id', user_id),
         Index('idx_generation_task_status', status),
         Index('idx_generation_task_created_at', created_at.desc()),
         Index('idx_generation_task_user_status', user_id, status),
         Index('idx_generation_task_history_entry', history_entry_id), 
-    ) 
+    )
 
 
 # New Model for Tracking User Progress in Learning Paths
@@ -220,23 +236,13 @@ class LearningPathProgress(Base):
     module_index = Column(Integer, nullable=False)
     submodule_index = Column(Integer, nullable=False)
     completed_at = Column(DateTime, nullable=False, server_default=func.now())
-    
-    # New column to explicitly track completion status
     is_completed = Column(Boolean, nullable=False, server_default='false', default=False)
     
-    # Relationships (optional, but can be useful)
     user = relationship("User") 
     learning_path = relationship("LearningPath") 
     
-    # Indexes and Constraints
     __table_args__ = (
-        # Index for efficient querying by user and path
-        Index('idx_lp_progress_user_path', user_id, learning_path_id),
-        # Unique constraint to prevent duplicate entries for the same submodule
-        Index('uq_user_path_submodule', 
-              user_id, 
-              learning_path_id, 
-              module_index, 
-              submodule_index, 
-              unique=True), 
+        Index('idx_lpp_user_path', user_id, learning_path_id), # Match inspected index
+        UniqueConstraint(user_id, learning_path_id, module_index, submodule_index, name='uq_user_path_submodule'), # Match inspected constraint
+        # Original Index('uq_user_path_submodule', ...) was trying to create an index with unique=True, using UniqueConstraint is cleaner
     )

@@ -22,7 +22,7 @@ import redis.asyncio as redis
 # Database imports
 from backend.config.database import engine, Base, get_db
 from backend.routes.auth import router as auth_router
-from backend.routes.learning_paths import router as learning_paths_router
+from backend.routes.learning_paths import router as learning_paths_router, public_router as public_learning_paths_router
 from backend.routes.admin import router as admin_router
 from backend.routes.chatbot import router as chatbot_router
 from backend.routes.payments import router as payments_router
@@ -152,6 +152,7 @@ app.include_router(learning_paths_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(chatbot_router, prefix="/api")
 app.include_router(payments_router, prefix="/api")
+app.include_router(public_learning_paths_router, prefix="/api")
 
 # Initialize Redis client for middleware (ensure REDIS_URL is set)
 redis_client_middleware = None

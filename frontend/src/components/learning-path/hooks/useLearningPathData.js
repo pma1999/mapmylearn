@@ -1,16 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useLocation } from 'react-router';
-import { getLearningPath, getHistoryEntry, API_URL } from '../../../services/api';
+import { getLearningPath, getHistoryEntry, getPublicLearningPath, API_URL } from '../../../services/api';
 
 /**
  * Custom hook to load learning path data from different sources.
  * Handles direct history loads or generation via taskId, including SSE progress.
+ * Also handles loading public paths via shareId.
  * 
- * @param {string} source - Optional source override ('history' or null)
- * @returns {Object} { learningPath, loading, error, isFromHistory, savedToHistory, refreshData, temporaryPathId, progressMessages, isReconnecting, retryAttempt, progressMap, setProgressMap, lastVisitedModuleIdx, lastVisitedSubmoduleIdx }
+ * @param {string} source - Optional source override ('history', 'public' or null for generation)
+ * @returns {Object} { learningPath, loading, error, isFromHistory, savedToHistory, refreshData, temporaryPathId, progressMessages, isReconnecting, retryAttempt, progressMap, setProgressMap, lastVisitedModuleIdx, lastVisitedSubmoduleIdx, isPublicView }
  */
 const useLearningPathData = (source = null) => {
-  const { taskId, entryId } = useParams();
+  const { taskId, entryId, shareId } = useParams();
   const location = useLocation();
   
   const [data, setData] = useState(null);
@@ -26,6 +27,9 @@ const useLearningPathData = (source = null) => {
   const [lastVisitedModuleIdx, setLastVisitedModuleIdx] = useState(null);
   const [lastVisitedSubmoduleIdx, setLastVisitedSubmoduleIdx] = useState(null);
   
+  // NEW: State to explicitly track if it's a public view
+  const [isPublicView, setIsPublicView] = useState(source === 'public');
+
   // State for SSE reconnection logic
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [retryAttempt, setRetryAttempt] = useState(0);
@@ -39,11 +43,13 @@ const useLearningPathData = (source = null) => {
   // Ref to track if connection was ever opened successfully
   const connectionOpenedRef = useRef(false);
 
-  // Determine if data should be loaded from history
+  // Determine if data should be loaded from history or public
   const shouldLoadFromHistory = 
     source === 'history' || 
     location.pathname.startsWith('/history/') || 
     !!entryId;
+    
+  const shouldLoadPublic = source === 'public' || !!shareId;
 
   // Function to manually refresh data
   const refreshData = useCallback(() => {
@@ -140,12 +146,13 @@ const useLearningPathData = (source = null) => {
       setRetryAttempt(0);
       receivedFinalSignalRef.current = false; 
       connectionOpenedRef.current = false; // Reset connection open flag
+      setIsPublicView(source === 'public'); // Reset public view state
     };
     
     cleanup();
 
     const loadData = async () => {
-      console.log('useLearningPathData: Starting load...', { taskId, entryId, shouldLoadFromHistory });
+      console.log('useLearningPathData: Starting load...', { taskId, entryId, shareId, shouldLoadFromHistory, shouldLoadPublic, source });
       setLoading(true);
       setError(null);
       setData(null); 
@@ -158,6 +165,7 @@ const useLearningPathData = (source = null) => {
       setProgressMap({});
       setLastVisitedModuleIdx(null);
       setLastVisitedSubmoduleIdx(null);
+      setIsPublicView(source === 'public'); // Set based on initial source prop
       
       try {
         if (shouldLoadFromHistory) {
@@ -181,7 +189,7 @@ const useLearningPathData = (source = null) => {
             setInitialDetailsWereSet(true);
           }
           
-          setData(pathData);
+          setData(entry);
           setIsFromHistory(true);
           setPersistentPathId(entryId);
           setProgressMap(fetchedProgressMap);
@@ -190,6 +198,39 @@ const useLearningPathData = (source = null) => {
           setLoading(false);
           console.log('useLearningPathData: History load complete.');
         
+        } else if (shouldLoadPublic) {
+          // --- Load Public Path --- 
+          console.log('useLearningPathData: Loading public path...', shareId);
+          setInitialDetailsWereSet(true); // Public paths are inherently "details set"
+          setIsFromHistory(false); // Not from user's history
+          setIsPublicView(true); // Explicitly set public view state
+          
+          if (!shareId) {
+            throw new Error('Missing shareId for public learning path.');
+          }
+          
+          const publicResponse = await getPublicLearningPath(shareId);
+          
+          if (!publicResponse) {
+             throw new Error('Public learning path not found or invalid response format.');
+          }
+          
+          // publicResponse is the LearningPathResponse object
+          const pathData = publicResponse.path_data || publicResponse; 
+          // For public view, progress map and last visited are likely irrelevant or empty
+          const fetchedProgressMap = publicResponse.progress_map || {}; 
+          const fetchedLastVisitedModIdx = publicResponse.last_visited_module_idx;
+          const fetchedLastVisitedSubIdx = publicResponse.last_visited_submodule_idx;
+
+          setData(pathData);
+          // Use the path_id from the response as the persistentPathId for context
+          setPersistentPathId(publicResponse.path_id); 
+          setProgressMap(fetchedProgressMap);
+          setLastVisitedModuleIdx(fetchedLastVisitedModIdx);
+          setLastVisitedSubmoduleIdx(fetchedLastVisitedSubIdx);
+          setLoading(false);
+          console.log('useLearningPathData: Public load complete.');
+
         } else if (taskId) {
           // --- Load via Generation Task (Modified) --- 
           setInitialDetailsWereSet(false); 
@@ -406,7 +447,7 @@ const useLearningPathData = (source = null) => {
     // Cleanup function for useEffect
     return cleanup;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskId, entryId, shouldLoadFromHistory, refreshTrigger]); // Keep original dependencies
+  }, [taskId, entryId, shareId, source, refreshTrigger]); // Add shareId and source dependencies
 
   return {
     learningPath: data,
@@ -423,7 +464,8 @@ const useLearningPathData = (source = null) => {
     progressMap,
     setProgressMap,
     lastVisitedModuleIdx,
-    lastVisitedSubmoduleIdx
+    lastVisitedSubmoduleIdx,
+    isPublicView // Return public view status
   };
 };
 

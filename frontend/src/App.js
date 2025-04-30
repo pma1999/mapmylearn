@@ -33,9 +33,13 @@ const AppContent = () => {
           {routesConfig.map((route, index) => {
             const { path, component: Component, requiresAuth, adminOnly } = route;
             
-            // Handle the LearningPathView specific prop
-            // In a more complex scenario, the config could include props directly
-            const elementProps = path === '/history/:entryId' ? { source: 'history' } : {};
+            // Handle the LearningPathView specific props based on route path
+            let elementProps = {};
+            if (path === '/history/:entryId') {
+              elementProps = { source: 'history' };
+            } else if (path === '/public/:shareId') { 
+              elementProps = { source: 'public' };
+            }
             const element = <Component {...elementProps} />;
 
             if (requiresAuth) {

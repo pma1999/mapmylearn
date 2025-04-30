@@ -15,7 +15,9 @@ import {
   Menu,
   MenuItem,
   ListItemIcon,
-  ListItemText
+  ListItemText,
+  Switch,
+  FormControlLabel
 } from '@mui/material';
 import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
@@ -25,6 +27,9 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import PublicIcon from '@mui/icons-material/Public';
+import LockIcon from '@mui/icons-material/Lock';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
 import { formatDate } from '../utils';
 import { StyledCard } from '../styledComponents';
@@ -41,6 +46,8 @@ import ConfirmationDialog from './ConfirmationDialog';
  * @param {Function} props.onUpdateTags - Handler for updating tags
  * @param {Function} props.onExport - Handler for exporting entry as JSON
  * @param {Function} props.onDownloadPDF - Handler for downloading entry as PDF
+ * @param {Function} props.onTogglePublic - Handler for toggling public status
+ * @param {Function} props.onCopyShareLink - Handler for copying share link
  * @param {boolean} props.virtualized - Whether the card is being rendered in a virtualized list
  * @returns {JSX.Element} History entry card component
  */
@@ -52,6 +59,8 @@ const HistoryEntryCard = memo(({
   onUpdateTags, 
   onExport,
   onDownloadPDF,
+  onTogglePublic,
+  onCopyShareLink,
   virtualized = false
 }) => {
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -116,6 +125,15 @@ const HistoryEntryCard = memo(({
     setConfirmDelete(false);
   }, [onDelete, entry.path_id]);
 
+  const handlePublicSwitchChange = useCallback((event) => {
+    onTogglePublic(entry.path_id, event.target.checked);
+  }, [onTogglePublic, entry.path_id]);
+
+  const handleCopyLink = useCallback((event) => {
+    event.stopPropagation();
+    onCopyShareLink(entry.share_id);
+  }, [onCopyShareLink, entry.share_id]);
+
   // Get modules count, handle both formats for backward compatibility
   const modulesCount = entry.modules_count || 
     (entry.path_data && entry.path_data.modules ? entry.path_data.modules.length : 0);
@@ -165,6 +183,14 @@ const HistoryEntryCard = memo(({
               label={entry.source === 'generated' ? 'Generated' : 'Imported'}
               size="small"
               color={entry.source === 'generated' ? 'primary' : 'secondary'}
+              sx={{ mr: 1, mb: { xs: 1, sm: 0 } }}
+            />
+            <Chip
+              icon={entry.is_public ? <PublicIcon /> : <LockIcon />}
+              label={entry.is_public ? 'Public' : 'Private'}
+              size="small"
+              variant="outlined"
+              color={entry.is_public ? 'success' : 'default'}
             />
           </Box>
           
@@ -176,6 +202,29 @@ const HistoryEntryCard = memo(({
           />
           
           <Divider sx={{ my: 1.5 }} />
+          
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+            <FormControlLabel
+              control={
+                <Switch 
+                  checked={entry.is_public || false} 
+                  onChange={handlePublicSwitchChange} 
+                  size="small" 
+                />
+              }
+              label={<Typography variant="body2" fontSize={{ xs: '0.75rem', sm: '0.8rem' }}>{entry.is_public ? 'Publicly Shared' : 'Private'}</Typography>}
+              sx={{ m: 0 }}
+            />
+            {entry.is_public && entry.share_id && (
+              <Tooltip title="Copy Share Link">
+                <IconButton size="small" onClick={handleCopyLink}>
+                  <ContentCopyIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+          </Box>
+
+          <Divider sx={{ mb: 1.5 }} />
           
           <Box sx={{ 
             display: 'flex', 
@@ -286,6 +335,14 @@ const HistoryEntryCard = memo(({
                 label={entry.source === 'generated' ? 'Generated' : 'Imported'}
                 size="small"
                 color={entry.source === 'generated' ? 'primary' : 'secondary'}
+                sx={{ mr: 1, mb: { xs: 1, sm: 0 } }}
+              />
+              <Chip
+                icon={entry.is_public ? <PublicIcon /> : <LockIcon />}
+                label={entry.is_public ? 'Public' : 'Private'}
+                size="small"
+                variant="outlined"
+                color={entry.is_public ? 'success' : 'default'}
               />
             </Box>
             
@@ -297,6 +354,29 @@ const HistoryEntryCard = memo(({
             
             <Divider sx={{ my: 2 }} />
             
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <FormControlLabel
+                control={
+                  <Switch 
+                    checked={entry.is_public || false} 
+                    onChange={handlePublicSwitchChange} 
+                    size="small" 
+                  />
+                }
+                label={<Typography variant="body2" fontSize={{ xs: '0.75rem', sm: '0.875rem' }}>{entry.is_public ? 'Publicly Shared' : 'Private'}</Typography>}
+                sx={{ m: 0 }}
+              />
+              {entry.is_public && entry.share_id && (
+                <Tooltip title="Copy Share Link">
+                  <IconButton size="small" onClick={handleCopyLink}>
+                    <ContentCopyIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </Box>
+
+            <Divider sx={{ mb: 2 }} />
+
             <Box sx={{ 
               display: 'flex', 
               justifyContent: 'space-between',
@@ -377,6 +457,8 @@ HistoryEntryCard.propTypes = {
     favorite: PropTypes.bool,
     tags: PropTypes.arrayOf(PropTypes.string),
     source: PropTypes.string,
+    is_public: PropTypes.bool,
+    share_id: PropTypes.string,
     modules_count: PropTypes.number,
     path_data: PropTypes.object
   }).isRequired,
@@ -386,6 +468,8 @@ HistoryEntryCard.propTypes = {
   onUpdateTags: PropTypes.func.isRequired,
   onExport: PropTypes.func.isRequired,
   onDownloadPDF: PropTypes.func.isRequired,
+  onTogglePublic: PropTypes.func.isRequired,
+  onCopyShareLink: PropTypes.func.isRequired,
   virtualized: PropTypes.bool
 };
 
