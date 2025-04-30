@@ -212,6 +212,30 @@ function Footer() {
             {' - AI-Powered Learning Path Generator'}
           </Typography>
           
+          {/* Legal Links */}
+          <Box sx={{ mt: { xs: 2, sm: 0 } }}>
+              <Link 
+                  component={RouterLink} 
+                  to="/terms" 
+                  variant="body2" 
+                  color="text.secondary" 
+                  underline="hover"
+                  sx={{ mr: 2 }}
+              >
+                  Terms & Conditions
+              </Link>
+              <Link 
+                  component={RouterLink} 
+                  to="/privacy" 
+                  variant="body2" 
+                  color="text.secondary" 
+                  underline="hover"
+              >
+                  Privacy Policy
+              </Link>
+              {/* Add Cookie Policy link here if created */}
+          </Box>
+          
           {!isMobile && (
             <Typography variant="caption" color="text.secondary" sx={{ mt: { xs: 1, sm: 0 } }}>
               Made with ❤️ for effective learning

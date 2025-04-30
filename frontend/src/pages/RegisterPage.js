@@ -12,6 +12,8 @@ import {
   Alert,
   CircularProgress,
   Grid,
+  Checkbox,
+  FormControlLabel,
 } from '@mui/material';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import { useAuth } from '../services/authContext';
@@ -26,6 +28,9 @@ const RegisterPage = () => {
     confirmPassword: '',
     fullName: '',
   });
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [termsError, setTermsError] = useState(false);
+
   const [errors, setErrors] = useState({});
   const [showError, setShowError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -62,8 +67,15 @@ const RegisterPage = () => {
       newErrors.confirmPassword = 'Passwords do not match';
     }
     
+    // Terms validation
+    if (!agreedToTerms) {
+      setTermsError(true);
+    } else {
+      setTermsError(false);
+    }
+    
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return Object.keys(newErrors).length === 0 && agreedToTerms;
   };
 
   const handleChange = (e) => {
@@ -79,6 +91,19 @@ const RegisterPage = () => {
         [e.target.name]: undefined,
       });
     }
+    
+    // Clear terms error when checkbox is clicked
+    if (termsError && e.target.name === 'agreedToTerms') {
+      setTermsError(false);
+    }
+  };
+
+  const handleCheckboxChange = (event) => {
+    setAgreedToTerms(event.target.checked);
+    // Clear error when checkbox state changes
+    if (termsError) {
+      setTermsError(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -89,6 +114,10 @@ const RegisterPage = () => {
     setShowSuccessMessage(false);
     
     if (!validateForm()) {
+      // Check specifically if the terms were the issue
+      if (!agreedToTerms) {
+        setTermsError(true);
+      }
       return;
     }
     
@@ -209,12 +238,44 @@ const RegisterPage = () => {
               disabled={isLoading}
             />
             
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={agreedToTerms}
+                  onChange={handleCheckboxChange}
+                  name="agreedToTerms"
+                  color="primary"
+                  required
+                  sx={{ '&.Mui-checked': { color: 'primary.main' } }}
+                />
+              }
+              label={
+                <Typography variant="body2" color={termsError ? "error" : "text.secondary"}>
+                  I have read and agree to the{' '}
+                  <Link component={RouterLink} to="/terms" target="_blank" rel="noopener noreferrer" variant="body2">
+                    Terms and Conditions
+                  </Link>
+                  {' '}and acknowledge the{' '}
+                  <Link component={RouterLink} to="/privacy" target="_blank" rel="noopener noreferrer" variant="body2">
+                    Privacy Policy
+                  </Link>
+                  .
+                </Typography>
+              }
+              sx={{ mt: 1, mb: 1 }}
+            />
+            {termsError && (
+              <Typography variant="caption" color="error" sx={{ display: 'block', ml: 1.8, mt: -0.5 }}>
+                You must accept the terms and conditions to register.
+              </Typography>
+            )}
+            
             <Button
               type="submit"
               fullWidth
               variant="contained"
               sx={{ mt: 3, mb: 2 }}
-              disabled={isLoading || showSuccessMessage}
+              disabled={isLoading || showSuccessMessage || !agreedToTerms}
             >
               {isLoading ? <CircularProgress size={24} /> : 'Create Account'}
             </Button>

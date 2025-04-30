@@ -78,6 +78,16 @@ const routesData = [
     isPublic: false,
   },
   // Add new routes data here
+  {
+    path: '/terms',
+    requiresAuth: false,
+    isPublic: true,
+  },
+  {
+    path: '/privacy',
+    requiresAuth: false,
+    isPublic: true,
+  },
 ];
 
 // Export using module.exports for compatibility with require()

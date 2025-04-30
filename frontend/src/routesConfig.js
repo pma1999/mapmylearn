@@ -14,6 +14,8 @@ import ResetPasswordPage from './pages/ResetPasswordPage';
 import LearningPathView from './components/learning-path/view/LearningPathView';
 import PurchaseSuccessPage from './components/payments/PurchaseSuccessPage';
 import PurchaseCancelPage from './components/payments/PurchaseCancelPage';
+import TermsPage from './pages/TermsPage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 
 /**
  * Centralized route configuration for the application.
@@ -37,6 +39,8 @@ const componentMap = {
   '/history/:entryId': LearningPathView,
   '/purchase/success': PurchaseSuccessPage,
   '/purchase/cancel': PurchaseCancelPage,
+  '/terms': TermsPage,
+  '/privacy': PrivacyPolicyPage,
 };
 
 const routesConfig = routesData.map(routeData => ({
