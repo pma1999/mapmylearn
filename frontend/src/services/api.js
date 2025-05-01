@@ -1,5 +1,4 @@
 import axios from 'axios';
-import * as localHistoryService from './localHistoryService';
 
 // Use local API when in development mode, Railway API in production
 export const API_URL = process.env.NODE_ENV === 'development'
@@ -869,68 +868,6 @@ export const updateLastVisited = async (entryId, moduleIndex, submoduleIndex) =>
   }
 };
 
-/**
- * Get raw history data directly from local storage service - FOR MIGRATION ONLY
- * @returns {Object} Raw history object
- */
-export const getLocalHistoryRaw = () => {
-  // Security Note: Exposing raw local storage data might be risky depending on contents.
-  // Consider if this is truly needed or if specific data should be fetched instead.
-  // Avoid exposing if sensitive info could be stored.
-  try {
-      return localHistoryService.getLocalHistory(); 
-  } catch (e) {
-       console.error("Failed to get raw local history:", e);
-       // Fallback if localHistoryService fails or isn't available
-       return { entries: [], last_updated: new Date().toISOString() };
-  }
-};
-
-/**
- * Clears all history entries from local storage - FOR MIGRATION ONLY
- * @returns {Promise<Object>} Result object { success: boolean }
- */
-export const clearHistory = async () => {
-  // DEPRECATED for general use. Use clearAllHistoryAPI instead.
-  // This function interacts with LOCAL STORAGE, only intended for post-migration cleanup if needed.
-  try {
-    // Simulating async operation, though local storage is sync
-    await new Promise(resolve => setTimeout(resolve, 10)); 
-    const result = localHistoryService.clearHistory();
-    console.warn('clearHistory (local storage) executed.'); // Add warning for tracking
-    return result;
-  } catch (error) {
-    console.error('Error clearing local history via API layer:', error);
-    // Ensure a consistent error object format is returned/thrown
-    throw new Error('Failed to clear local history'); 
-  }
-};
-
-/**
- * Exports all history entries from local storage service - DEPRECATED
- * @returns {Array} Array of history entries.
- */
-export const exportAllHistory = () => { 
-  // DEPRECATED: Uses local storage. Use exportAllHistoryAPI instead.
-  console.error("Deprecated function exportAllHistory called. It uses local storage.");
-  // throw new Error('Deprecated function exportAllHistory called. Use exportAllHistoryAPI.'); 
-  // Return empty array to avoid breaking UI completely for now
-  return [];
-};
-
-/**
- * Imports a single learning path entry into local storage history - DEPRECATED
- * @param {Object} learningPathObject - The learning path object to import.
- * @returns {Promise<Object>} Result object { success: boolean, entry_id: string, topic: string }
- */
-export const importHistoryEntry = async (learningPathObject) => {
-  // DEPRECATED: Uses local storage. Use saveToHistory API call instead.
-  console.error("Deprecated function importHistoryEntry called. It uses local storage.");
-  // throw new Error('Deprecated function importHistoryEntry called. Use saveToHistory API call.');
-  // Return failure to avoid incorrect UI feedback
-  return { success: false, error: "Import function deprecated." };
-};
-
 // --- Placeholders for Required Backend API Functions ---
 
 /**
@@ -1348,8 +1285,6 @@ export default {
   saveToHistory,
   updateHistoryEntry,
   deleteHistoryEntry,
-  getLocalHistoryRaw,
-  clearHistory,
   validateApiKeys,
   authenticateApiKeys,
   saveApiTokens,

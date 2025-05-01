@@ -1,6 +1,5 @@
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import * as api from './api';
-import { getLocalHistoryRaw, clearHistory } from './api';
 
 // Create authentication context
 const AuthContext = createContext(null);
@@ -25,7 +24,6 @@ export const AuthProvider = ({ children }) => {
   const refreshAttempts = useRef(0);
   const MAX_REFRESH_ATTEMPTS = 3;
   const refreshPromise = useRef(null); // To store the promise during refresh
-  const MIGRATION_FLAG_KEY = 'mapmylearn_migration_attempted'; // Define key for flag
   const [showWelcomeModal, setShowWelcomeModal] = useState(false); // New state
   const WELCOME_FLAG_KEY = 'mapmylearn_welcome_shown';
 
@@ -254,48 +252,7 @@ export const AuthProvider = ({ children }) => {
       }
 
       // --- Automatic Local History Migration --- 
-      // Run migration check *after* authentication status is determined
-      // AND only if initialization didn't exit early due to errors/logout
-      if (isAuthenticated) {
-        console.log("User is authenticated, checking for pending local history migration...");
-        try {
-            const migrationAttempted = localStorage.getItem(MIGRATION_FLAG_KEY);
-
-            if (!migrationAttempted) {
-                console.log("Migration not attempted yet. Checking local history...");
-                const localHistory = getLocalHistoryRaw(); // Use the function from api.js
-
-                if (localHistory && localHistory.entries && localHistory.entries.length > 0) {
-                    console.log(`Found ${localHistory.entries.length} entries in local history. Attempting migration...`);
-                    // Call the migrateLearningPaths function from api.js
-                    const migrationResult = await api.migrateLearningPaths(localHistory.entries); 
-
-                    if (migrationResult.success) {
-                        console.log(`Successfully migrated ${migrationResult.migrated_count} learning paths. Clearing local history.`);
-                        localStorage.setItem(MIGRATION_FLAG_KEY, 'true');
-                    } else {
-                        console.error("Local history migration failed:", migrationResult.errors);
-                        // Still set the flag to avoid retrying on persistent errors
-                        localStorage.setItem(MIGRATION_FLAG_KEY, 'true'); 
-                        // Optionally notify user about migration failure
-                    }
-                } else {
-                    console.log("No local history entries found to migrate.");
-                    localStorage.setItem(MIGRATION_FLAG_KEY, 'true');
-                }
-            } else {
-                console.log("Local history migration already attempted.");
-            }
-        } catch (migrationError) {
-            console.error("An error occurred during the migration check:", migrationError);
-            // Set flag even if check fails to prevent loops
-             if (!localStorage.getItem(MIGRATION_FLAG_KEY)) { 
-                localStorage.setItem(MIGRATION_FLAG_KEY, 'true');
-             }
-        }
-      } else {
-        console.log("User not authenticated after init, skipping migration check.");
-      }
+      // REMOVED MIGRATION BLOCK
       // Ensure loading is false at the end of the process if not already set
       setLoading(false); 
     } catch (err) {
