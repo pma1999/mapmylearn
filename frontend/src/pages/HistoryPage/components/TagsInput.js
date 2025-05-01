@@ -28,7 +28,11 @@ const TagsInput = memo(({ tags = [], onAddTag, onDeleteTag, maxDisplayTags = nul
   const [newTag, setNewTag] = useState('');
   const [showInput, setShowInput] = useState(false);
 
-  const handleAddTag = useCallback(() => {
+  const handleAddTag = useCallback((event) => {
+    if (event && typeof event.stopPropagation === 'function') {
+      event.stopPropagation();
+    }
+    
     if (newTag.trim() && !tags.includes(newTag.trim())) {
       onAddTag(newTag.trim());
       setNewTag('');
@@ -49,7 +53,8 @@ const TagsInput = memo(({ tags = [], onAddTag, onDeleteTag, maxDisplayTags = nul
     setNewTag(e.target.value);
   }, []);
   
-  const handleShowInput = useCallback(() => {
+  const handleShowInput = useCallback((event) => {
+    event.stopPropagation();
     setShowInput(true);
   }, []);
 
@@ -130,7 +135,7 @@ const TagsInput = memo(({ tags = [], onAddTag, onDeleteTag, maxDisplayTags = nul
           <Tooltip title="Add Tag" arrow>
             <IconButton 
               size="small" 
-              onClick={handleShowInput} 
+              onClick={handleShowInput}
               aria-label="Add new tag"
               sx={{ p: 0.25 }}
             >
