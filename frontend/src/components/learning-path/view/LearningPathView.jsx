@@ -94,9 +94,6 @@ const LearningPathView = ({ source }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
-  // NEW: State for topic display during loading
-  const [displayTopic, setDisplayTopic] = useState(null);
-
   // Local state for tracking if details (tags/favorites) have been set via dialog
   const [localDetailsHaveBeenSet, setLocalDetailsHaveBeenSet] = useState(false);
   const [localEntryId, setLocalEntryId] = useState(null);
@@ -116,29 +113,6 @@ const LearningPathView = ({ source }) => {
         }
     }
   }, [loading, initialDetailsWereSet, isFromHistory, persistentPathId]);
-  
-  // NEW: Effect to determine topic for loading state
-  useEffect(() => {
-    let initialTopic = null;
-    if (loading) {
-      // Priority 1: Early topic from hook (history/public)
-      if (earlyTopic) {
-        initialTopic = earlyTopic;
-      }
-      // Priority 2: Session storage (generation fallback)
-      else if (taskId && !entryId && !shareId) { // Check it's the generation result scenario
-        const sessionTopic = sessionStorage.getItem('currentTopic');
-        if (sessionTopic) {
-          initialTopic = sessionTopic;
-        }
-      }
-    } else {
-      // Once loading is finished, use the topic from the final learningPath data
-      initialTopic = learningPath?.topic || null;
-    }
-    setDisplayTopic(initialTopic);
-    // Use shareId destructured earlier in dependencies
-  }, [loading, earlyTopic, taskId, entryId, shareId, learningPath?.topic]);
   
   // Derived states based on hook values and local actions
   const isPdfReady = !loading && !!persistentPathId && !isPublicView; // PDF might not be ready/allowed in public view initially
@@ -700,13 +674,27 @@ const LearningPathView = ({ source }) => {
 
   // Use `loading` directly from hook
   if (loading) {
+    // Calculate topic for loading state directly here
+    let topicForLoading = null;
+    // Priority 1: Early topic from hook (history/public)
+    if (earlyTopic) {
+      topicForLoading = earlyTopic;
+    }
+    // Priority 2: Session storage (generation fallback)
+    else if (taskId && !entryId && !shareId) { 
+      const sessionTopic = sessionStorage.getItem('currentTopic');
+      if (sessionTopic) {
+        topicForLoading = sessionTopic;
+      }
+    }
+    
+    // Render LoadingState with the calculated topic
     return (
-      // Pass progressMessages, isReconnecting, and retryAttempt to LoadingState
       <LoadingState 
         progressMessages={progressMessages} 
         isReconnecting={isReconnecting}
         retryAttempt={retryAttempt}
-        topic={displayTopic} // Pass the determined display topic
+        topic={topicForLoading} // Pass the calculated topic directly
       /> 
     );
   }
