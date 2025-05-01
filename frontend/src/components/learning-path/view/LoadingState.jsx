@@ -29,13 +29,25 @@ import ModuleIcon from '@mui/icons-material/AccountTree';
  * @param {Array} props.progressMessages Progress messages from SSE
  * @param {boolean} props.isReconnecting - Flag indicating if reconnecting
  * @param {number} props.retryAttempt - Current retry attempt number
- * @param {string|null} props.topic - The topic of the learning path being loaded
+ * @param {string|null} props.topic - The topic from the partially/fully loaded path data
  * @returns {JSX.Element} Loading state component
  */
 const LoadingState = ({ progressMessages = [], isReconnecting = false, retryAttempt = 0, topic = null }) => {
   const theme = useTheme();
   const [showHistory, setShowHistory] = React.useState(false);
   
+  // Determine the topic to display
+  let displayTopic = topic;
+  // If topic prop is not yet available, try the generation fallback from sessionStorage
+  if (!displayTopic) {
+    const sessionTopic = sessionStorage.getItem('currentTopic');
+    if (sessionTopic) {
+      displayTopic = sessionTopic;
+      // Optionally clear storage once used, uncomment if needed
+      // sessionStorage.removeItem('currentTopic'); 
+    }
+  }
+
   // Get the latest update object
   const latestUpdate = progressMessages.length > 0 
       ? progressMessages[progressMessages.length - 1] 
@@ -87,7 +99,7 @@ const LoadingState = ({ progressMessages = [], isReconnecting = false, retryAtte
             }}
           >
             <Typography variant="h5" component="h2" gutterBottom fontWeight="bold">
-              {topic ? `Building Path: "${topic}"` : 'Loading Learning Path...'}
+              {displayTopic ? `Building Path: "${displayTopic}"` : 'Loading Learning Path...'}
             </Typography>
             
             {/* Phase Indicator */}
@@ -250,7 +262,7 @@ LoadingState.propTypes = {
   })),
   isReconnecting: PropTypes.bool, 
   retryAttempt: PropTypes.number, 
-  topic: PropTypes.string,
+  topic: PropTypes.string, // Topic prop can be string or null
 };
 
 export default LoadingState; 

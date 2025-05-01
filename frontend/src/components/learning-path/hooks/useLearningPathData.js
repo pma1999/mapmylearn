@@ -8,7 +8,7 @@ import { getLearningPath, getHistoryEntry, getPublicLearningPath, API_URL } from
  * Also handles loading public paths via shareId.
  * 
  * @param {string} source - Optional source override ('history', 'public' or null for generation)
- * @returns {Object} { learningPath, loading, error, isFromHistory, initialDetailsWereSet, persistentPathId, temporaryPathId, progressMessages, isReconnecting, retryAttempt, refreshData, progressMap, setProgressMap, lastVisitedModuleIdx, lastVisitedSubmoduleIdx, isPublicView, earlyTopic }
+ * @returns {Object} { learningPath, loading, error, isFromHistory, initialDetailsWereSet, persistentPathId, temporaryPathId, progressMessages, isReconnecting, retryAttempt, refreshData, progressMap, setProgressMap, lastVisitedModuleIdx, lastVisitedSubmoduleIdx, isPublicView }
  */
 const useLearningPathData = (source = null) => {
   const { taskId, entryId, shareId } = useParams();
@@ -29,8 +29,6 @@ const useLearningPathData = (source = null) => {
   
   // NEW: State to explicitly track if it's a public view
   const [isPublicView, setIsPublicView] = useState(source === 'public' || !!shareId);
-  // NEW: State for early topic access
-  const [earlyTopic, setEarlyTopic] = useState(null);
 
   // State for SSE reconnection logic
   const [isReconnecting, setIsReconnecting] = useState(false);
@@ -83,7 +81,6 @@ const useLearningPathData = (source = null) => {
         setError(null);
         setLoading(false);
         setIsReconnecting(false); // Ensure reconnecting is false
-        setEarlyTopic(responseData.result.topic); // Set early topic from history entry
         return { status: 'completed' };
       } else if (responseData.status === 'failed') {
         console.log('Direct fetch successful: Task failed.');
@@ -149,7 +146,6 @@ const useLearningPathData = (source = null) => {
       setRetryAttempt(0);
       receivedFinalSignalRef.current = false; 
       connectionOpenedRef.current = false; // Reset connection open flag
-      setEarlyTopic(null); // Reset early topic on cleanup
     };
     
     cleanup();
@@ -168,7 +164,6 @@ const useLearningPathData = (source = null) => {
       setProgressMap({});
       setLastVisitedModuleIdx(null);
       setLastVisitedSubmoduleIdx(null);
-      setEarlyTopic(null); // Reset early topic on new load
       setIsPublicView(source === 'public' || !!shareId);
       
       try {
@@ -183,8 +178,8 @@ const useLearningPathData = (source = null) => {
           }
 
           const entry = historyResponse.entry; 
-          // Set early topic IMMEDIATELY after getting the data
-          setEarlyTopic(entry.topic); 
+          // Update data partially first with topic
+          setData({ topic: entry.topic }); 
 
           const pathData = entry.path_data || entry; 
           const fetchedProgressMap = entry.progress_map || {}; 
@@ -196,7 +191,7 @@ const useLearningPathData = (source = null) => {
             setInitialDetailsWereSet(true);
           }
           
-          // Set the rest of the state
+          // Set the full data state
           setData(entry);
           setIsFromHistory(true);
           setPersistentPathId(entryId);
@@ -211,9 +206,8 @@ const useLearningPathData = (source = null) => {
         } else if (shouldLoadPublic) {
           // --- Load Public Path --- 
           console.log('useLearningPathData: Loading public path...', shareId);
-          setInitialDetailsWereSet(true); // Public paths are inherently "details set"
-          setIsFromHistory(false); // Not from user's history
-          // No need to set isPublicView here, already set based on source/shareId at start of loadData
+          setInitialDetailsWereSet(true); 
+          setIsFromHistory(false); 
           
           if (!shareId) {
             throw new Error('Missing shareId for public learning path.');
@@ -225,10 +219,10 @@ const useLearningPathData = (source = null) => {
              throw new Error('Public learning path not found or invalid response format.');
           }
 
-          // Set early topic IMMEDIATELY after getting the data
-          setEarlyTopic(publicResponse.topic); 
+          // Update data partially first with topic
+          setData({ topic: publicResponse.topic }); 
           
-          // Set the rest of the state
+          // Set the full data state
           const pathData = publicResponse.path_data || publicResponse; 
           const fetchedProgressMap = publicResponse.progress_map || {}; 
           const fetchedLastVisitedModIdx = publicResponse.last_visited_module_idx;
@@ -249,17 +243,16 @@ const useLearningPathData = (source = null) => {
           setInitialDetailsWereSet(false); 
           
           // 1. Attempt to fetch final result directly first
-          const initialResult = await tryFetchFinalResult(taskId, true); // Mark as initial attempt
+          const initialResult = await tryFetchFinalResult(taskId, true); 
 
           // 2. Only connect to SSE if the initial fetch indicated processing is needed
           if (initialResult.status === 'processing') {
             connectSSE();
           }
-          // If completed/failed/error, state was set by tryFetchFinalResult.
           
         } else {
-           console.error("useLearningPathData: Missing taskId for generation.");
-           setError("Task ID is missing, cannot load learning path.");
+           console.error("useLearningPathData: Missing taskId/entryId/shareId for loading.");
+           setError("ID is missing, cannot load learning path.");
             setLoading(false);
         }
       } catch (err) {
@@ -479,7 +472,6 @@ const useLearningPathData = (source = null) => {
     lastVisitedModuleIdx,
     lastVisitedSubmoduleIdx,
     isPublicView, // Return public view status
-    earlyTopic // Ensure earlyTopic is returned
   };
 };
 

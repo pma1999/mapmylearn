@@ -85,7 +85,6 @@ const LearningPathView = ({ source }) => {
     lastVisitedModuleIdx,
     lastVisitedSubmoduleIdx,
     isPublicView, // Get public view status from hook
-    earlyTopic // Get early topic from hook
   } = useLearningPathData(source); 
   
   // State for Focus Flow navigation
@@ -674,27 +673,12 @@ const LearningPathView = ({ source }) => {
 
   // Use `loading` directly from hook
   if (loading) {
-    // Calculate topic for loading state directly here
-    let topicForLoading = null;
-    // Priority 1: Early topic from hook (history/public)
-    if (earlyTopic) {
-      topicForLoading = earlyTopic;
-    }
-    // Priority 2: Session storage (generation fallback)
-    else if (taskId && !entryId && !shareId) { 
-      const sessionTopic = sessionStorage.getItem('currentTopic');
-      if (sessionTopic) {
-        topicForLoading = sessionTopic;
-      }
-    }
-    
-    // Render LoadingState with the calculated topic
     return (
       <LoadingState 
         progressMessages={progressMessages} 
         isReconnecting={isReconnecting}
         retryAttempt={retryAttempt}
-        topic={topicForLoading} // Pass the calculated topic directly
+        topic={learningPath?.topic} // Pass topic directly from learningPath object
       /> 
     );
   }
