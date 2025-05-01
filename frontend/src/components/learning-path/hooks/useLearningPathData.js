@@ -183,6 +183,9 @@ const useLearningPathData = (source = null) => {
           }
 
           const entry = historyResponse.entry; 
+          // Set early topic IMMEDIATELY after getting the data
+          setEarlyTopic(entry.topic); 
+
           const pathData = entry.path_data || entry; 
           const fetchedProgressMap = entry.progress_map || {}; 
           const fetchedLastVisitedModIdx = entry.last_visited_module_idx;
@@ -193,13 +196,15 @@ const useLearningPathData = (source = null) => {
             setInitialDetailsWereSet(true);
           }
           
-          setEarlyTopic(entry.topic); // Set early topic from history entry
+          // Set the rest of the state
           setData(entry);
           setIsFromHistory(true);
           setPersistentPathId(entryId);
           setProgressMap(fetchedProgressMap);
           setLastVisitedModuleIdx(fetchedLastVisitedModIdx);
           setLastVisitedSubmoduleIdx(fetchedLastVisitedSubIdx);
+          
+          // Set loading to false LAST
           setLoading(false);
           console.log('useLearningPathData: History load complete.');
         
@@ -208,7 +213,7 @@ const useLearningPathData = (source = null) => {
           console.log('useLearningPathData: Loading public path...', shareId);
           setInitialDetailsWereSet(true); // Public paths are inherently "details set"
           setIsFromHistory(false); // Not from user's history
-          setIsPublicView(true); // Explicitly set public view state
+          // No need to set isPublicView here, already set based on source/shareId at start of loadData
           
           if (!shareId) {
             throw new Error('Missing shareId for public learning path.');
@@ -219,21 +224,23 @@ const useLearningPathData = (source = null) => {
           if (!publicResponse) {
              throw new Error('Public learning path not found or invalid response format.');
           }
+
+          // Set early topic IMMEDIATELY after getting the data
+          setEarlyTopic(publicResponse.topic); 
           
-          setEarlyTopic(publicResponse.topic); // Set early topic from public response
-          // publicResponse is the LearningPathResponse object
+          // Set the rest of the state
           const pathData = publicResponse.path_data || publicResponse; 
-          // For public view, progress map and last visited are likely irrelevant or empty
           const fetchedProgressMap = publicResponse.progress_map || {}; 
           const fetchedLastVisitedModIdx = publicResponse.last_visited_module_idx;
           const fetchedLastVisitedSubIdx = publicResponse.last_visited_submodule_idx;
 
           setData(pathData);
-          // Use the path_id from the response as the persistentPathId for context
           setPersistentPathId(publicResponse.path_id); 
           setProgressMap(fetchedProgressMap);
           setLastVisitedModuleIdx(fetchedLastVisitedModIdx);
           setLastVisitedSubmoduleIdx(fetchedLastVisitedSubIdx);
+          
+          // Set loading to false LAST
           setLoading(false);
           console.log('useLearningPathData: Public load complete.');
 
