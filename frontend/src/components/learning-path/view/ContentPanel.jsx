@@ -469,7 +469,12 @@ const ContentPanel = forwardRef(({
                                startIcon={<GraphicEqIcon />}
                                sx={{ mt: 1 }}
                            >
-                               {isAudioLoading ? 'Generating...' : (audioUrl ? `Re-generate in ${supportedLanguages.find(l => l.code === selectedLanguage)?.name || selectedLanguage}` : 'Generate Audio')}
+                               {isAudioLoading ? 'Generating...' : 
+                                 (audioUrl ? 
+                                   `Re-generate in ${supportedLanguages.find(l => l.code === selectedLanguage)?.name || selectedLanguage} (${AUDIO_CREDIT_COST} ${AUDIO_CREDIT_COST === 1 ? 'credit' : 'credits'})` : 
+                                   `Generate Audio (${AUDIO_CREDIT_COST} ${AUDIO_CREDIT_COST === 1 ? 'credit' : 'credits'})`
+                                 )
+                               }
                            </Button>
                        </Box>
                    )}
