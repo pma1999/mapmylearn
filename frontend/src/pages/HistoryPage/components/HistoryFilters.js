@@ -7,9 +7,13 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  InputAdornment
+  InputAdornment,
+  Box,
+  Button,
+  Chip
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
+import FilterListOffIcon from '@mui/icons-material/FilterListOff';
 
 /**
  * Component for filtering and sorting history entries
@@ -20,6 +24,8 @@ import SearchIcon from '@mui/icons-material/Search';
  * @param {Function} props.onFilterChange - Handler for source filter change
  * @param {string} props.search - Current search term
  * @param {Function} props.onSearchChange - Handler for search term change
+ * @param {Function} props.clearFilters - Handler for clearing filters
+ * @param {boolean} props.hasFilters - Whether any filters are applied
  * @returns {JSX.Element} History filters component
  */
 const HistoryFilters = ({ 
@@ -28,28 +34,29 @@ const HistoryFilters = ({
   filterSource, 
   onFilterChange, 
   search, 
-  onSearchChange 
+  onSearchChange,
+  clearFilters,
+  hasFilters
 }) => {
   return (
-    <Grid container spacing={2} sx={{ mb: 3 }}>
-      <Grid item xs={12} sm={12} md={5}>
-        <TextField
-          fullWidth
-          placeholder="Search by topic..."
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-          }}
-          size="small"
-        />
-      </Grid>
-      <Grid item xs={6} sm={6} md={4}>
-        <FormControl fullWidth size="small">
+    <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2 }}>
+      <TextField
+        placeholder="Search by topic..."
+        value={search}
+        onChange={(e) => onSearchChange(e.target.value)}
+        InputProps={{
+          startAdornment: (
+            <InputAdornment position="start">
+              <SearchIcon />
+            </InputAdornment>
+          ),
+        }}
+        size="small"
+        sx={{ flexGrow: 1 }}
+      />
+      
+      <Box sx={{ display: 'flex', gap: 2, width: { xs: '100%', md: 'auto' } }}>
+        <FormControl size="small" sx={{ minWidth: 150, flexGrow: { xs: 1, md: 0 } }}>
           <InputLabel id="sort-by-label">Sort By</InputLabel>
           <Select
             labelId="sort-by-label"
@@ -59,13 +66,12 @@ const HistoryFilters = ({
           >
             <MenuItem value="creation_date">Creation Date</MenuItem>
             <MenuItem value="last_modified_date">Last Modified</MenuItem>
-            <MenuItem value="topic">Topic</MenuItem>
+            <MenuItem value="topic">Topic (A-Z)</MenuItem>
             <MenuItem value="favorite">Favorites First</MenuItem>
           </Select>
         </FormControl>
-      </Grid>
-      <Grid item xs={6} sm={6} md={3}>
-        <FormControl fullWidth size="small">
+        
+        <FormControl size="small" sx={{ minWidth: 120, flexGrow: { xs: 1, md: 0 } }}>
           <InputLabel id="filter-source-label">Source</InputLabel>
           <Select
             labelId="filter-source-label"
@@ -78,8 +84,20 @@ const HistoryFilters = ({
             <MenuItem value="imported">Imported</MenuItem>
           </Select>
         </FormControl>
-      </Grid>
-    </Grid>
+      </Box>
+      
+      {hasFilters && (
+          <Button 
+            variant="text"
+            size="small"
+            startIcon={<FilterListOffIcon />}
+            onClick={clearFilters}
+            sx={{ flexShrink: 0, alignSelf: 'center' }}
+          >
+            Clear Filters
+          </Button>
+      )}
+    </Box>
   );
 };
 
@@ -89,7 +107,9 @@ HistoryFilters.propTypes = {
   filterSource: PropTypes.string,
   onFilterChange: PropTypes.func.isRequired,
   search: PropTypes.string.isRequired,
-  onSearchChange: PropTypes.func.isRequired
+  onSearchChange: PropTypes.func.isRequired,
+  clearFilters: PropTypes.func.isRequired,
+  hasFilters: PropTypes.bool.isRequired
 };
 
 export default HistoryFilters; 

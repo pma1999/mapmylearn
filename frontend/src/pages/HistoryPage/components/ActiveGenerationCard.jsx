@@ -89,12 +89,20 @@ const ActiveGenerationCard = ({ entry, virtualized = false }) => {
 
   return (
     <CardWrapper {...wrapperProps}>
-      <StyledCard variant="outlined" sx={{ height: '100%', borderLeft: `3px solid ${theme.palette.info.main}` }}>
+      <StyledCard 
+        variant="outlined" 
+        sx={{
+          height: '100%', 
+          borderLeft: `4px solid ${theme.palette.info.main}`, // Thicker border
+          backgroundColor: theme.palette.action.hover // Subtle background tint
+        }}
+        onClick={handleViewProgress} // Make the whole card clickable
+      >
         <CardContent sx={{ flexGrow: 1, p: { xs: 2, md: 2 }, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
           <Box>
             <Typography variant="h6" sx={{ 
-              fontWeight: 'medium', 
-              fontSize: { xs: '1rem', sm: '1.1rem' },
+              fontWeight: 'bold', // Increased weight
+              fontSize: { xs: '1.05rem', sm: '1.15rem' }, // Slightly larger
               overflow: 'hidden', 
               textOverflow: 'ellipsis', 
               whiteSpace: 'nowrap',
@@ -113,15 +121,16 @@ const ActiveGenerationCard = ({ entry, virtualized = false }) => {
           </Box>
 
           <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
-            <Tooltip title="View Progress">
-                <Button
+            <Button // Make button more prominent
                 startIcon={<VisibilityIcon />}
                 onClick={handleViewProgress}
                 size="small"
-                variant="outlined"
+                variant="contained" // Changed to contained
                 color="primary"
-                >View Progress</Button>
-            </Tooltip>
+                sx={{ textTransform: 'none' }} // Prevent all caps
+            >
+              View Progress
+            </Button>
           </Box>
         </CardContent>
       </StyledCard>

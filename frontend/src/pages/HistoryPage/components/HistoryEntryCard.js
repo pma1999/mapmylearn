@@ -17,24 +17,39 @@ import {
   ListItemIcon,
   ListItemText,
   Switch,
-  FormControlLabel
+  FormControlLabel,
+  Stack,
+  Popover,
+  TextField,
+  InputAdornment
 } from '@mui/material';
 import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 import DownloadIcon from '@mui/icons-material/Download';
 import DeleteIcon from '@mui/icons-material/Delete';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import PublicIcon from '@mui/icons-material/Public';
 import LockIcon from '@mui/icons-material/Lock';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import ShareIcon from '@mui/icons-material/Share';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import NotesIcon from '@mui/icons-material/Notes';
+import SourceIcon from '@mui/icons-material/Source';
 
 import { formatDate } from '../utils';
-import { StyledCard } from '../styledComponents';
+import { StyledCard, StyledChip } from '../styledComponents';
 import TagsInput from './TagsInput';
 import ConfirmationDialog from './ConfirmationDialog';
+
+// Function to generate the full shareable link
+const generateShareLink = (shareId) => {
+  if (!shareId) return '';
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  return `${origin}/shared/${shareId}`;
+};
 
 /**
  * Card component for displaying a single history entry
@@ -64,11 +79,11 @@ const HistoryEntryCard = memo(({
   virtualized = false
 }) => {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [downloadMenuAnchor, setDownloadMenuAnchor] = useState(null);
+  const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
+  const [sharePopoverAnchor, setSharePopoverAnchor] = useState(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-  // Only log in development mode
   useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
       console.debug(`Entry ${entry.topic} - ID: ${entry.id}, path_id: ${entry.path_id}`);
@@ -76,45 +91,47 @@ const HistoryEntryCard = memo(({
   }, [entry]);
 
   const handleAddTag = useCallback(async (newTag) => {
-    const updatedTags = [...entry.tags, newTag];
+    const updatedTags = [...(entry.tags || []), newTag];
     await onUpdateTags(entry.path_id, updatedTags);
   }, [entry.tags, entry.path_id, onUpdateTags]);
 
   const handleDeleteTag = useCallback(async (tagToDelete) => {
-    const updatedTags = entry.tags.filter(tag => tag !== tagToDelete);
+    const updatedTags = (entry.tags || []).filter(tag => tag !== tagToDelete);
     await onUpdateTags(entry.path_id, updatedTags);
   }, [entry.tags, entry.path_id, onUpdateTags]);
 
-  const handleOpenDownloadMenu = useCallback((event) => {
+  const handleOpenActionsMenu = useCallback((event) => {
     event.stopPropagation();
-    setDownloadMenuAnchor(event.currentTarget);
+    setActionsMenuAnchor(event.currentTarget);
   }, []);
 
-  const handleCloseDownloadMenu = useCallback(() => {
-    setDownloadMenuAnchor(null);
+  const handleCloseActionsMenu = useCallback(() => {
+    setActionsMenuAnchor(null);
   }, []);
 
   const handleDownloadJSON = useCallback(() => {
-    handleCloseDownloadMenu();
+    handleCloseActionsMenu();
     onExport(entry.path_id);
-  }, [handleCloseDownloadMenu, onExport, entry.path_id]);
+  }, [handleCloseActionsMenu, onExport, entry.path_id]);
 
   const handleDownloadPDF = useCallback(() => {
-    handleCloseDownloadMenu();
+    handleCloseActionsMenu();
     onDownloadPDF(entry.path_id);
-  }, [handleCloseDownloadMenu, onDownloadPDF, entry.path_id]);
+  }, [handleCloseActionsMenu, onDownloadPDF, entry.path_id]);
   
   const handleViewDetails = useCallback(() => {
     onView(entry.path_id);
   }, [onView, entry.path_id]);
   
-  const handleToggleFavorite = useCallback(() => {
+  const handleToggleFavorite = useCallback((event) => {
+    event.stopPropagation();
     onToggleFavorite(entry.path_id, !entry.favorite);
   }, [onToggleFavorite, entry.path_id, entry.favorite]);
   
   const handleConfirmDelete = useCallback(() => {
+    handleCloseActionsMenu();
     setConfirmDelete(true);
-  }, []);
+  }, [handleCloseActionsMenu]);
   
   const handleCancelDelete = useCallback(() => {
     setConfirmDelete(false);
@@ -125,319 +142,254 @@ const HistoryEntryCard = memo(({
     setConfirmDelete(false);
   }, [onDelete, entry.path_id]);
 
-  const handlePublicSwitchChange = useCallback((event) => {
-    onTogglePublic(entry.path_id, event.target.checked);
+  const handleOpenSharePopover = useCallback((event) => {
+    event.stopPropagation();
+    setSharePopoverAnchor(event.currentTarget);
+  }, []);
+
+  const handleCloseSharePopover = useCallback(() => {
+    setSharePopoverAnchor(null);
+  }, []);
+
+  const handlePublicSwitchChange = useCallback(async (event) => {
+    await onTogglePublic(entry.path_id, event.target.checked);
   }, [onTogglePublic, entry.path_id]);
 
   const handleCopyLink = useCallback((event) => {
     event.stopPropagation();
-    onCopyShareLink(entry.share_id);
+    onCopyShareLink(generateShareLink(entry.share_id));
   }, [onCopyShareLink, entry.share_id]);
 
-  // Get modules count, handle both formats for backward compatibility
-  const modulesCount = entry.modules_count || 
-    (entry.path_data && entry.path_data.modules ? entry.path_data.modules.length : 0);
+  const sharePopoverOpen = Boolean(sharePopoverAnchor);
+  const sharePopoverId = sharePopoverOpen ? 'share-popover-' + entry.path_id : undefined;
+  const fullShareLink = generateShareLink(entry.share_id);
 
-  // Prepare the card content - optimized for virtualized rendering
-  return (
-    // When virtualized, don't wrap in Grid item as the parent handles that
-    virtualized ? (
-      <StyledCard variant="outlined" sx={{ height: '100%' }}>
-        <CardContent sx={{ flexGrow: 1, p: { xs: 2, md: 2 } }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-            <Typography variant="h6" sx={{ 
-              fontWeight: 'medium', 
-              fontSize: { xs: '1rem', sm: '1.1rem' },
+  const modulesCount = entry.modules_count ||
+    (entry.path_data?.modules?.length) || 0;
+
+  const cardElevation = entry.favorite ? 4 : 1;
+
+  const cardContent = (
+    <StyledCard
+      variant="outlined"
+      sx={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        borderColor: entry.favorite ? 'warning.main' : undefined,
+      }}
+      onClick={handleViewDetails}
+    >
+      <CardContent sx={{ flexGrow: 1, p: { xs: 1.5, sm: 2 }, display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+          <Tooltip title={entry.topic} arrow placement="top-start">
+            <Typography variant="h6" sx={{
+              fontWeight: 'bold',
+              fontSize: { xs: '1.05rem', sm: '1.15rem' },
               overflow: 'hidden',
               textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
+              whiteSpace: 'nowrap',
+              mr: 1,
+              flexGrow: 1,
             }}>
               {entry.topic}
             </Typography>
-            <IconButton
-              color={entry.favorite ? "warning" : "default"}
-              onClick={handleToggleFavorite}
-              size="small"
-            >
-              {entry.favorite ? <StarIcon /> : <StarBorderIcon />}
-            </IconButton>
-          </Box>
-          
-          <Typography variant="body2" color="text.secondary" gutterBottom fontSize={{ xs: '0.75rem', sm: '0.8rem' }}>
-            Created: {formatDate(entry.creation_date)}
-          </Typography>
-          
-          {entry.last_modified_date && (
-            <Typography variant="body2" color="text.secondary" gutterBottom fontSize={{ xs: '0.75rem', sm: '0.8rem' }}>
-              Modified: {formatDate(entry.last_modified_date)}
-            </Typography>
-          )}
-          
-          <Box sx={{ mt: 1, mb: 1.5, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-            <Chip
-              label={`${modulesCount} modules`}
-              size="small"
-            />
-            <Chip
-              label={entry.source === 'generated' ? 'Generated' : 'Imported'}
-              size="small"
-              color={entry.source === 'generated' ? 'primary' : 'secondary'}
-            />
-            <Chip
-              icon={entry.is_public ? <PublicIcon /> : <LockIcon />}
-              label={entry.is_public ? 'Public' : 'Private'}
-              size="small"
-              variant="outlined"
-              color={entry.is_public ? 'success' : 'default'}
-            />
-          </Box>
-          
-          <TagsInput
-            tags={entry.tags}
-            onAddTag={handleAddTag}
-            onDeleteTag={handleDeleteTag}
-            maxDisplayTags={3}
-          />
-          
-          <Divider sx={{ my: 1.5 }} />
-          
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-            <FormControlLabel
-              control={
-                <Switch 
-                  checked={entry.is_public || false} 
-                  onChange={handlePublicSwitchChange} 
-                  size="small" 
-                />
-              }
-              label={<Typography variant="body2" fontSize={{ xs: '0.75rem', sm: '0.8rem' }}>{entry.is_public ? 'Publicly Shared' : 'Private'}</Typography>}
-              sx={{ m: 0 }}
-            />
-            {entry.is_public && entry.share_id && (
-              <Tooltip title="Copy Share Link">
-                <IconButton size="small" onClick={handleCopyLink}>
-                  <ContentCopyIcon fontSize="small" />
-                </IconButton>
+          </Tooltip>
+          <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+             <Tooltip title={entry.favorite ? "Remove from Favorites" : "Add to Favorites"} arrow>
+                <span>
+                  <IconButton
+                    aria-label={entry.favorite ? "Remove from favorites" : "Add to favorites"}
+                    color={entry.favorite ? "warning" : "default"}
+                    onClick={handleToggleFavorite}
+                    size="small"
+                    sx={{ p: 0.5 }}
+                  >
+                    {entry.favorite ? <StarIcon fontSize="small" /> : <StarBorderIcon fontSize="small" />}
+                  </IconButton>
+                </span>
               </Tooltip>
-            )}
-          </Box>
-
-          <Divider sx={{ mb: 1.5 }} />
-          
-          <Box sx={{ 
-            display: 'flex', 
-            justifyContent: 'space-between',
-            flexDirection: { xs: isMobile ? 'column' : 'row', sm: 'row' },
-            alignItems: { xs: isMobile ? 'stretch' : 'center', sm: 'center' }
-          }}>
-            <Button
-              startIcon={<ExpandMoreIcon />}
-              onClick={handleViewDetails}
-              size="small"
-              sx={{ mb: isMobile ? 1 : 0, width: isMobile ? '100%' : 'auto' }}
-            >
-              View Details
-            </Button>
-            
-            <Box sx={{ display: 'flex', justifyContent: isMobile ? 'space-between' : 'flex-end', width: isMobile ? '100%' : 'auto' }}>
-              <Tooltip title="Download options">
-                <IconButton 
-                  size="small" 
-                  onClick={handleOpenDownloadMenu}
-                  aria-label="Download options"
+            <Tooltip title="Actions" arrow>
+              <span>
+                <IconButton
+                  aria-label="Actions"
+                  size="small"
+                  onClick={handleOpenActionsMenu}
+                  sx={{ p: 0.5 }}
                 >
-                  <DownloadIcon fontSize="small" />
+                  <MoreVertIcon fontSize="small" />
                 </IconButton>
-              </Tooltip>
-              
-              <Menu
-                anchorEl={downloadMenuAnchor}
-                open={Boolean(downloadMenuAnchor)}
-                onClose={handleCloseDownloadMenu}
-              >
-                <MenuItem onClick={handleDownloadJSON}>
-                  <ListItemIcon>
-                    <FileDownloadIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>Download as JSON</ListItemText>
-                </MenuItem>
-                <MenuItem onClick={handleDownloadPDF}>
-                  <ListItemIcon>
-                    <PictureAsPdfIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>Download as PDF</ListItemText>
-                </MenuItem>
-              </Menu>
-
-              <IconButton
-                size="small"
-                color="error"
-                onClick={handleConfirmDelete}
-                title="Delete"
-              >
-                <DeleteIcon fontSize="small" />
-              </IconButton>
-            </Box>
+              </span>
+            </Tooltip>
           </Box>
-        </CardContent>
-        
-        <ConfirmationDialog
-          open={confirmDelete}
-          title="Delete Learning Path"
-          message={`Are you sure you want to delete "${entry.topic}"?`}
-          onConfirm={handleDelete}
-          onCancel={handleCancelDelete}
+        </Box>
+
+        <Stack direction="row" spacing={1.5} sx={{ mb: 1.5, flexWrap: 'wrap' }} alignItems="center">
+           <Tooltip title={`Created: ${formatDate(entry.creation_date)}`} arrow>
+             <Stack direction="row" alignItems="center" spacing={0.5} sx={{ color: 'text.secondary' }}>
+               <CalendarTodayIcon sx={{ fontSize: '0.875rem' }} />
+               <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>
+                 {formatDate(entry.creation_date, { dateStyle: 'short' })}
+               </Typography>
+             </Stack>
+           </Tooltip>
+           {entry.last_modified_date && (
+             <Tooltip title={`Modified: ${formatDate(entry.last_modified_date)}`} arrow>
+               <Stack direction="row" alignItems="center" spacing={0.5} sx={{ color: 'text.secondary' }}>
+                 <AccessTimeIcon sx={{ fontSize: '0.875rem' }} />
+                 <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>
+                   {formatDate(entry.last_modified_date, { dateStyle: 'short' })}
+                 </Typography>
+               </Stack>
+             </Tooltip>
+           )}
+        </Stack>
+
+        <Stack direction="row" spacing={1} sx={{ mb: 1.5, flexWrap: 'wrap' }} alignItems="center">
+          <StyledChip
+            icon={<NotesIcon fontSize="small" />}
+            label={`${modulesCount} modules`}
+            size="small"
+            variant="outlined"
+          />
+          <StyledChip
+            icon={<SourceIcon fontSize="small" />}
+            label={entry.source === 'generated' ? 'Generated' : 'Imported'}
+            size="small"
+            color={entry.source === 'generated' ? 'primary' : 'secondary'}
+            variant="outlined"
+          />
+        </Stack>
+
+        <TagsInput
+          tags={entry.tags || []}
+          onAddTag={handleAddTag}
+          onDeleteTag={handleDeleteTag}
+          maxDisplayTags={isMobile ? 2 : 3}
         />
-      </StyledCard>
-    ) : (
-      // Non-virtualized version wrapped in Grid item
-      <Grid item xs={12} sm={6} md={4}>
-        <StyledCard variant="outlined">
-          <CardContent sx={{ flexGrow: 1, p: { xs: 2, md: 3 } }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-              <Typography variant="h6" sx={{ 
-                fontWeight: 'medium', 
-                fontSize: { xs: '1rem', sm: '1.15rem', md: '1.25rem' },
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}>
-                {entry.topic}
-              </Typography>
-              <IconButton
-                color={entry.favorite ? "warning" : "default"}
-                onClick={handleToggleFavorite}
+
+        <Box sx={{ flexGrow: 1 }} />
+
+        <Divider sx={{ my: 1.5 }} />
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Tooltip title={entry.is_public ? "Manage Sharing" : "Share"} arrow>
+            <span>
+              <Button
+                aria-describedby={sharePopoverId}
+                variant="text"
+                color={entry.is_public ? "success" : "primary"}
                 size="small"
+                startIcon={<ShareIcon />}
+                onClick={handleOpenSharePopover}
+                sx={{ textTransform: 'none' }}
               >
-                {entry.favorite ? <StarIcon /> : <StarBorderIcon />}
-              </IconButton>
-            </Box>
-            
-            <Typography variant="body2" color="text.secondary" gutterBottom fontSize={{ xs: '0.75rem', sm: '0.875rem' }}>
-              Created: {formatDate(entry.creation_date)}
-            </Typography>
-            
-            {entry.last_modified_date && (
-              <Typography variant="body2" color="text.secondary" gutterBottom fontSize={{ xs: '0.75rem', sm: '0.875rem' }}>
-                Modified: {formatDate(entry.last_modified_date)}
+                {entry.is_public ? "Shared" : "Share"}
+              </Button>
+            </span>
+          </Tooltip>
+        </Box>
+      </CardContent>
+
+      <Menu
+        anchorEl={actionsMenuAnchor}
+        open={Boolean(actionsMenuAnchor)}
+        onClose={handleCloseActionsMenu}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <MenuItem onClick={handleDownloadJSON}>
+          <ListItemIcon>
+            <FileDownloadIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primaryTypographyProps={{ variant: 'body2' }}>Download JSON</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleDownloadPDF}>
+          <ListItemIcon>
+            <PictureAsPdfIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primaryTypographyProps={{ variant: 'body2' }}>Download PDF</ListItemText>
+        </MenuItem>
+        <Divider />
+        <MenuItem onClick={handleConfirmDelete} sx={{ color: 'error.main' }}>
+          <ListItemIcon>
+            <DeleteIcon fontSize="small" color="error" />
+          </ListItemIcon>
+          <ListItemText primaryTypographyProps={{ variant: 'body2' }}>Delete</ListItemText>
+        </MenuItem>
+      </Menu>
+
+      <Popover
+        id={sharePopoverId}
+        open={sharePopoverOpen}
+        anchorEl={sharePopoverAnchor}
+        onClose={handleCloseSharePopover}
+        onClick={(e) => e.stopPropagation()}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'right',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'right',
+        }}
+      >
+        <Box sx={{ p: 2, minWidth: 280 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={entry.is_public || false}
+                onChange={handlePublicSwitchChange}
+                size="small"
+              />
+            }
+            label={<Typography variant="body2">{entry.is_public ? 'Publicly Shared' : 'Private'}</Typography>}
+            sx={{ mb: 1 }}
+          />
+          {entry.is_public && entry.share_id && (
+            <Box>
+              <Typography variant="caption" display="block" gutterBottom>
+                Anyone with the link can view:
               </Typography>
-            )}
-            
-            <Box sx={{ mt: 1, mb: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-              <Chip
-                label={`${modulesCount} modules`}
-                size="small"
-              />
-              <Chip
-                label={entry.source === 'generated' ? 'Generated' : 'Imported'}
-                size="small"
-                color={entry.source === 'generated' ? 'primary' : 'secondary'}
-              />
-              <Chip
-                icon={entry.is_public ? <PublicIcon /> : <LockIcon />}
-                label={entry.is_public ? 'Public' : 'Private'}
+              <TextField
+                fullWidth
                 size="small"
                 variant="outlined"
-                color={entry.is_public ? 'success' : 'default'}
+                value={fullShareLink}
+                InputProps={{
+                  readOnly: true,
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Tooltip title="Copy Link" arrow>
+                        <IconButton size="small" onClick={handleCopyLink} edge="end">
+                          <ContentCopyIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{ '& .MuiInputBase-input': { fontSize: '0.8rem' } }}
               />
             </Box>
-            
-            <TagsInput
-              tags={entry.tags}
-              onAddTag={handleAddTag}
-              onDeleteTag={handleDeleteTag}
-            />
-            
-            <Divider sx={{ my: 2 }} />
-            
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <FormControlLabel
-                control={
-                  <Switch 
-                    checked={entry.is_public || false} 
-                    onChange={handlePublicSwitchChange} 
-                    size="small" 
-                  />
-                }
-                label={<Typography variant="body2" fontSize={{ xs: '0.75rem', sm: '0.875rem' }}>{entry.is_public ? 'Publicly Shared' : 'Private'}</Typography>}
-                sx={{ m: 0 }}
-              />
-              {entry.is_public && entry.share_id && (
-                <Tooltip title="Copy Share Link">
-                  <IconButton size="small" onClick={handleCopyLink}>
-                    <ContentCopyIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              )}
-            </Box>
+          )}
+        </Box>
+      </Popover>
 
-            <Divider sx={{ mb: 2 }} />
+      <ConfirmationDialog
+        open={confirmDelete}
+        title="Delete Learning Path"
+        message={`Are you sure you want to delete "${entry.topic}"? This action cannot be undone.`}
+        onConfirm={handleDelete}
+        onCancel={handleCancelDelete}
+        isDestructive={true}
+      />
+    </StyledCard>
+  );
 
-            <Box sx={{ 
-              display: 'flex', 
-              justifyContent: 'space-between',
-              flexDirection: { xs: isMobile ? 'column' : 'row', sm: 'row' },
-              alignItems: { xs: isMobile ? 'stretch' : 'center', sm: 'center' }
-            }}>
-              <Button
-                startIcon={<ExpandMoreIcon />}
-                onClick={handleViewDetails}
-                size="small"
-                sx={{ mb: isMobile ? 1 : 0, width: isMobile ? '100%' : 'auto' }}
-              >
-                View Details
-              </Button>
-              
-              <Box sx={{ display: 'flex', justifyContent: isMobile ? 'space-between' : 'flex-end', width: isMobile ? '100%' : 'auto' }}>
-                <Tooltip title="Download options">
-                  <IconButton 
-                    size="small" 
-                    onClick={handleOpenDownloadMenu}
-                    aria-label="Download options"
-                  >
-                    <DownloadIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-                
-                <Menu
-                  anchorEl={downloadMenuAnchor}
-                  open={Boolean(downloadMenuAnchor)}
-                  onClose={handleCloseDownloadMenu}
-                >
-                  <MenuItem onClick={handleDownloadJSON}>
-                    <ListItemIcon>
-                      <FileDownloadIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Download as JSON</ListItemText>
-                  </MenuItem>
-                  <MenuItem onClick={handleDownloadPDF}>
-                    <ListItemIcon>
-                      <PictureAsPdfIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Download as PDF</ListItemText>
-                  </MenuItem>
-                </Menu>
-
-                <IconButton
-                  size="small"
-                  color="error"
-                  onClick={handleConfirmDelete}
-                  title="Delete"
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Box>
-            </Box>
-          </CardContent>
-          
-          <ConfirmationDialog
-            open={confirmDelete}
-            title="Delete Learning Path"
-            message={`Are you sure you want to delete "${entry.topic}"?`}
-            onConfirm={handleDelete}
-            onCancel={handleCancelDelete}
-          />
-        </StyledCard>
+  return (
+    virtualized ? (
+       <Box sx={{ height: '100%' }}>{cardContent}</Box>
+    ) : (
+      <Grid item xs={12} sm={6} md={4} lg={3}>
+         {cardContent}
       </Grid>
     )
   );
@@ -446,7 +398,7 @@ const HistoryEntryCard = memo(({
 HistoryEntryCard.propTypes = {
   entry: PropTypes.shape({
     id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-    path_id: PropTypes.string,
+    path_id: PropTypes.string.isRequired,
     topic: PropTypes.string.isRequired,
     creation_date: PropTypes.string,
     last_modified_date: PropTypes.string,

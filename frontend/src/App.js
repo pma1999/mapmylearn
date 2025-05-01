@@ -13,6 +13,9 @@ import ProtectedRoute from './components/ProtectedRoute';
 // Import auth provider and hook
 import { AuthProvider, useAuth } from './services/authContext';
 
+// Import Notification provider
+import { NotificationProvider } from './contexts/NotificationContext';
+
 // Import the centralized route configuration
 import routesConfig from './routesConfig';
 
@@ -80,16 +83,18 @@ function App() {
     <AuthProvider>
       <Analytics />
       <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <Box sx={{ 
-          display: 'flex', 
-          flexDirection: 'column', 
-          minHeight: '100vh',
-        }}>
-          <Navbar />
-          <AppContent />
-          <Footer />
-        </Box>
+        <NotificationProvider>
+          <CssBaseline />
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            minHeight: '100vh',
+          }}>
+            <Navbar />
+            <AppContent />
+            <Footer />
+          </Box>
+        </NotificationProvider>
       </ThemeProvider>
     </AuthProvider>
   );

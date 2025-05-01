@@ -4,118 +4,82 @@ import {
   Card,
   CardContent,
   Skeleton,
-  Grid,
   Box,
-  Divider
+  Divider,
+  Stack
 } from '@mui/material';
 
 /**
- * Skeleton loading component for history entries
- * @param {Object} props - Component props
- * @param {number} props.count - Number of skeletons to display
- * @param {boolean} props.virtualized - Whether the skeleton is for virtualized list
- * @returns {JSX.Element} History entry skeleton
+ * Skeleton loading component for a single history entry.
+ * Designed to mimic the structure and spacing of HistoryEntryCard.
  */
-const HistoryEntrySkeleton = memo(({ count = 1, virtualized = false }) => {
-  // Animation delay factors for staggered loading effect
-  const getAnimationDelay = (index) => {
-    return `${(index % 5) * 0.1}s`;
+const HistoryEntrySkeletonInternal = memo(({ index }) => {
+  // Animation delay factors for staggered loading effect (optional)
+  const getAnimationDelay = (idx) => {
+    return `${(idx % 5) * 0.1}s`; // Use idx passed from parent grid
   };
-  
-  const SkeletonContent = ({ index }) => (
-    <CardContent sx={{ p: { xs: 2, md: virtualized ? 2 : 3 } }}>
-      <Skeleton 
-        variant="text" 
-        width="70%" 
-        height={40} 
-        animation="wave"
-        sx={{ animationDelay: getAnimationDelay(index) }}
-      />
-      <Skeleton 
-        variant="text" 
-        width="40%" 
-        animation="wave"
-        sx={{ animationDelay: getAnimationDelay(index) }}
-      />
-      <Skeleton 
-        variant="text" 
-        width="60%" 
-        animation="wave"
-        sx={{ animationDelay: getAnimationDelay(index) }}
-      />
-      <Box sx={{ mt: 1, mb: 2, display: 'flex', flexWrap: 'wrap' }}>
-        <Skeleton 
-          variant="rectangular" 
-          width={120} 
-          height={24} 
-          sx={{ borderRadius: 4, mr: 1, animationDelay: getAnimationDelay(index) }} 
-          animation="wave"
-        />
-        <Skeleton 
-          variant="rectangular" 
-          width={100} 
-          height={24} 
-          sx={{ borderRadius: 4, animationDelay: getAnimationDelay(index) }}
-          animation="wave"
-        />
-      </Box>
-      <Skeleton 
-        variant="rectangular" 
-        height={80} 
-        animation="wave"
-        sx={{ animationDelay: getAnimationDelay(index) }}
-      />
-      <Divider sx={{ my: 2 }} />
-      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-        <Skeleton 
-          variant="rectangular" 
-          width={100} 
-          height={30} 
-          sx={{ borderRadius: 1, animationDelay: getAnimationDelay(index) }}
-          animation="wave"
-        />
-        <Box>
+
+  // Mimic the structure of HistoryEntryCard
+  return (
+    <Card variant="outlined" sx={{ height: '100%' }}>
+      <CardContent sx={{ p: { xs: 1.5, sm: 2 }, display: 'flex', flexDirection: 'column', height: '100%' }}>
+        {/* Top Section */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+          {/* Title Skeleton */}
           <Skeleton 
-            variant="circular" 
-            width={24} 
-            height={24} 
-            sx={{ display: 'inline-block', mr: 1, animationDelay: getAnimationDelay(index) }}
+            variant="text" 
+            width="70%" 
+            height={24} // Match Typography h6 size approx
             animation="wave"
+            sx={{ animationDelay: getAnimationDelay(index), mb: 0.5 }} // Add margin bottom like Typography
           />
-          <Skeleton 
-            variant="circular" 
-            width={24} 
-            height={24} 
-            sx={{ display: 'inline-block', animationDelay: getAnimationDelay(index) }}
-            animation="wave"
-          />
+          {/* Icons Skeleton */}
+          <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+             <Skeleton variant="circular" width={20} height={20} sx={{ p: 0.5, animationDelay: getAnimationDelay(index) }} animation="wave" />
+             <Skeleton variant="circular" width={20} height={20} sx={{ p: 0.5, ml: 0.5, animationDelay: getAnimationDelay(index) }} animation="wave" />
+          </Box>
         </Box>
-      </Box>
-    </CardContent>
+
+        {/* Info Section: Dates */}
+        <Stack direction="row" spacing={1.5} sx={{ mb: 1.5, flexWrap: 'wrap' }} alignItems="center">
+          <Skeleton variant="text" width="80px" height={16} animation="wave" sx={{ animationDelay: getAnimationDelay(index) }} />
+          <Skeleton variant="text" width="80px" height={16} animation="wave" sx={{ animationDelay: getAnimationDelay(index) }} />
+        </Stack>
+        
+        {/* Info Section: Chips */}
+        <Stack direction="row" spacing={1} sx={{ mb: 1.5, flexWrap: 'wrap' }} alignItems="center">
+           <Skeleton variant="rounded" width={100} height={22} sx={{ borderRadius: '16px', animationDelay: getAnimationDelay(index) }} animation="wave" />
+           <Skeleton variant="rounded" width={90} height={22} sx={{ borderRadius: '16px', animationDelay: getAnimationDelay(index) }} animation="wave" />
+        </Stack>
+
+        {/* Tags Section Skeleton */}
+        <Box sx={{ mb: 1 }}>
+            <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
+                <Skeleton variant="rounded" width={70} height={22} sx={{ borderRadius: '16px', animationDelay: getAnimationDelay(index) }} animation="wave" />
+                <Skeleton variant="rounded" width={80} height={22} sx={{ borderRadius: '16px', animationDelay: getAnimationDelay(index) }} animation="wave" />
+            </Stack>
+            {/* Skeleton for the Add Tag button area */}
+            <Skeleton variant="text" width={60} height={20} sx={{ mt: 0.5, animationDelay: getAnimationDelay(index) }} animation="wave"/> 
+        </Box>
+
+        {/* Spacer */}
+        <Box sx={{ flexGrow: 1 }} />
+
+        {/* Bottom Action Skeleton */}
+        <Divider sx={{ my: 1.5 }} />
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+           <Skeleton variant="rounded" width={80} height={28} sx={{ borderRadius: 1, animationDelay: getAnimationDelay(index) }} animation="wave" />
+        </Box>
+      </CardContent>
+    </Card>
   );
-  
-  if (virtualized) {
-    // For virtualized lists, don't wrap in Grid
-    return Array.from(new Array(count)).map((_, index) => (
-      <Card key={index} variant="outlined" sx={{ height: '100%' }}>
-        <SkeletonContent index={index} />
-      </Card>
-    ));
-  }
-  
-  // Standard grid layout
-  return Array.from(new Array(count)).map((_, index) => (
-    <Grid item xs={12} sm={6} md={4} key={index}>
-      <Card variant="outlined" sx={{ height: '100%' }}>
-        <SkeletonContent index={index} />
-      </Card>
-    </Grid>
-  ));
 });
 
-HistoryEntrySkeleton.propTypes = {
-  count: PropTypes.number,
-  virtualized: PropTypes.bool
+HistoryEntrySkeletonInternal.propTypes = {
+  index: PropTypes.number.isRequired,
 };
+
+// Keep the export name the same for compatibility
+const HistoryEntrySkeleton = HistoryEntrySkeletonInternal;
 
 export default HistoryEntrySkeleton; 

@@ -1,20 +1,29 @@
-import React from 'react';
+import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import { Link as RouterLink } from 'react-router';
 import { 
   Box, 
   Typography, 
   Button, 
-  Chip, 
+  Chip,
   useMediaQuery, 
-  useTheme 
+  useTheme,
+  IconButton,
+  Tooltip,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
+  Stack,
+  ButtonGroup
 } from '@mui/material';
 import HistoryIcon from '@mui/icons-material/History';
 import AddIcon from '@mui/icons-material/Add';
 import UploadIcon from '@mui/icons-material/Upload';
 import DownloadIcon from '@mui/icons-material/Download';
 import ClearAllIcon from '@mui/icons-material/ClearAll';
-import StorageIcon from '@mui/icons-material/Storage';
+import CloudDoneIcon from '@mui/icons-material/CloudDone';
+import SettingsIcon from '@mui/icons-material/Settings';
 
 import { PageHeaderWrapper, ActionButtonsWrapper } from '../styledComponents';
 
@@ -32,64 +41,81 @@ import { PageHeaderWrapper, ActionButtonsWrapper } from '../styledComponents';
 const PageHeader = ({ hasEntries, onImport, onExport, onClear, isLoading = false, isProcessing = false }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  
+  const [anchorEl, setAnchorEl] = useState(null);
+  const open = Boolean(anchorEl);
+
+  const handleMenuClick = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleImportClick = () => {
+    onImport();
+    handleMenuClose();
+  };
+
+  const handleExportClick = () => {
+    onExport();
+    handleMenuClose();
+  };
+
+  const handleClearClick = () => {
+    onClear();
+    handleMenuClose();
+  };
+
   return (
     <PageHeaderWrapper>
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', mb: { xs: 2, sm: 0 } }}>
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <HistoryIcon sx={{ mr: 1, fontSize: { xs: 24, sm: 32 }, color: 'primary.main' }} />
+          <HistoryIcon sx={{ mr: 1, fontSize: { xs: 28, sm: 32 }, color: 'primary.main' }} />
           <Typography variant="h4" component="h1" sx={{ 
             fontWeight: 'bold',
-            fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' }
+            fontSize: { xs: '1.75rem', sm: '2rem', md: '2.125rem' }
           }}>
-            Learning Path History
+            History
           </Typography>
+          <Tooltip title="History is synchronized with your account" arrow>
+            <CloudDoneIcon color="action" sx={{ ml: 1, fontSize: '1.25rem' }} />
+          </Tooltip>
         </Box>
-        <Chip
-          icon={<StorageIcon />}
-          label="Synchronized with your account"
-          size="small"
-          color="primary"
-          variant="outlined"
-          sx={{ mt: 1, mb: 1 }}
-        />
       </Box>
       
       <ActionButtonsWrapper 
         direction={{ xs: 'column', sm: 'row' }} 
-        spacing={{ xs: 1, sm: 2 }}
+        spacing={{ xs: 1, sm: 1.5 }}
+        alignItems="center"
       >
-        <Button
-          variant="outlined"
-          startIcon={<UploadIcon />}
-          onClick={onImport}
-          fullWidth={isMobile}
-          size="small"
-          disabled={isLoading || isProcessing}
-        >
-          Import
-        </Button>
-        <Button
-          variant="outlined"
-          startIcon={<DownloadIcon />}
-          onClick={onExport}
-          disabled={!hasEntries || isLoading || isProcessing}
-          fullWidth={isMobile}
-          size="small"
-        >
-          Export All
-        </Button>
-        <Button
-          variant="outlined"
-          color="error"
-          startIcon={<ClearAllIcon />}
-          onClick={onClear}
-          disabled={!hasEntries || isLoading || isProcessing}
-          fullWidth={isMobile}
-          size="small"
-        >
-          Clear All
-        </Button>
+        <ButtonGroup variant="outlined" size="small" aria-label="History management actions" disabled={isLoading || isProcessing}>
+          <Button
+            startIcon={<UploadIcon />}
+            onClick={onImport}
+            sx={{ textTransform: 'none' }}
+          >
+            Import
+          </Button>
+          <Button
+            startIcon={<DownloadIcon />}
+            onClick={onExport}
+            disabled={!hasEntries || isLoading || isProcessing}
+            sx={{ textTransform: 'none' }}
+          >
+            Export All
+          </Button>
+          <Button
+            color="error"
+            startIcon={<ClearAllIcon />}
+            onClick={onClear}
+            disabled={!hasEntries || isLoading || isProcessing}
+            sx={{ textTransform: 'none' }}
+          >
+            Clear All
+          </Button>
+        </ButtonGroup>
+        
         <Button
           variant="contained"
           color="primary"
@@ -98,6 +124,7 @@ const PageHeader = ({ hasEntries, onImport, onExport, onClear, isLoading = false
           to="/generator"
           fullWidth={isMobile}
           size="small"
+          sx={{ textTransform: 'none' }}
         >
           Create New Path
         </Button>

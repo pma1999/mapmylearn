@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useCallback, useState } from 'react';
-import { Container, Paper, Divider, Grid, Snackbar, Alert, useMediaQuery, useTheme, Typography, Box } from '@mui/material';
+import { Container, Paper, Divider, Grid, useMediaQuery, useTheme, Typography, Box, Pagination, Stack } from '@mui/material';
 import { FixedSizeGrid } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
 
@@ -23,24 +23,46 @@ import ConfirmationDialog from './components/ConfirmationDialog';
 import * as api from '../../services/api';
 
 /**
- * Virtualized grid cell renderer for history entries
+ * Virtualized grid cell renderer for history entries and skeletons
  */
 const EntryCell = ({ columnIndex, rowIndex, style, data }) => {
-  const { entries, columnCount, onView, onDelete, onToggleFavorite, onUpdateTags, onDownloadPDF, onExport, onTogglePublic, onCopyShareLink } = data;
+  const { 
+    entries, 
+    columnCount, 
+    onView, 
+    onDelete, 
+    onToggleFavorite, 
+    onUpdateTags, 
+    onDownloadPDF, 
+    onExport, 
+    onTogglePublic, 
+    onCopyShareLink,
+    isLoading // Added isLoading flag
+  } = data;
   const index = rowIndex * columnCount + columnIndex;
   
+  // If loading, render skeleton if index is within skeleton count
+  if (isLoading) {
+     if (index < data.skeletonCount) {
+        return (
+          <div style={{ ...style, padding: '8px', boxSizing: 'border-box' }}>
+            <HistoryEntrySkeleton index={index} />
+          </div>
+        );
+     } else {
+        return null; // Don't render anything beyond skeleton count
+     }
+  }
+  
+  // If not loading, render actual entry if index is valid
   if (index >= entries.length) {
-    return null; // Return empty for cells beyond our data
+    return null; // Return empty for cells beyond real data
   }
   
   const entry = entries[index];
   
   return (
-    <div style={{
-      ...style,
-      padding: '8px',
-      boxSizing: 'border-box'
-    }}>
+    <div style={{ ...style, padding: '8px', boxSizing: 'border-box' }}>
       {entry.isActive ? (
         <ActiveGenerationCard 
           entry={entry} 
@@ -92,14 +114,13 @@ const HistoryPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
-  const isSmallScreen = useMediaQuery(theme.breakpoints.down('lg'));
+  const isLargeScreen = useMediaQuery(theme.breakpoints.up('lg'));
   
+  const [page, setPage] = useState(1);
+  const ITEMS_PER_PAGE = 12;
+
   // Initialize notification hook
-  const { 
-    notification, 
-    showNotification, 
-    closeNotification 
-  } = useNotification();
+  const { showNotification } = useNotification();
   
   // Initialize filters hook
   const {
@@ -112,28 +133,24 @@ const HistoryPage = () => {
     clearFilters
   } = useHistoryFilters();
   
-  // Initialize history entries hook with filter options
+  // Fetch entries with pagination
   const {
     entries,
+    pagination,
     loading,
     error,
     stats,
     initialLoadComplete,
     refreshEntries
   } = useHistoryEntries(
-    { sortBy, filterSource, searchTerm },
+    { sortBy, filterSource, searchTerm, page, perPage: ITEMS_PER_PAGE },
     showNotification
   );
   
   // State for dialogs and processing status
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false); // Added for disabling buttons during actions
-
-  // Placeholder handlers for PageHeader props - Updated Below
-  // const handleImport = () => console.warn('Import functionality not implemented yet.');
-  // const handleExportAll = () => console.warn('Export All functionality not implemented yet.');
-  // const handleClearHistory = () => console.warn('Clear History functionality not implemented yet.');
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Mock/Placeholder handler for individual entry export
   const handleExportEntry = (entryId) => console.warn(`Export for entry ${entryId} not implemented yet.`);
@@ -147,7 +164,7 @@ const HistoryPage = () => {
   const handlePerformImport = async (learningPathObject) => {
     setIsProcessing(true);
     setIsImportDialogOpen(false); // Close dialog immediately
-    showNotification('Importing history...', 'info');
+    showNotification('Importing learning path...', { severity: 'info' });
     try {
       // Prepare payload for saveToHistory (matches LearningPathCreate schema)
       const payload = {
@@ -163,7 +180,7 @@ const HistoryPage = () => {
       const result = await api.saveToHistory(payload);
       
       if (result.success) {
-        showNotification(`Learning path "${payload.topic}" imported successfully!`, 'success');
+        showNotification(`"${payload.topic}" imported successfully!`, { severity: 'success' });
         refreshEntries(); // Refresh the list
       } else {
         // This path might not be reached if api throws error, but good practice
@@ -171,7 +188,7 @@ const HistoryPage = () => {
       }
     } catch (error) {
       console.error("Import failed:", error);
-      showNotification(`Import failed: ${error.message || 'Could not process the import request.'}`, 'error');
+      showNotification(`Import failed: ${error.message || 'Could not process the import request.'}`, { severity: 'error' });
     } finally {
       setIsProcessing(false);
     }
@@ -179,11 +196,11 @@ const HistoryPage = () => {
 
   const handleExportAll = async () => {
     if (!entries.length) {
-      showNotification('No history entries to export.', 'info');
+      showNotification('No history entries to export.', { severity: 'info' });
       return;
     }
     setIsProcessing(true);
-    showNotification('Exporting history...', 'info');
+    showNotification('Exporting all history...', { severity: 'info' });
     try {
       // Call the placeholder for the backend API endpoint
       const exportedEntries = await api.exportAllHistoryAPI(); 
@@ -191,7 +208,7 @@ const HistoryPage = () => {
       // --- This download logic will execute only if the API call succeeds --- 
       // --- (which it won't until the backend endpoint is implemented) --- 
       if (!exportedEntries || exportedEntries.length === 0) {
-        showNotification('No history entries found to export.', 'info');
+        showNotification('No history entries found to export.', { severity: 'info' });
         // No return here, proceed to finally
       } else {
         const jsonString = JSON.stringify(exportedEntries, null, 2);
@@ -205,12 +222,12 @@ const HistoryPage = () => {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         
-        showNotification('History exported successfully.', 'success');
+        showNotification('History exported successfully.', { severity: 'success' });
       }
     } catch (error) {
       console.error("Export failed:", error);
       // Display the error from the API call (or the placeholder error)
-      showNotification(`Export failed: ${error.message}`, 'error'); 
+      showNotification(`Export failed: ${error.message}`, { severity: 'error' }); 
     } finally {
       setIsProcessing(false);
     }
@@ -223,20 +240,20 @@ const HistoryPage = () => {
   const handlePerformClear = async () => {
     setIsClearConfirmOpen(false); // Close dialog immediately
     setIsProcessing(true);
-    showNotification('Clearing history...', 'info');
+    showNotification('Clearing all history...', { severity: 'info' });
     try {
        // Call the placeholder for the backend API endpoint
       await api.clearAllHistoryAPI();
 
       // --- This success logic will execute only if the API call succeeds --- 
       // --- (which it won't until the backend endpoint is implemented) --- 
-      showNotification('History cleared successfully.', 'success');
+      showNotification('History cleared successfully.', { severity: 'success' });
       refreshEntries(); // Refresh the list
       
     } catch (error) {
       console.error("Clear history failed:", error);
       // Display the error from the API call (or the placeholder error)
-      showNotification(`Failed to clear history: ${error.message}`, 'error');
+      showNotification(`Failed to clear history: ${error.message}`, { severity: 'error' });
     } finally {
       setIsProcessing(false);
     }
@@ -255,35 +272,26 @@ const HistoryPage = () => {
     handleCopyShareLink
   } = useHistoryActions(showNotification, refreshEntries);
   
-  // Calculate grid dimensions based on screen size
-  const columnCount = useMemo(() => {
-    if (isMobile) return 1;
-    if (isTablet) return 2;
-    if (isSmallScreen) return 3;
-    return 4;
-  }, [isMobile, isTablet, isSmallScreen]);
-  
-  // Calculate row count based on entries length and column count
-  const rowCount = useMemo(() => {
-    return Math.ceil(entries.length / columnCount);
-  }, [entries.length, columnCount]);
-  
-  // Compute item size based on screen size
-  const itemWidth = useMemo(() => {
-    if (isMobile) return 300;
-    if (isTablet) return 280;
-    if (isSmallScreen) return 260;
-    return 270;
-  }, [isMobile, isTablet, isSmallScreen]);
-  
-  const itemHeight = 400; // Increased height for cards to accommodate new elements
-  
-  // Computed value to check if any filters are applied
-  const hasFiltersApplied = !!filterSource || !!searchTerm || sortBy !== 'creation_date';
-  
-  // Virtualized list itemData - include onExport
+  const handlePageChange = (event, newPage) => {
+    setPage(newPage);
+    // The useHistoryEntries hook should re-fetch data when 'page' changes
+  };
+
+  const hasFiltersApplied = useMemo(() => {
+      return searchTerm !== '' || filterSource !== null || sortBy !== 'creation_date';
+  }, [searchTerm, filterSource, sortBy]);
+
+  // Calculate grid parameters
+  const columnCount = isMobile ? 1 : isTablet ? 2 : isLargeScreen ? 4 : 3;
+  const isLoadingSkeletons = loading && !initialLoadComplete;
+  // Use ITEMS_PER_PAGE for skeletons, actual entries length for data
+  const displayData = isLoadingSkeletons ? Array(ITEMS_PER_PAGE).fill({ isSkeleton: true }) : entries;
+  const rowCount = Math.ceil(displayData.length / columnCount);
+  const cardHeight = 380;
+
+  // Memoize itemData for react-window, include loading state and skeleton count
   const itemData = useMemo(() => ({
-    entries,
+    entries: displayData, // Use potentially skeleton-filled array
     columnCount,
     onView: handleViewLearningPath,
     onDelete: handleDeleteLearningPath,
@@ -292,50 +300,77 @@ const HistoryPage = () => {
     onDownloadPDF: handleDownloadPDF,
     onExport: handleExportEntry,
     onTogglePublic: handleTogglePublic,
-    onCopyShareLink: handleCopyShareLink
+    onCopyShareLink: handleCopyShareLink,
+    isLoading: isLoadingSkeletons, // Pass loading flag
+    skeletonCount: ITEMS_PER_PAGE // Pass expected skeleton count (used by EntryCell)
   }), [
-    entries, 
+    displayData, // Depends on loading state
     columnCount, 
     handleViewLearningPath, 
     handleDeleteLearningPath, 
     handleToggleFavorite, 
     handleUpdateTags, 
-    handleDownloadPDF,
-    handleExportEntry,
-    handleTogglePublic,
-    handleCopyShareLink
+    handleDownloadPDF, 
+    handleExportEntry, 
+    handleTogglePublic, 
+    handleCopyShareLink,
+    isLoadingSkeletons // Add dependency
   ]);
   
-  // Reference to AutoSizer for recalculating dimensions when entries change
-  const autoSizerRef = useRef(null);
-  
-  // Handler for refreshing the grid size
-  const refreshGridSize = useCallback(() => {
-    if (autoSizerRef.current) {
-      // Force a recalculation of the grid dimensions
-      autoSizerRef.current.forceUpdate();
-    }
-  }, []);
-  
-  // Refresh grid size when entries change
-  React.useEffect(() => {
-    refreshGridSize();
-  }, [entries.length, refreshGridSize]);
-  
-  return (
-    <Container maxWidth="lg">
-      <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, borderRadius: 2, mb: 4 }}>
-        <PageHeader 
-          hasEntries={entries.length > 0}
-          isLoading={loading && !initialLoadComplete}
-          isProcessing={isProcessing}
-          onImport={handleImport}
-          onExport={handleExportAll}
-          onClear={handleClearHistory}
+  // Render Logic
+  const renderContent = () => {
+    // Check for EmptyState AFTER checking for loading, otherwise it might flash empty state briefly
+    if (!isLoadingSkeletons && entries.length === 0) {
+      return (
+        <EmptyState 
+          hasFilters={hasFiltersApplied}
+          onClearFilters={clearFilters} 
         />
-        
-        <Divider sx={{ mb: 3 }} />
-        
+      );
+    }
+    
+    // Always render the grid: it shows skeletons when loading, entries when loaded
+    return (
+        <Box sx={{ height: 'calc(100vh - 250px)', width: '100%' }}> {/* Adjust height */} 
+            <AutoSizer>
+            {({
+                height,
+                width
+            }) => {
+                const cardWidth = width / columnCount;
+                const effectiveRowCount = Math.max(1, rowCount);
+                return (
+                <FixedSizeGrid
+                    columnCount={columnCount}
+                    columnWidth={cardWidth}
+                    height={height}
+                    rowCount={effectiveRowCount} 
+                    rowHeight={cardHeight}
+                    width={width}
+                    itemData={itemData}
+                    style={{ overflowX: 'hidden'}}
+                >
+                    {EntryCell}
+                </FixedSizeGrid>
+                );
+            }}
+            </AutoSizer>
+        </Box>
+    );
+  };
+
+  return (
+    <Container maxWidth="xl" sx={{ py: 3 }}>
+      <PageHeader
+        hasEntries={entries.length > 0}
+        onImport={handleImport}
+        onExport={handleExportAll}
+        onClear={handleClearHistory}
+        isLoading={loading && !initialLoadComplete}
+        isProcessing={isProcessing}
+      />
+      
+      <Paper elevation={0} sx={{ p: { xs: 1.5, sm: 2 }, mb: 3, border: '1px solid', borderColor: 'divider' }}>
         <HistoryFilters
           sortBy={sortBy}
           onSortChange={handleSortChange}
@@ -343,88 +378,49 @@ const HistoryPage = () => {
           onFilterChange={handleFilterChange}
           search={searchTerm}
           onSearchChange={handleSearchChange}
-          disabled={loading && !initialLoadComplete}
+          clearFilters={clearFilters}
+          hasFilters={hasFiltersApplied}
         />
-        
-        <PerformanceStats 
-          stats={stats} 
-          visible={process.env.NODE_ENV === 'development' && initialLoadComplete} 
-        />
-        
-        {loading && !initialLoadComplete ? (
-          // Show skeletons only on initial load
-          <Grid container spacing={2}>
-            <HistoryEntrySkeleton count={8} />
-          </Grid>
-        ) : error ? (
-          // Error state
-          <Box sx={{ py: 4, textAlign: 'center' }}>
-            <Typography color="error" gutterBottom>
-              {error}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Please try refreshing the page or check your network connection.
-            </Typography>
-          </Box>
-        ) : entries.length > 0 ? (
-          // Virtualized grid for better performance with many entries
-          <Box sx={{ height: Math.min(800, Math.max(400, rowCount * itemHeight / 2)), width: '100%' }}>
-            <AutoSizer ref={autoSizerRef}>
-              {({ height, width }) => (
-                <FixedSizeGrid
-                  columnCount={columnCount}
-                  columnWidth={width / columnCount}
-                  height={height}
-                  rowCount={rowCount}
-                  rowHeight={itemHeight}
-                  width={width}
-                  itemData={itemData}
-                >
-                  {EntryCell}
-                </FixedSizeGrid>
-              )}
-            </AutoSizer>
-          </Box>
-        ) : (
-          // Empty state
-          <EmptyState 
-            onClearFilters={hasFiltersApplied ? clearFilters : undefined}
-            hasFilters={hasFiltersApplied}
-          />
-        )}
       </Paper>
       
-      {/* Render Dialogs */}
-      <ImportDialog 
-        open={isImportDialogOpen} 
-        onClose={() => !isProcessing && setIsImportDialogOpen(false)} // Prevent closing while processing
-        onImport={handlePerformImport} // Pass the actual import handler
-      />
+      {renderContent()}
       
-      <ConfirmationDialog 
-        open={isClearConfirmOpen} 
-        title="Confirm Clear History" 
-        message="Are you sure you want to delete ALL learning path history entries? This action cannot be undone." 
-        onConfirm={handlePerformClear} 
-        onCancel={() => !isProcessing && setIsClearConfirmOpen(false)} // Prevent closing while processing
-      />
+      {!isLoadingSkeletons && pagination && pagination.total > 0 && pagination.total > ITEMS_PER_PAGE && (
+        <Stack spacing={2} sx={{ mt: 3, alignItems: 'center' }}>
+            <Typography variant="body2" color="text.secondary">
+                Showing {entries.length} of {pagination.total} paths
+            </Typography>
+            <Pagination 
+                count={Math.ceil(pagination.total / ITEMS_PER_PAGE)}
+                page={page}
+                onChange={handlePageChange}
+                color="primary"
+                showFirstButton 
+                showLastButton 
+                sx={{ 
+                  '& .MuiPaginationItem-root': {
+                    fontSize: '0.875rem'
+                  }
+                }}
+            />
+        </Stack>
+      )}
 
-      {/* Notification Snackbar */}
-      <Snackbar
-        open={notification.open}
-        autoHideDuration={6000}
-        onClose={closeNotification}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      >
-        <Alert 
-          onClose={closeNotification} 
-          severity={notification.severity} 
-          variant="filled"
-          sx={{ width: '100%' }}
-        >
-          {notification.message}
-        </Alert>
-      </Snackbar>
+      <PerformanceStats stats={stats} visible={process.env.NODE_ENV === 'development'} />
+
+      <ImportDialog
+        open={isImportDialogOpen}
+        onClose={() => setIsImportDialogOpen(false)}
+        onImport={handlePerformImport}
+      />
+      <ConfirmationDialog
+        open={isClearConfirmOpen}
+        title="Clear All History"
+        message="Are you sure you want to delete ALL learning paths from your history? This action cannot be undone."
+        onConfirm={handlePerformClear}
+        onCancel={() => setIsClearConfirmOpen(false)}
+        isDestructive={true}
+      />
     </Container>
   );
 };

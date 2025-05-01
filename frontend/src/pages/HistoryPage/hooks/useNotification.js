@@ -1,40 +1,35 @@
-import { useState } from 'react';
+import { useNotifier } from '../../../contexts/NotificationContext';
 
 /**
- * Custom hook for managing notifications
- * @returns {Object} Notification state and functions
+ * Custom hook providing a simple interface to display notifications.
+ * This hook now acts as a wrapper around the NotificationContext.
+ * @returns {Function} showNotification function
  */
 const useNotification = () => {
-  const [notification, setNotification] = useState({ 
-    open: false, 
-    message: '', 
-    severity: 'info' 
-  });
+  const { showNotification: contextShowNotification } = useNotifier();
 
   /**
-   * Show a notification with specified message and severity
-   * @param {string} message - The message to display
-   * @param {string} severity - The severity level (info, success, warning, error)
+   * Show a notification with specified message and severity/options.
+   * @param {string} message - The message to display.
+   * @param {object|string} [optionsOrSeverity='info'] - Either a severity string ('info', 'success', 'warning', 'error') 
+   *                                                    or an options object { severity?: string, duration?: number }.
    */
-  const showNotification = (message, severity = 'info') => {
-    setNotification({
-      open: true,
-      message,
-      severity,
-    });
+  const showNotification = (message, optionsOrSeverity = 'info') => {
+    let options = {};
+    if (typeof optionsOrSeverity === 'string') {
+      options.severity = optionsOrSeverity;
+    } else if (typeof optionsOrSeverity === 'object' && optionsOrSeverity !== null) {
+      options = optionsOrSeverity;
+    }
+    
+    contextShowNotification(message, options);
   };
 
-  /**
-   * Close the current notification
-   */
-  const handleNotificationClose = () => {
-    setNotification({ ...notification, open: false });
-  };
-
+  // The actual Snackbar rendering and closing logic is now handled by NotificationProvider.
+  // This hook just provides the function to trigger notifications.
   return {
-    notification,
     showNotification,
-    closeNotification: handleNotificationClose
+    // No need to return notification state or closeNotification anymore
   };
 };
 

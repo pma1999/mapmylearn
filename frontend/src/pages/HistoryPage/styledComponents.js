@@ -9,6 +9,7 @@ export const StyledCard = styled(Card)(({ theme }) => ({
   display: 'flex',
   flexDirection: 'column',
   transition: 'transform 0.2s ease, box-shadow 0.2s ease, all 0.3s ease-in-out',
+  cursor: 'pointer',
   '&:hover': {
     transform: 'translateY(-4px)',
     boxShadow: theme.shadows[4],

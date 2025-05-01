@@ -22,9 +22,10 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
  * @param {string} props.message - Dialog message
  * @param {Function} props.onConfirm - Handler for confirmation
  * @param {Function} props.onCancel - Handler for cancellation
+ * @param {boolean} [props.isDestructive] - Optional: If true, styles confirm button for destructive actions
  * @returns {JSX.Element} Confirmation dialog component
  */
-const ConfirmationDialog = ({ open, title, message, onConfirm, onCancel }) => {
+const ConfirmationDialog = ({ open, title, message, onConfirm, onCancel, isDestructive = false }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
@@ -38,7 +39,7 @@ const ConfirmationDialog = ({ open, title, message, onConfirm, onCancel }) => {
       TransitionComponent={Slide}
       TransitionProps={{ direction: 'up' }}
     >
-      <DialogTitle>
+      <DialogTitle sx={{ fontWeight: 'bold' }}>
         {isMobile && (
           <IconButton
             edge="start"
@@ -57,26 +58,33 @@ const ConfirmationDialog = ({ open, title, message, onConfirm, onCancel }) => {
       </DialogContent>
       <DialogActions sx={{ 
         px: { xs: 2, sm: 3 }, 
-        py: { xs: 2, sm: 1 }, 
-        flexDirection: isMobile ? 'column' : 'row', 
-        alignItems: isMobile ? 'stretch' : 'center' 
+        py: { xs: 2, sm: 1.5 },
+        flexDirection: isMobile ? 'column-reverse' : 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-end'
       }}>
         <Button 
           onClick={onCancel} 
-          color="primary"
+          variant="text"
           fullWidth={isMobile}
-          sx={{ mb: isMobile ? 1 : 0 }}
+          sx={{ mb: isMobile ? 1 : 0, mr: isMobile ? 0 : 1 }}
         >
           Cancel
         </Button>
         <Button 
           onClick={onConfirm} 
-          color="primary" 
+          color={isDestructive ? 'error' : 'primary'}
           variant="contained" 
           autoFocus
           fullWidth={isMobile}
+          sx={{ 
+            ...(isDestructive && {
+              // Example: backgroundColor: theme.palette.error.dark, 
+              // '&:hover': { backgroundColor: theme.palette.error.main }
+            })
+          }}
         >
-          Confirm
+          {isDestructive ? 'Confirm Delete' : 'Confirm'}
         </Button>
       </DialogActions>
     </Dialog>
@@ -88,7 +96,8 @@ ConfirmationDialog.propTypes = {
   title: PropTypes.string.isRequired,
   message: PropTypes.string.isRequired,
   onConfirm: PropTypes.func.isRequired,
-  onCancel: PropTypes.func.isRequired
+  onCancel: PropTypes.func.isRequired,
+  isDestructive: PropTypes.bool
 };
 
 export default ConfirmationDialog; 

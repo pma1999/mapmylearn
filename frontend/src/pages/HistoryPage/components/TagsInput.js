@@ -1,8 +1,18 @@
 import React, { useState, memo, useCallback } from 'react';
 import PropTypes from 'prop-types';
-import { Box, TextField, Button, Chip, Tooltip, Typography } from '@mui/material';
+import { 
+  Box, 
+  TextField, 
+  Button, 
+  Chip, 
+  Tooltip, 
+  Typography, 
+  IconButton, 
+  InputAdornment 
+} from '@mui/material';
 import LabelIcon from '@mui/icons-material/Label';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import { StyledChip } from '../styledComponents';
 
 /**
@@ -29,6 +39,9 @@ const TagsInput = memo(({ tags = [], onAddTag, onDeleteTag, maxDisplayTags = nul
     if (e.key === 'Enter') {
       e.preventDefault();
       handleAddTag();
+    } else if (e.key === 'Escape') {
+      setShowInput(false);
+      setNewTag('');
     }
   }, [handleAddTag]);
   
@@ -36,8 +49,8 @@ const TagsInput = memo(({ tags = [], onAddTag, onDeleteTag, maxDisplayTags = nul
     setNewTag(e.target.value);
   }, []);
   
-  const handleToggleInput = useCallback(() => {
-    setShowInput(prev => !prev);
+  const handleShowInput = useCallback(() => {
+    setShowInput(true);
   }, []);
 
   // Determine which tags to show
@@ -52,61 +65,80 @@ const TagsInput = memo(({ tags = [], onAddTag, onDeleteTag, maxDisplayTags = nul
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', mb: 1 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.5, mb: 1 }}>
         {displayTags.map((tag) => (
           <StyledChip
             key={tag}
             label={tag}
             onDelete={() => onDeleteTag(tag)}
             size="small"
-            icon={<LabelIcon />}
+            icon={<LabelIcon fontSize="small" />}
           />
         ))}
         
         {hiddenTagsCount > 0 && (
-          <Tooltip title={tags.slice(maxDisplayTags).join(', ')} arrow>
+          <Tooltip 
+            arrow 
+            title={
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                {tags.slice(maxDisplayTags).map(tag => (
+                  <Typography key={tag} variant="body2">{tag}</Typography>
+                ))}
+              </Box>
+            }
+          >
             <StyledChip
-              icon={<MoreHorizIcon />}
-              label={`+${hiddenTagsCount} more`}
+              icon={<MoreHorizIcon fontSize="small" />}
+              label={`+${hiddenTagsCount}`}
               size="small"
-              sx={{ cursor: 'pointer' }}
+              sx={{ cursor: 'help' }}
             />
           </Tooltip>
         )}
-      </Box>
-      
-      {showInput ? (
-        <Box sx={{ display: 'flex' }}>
+        
+        {showInput ? (
           <TextField
             size="small"
             value={newTag}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder="Add tag..."
+            placeholder="New tag..."
             variant="outlined"
-            fullWidth
-            sx={{ mr: 1 }}
             autoFocus
+            onBlur={() => { if (!newTag) setShowInput(false); }}
+            sx={{ 
+              maxWidth: '150px',
+              '& .MuiInputBase-root': { height: '28px' }
+            }}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    aria-label="add tag"
+                    onClick={handleAddTag}
+                    disabled={!newTag.trim() || tags.includes(newTag.trim())}
+                    edge="end"
+                    size="small"
+                  >
+                    <AddCircleOutlineIcon fontSize="small" />
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
           />
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={handleAddTag}
-            disabled={!newTag.trim()}
-          >
-            Add
-          </Button>
-        </Box>
-      ) : (
-        <Button
-          size="small"
-          variant="text"
-          onClick={handleToggleInput}
-          sx={{ p: 0.5, minWidth: 'auto' }}
-        >
-          + Add Tag
-        </Button>
-      )}
+        ) : (
+          <Tooltip title="Add Tag" arrow>
+            <IconButton 
+              size="small" 
+              onClick={handleShowInput} 
+              aria-label="Add new tag"
+              sx={{ p: 0.25 }}
+            >
+              <AddCircleOutlineIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
+      </Box>
     </Box>
   );
 });
