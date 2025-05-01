@@ -27,6 +27,7 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import LinkIcon from '@mui/icons-material/Link';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import LockIcon from '@mui/icons-material/Lock';
+import BookmarkAddIcon from '@mui/icons-material/BookmarkAdd';
 import { motion } from 'framer-motion';
 import InfoTooltip from '../../shared/InfoTooltip';
 import { helpTexts } from '../../../constants/helpTexts';
@@ -54,6 +55,7 @@ import { helpTexts } from '../../../constants/helpTexts';
  * @param {Function} [props.onCopyShareLink] Handler to copy share link
  * @param {string|null} [props.entryId=null] Persistent ID of the path (if saved)
  * @param {boolean} [props.isLoggedIn=false] Whether the current user is logged in
+ * @param {Function} [props.onCopyToHistory] Handler to copy public path to user's history
  * @returns {JSX.Element} Header component
  */
 const LearningPathHeader = ({ 
@@ -75,7 +77,8 @@ const LearningPathHeader = ({
   onTogglePublic,
   onCopyShareLink,
   entryId = null,
-  isLoggedIn = false
+  isLoggedIn = false,
+  onCopyToHistory
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -345,6 +348,24 @@ const LearningPathHeader = ({
                   </motion.div>
                 )}
                 
+                {isPublicView && isLoggedIn && (
+                  <motion.div variants={buttonVariants} sx={{ width: '100%' }}>
+                    <Tooltip title="Save a copy to your personal history">
+                      <Button
+                        data-tut="copy-public-path-button"
+                        variant="outlined"
+                        fullWidth
+                        color="secondary"
+                        startIcon={<BookmarkAddIcon />}
+                        onClick={onCopyToHistory}
+                        size={isMobile ? "small" : "medium"}
+                      >
+                        Save to My History
+                      </Button>
+                    </Tooltip>
+                  </motion.div>
+                )}
+                
                 <motion.div variants={buttonVariants}>
                   <Button
                     data-tut="create-new-button"
@@ -407,6 +428,23 @@ const LearningPathHeader = ({
                     </Tooltip>
                   </motion.div>
                 )}
+
+                {isPublicView && isLoggedIn && (
+                  <motion.div variants={buttonVariants}>
+                    <Tooltip title="Save a copy to your personal history">
+                      <Button
+                        data-tut="copy-public-path-button"
+                        variant="outlined"
+                        color="secondary"
+                        startIcon={<BookmarkAddIcon />}
+                        onClick={onCopyToHistory}
+                      >
+                        Save to My History
+                      </Button>
+                    </Tooltip>
+                  </motion.div>
+                )}
+
                 <Box sx={{ flexGrow: { xs: 0, sm: 1 } }} />
                 <motion.div variants={buttonVariants}>
                   <Button
@@ -448,6 +486,7 @@ LearningPathHeader.propTypes = {
   onCopyShareLink: PropTypes.func,
   entryId: PropTypes.string,
   isLoggedIn: PropTypes.bool,
+  onCopyToHistory: PropTypes.func,
 };
 
 export default LearningPathHeader; 

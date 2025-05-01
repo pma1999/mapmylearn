@@ -1017,6 +1017,94 @@ async def get_public_learning_path(
     # For simplicity, return the standard response. Frontend will handle UI differences.
     return learning_path
 
+# --- NEW: Endpoint to copy a public learning path ---
+@router.post("/copy/{share_id}", response_model=LearningPathResponse, status_code=status.HTTP_201_CREATED)
+async def copy_public_learning_path(
+    share_id: str = Path(..., description="Share ID of the public learning path to copy"),
+    user: User = Depends(get_current_user), # Require authentication
+    db: Session = Depends(get_db)
+):
+    """
+    Copies a public learning path (specified by share_id) to the authenticated user's history.
+    The new copy is private by default and has its own independent progress tracking.
+    """
+    logger.info(f"User {user.id} attempting to copy public learning path with share_id: {share_id}")
+    
+    # 1. Fetch the original public path
+    original_path = db.query(LearningPath).filter(
+        LearningPath.share_id == share_id,
+        LearningPath.is_public == True
+    ).first()
+    
+    # 2. Handle Not Found
+    if not original_path:
+        logger.warning(f"Public learning path with share_id {share_id} not found or not public for copy attempt by user {user.id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Public learning path not found or sharing is disabled."
+        )
+        
+    # 3. Check if user already has a path with the same source topic (optional, prevents duplicates for the same user)
+    # You might want to disable this check if users should be allowed to copy the same public path multiple times.
+    existing_copy = db.query(LearningPath.path_id).filter(
+        LearningPath.user_id == user.id,
+        LearningPath.topic == original_path.topic,
+        LearningPath.source == "copied_public" # Check if they copied THIS topic before
+    ).first() # Use first() instead of scalar() to avoid errors if multiple exist (though unlikely)
+    
+    if existing_copy:
+         logger.warning(f"User {user.id} already has a copy of path topic '{original_path.topic}' (share_id: {share_id}). Skipping copy.")
+         # Instead of raising an error, maybe return the existing copy? Or a specific status code?
+         # For now, let's raise a 409 Conflict.
+         raise HTTPException(
+             status_code=status.HTTP_409_CONFLICT,
+             detail=f"You already have a copy of the learning path '{original_path.topic}' in your history."
+         )
+         # Alternatively, to return the existing copy (requires fetching it):
+         # existing_path_full = db.query(LearningPath).filter(LearningPath.path_id == existing_copy.path_id).first()
+         # return existing_path_full
+    
+    # 4. Extract Data and Generate New ID
+    new_path_id = str(uuid.uuid4())
+    
+    # 5. Create New Entry
+    new_learning_path = LearningPath(
+        user_id=user.id,
+        path_id=new_path_id,
+        topic=original_path.topic,
+        language=original_path.language,
+        path_data=original_path.path_data, # Direct copy of the content
+        creation_date=datetime.utcnow(),
+        last_modified_date=datetime.utcnow(),
+        favorite=False, # Reset to default
+        tags=[], # Reset to default
+        source="copied_public", # Indicate origin
+        is_public=False, # Private by default
+        share_id=None, # No share ID for the copy
+        last_visited_module_idx=None, # Reset progress tracking
+        last_visited_submodule_idx=None # Reset progress tracking
+    )
+    
+    # 6. Database Operations
+    try:
+        db.add(new_learning_path)
+        db.commit()
+        db.refresh(new_learning_path)
+        logger.info(f"Successfully copied public path {share_id} to new path {new_path_id} for user {user.id}")
+    except IntegrityError as e:
+        db.rollback()
+        logger.error(f"IntegrityError copying public path {share_id} for user {user.id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not copy learning path due to a database conflict.")
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Error copying public path {share_id} for user {user.id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to copy learning path.")
+        
+    # 7. Return Response (serialized by LearningPathResponse)
+    return new_learning_path
+
+# --- End NEW Endpoint ---
+
 # Need to include the public_router in the main FastAPI app in main.py or api.py
 # Example (in main.py or wherever app = FastAPI() is):
 # from backend.routes.learning_paths import public_router as public_learning_paths_router

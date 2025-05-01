@@ -1321,6 +1321,25 @@ export const getPublicLearningPath = async (shareId) => {
   }
 };
 
+// --- NEW: Function to copy a public learning path ---
+export const copyPublicPath = async (shareId) => {
+  try {
+    // Ensure auth token exists
+    if (!authToken) {
+        if (!initAuthFromStorage()) {
+            console.error('copyPublicPath Error: No auth token available.');
+            throw new Error('Authentication required. Please log in to copy.');
+        }
+    }
+    const response = await api.post(`/v1/learning-paths/copy/${shareId}`);
+    // response.data should be the new LearningPathResponse object
+    return response.data; 
+  } catch (error) {
+    console.error(`Error copying public learning path ${shareId}:`, error);
+    throw error; // Re-throw formatted error from interceptor
+  }
+};
+
 export default {
   generateLearningPath,
   getLearningPath,
@@ -1369,5 +1388,6 @@ export default {
   purchaseChatAllowance,
   updateLearningPathPublicity,
   getPublicLearningPath,
+  copyPublicPath,
 };
 

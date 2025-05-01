@@ -17,6 +17,7 @@ import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
 import QuestionAnswerIcon from '@mui/icons-material/QuestionAnswer';
 import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import LoginIcon from '@mui/icons-material/Login';
+import BookmarkAddIcon from '@mui/icons-material/BookmarkAdd'; // Import needed for header prop pass potentially
 
 // Custom hooks
 import useLearningPathData from '../hooks/useLearningPathData';
@@ -65,7 +66,7 @@ const LearningPathView = ({ source }) => {
 
   // --- NEW: Get auth state --- 
   const { user, isAuthenticated } = useAuth();
-  const navigate = useNavigate(); // For login/register buttons
+  const navigate = useNavigate(); // For login/register buttons and copy redirect
 
   // Load learning path data using the hook
   const {
@@ -241,6 +242,42 @@ const LearningPathView = ({ source }) => {
     handleTogglePublic, 
     handleCopyShareLink 
   } = usePathSharingActions(showNotification, refreshData);
+
+  // --- NEW: Handler for Copying Public Path ---
+  const handleCopyToHistory = async () => {
+    // Use shareId from params directly as that's what identifies the public path
+    const publicShareId = shareId; // Use shareId from the top-level useParams call
+    if (!publicShareId) {
+      showNotification('Cannot copy path: Missing share ID.', 'error');
+      return;
+    }
+    if (!isAuthenticated) {
+       showNotification('Please log in to save this path to your history.', 'warning');
+       // Optional: navigate('/login?redirect=' + encodeURIComponent(location.pathname));
+       return;
+    }
+
+    showNotification('Copying path to your history...', 'info');
+    try {
+      const newPathData = await apiService.copyPublicPath(publicShareId);
+      if (newPathData && newPathData.path_id) {
+        showNotification('Path successfully copied to your history!', 'success');
+        // Navigate to the new private copy in the user's history
+        navigate(`/history/${newPathData.path_id}`); 
+      } else {
+        // Should not happen if API returns correctly, but handle defensively
+        throw new Error('Copy operation response did not contain a new path ID.');
+      }
+    } catch (error) {
+      console.error("Failed to copy public path:", error);
+      // Check for specific 409 conflict error
+      if (error.response?.status === 409) {
+          showNotification(error.message || 'You already have a copy of this path.', 'warning');
+      } else {
+          showNotification(`Failed to copy path: ${error.message || 'Please try again.'}`, 'error');
+      }
+    }
+  };
 
   // Handler to toggle progress state
   const handleToggleProgress = useCallback(async (modIndex, subIndex) => {
@@ -765,6 +802,7 @@ const LearningPathView = ({ source }) => {
                isLoggedIn={isAuthenticated} // Pass login status
                onTogglePublic={() => handleTogglePublic(currentEntryId, !isPublic)} // Pass bound toggle handler
                onCopyShareLink={handleCopyShareLink} // Pass the raw function reference
+               onCopyToHistory={handleCopyToHistory} // Pass the new handler for copying
              />
              {/* Optional: Add overall progress bar here */}
              {/* Optional: Add Topic Resources link/button here */}
