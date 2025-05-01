@@ -134,12 +134,14 @@ async def generate_submodule_audio(
     learning_path: LearningPath,
     module_index: int,
     submodule_index: int,
-    language: str # Expecting ISO code 'en', 'es', etc.
+    language: str, # Expecting ISO code 'en', 'es', etc.
+    force_regenerate: bool = False # Add parameter
 ) -> str:
     """
     Generates audio for a specific submodule using OpenAI TTS, saves it, and returns the URL.
     Handles scraping, LLM script generation, potential script chunking, concurrent TTS,
     concatenation, and database updates if applicable.
+    Respects the force_regenerate flag to bypass cache checks.
     """
     # --- Validate Language ---
     if language not in AUDIO_SCRIPT_PROMPTS_BY_LANG:
@@ -150,6 +152,32 @@ async def generate_submodule_audio(
          )
 
     is_persisted = db is not None and hasattr(learning_path, 'id') and learning_path.id is not None
+
+    # --- Check Cache (only if persisted and not forced) ---
+    if is_persisted and not force_regenerate:
+        logger.info(f"Checking cache for existing audio URL (persisted path {learning_path.path_id}, force_regenerate=False).")
+        try:
+            path_data_json = learning_path.path_data
+            if isinstance(path_data_json, dict):
+                modules = path_data_json.get('modules', [])
+                if 0 <= module_index < len(modules):
+                    submodules = modules[module_index].get('submodules', [])
+                    if 0 <= submodule_index < len(submodules):
+                        # TODO: Future: Store language alongside URL? e.g., audio_urls: {"en": "/path/en.mp3"}
+                        # For now, any existing URL is returned, ignoring language match.
+                        existing_url = submodules[submodule_index].get('audio_url')
+                        if existing_url:
+                            logger.info(f"Found cached audio URL for {learning_path.path_id}/{module_index}/{submodule_index}: {existing_url}. Returning cached version.")
+                            return existing_url # Return cached URL
+            else:
+                logger.warning(f"path_data for persisted path {learning_path.path_id} is not a dict. Type: {type(path_data_json)}")
+        except Exception as e:
+            # Log error but proceed to generate if cache check fails
+            logger.exception(f"Error checking audio cache for {learning_path.path_id}/{module_index}/{submodule_index}: {e}")
+        logger.info(f"No suitable cached audio found for persisted path {learning_path.path_id}. Proceeding to generation.")
+    elif force_regenerate:
+         logger.info(f"force_regenerate=True. Skipping cache check for path {learning_path.path_id}.")
+    # --- End Cache Check ---
 
     if not OPENAI_API_KEY:
         logger.error("OPENAI_API_KEY is not set.")

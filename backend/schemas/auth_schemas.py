@@ -261,9 +261,12 @@ class ResetPasswordRequest(BaseModel):
 
 
 class GenerateAudioRequest(BaseModel):
-    path_data: Optional[Dict[str, Any]] = Field(None, description="Full learning path data, required only if path_id refers to a temporary/non-persisted path")
-    language: str = Field(..., description="Target language code (ISO 639-1) for the audio script.")
+    """Request body for generating audio."""
+    path_data: Optional[Dict[str, Any]] = None # Needed for temporary paths
+    language: str # ISO language code like 'en', 'es'
+    force_regenerate: bool = False # Add this field
 
 
 class GenerateAudioResponse(BaseModel):
+    """Response body for audio generation."""
     audio_url: str = Field(..., description="URL to the generated audio file") 

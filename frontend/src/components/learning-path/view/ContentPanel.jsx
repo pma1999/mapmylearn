@@ -150,9 +150,12 @@ const ContentPanel = forwardRef(({
       setAudioError(null);
       setNotification({ open: false, message: '', severity: 'info' });
 
+      const isRegeneration = !!audioUrl; // Check if we are regenerating
+
       const requestBody = {
           path_data: isTemporaryPath ? actualPathData : undefined,
-          language: selectedLanguage
+          language: selectedLanguage,
+          force_regenerate: isRegeneration // Add the flag
       };
 
       try {

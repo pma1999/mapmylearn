@@ -648,12 +648,11 @@ async def generate_or_get_submodule_audio(
     """
     Generates audio narration for a specific submodule in the requested language.
 
-    - If the learning path is persisted and audio already exists (assumed to be in the default language initially), returns the existing URL.
-      (Note: This doesn't re-generate in a different language if already exists. Future enhancement could be to store language with URL).
-    - If the learning path is persisted and audio doesn't exist, generates it in the requested language, saves the URL, and returns it.
-    - If the learning path ID is temporary (not in DB), uses `request_data.path_data` to generate the audio in the requested language and returns the URL (without persisting).
+    - If `force_regenerate` is false and audio already exists for the language, returns the existing URL.
+    - If `force_regenerate` is true or audio doesn't exist, generates it, saves/updates the URL, charges credits, and returns it.
+    - If the path ID is temporary, uses `request_data.path_data` to generate and returns URL (without persisting).
     """
-    logger.info(f"Received audio generation request for path {path_id}, module {module_index}, sub {submodule_index}, lang {request_data.language}")
+    logger.info(f"Received audio generation request for path {path_id}, module {module_index}, sub {submodule_index}, lang {request_data.language}, force: {request_data.force_regenerate}")
 
     # --- Validate Language ---
     requested_language = request_data.language
@@ -673,29 +672,11 @@ async def generate_or_get_submodule_audio(
     temp_path_data = request_data.path_data if not is_persisted else None
 
     if is_persisted:
-        logger.info(f"Path {path_id} found in DB (persisted). Checking for existing audio URL.")
-        # --- Check Cache (existing URL in path_data) ---
-        # Note: Current cache check doesn't consider language. If found, returns existing URL.
-        try:
-            path_data_json = learning_path.path_data
-            if isinstance(path_data_json, dict):
-                modules = path_data_json.get('modules', [])
-                if 0 <= module_index < len(modules):
-                    submodules = modules[module_index].get('submodules', [])
-                    if 0 <= submodule_index < len(submodules):
-                        # TODO: Future: Store language alongside URL? e.g., audio_urls: {"en": "/path/en.mp3"}
-                        existing_url = submodules[submodule_index].get('audio_url')
-                        if existing_url:
-                            logger.info(f"Found cached audio URL for {path_id}/{module_index}/{submodule_index}: {existing_url}. Returning cached version.")
-                            return GenerateAudioResponse(audio_url=existing_url)
-            else:
-                logger.warning(f"path_data for persisted path {path_id} is not a dict. Type: {type(path_data_json)}")
-        except Exception as e:
-            # Log error but proceed to generate if cache check fails
-            logger.exception(f"Error checking audio cache for {path_id}/{module_index}/{submodule_index}: {e}")
+        logger.info(f"Path {path_id} found in DB (persisted). Proceeding to audio service for potential generation/retrieval.")
+        # --- REMOVED CACHE CHECK BLOCK ---
+        # The audio service will now handle caching logic based on force_regenerate flag.
 
-        # If no cached URL, proceed to generate and persist
-        logger.info(f"No cached audio found for persisted path {path_id}. Charging credit and generating in '{requested_language}'...")
+        # Proceed to generate/retrieve via service
         notes = f"Audio generation ({requested_language}) for persisted path {path_id}, Mod {module_index}, Sub {submodule_index}"
         try:
             # Use credit service context manager
@@ -705,7 +686,8 @@ async def generate_or_get_submodule_audio(
                     learning_path=learning_path,
                     module_index=module_index,
                     submodule_index=submodule_index,
-                    language=requested_language # Pass language
+                    language=requested_language, # Pass language
+                    force_regenerate=request_data.force_regenerate # Pass flag
                 )
             # If context manager exits without error, credit is deducted and committed.
             return GenerateAudioResponse(audio_url=generated_url)
@@ -745,7 +727,8 @@ async def generate_or_get_submodule_audio(
                     learning_path=temp_lp_obj,
                     module_index=module_index,
                     submodule_index=submodule_index,
-                    language=requested_language # Pass language
+                    language=requested_language, # Pass language
+                    force_regenerate=request_data.force_regenerate # Pass flag for temp paths too
                 )
             # If context manager exits without error, credit is deducted and committed.
             return GenerateAudioResponse(audio_url=generated_url)
