@@ -1,50 +1,69 @@
-import sqlite3
+import sqlalchemy
+from sqlalchemy import create_engine, inspect
+from sqlalchemy.exc import NoSuchTableError, OperationalError
 import os
+import sys
 
-def check_sqlite_db_structure():
-    db_path = "learni.db"
-    if not os.path.exists(db_path):
-        print(f"Database file {db_path} does not exist!")
+# Target the local DB file
+DB_PATH = 'learni.db'
+DB_URL = f'sqlite:///{DB_PATH}' 
+DB_NAME_FOR_PRINTING = f"Local SQLite DB ({DB_PATH})"
+
+def check_table_structure(table_name: str):
+    print(f"--- Checking structure of table '{table_name}' in {DB_NAME_FOR_PRINTING} ---")
+
+    if not os.path.exists(DB_PATH):
+        print(f"Error: Database file not found at {DB_PATH}")
         return
-    
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    
-    # List all tables
-    print("Tables in the database:")
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-    tables = cursor.fetchall()
-    for table in tables:
-        print(f"  - {table[0]}")
-    
-    # Check credit_transactions table structure
-    print("\nStructure of credit_transactions table:")
-    cursor.execute("PRAGMA table_info(credit_transactions);")
-    columns = cursor.fetchall()
-    for col in columns:
-        print(f"  - {col[1]} ({col[2]}), {'NOT NULL' if col[3] else 'NULL'}")
-    
-    # Check for indexes
-    print("\nIndexes on credit_transactions:")
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='credit_transactions';")
-    indexes = cursor.fetchall()
-    for idx in indexes:
-        print(f"  - {idx[0]}")
-    
-    # Sample data from credit_transactions
-    print("\nSample data from credit_transactions:")
+        
     try:
-        cursor.execute("SELECT * FROM credit_transactions LIMIT 3;")
-        rows = cursor.fetchall()
-        if rows:
-            for row in rows:
-                print(f"  - {row}")
-        else:
-            print("  (No data)")
-    except sqlite3.Error as e:
-        print(f"  Error fetching data: {e}")
-    
-    conn.close()
+        engine = create_engine(DB_URL)
+        inspector = inspect(engine)
+        
+        print(f"Attempting to connect to: {DB_URL}")
+        
+        with engine.connect() as connection:
+            print("Connection successful.")
+            
+            # Check if the table exists
+            if not inspector.has_table(table_name):
+                print(f"Error: Table '{table_name}' does not exist in the database.")
+                print("\nTables found in the database:")
+                try:
+                    tables = inspector.get_table_names()
+                    if tables:
+                        for t in tables:
+                            print(f"- {t}")
+                    else:
+                        print("(No tables found)")
+                except Exception as list_e:
+                    print(f"(Could not list tables: {list_e})")
+                return
+
+            print(f"\nColumns found in table '{table_name}':")
+            columns = inspector.get_columns(table_name)
+            if columns:
+                for column in columns:
+                    print(f"- Name: {column['name']}, Type: {column['type']}, Nullable: {column['nullable']}")
+            else:
+                print("(No columns found - this shouldn't happen if table exists)")
+
+    except OperationalError as e:
+        print(f"\nError connecting to or querying the database: {e}")
+        print("Check connection string, network access, and database status.")
+    # Remove DBAPIError handling specific to PostgreSQL
+    # except DBAPIError as e:
+    #     if "authentication failed" in str(e).lower():
+    #          print(f"\nAuthentication failed. Please check the database credentials.")
+    #     else:
+    #         print(f"\nDatabase API Error: {e}")
+    except NoSuchTableError:
+        print(f"Error: Table '{table_name}' does not exist (NoSuchTableError).")
+    except Exception as e:
+        print(f"\nAn unexpected error occurred: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
-    check_sqlite_db_structure() 
+    check_table_structure('users')
+    print("\n--- Check complete ---") 
