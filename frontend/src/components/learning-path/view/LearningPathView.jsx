@@ -57,6 +57,9 @@ const LearningPathView = ({ source }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [showFirstViewAlert, setShowFirstViewAlert] = useState(false);
   
+  // --- State for Copying Action ---
+  const [isCopying, setIsCopying] = useState(false);
+  
   // Mobile drawer state
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
@@ -257,6 +260,7 @@ const LearningPathView = ({ source }) => {
        return;
     }
 
+    setIsCopying(true); // Set loading state before starting
     showNotification('Copying path to your history...', 'info');
     try {
       const newPathData = await apiService.copyPublicPath(publicShareId);
@@ -276,6 +280,9 @@ const LearningPathView = ({ source }) => {
       } else {
           showNotification(`Failed to copy path: ${error.message || 'Please try again.'}`, 'error');
       }
+    }
+    finally {
+      setIsCopying(false); // Reset loading state regardless of outcome
     }
   };
 
@@ -803,6 +810,7 @@ const LearningPathView = ({ source }) => {
                onTogglePublic={() => handleTogglePublic(currentEntryId, !isPublic)} // Pass bound toggle handler
                onCopyShareLink={handleCopyShareLink} // Pass the raw function reference
                onCopyToHistory={handleCopyToHistory} // Pass the new handler for copying
+               isCopying={isCopying} // Pass the loading state
              />
              {/* Optional: Add overall progress bar here */}
              {/* Optional: Add Topic Resources link/button here */}

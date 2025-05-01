@@ -28,6 +28,7 @@ import LinkIcon from '@mui/icons-material/Link';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import LockIcon from '@mui/icons-material/Lock';
 import BookmarkAddIcon from '@mui/icons-material/BookmarkAdd';
+import CircularProgress from '@mui/material/CircularProgress';
 import { motion } from 'framer-motion';
 import InfoTooltip from '../../shared/InfoTooltip';
 import { helpTexts } from '../../../constants/helpTexts';
@@ -56,6 +57,7 @@ import { helpTexts } from '../../../constants/helpTexts';
  * @param {string|null} [props.entryId=null] Persistent ID of the path (if saved)
  * @param {boolean} [props.isLoggedIn=false] Whether the current user is logged in
  * @param {Function} [props.onCopyToHistory] Handler to copy public path to user's history
+ * @param {boolean} [props.isCopying=false] Loading state for the copy operation
  * @returns {JSX.Element} Header component
  */
 const LearningPathHeader = ({ 
@@ -78,7 +80,8 @@ const LearningPathHeader = ({
   onCopyShareLink,
   entryId = null,
   isLoggedIn = false,
-  onCopyToHistory
+  onCopyToHistory,
+  isCopying = false
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -356,11 +359,12 @@ const LearningPathHeader = ({
                         variant="outlined"
                         fullWidth
                         color="secondary"
-                        startIcon={<BookmarkAddIcon />}
+                        startIcon={isCopying ? <CircularProgress size={20} color="inherit" /> : <BookmarkAddIcon />}
                         onClick={onCopyToHistory}
                         size={isMobile ? "small" : "medium"}
+                        disabled={isCopying}
                       >
-                        Save to My History
+                        {isCopying ? 'Saving...' : 'Save to My History'}
                       </Button>
                     </Tooltip>
                   </motion.div>
@@ -436,10 +440,12 @@ const LearningPathHeader = ({
                         data-tut="copy-public-path-button"
                         variant="outlined"
                         color="secondary"
-                        startIcon={<BookmarkAddIcon />}
+                        startIcon={isCopying ? <CircularProgress size={20} color="inherit" /> : <BookmarkAddIcon />}
                         onClick={onCopyToHistory}
+                        size={isMobile ? "small" : "medium"}
+                        disabled={isCopying}
                       >
-                        Save to My History
+                        {isCopying ? 'Saving...' : 'Save to My History'}
                       </Button>
                     </Tooltip>
                   </motion.div>
@@ -487,6 +493,7 @@ LearningPathHeader.propTypes = {
   entryId: PropTypes.string,
   isLoggedIn: PropTypes.bool,
   onCopyToHistory: PropTypes.func,
+  isCopying: PropTypes.bool,
 };
 
 export default LearningPathHeader; 
