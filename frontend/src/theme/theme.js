@@ -295,25 +295,25 @@ const theme = createTheme({
          },
          standardInfo: {
             borderColor: palette.info.main,
-            backgroundColor: `${palette.info.main}1A`, // Light blue background
+            backgroundColor: `${palette.info.main}66`, // Light blue background
             color: palette.info.dark || palette.info.main, // Ensure text is dark enough
             '.MuiAlert-icon': { color: palette.info.main }
          },
          standardSuccess: {
             borderColor: palette.success.main,
-            backgroundColor: `${palette.success.main}1A`,
+            backgroundColor: `${palette.success.main}66`,
             color: palette.success.dark || palette.success.main,
             '.MuiAlert-icon': { color: palette.success.main }
          },
          standardWarning: {
             borderColor: palette.warning.main,
-            backgroundColor: `${palette.warning.main}1A`,
+            backgroundColor: `${palette.warning.main}66`,
             color: palette.warning.dark || palette.warning.main,
             '.MuiAlert-icon': { color: palette.warning.main }
          },
          standardError: {
             borderColor: palette.error.main,
-            backgroundColor: `${palette.error.main}1A`,
+            backgroundColor: `${palette.error.main}66`,
             color: palette.error.dark || palette.error.main,
             '.MuiAlert-icon': { color: palette.error.main }
          },

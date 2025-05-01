@@ -270,8 +270,9 @@ const LearningPathHeader = ({
                       size="small" 
                       variant="text"
                       startIcon={<LinkIcon />}
-                      onClick={onCopyShareLink}
-                      disabled={!onCopyShareLink}
+                      onClick={() => onCopyShareLink(shareId)}
+                      disabled={!onCopyShareLink || !shareId}
+                      sx={{ ml: 1 }}
                     >
                       Copy Link
                     </Button>

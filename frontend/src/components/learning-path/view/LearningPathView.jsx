@@ -147,6 +147,11 @@ const LearningPathView = ({ source }) => {
   const isPublic = learningPath?.is_public || false;
   // Rename to avoid conflict with shareId from useParams
   const loadedShareId = learningPath?.share_id || null; 
+  
+  // --- NEW: Determine correct shareId for header copy button ---
+  const { shareId: shareIdFromParams } = useParams(); // Get shareId specifically from params
+  const relevantShareIdForHeader = isPublicView ? shareIdFromParams : loadedShareId;
+  // --- End NEW ---
 
   // Effect to set initial active module/submodule from last visited or default
   useEffect(() => {
@@ -755,11 +760,11 @@ const LearningPathView = ({ source }) => {
                isPublicView={isPublicView} // Pass public view status
                // --- NEW PROPS for Sharing ---
                isPublic={isPublic} // Pass extracted isPublic (from learningPath)
-               shareId={shareId} // Pass shareId from useParams for API calls/linking
+               shareId={relevantShareIdForHeader} // Pass the correctly determined shareId
                entryId={currentEntryId} // Pass the determined entry ID
                isLoggedIn={isAuthenticated} // Pass login status
                onTogglePublic={() => handleTogglePublic(currentEntryId, !isPublic)} // Pass bound toggle handler
-               onCopyShareLink={() => handleCopyShareLink(shareId)} // Pass shareId from useParams to copy handler
+               onCopyShareLink={handleCopyShareLink} // Pass the raw function reference
              />
              {/* Optional: Add overall progress bar here */}
              {/* Optional: Add Topic Resources link/button here */}

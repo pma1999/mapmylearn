@@ -416,7 +416,12 @@ const HistoryPage = () => {
         onClose={closeNotification}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
-        <Alert onClose={closeNotification} severity={notification.severity} sx={{ width: '100%' }}>
+        <Alert 
+          onClose={closeNotification} 
+          severity={notification.severity} 
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
           {notification.message}
         </Alert>
       </Snackbar>
