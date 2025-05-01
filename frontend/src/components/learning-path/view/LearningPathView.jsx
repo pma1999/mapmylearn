@@ -50,7 +50,7 @@ const TUTORIAL_STORAGE_KEY = 'learniTutorialCompleted'; // Key for localStorage
  * @returns {JSX.Element} Learning path view component
  */
 const LearningPathView = ({ source }) => {
-  const { taskId, entryId } = useParams();
+  const { taskId, entryId, shareId } = useParams();
   const theme = useTheme();
   const isMobileLayout = useMediaQuery(theme.breakpoints.down('md'));
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -84,7 +84,8 @@ const LearningPathView = ({ source }) => {
     setProgressMap,
     lastVisitedModuleIdx,
     lastVisitedSubmoduleIdx,
-    isPublicView // Get public view status from hook
+    isPublicView, // Get public view status from hook
+    earlyTopic // Get early topic from hook
   } = useLearningPathData(source); 
   
   // State for Focus Flow navigation
@@ -92,6 +93,9 @@ const LearningPathView = ({ source }) => {
   const [activeSubmoduleIndex, setActiveSubmoduleIndex] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+
+  // NEW: State for topic display during loading
+  const [displayTopic, setDisplayTopic] = useState(null);
 
   // Local state for tracking if details (tags/favorites) have been set via dialog
   const [localDetailsHaveBeenSet, setLocalDetailsHaveBeenSet] = useState(false);
@@ -112,6 +116,29 @@ const LearningPathView = ({ source }) => {
         }
     }
   }, [loading, initialDetailsWereSet, isFromHistory, persistentPathId]);
+  
+  // NEW: Effect to determine topic for loading state
+  useEffect(() => {
+    let initialTopic = null;
+    if (loading) {
+      // Priority 1: Early topic from hook (history/public)
+      if (earlyTopic) {
+        initialTopic = earlyTopic;
+      }
+      // Priority 2: Session storage (generation fallback)
+      else if (taskId && !entryId && !shareId) { // Check it's the generation result scenario
+        const sessionTopic = sessionStorage.getItem('currentTopic');
+        if (sessionTopic) {
+          initialTopic = sessionTopic;
+        }
+      }
+    } else {
+      // Once loading is finished, use the topic from the final learningPath data
+      initialTopic = learningPath?.topic || null;
+    }
+    setDisplayTopic(initialTopic);
+    // Use shareId destructured earlier in dependencies
+  }, [loading, earlyTopic, taskId, entryId, shareId, learningPath?.topic]);
   
   // Derived states based on hook values and local actions
   const isPdfReady = !loading && !!persistentPathId && !isPublicView; // PDF might not be ready/allowed in public view initially
@@ -145,7 +172,8 @@ const LearningPathView = ({ source }) => {
   const topic = learningPath?.topic || 'Loading Topic...'; // Use directly from learningPath
   const topicResources = learningPath?.topic_resources || []; // Use directly from learningPath
   const isPublic = learningPath?.is_public || false;
-  const shareId = learningPath?.share_id || null;
+  // Rename to avoid conflict with shareId from useParams
+  const loadedShareId = learningPath?.share_id || null; 
 
   // Effect to set initial active module/submodule from last visited or default
   useEffect(() => {
@@ -678,6 +706,7 @@ const LearningPathView = ({ source }) => {
         progressMessages={progressMessages} 
         isReconnecting={isReconnecting}
         retryAttempt={retryAttempt}
+        topic={displayTopic} // Pass the determined display topic
       /> 
     );
   }
@@ -739,7 +768,7 @@ const LearningPathView = ({ source }) => {
           {/* Use theme spacing */} 
           <Box sx={{ flexShrink: 0, mb: { xs: 2, md: 3 } }}> 
              <LearningPathHeader 
-               topic={topic} // Pass extracted topic
+               topic={topic} // Pass extracted topic (uses final topic after load)
                detailsHaveBeenSet={localDetailsHaveBeenSet} 
                isPdfReady={isPdfReady} 
                onDownload={handleDownloadJSONAdjusted} 
@@ -753,12 +782,12 @@ const LearningPathView = ({ source }) => {
                onStartTutorial={startTutorial} // Pass tutorial trigger
                isPublicView={isPublicView} // Pass public view status
                // --- NEW PROPS for Sharing ---
-               isPublic={isPublic} // Pass extracted isPublic
-               shareId={shareId} // Pass extracted shareId
+               isPublic={isPublic} // Pass extracted isPublic (from learningPath)
+               shareId={shareId} // Pass shareId from useParams for API calls/linking
                entryId={currentEntryId} // Pass the determined entry ID
                isLoggedIn={isAuthenticated} // Pass login status
                onTogglePublic={() => handleTogglePublic(currentEntryId, !isPublic)} // Pass bound toggle handler
-               onCopyShareLink={() => handleCopyShareLink(shareId)} // Pass bound copy handler
+               onCopyShareLink={() => handleCopyShareLink(shareId)} // Pass shareId from useParams to copy handler
              />
              {/* Optional: Add overall progress bar here */}
              {/* Optional: Add Topic Resources link/button here */}

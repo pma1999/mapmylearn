@@ -49,14 +49,17 @@ const useGeneratorForm = (
   /**
    * Setup progress tracking for a task
    * @param {string} taskId - Task ID to track
+   * @param {string} currentTopic - The topic being generated
    */
-  const setupProgressTracking = useCallback((taskId) => {
+  const setupProgressTracking = useCallback((taskId, currentTopic) => {
+    // Save topic to session storage HERE
+    sessionStorage.setItem('currentTopic', currentTopic);
     // Connect to progress updates
     connectToProgressUpdates(taskId);
     
     // Navigate to result page
     navigate(`/result/${taskId}`);
-  }, [connectToProgressUpdates, navigate, topic]);
+  }, [connectToProgressUpdates, navigate]);
 
   /**
    * Handle form submission
@@ -93,7 +96,7 @@ const useGeneratorForm = (
       setTaskId(result.task_id);
       
       // Set up polling/SSE for progress updates
-      setupProgressTracking(result.task_id);
+      setupProgressTracking(result.task_id, topic);
       
     } catch (err) {
       console.error('Error starting generation:', err);
