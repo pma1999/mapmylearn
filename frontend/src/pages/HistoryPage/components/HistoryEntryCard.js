@@ -173,17 +173,15 @@ const HistoryEntryCard = memo(({
             </Typography>
           )}
           
-          <Box sx={{ mt: 1, mb: 1.5, display: 'flex', flexWrap: 'wrap' }}>
+          <Box sx={{ mt: 1, mb: 1.5, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
             <Chip
               label={`${modulesCount} modules`}
               size="small"
-              sx={{ mr: 1, mb: { xs: 1, sm: 0 } }}
             />
             <Chip
               label={entry.source === 'generated' ? 'Generated' : 'Imported'}
               size="small"
               color={entry.source === 'generated' ? 'primary' : 'secondary'}
-              sx={{ mr: 1, mb: { xs: 1, sm: 0 } }}
             />
             <Chip
               icon={entry.is_public ? <PublicIcon /> : <LockIcon />}
@@ -325,17 +323,15 @@ const HistoryEntryCard = memo(({
               </Typography>
             )}
             
-            <Box sx={{ mt: 1, mb: 2, display: 'flex', flexWrap: 'wrap' }}>
+            <Box sx={{ mt: 1, mb: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
               <Chip
                 label={`${modulesCount} modules`}
                 size="small"
-                sx={{ mr: 1, mb: { xs: 1, sm: 0 } }}
               />
               <Chip
                 label={entry.source === 'generated' ? 'Generated' : 'Imported'}
                 size="small"
                 color={entry.source === 'generated' ? 'primary' : 'secondary'}
-                sx={{ mr: 1, mb: { xs: 1, sm: 0 } }}
               />
               <Chip
                 icon={entry.is_public ? <PublicIcon /> : <LockIcon />}
