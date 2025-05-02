@@ -4,7 +4,6 @@ import { styled } from '@mui/material/styles';
 
 // Import custom hooks
 import useNotification from '../../shared/hooks/useNotification';
-import useApiKeyManagement from './hooks/useApiKeyManagement';
 import useProgressTracking from './hooks/useProgressTracking';
 import useHistoryManagement from './hooks/useHistoryManagement';
 import useGeneratorForm from './hooks/useGeneratorForm';
@@ -36,16 +35,12 @@ const GeneratorPage = () => {
   // Initialize custom hooks with necessary dependencies
   const { notification, showNotification, closeNotification } = useNotification();
   
-  const apiKeyState = useApiKeyManagement(showNotification);
-  
   const progressTrackingState = useProgressTracking();
   
   const historyState = useHistoryManagement(showNotification);
   
   const formState = useGeneratorForm(
-    apiKeyState,
     progressTrackingState,
-    historyState,
     showNotification
   );
 
@@ -83,7 +78,6 @@ const GeneratorPage = () => {
         {/* Main Form */}
         <GeneratorForm
           formState={formState}
-          apiKeyState={apiKeyState}
           historyState={historyState}
           progressState={progressTrackingState}
           isMobile={isMobile}

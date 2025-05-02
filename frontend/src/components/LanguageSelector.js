@@ -33,10 +33,10 @@ const detectBrowserLanguage = () => {
   }
 };
 
-const LanguageSelector = ({ language, setLanguage, sx = {} }) => {
+const LanguageSelector = ({ language, setLanguage, sx = {}, disabled = false }) => {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', ...sx }}>
-      <FormControl variant="outlined" size="small" fullWidth>
+      <FormControl variant="outlined" size="small" fullWidth disabled={disabled}>
         <InputLabel id="language-select-label">Language</InputLabel>
         <Select
           labelId="language-select-label"
@@ -45,6 +45,7 @@ const LanguageSelector = ({ language, setLanguage, sx = {} }) => {
           onChange={(e) => setLanguage(e.target.value)}
           label="Language"
           sx={{ minWidth: 120 }}
+          disabled={disabled}
         >
           {LANGUAGE_OPTIONS.map((lang) => (
             <MenuItem key={lang.code} value={lang.code}>

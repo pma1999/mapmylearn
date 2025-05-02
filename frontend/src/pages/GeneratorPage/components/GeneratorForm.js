@@ -5,27 +5,24 @@ import {
   TextField,
   Button,
   Divider,
-  Alert,
   CircularProgress,
+  // Alert, // Remove Alert import
 } from '@mui/material';
 import BoltIcon from '@mui/icons-material/Bolt';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import LanguageSelector from '../../../components/LanguageSelector';
-import ApiKeySettings from '../../../components/organisms/ApiKeySettings';
 import AdvancedSettings from '../../../components/organisms/AdvancedSettings';
-import ProgressDisplay from './ProgressDisplay';
 
 /**
  * Form component for the learning path generator
  * @param {Object} props - Component props
  * @param {Object} props.formState - Form state from useGeneratorForm hook
- * @param {Object} props.apiKeyState - API key state from useApiKeyManagement hook
  * @param {Object} props.progressState - Progress state from useProgressTracking hook
  * @param {boolean} props.isMobile - Whether the display is in mobile viewport
  * @returns {JSX.Element} Generator form component
  */
 const GeneratorForm = ({
   formState,
-  apiKeyState,
   progressState,
   isMobile
 }) => {
@@ -57,50 +54,8 @@ const GeneratorForm = ({
     handleSubmit
   } = formState;
 
-  const {
-    googleApiKey,
-    setGoogleApiKey,
-    pplxApiKey,
-    setPplxApiKey,
-    showGoogleKey,
-    setShowGoogleKey,
-    showPplxKey,
-    setShowPplxKey,
-    rememberApiKeys,
-    setRememberApiKeys,
-    googleKeyValid,
-    pplxKeyValid,
-    validatingKeys,
-    googleKeyToken,
-    pplxKeyToken,
-    handleValidateApiKeys,
-    handleClearApiKeys
-  } = apiKeyState;
-
-  const {
-    progressUpdates,
-    progressPercentage
-  } = progressState;
-
   return (
     <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
-      <Alert 
-        severity="success" 
-        sx={{ 
-          mb: 4, 
-          '& .MuiAlert-message': { 
-            width: '100%'
-          } 
-        }}
-      >
-        <Typography variant="subtitle1" fontWeight="bold">
-          🎉 New Feature: API Keys Now Provided By Server
-        </Typography>
-        <Typography variant="body2">
-          You no longer need to provide your own API keys! We now provide all required API keys directly from our server.
-        </Typography>
-      </Alert>
-
       <Typography
         variant="h4"
         component="h1"
@@ -112,6 +67,7 @@ const GeneratorForm = ({
           fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' }
         }}
       >
+        <AutoAwesomeIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: { xs: '1.8rem', sm: '2.2rem' } }} />
         Generate Learning Path
       </Typography>
       
@@ -123,11 +79,12 @@ const GeneratorForm = ({
         Enter any topic you want to learn about and we'll create a personalized learning path for you.
       </Typography>
       
-      {error && (
+      {/* Removed error Alert display */}
+      {/* {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
         </Alert>
-      )}
+      )} */}
       
       <TextField
         label="What do you want to learn about?"
@@ -153,6 +110,7 @@ const GeneratorForm = ({
         <LanguageSelector 
           language={language}
           setLanguage={setLanguage}
+          disabled={isGenerating}
         />
       </Box>
       
@@ -175,13 +133,6 @@ const GeneratorForm = ({
         desiredSubmoduleCount={desiredSubmoduleCount}
         setDesiredSubmoduleCount={setDesiredSubmoduleCount}
         isGenerating={isGenerating}
-        isMobile={isMobile}
-      />
-      
-      {/* API Key Settings */}
-      <ApiKeySettings 
-        apiSettingsOpen={apiSettingsOpen}
-        setApiSettingsOpen={setApiSettingsOpen}
         isMobile={isMobile}
       />
       
@@ -211,15 +162,6 @@ const GeneratorForm = ({
           {isGenerating ? 'Generating...' : 'Generate Learning Path'}
         </Button>
       </Box>
-      
-      {/* Progress display (shown when generating) */}
-      {isGenerating && (
-        <ProgressDisplay 
-          progressUpdates={progressUpdates}
-          progressPercentage={progressPercentage}
-          isMobile={isMobile}
-        />
-      )}
     </Box>
   );
 };

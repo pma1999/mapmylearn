@@ -5,13 +5,11 @@ import * as languageService from '../../../services/languageService';
 
 /**
  * Custom hook for managing generator form state and submission
- * @param {Object} apiKeyState - API key state from useApiKeyManagement hook
  * @param {Object} progressTrackingState - Progress tracking state from useProgressTracking hook
  * @param {Function} showNotification - Function to display notifications
  * @returns {Object} Form state and management functions
  */
 const useGeneratorForm = (
-  { googleKeyToken, pplxKeyToken, rememberApiKeys, hasValidApiKey },
   { connectToProgressUpdates, resetProgress, setTaskId },
   showNotification
 ) => {
@@ -38,7 +36,6 @@ const useGeneratorForm = (
   
   // Accordion state
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
-  const [apiSettingsOpen, setApiSettingsOpen] = useState(false);
   
   // Save language preference whenever it changes
   const handleLanguageChange = (newLanguage) => {
@@ -86,9 +83,6 @@ const useGeneratorForm = (
         submoduleParallelCount,
         desiredModuleCount: autoModuleCount ? null : desiredModuleCount,
         desiredSubmoduleCount: autoSubmoduleCount ? null : desiredSubmoduleCount,
-        googleKeyToken,
-        pplxKeyToken,
-        rememberTokens: rememberApiKeys,
         language
       });
       
@@ -157,8 +151,6 @@ const useGeneratorForm = (
     // Accordion state
     advancedSettingsOpen,
     setAdvancedSettingsOpen,
-    apiSettingsOpen,
-    setApiSettingsOpen,
     
     // Form submission
     handleSubmit
