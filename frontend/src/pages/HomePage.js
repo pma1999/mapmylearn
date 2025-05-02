@@ -283,19 +283,6 @@ function HomePage() {
           </Box>
         </Container>
       </motion.div>
-
-      <Box sx={{ textAlign: 'center', mt: 8, mb: 4, py: 3 }}>
-        <Typography variant="h6" component="p" gutterBottom>
-          MapMyLearn – Learn Smarter, Not Harder
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          Personalized AI-powered learning experiences designed to maximize your learning efficiency and results.
-        </Typography>
-        <Divider sx={{ my: 3 }} />
-        <Typography variant="caption" color="text.secondary">
-          © {new Date().getFullYear()} MapMyLearn | Made with ❤️ for smarter learning.
-        </Typography>
-      </Box>
     </Box>
   );
 }
