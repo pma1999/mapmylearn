@@ -97,16 +97,6 @@ const GeneratorPage = () => {
         {helpTexts.generatorSubtitle}
       </Typography>
       
-      <Box sx={{ mt: 4, textAlign: 'center' }}>
-        <Typography variant="body2" color="text.secondary" sx={{
-          fontSize: { xs: '0.75rem', sm: '0.875rem' },
-          px: { xs: 2, sm: 0 }
-        }}>
-          Our AI will research your topic and create a comprehensive learning path
-          with modules and submodules to help you master the subject efficiently.
-        </Typography>
-      </Box>
-      
       {/* Save Dialog */}
       <SaveDialog 
         open={saveDialogOpen}
