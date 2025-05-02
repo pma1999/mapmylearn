@@ -563,7 +563,7 @@ Based on the following search results and scraped web content snippets, organize
 For each module:
 1. Give it a clear, descriptive title.
 2. Write a comprehensive overview (100-200 words) summarizing the module's purpose and content.
-3. Identify 3-5 key learning objectives (action-oriented).
+3. Define the single, primary learning objective for this module in one concise, action-oriented sentence.
 4. Explain why this module is important in the overall learning journey and how it connects to other modules.
 
 Format your response as a structured curriculum. Each module should build logically on previous knowledge.

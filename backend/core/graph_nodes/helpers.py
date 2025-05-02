@@ -62,6 +62,7 @@ def create_retry_prompt(original_prompt, format_instructions: str, failed_respon
     # Escape braces in potentially problematic inputs to prevent format errors
     safe_failed_response = failed_response.replace("{", "{{").replace("}", "}}")
     safe_error_message = error_message.replace("{", "{{").replace("}", "}}")
+    safe_format_instructions = format_instructions.replace("{", "{{").replace("}", "}}")
     
     # Extract original template string and validation details (if any)
     original_template = ""
@@ -90,7 +91,7 @@ Original Request:
 
 Format required:
 --------
-{format_instructions}
+{safe_format_instructions}
 --------
 
 Your previous response:
@@ -183,9 +184,13 @@ async def run_chain(prompt, llm_getter, parser: BaseOutputParser[T], params: Dic
                     # Store response for potential retry
                     last_response = raw_response
                     
+                    # Extract text from raw_response before parsing
+                    response_text = raw_response.text if hasattr(raw_response, 'text') else str(raw_response)
+                    
                     # Try to parse directly using the parser
                     if hasattr(parser, "parse"):
-                        result = parser.parse(raw_response)
+                        # Pass the extracted text to the parse method
+                        result = parser.parse(response_text)
                         logger.info(f"Successfully parsed response after reformatting (attempt {parsing_retries})")
                         return result
                 except Exception as parsing_error:
