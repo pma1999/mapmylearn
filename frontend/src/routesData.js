@@ -67,16 +67,16 @@ const routesData = [
     requiresAuth: true,
     isPublic: false,
   },
-  {
-    path: '/purchase/success',
-    requiresAuth: true,
-    isPublic: false,
-  },
-  {
-    path: '/purchase/cancel',
-    requiresAuth: true,
-    isPublic: false,
-  },
+  //{
+  //  path: '/purchase/success',
+  //  requiresAuth: true,
+  //  isPublic: false,
+  //},
+  //{
+  //  path: '/purchase/cancel',
+  //  requiresAuth: true,
+  //  isPublic: false,
+  //},
   // Add new routes data here
   {
     path: '/terms',
@@ -93,6 +93,11 @@ const routesData = [
     path: '/public/:shareId',
     requiresAuth: false,
     isPublic: true, // Allow indexing? Maybe false initially.
+  },
+  {
+    path: '/purchase-result', // New route for Stripe redirect
+    requiresAuth: true, // Requires login to check session against user
+    isPublic: false,
   },
 ];
 

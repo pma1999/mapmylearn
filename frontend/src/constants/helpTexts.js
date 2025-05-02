@@ -14,6 +14,7 @@ export const helpTexts = {
 
   // GeneratorPage
   generatorSubtitle: "Enter any topic. Our AI will build a custom learning path with lessons, activities, and AI chat tailored to you.",
+  generatorCostHint: "Requires 1 credit",
 
   // HistoryPage
   historyEmptyState: "Your saved learning paths appear here. Generate a new path and click 'Save to History' on the results page to keep track of your learning journey.",
@@ -22,7 +23,7 @@ export const helpTexts = {
   lpFirstViewAlert: "Explore your new path! Dive into Modules and Submodules. Use the tabs inside submodules for content, quizzes, resources, and AI chat.",
 
   // Navbar
-  navbarCreditsTooltip: (cost) => `Credits are used for generation (1 credit) & audio features (${cost} credit). Purchase more credits anytime.`,
+  navbarCreditsTooltip: "Credits are used for features like path generation (1 credit) and audio generation. Click to buy more.",
   navbarPurchaseMore: "Purchase more", // Link text if needed, might be separate button
 
   // LearningPathHeader

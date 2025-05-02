@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Typography,
   Box,
@@ -6,12 +6,18 @@ import {
   Button,
   Divider,
   CircularProgress,
-  // Alert, // Remove Alert import
+  Alert,
+  Chip,
+  Tooltip
 } from '@mui/material';
 import BoltIcon from '@mui/icons-material/Bolt';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import TokenIcon from '@mui/icons-material/Token';
 import LanguageSelector from '../../../components/LanguageSelector';
 import AdvancedSettings from '../../../components/organisms/AdvancedSettings';
+import { useAuth } from '../../../services/authContext';
+import { helpTexts } from '../../../constants/helpTexts';
+import CreditPurchaseDialog from '../../../components/payments/CreditPurchaseDialog';
 
 /**
  * Form component for the learning path generator
@@ -54,6 +60,21 @@ const GeneratorForm = ({
     handleSubmit
   } = formState;
 
+  // Get user and credits
+  const { user } = useAuth();
+  const [purchaseDialogOpen, setPurchaseDialogOpen] = useState(false);
+
+  const hasCredits = user?.credits > 0;
+  const creditsNeeded = 1; // Define cost
+
+  const handleOpenPurchaseDialog = () => {
+     setPurchaseDialogOpen(true);
+  };
+
+  const handleClosePurchaseDialog = () => {
+     setPurchaseDialogOpen(false);
+  };
+
   return (
     <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
       <Typography
@@ -79,12 +100,12 @@ const GeneratorForm = ({
         Enter any topic you want to learn about and we'll create a personalized learning path for you.
       </Typography>
       
-      {/* Removed error Alert display */}
-      {/* {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-      )} */}
+      {/* Display error from generation submission */}
+       {error && (
+         <Alert severity="error" sx={{ mb: 3 }}>
+           {error}
+         </Alert>
+       )}
       
       <TextField
         label="What do you want to learn about?"
@@ -136,32 +157,74 @@ const GeneratorForm = ({
         isMobile={isMobile}
       />
       
+      {/* Action Buttons Area */}
       <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
         mt: 3,
-        flexDirection: { xs: 'column', sm: 'row' },
-        gap: { xs: 2, sm: 0 }
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 2
       }}>
-        <Button
-          type="submit"
-          variant="contained"
-          color="primary"
-          size={isMobile ? "medium" : "large"}
-          disabled={isGenerating || !topic.trim()}
-          startIcon={isGenerating ? <CircularProgress size={20} color="inherit" /> : <BoltIcon />}
-          sx={{ 
-            py: { xs: 1, sm: 1.5 }, 
-            px: { xs: 2, sm: 4 }, 
-            borderRadius: 2, 
-            fontWeight: 'bold', 
-            fontSize: { xs: '0.9rem', sm: '1.1rem' },
-            width: { xs: '100%', sm: 'auto' }
-          }}
-        >
-          {isGenerating ? 'Generating...' : 'Generate Learning Path'}
-        </Button>
+        {/* Conditionally show alert if no credits */}
+        {!hasCredits && !isGenerating && (
+          <Alert 
+             severity="warning" 
+             sx={{ width: '100%', mb: 1 }} 
+             action={
+               <Button color="inherit" size="small" onClick={handleOpenPurchaseDialog}>
+                 Buy Credits
+               </Button>
+             }
+           >
+             You need credits to generate a learning path.
+          </Alert>
+        )}
+
+        {/* Generate Button */} 
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          width: '100%', 
+          flexDirection: { xs: 'column', sm: 'row' }, 
+          alignItems: 'center', 
+          gap: 1 // Add gap between button and hint
+        }}>
+          <Button
+            type="submit"
+            variant="contained"
+            color="primary"
+            size={isMobile ? "medium" : "large"}
+            disabled={isGenerating || !topic.trim() || !hasCredits} // Disable if no credits
+            startIcon={isGenerating ? <CircularProgress size={20} color="inherit" /> : <BoltIcon />}
+            sx={{ 
+              py: { xs: 1, sm: 1.5 }, 
+              px: { xs: 2, sm: 4 }, 
+              borderRadius: 2, 
+              fontWeight: 'bold', 
+              fontSize: { xs: '0.9rem', sm: '1.1rem' },
+              width: { xs: '100%', sm: 'auto' } 
+            }}
+          >
+            {isGenerating ? 'Generating...' : 'Generate Learning Path'}
+          </Button>
+
+          {/* Credit Cost Hint */} 
+          <Tooltip title="Generating a new learning path costs 1 credit.">
+             <Chip 
+               icon={<TokenIcon fontSize="small" />} 
+               label={helpTexts.generatorCostHint} 
+               size="small" 
+               variant="outlined" 
+             />
+          </Tooltip>
+        </Box>
       </Box>
+
+       {/* Purchase Dialog */}
+       <CreditPurchaseDialog
+         open={purchaseDialogOpen}
+         onClose={handleClosePurchaseDialog}
+       />
     </Box>
   );
 };

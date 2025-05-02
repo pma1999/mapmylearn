@@ -12,10 +12,9 @@ import VerifyEmailPage from './pages/VerifyEmailPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import LearningPathView from './components/learning-path/view/LearningPathView';
-import PurchaseSuccessPage from './components/payments/PurchaseSuccessPage';
-import PurchaseCancelPage from './components/payments/PurchaseCancelPage';
 import TermsPage from './pages/TermsPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import PurchaseResultPage from './pages/PurchaseResultPage';
 
 /**
  * Centralized route configuration for the application.
@@ -37,11 +36,10 @@ const componentMap = {
   '/admin': AdminPage,
   '/result/:taskId': ResultPage,
   '/history/:entryId': LearningPathView,
-  '/purchase/success': PurchaseSuccessPage,
-  '/purchase/cancel': PurchaseCancelPage,
   '/terms': TermsPage,
   '/privacy': PrivacyPolicyPage,
   '/public/:shareId': LearningPathView,
+  '/purchase-result': PurchaseResultPage,
 };
 
 const routesConfig = routesData.map(routeData => ({

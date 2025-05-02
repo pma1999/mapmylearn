@@ -215,6 +215,34 @@ function Navbar() {
     setPurchaseDialogOpen(false);
   };
 
+  // Component for the visible Credit Chip + Tooltip
+  const CreditDisplay = ({ onClick, credits }) => (
+    <Tooltip title={helpTexts.navbarCreditsTooltip}>
+      <Chip
+        icon={<TokenIcon fontSize="small" />}
+        label={`${credits ?? 0} credits`}
+        size="small"
+        color={credits > 0 ? "primary" : "default"}
+        onClick={onClick}
+        sx={{
+          fontWeight: 500,
+          transition: 'all 0.3s ease',
+          ml: 1,
+          cursor: 'pointer',
+          backgroundColor: 'rgba(255, 255, 255, 0.15)',
+          color: 'white',
+          '& .MuiChip-icon': {
+            color: 'white'
+          },
+          '&:hover': {
+             backgroundColor: 'rgba(255, 255, 255, 0.25)',
+          },
+          border: '1px solid rgba(255, 255, 255, 0.3)'
+        }}
+      />
+    </Tooltip>
+  );
+
   const DesktopNav = useMemo(() => (
     <Box sx={{ display: 'flex', alignItems: 'center' }}>
       {navItems.map((item) => (
@@ -273,8 +301,11 @@ function Navbar() {
       ))}
       
       {isAuthenticated ? (
-        // User menu
+        // User menu and visible credits
         <>
+          {/* Visible Credit Display */}
+          <CreditDisplay onClick={handlePurchaseCredits} credits={user?.credits} />
+
           <Tooltip title="Account settings">
             <IconButton 
               onClick={handleUserMenuOpen}
@@ -336,38 +367,9 @@ function Navbar() {
                 <Typography variant="body2" color="text.secondary" noWrap>
                   {user.email}
                 </Typography>
-                <Box sx={{ 
-                  mt: 1, 
-                  display: 'flex', 
-                  alignItems: 'center',
-                  justifyContent: 'space-between'
-                }}>
-                  <Chip
-                    icon={<TokenIcon fontSize="small" />}
-                    label={`${user.credits ?? 0} credits`}
-                    size="small"
-                    color={user?.credits > 0 ? "primary" : "default"}
-                    sx={{ 
-                      fontWeight: 500,
-                      transition: 'all 0.3s ease',
-                      '& .MuiChip-icon': {
-                        color: user?.credits > 0 ? 'inherit' : theme.palette.text.secondary
-                      }
-                    }}
-                  />
-                  <InfoTooltip 
-                    title={helpTexts.navbarCreditsTooltip(AUDIO_CREDIT_COST)}
-                    size="small"
-                    sx={{ ml: 0.5 }}
-                  />
-                </Box>
               </Box>
             )}
             <Divider />
-            <MenuItem onClick={handlePurchaseCredits}>
-              <TokenIcon fontSize="small" sx={{ mr: 1 }} />
-              {helpTexts.navbarPurchaseMore}
-            </MenuItem>
             <MenuItem onClick={handleLogout}>
               <LogoutIcon fontSize="small" sx={{ mr: 1 }} />
               Logout
@@ -473,6 +475,18 @@ function Navbar() {
         
         {isAuthenticated ? (
           <>
+            {/* ADDED Prominent Credit Purchase/Display MenuItem */}
+            <Tooltip title={helpTexts.navbarCreditsTooltip} placement="left">
+              <MenuItem onClick={() => { handleMenuClose(); handlePurchaseCredits(); }} sx={{ justifyContent: 'space-between' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center'}}>
+                  <TokenIcon fontSize="small" sx={{ mr: 1, color: 'primary.main' }} />
+                  <Typography variant="body2">{user?.credits ?? 0} Credits</Typography>
+                </Box>
+                <Button size="small" variant="outlined" color="primary" sx={{ ml: 1, py: 0.2, px: 1, fontSize: '0.75rem' }}>Buy</Button>
+              </MenuItem>
+            </Tooltip>
+             <Divider /> 
+             
             {user && (
               <Box sx={{ px: 2, py: 1 }}>
                 <Typography variant="subtitle2" noWrap>
@@ -481,33 +495,8 @@ function Navbar() {
                 <Typography variant="body2" color="text.secondary" noWrap sx={{ fontSize: '0.8rem' }}>
                   {user.email}
                 </Typography>
-                <Box sx={{ mt: 1, display: 'flex', alignItems: 'center' }}>
-                  <Chip
-                    icon={<TokenIcon fontSize="small" />}
-                    label={`${user.credits ?? 0} credits`}
-                    size="small"
-                    color={user?.credits > 0 ? "primary" : "default"}
-                    sx={{ 
-                      fontWeight: 500,
-                      fontSize: '0.8rem',
-                      transition: 'all 0.3s ease',
-                      '& .MuiChip-icon': {
-                        color: user?.credits > 0 ? 'inherit' : theme.palette.text.secondary
-                      }
-                    }}
-                  />
-                  <InfoTooltip 
-                    title={helpTexts.navbarCreditsTooltip(AUDIO_CREDIT_COST)}
-                    size="small"
-                    sx={{ ml: 0.5 }}
-                  />
-                </Box>
               </Box>
             )}
-            <MenuItem onClick={() => { handleMenuClose(); handlePurchaseCredits(); }}>
-              <TokenIcon fontSize="small" sx={{ mr: 1 }} />
-              {helpTexts.navbarPurchaseMore}
-            </MenuItem>
             <MenuItem onClick={() => { handleMenuClose(); handleLogout(); }}>
               <LogoutIcon fontSize="small" sx={{ mr: 1 }} />
               Logout

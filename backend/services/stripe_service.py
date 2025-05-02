@@ -62,8 +62,8 @@ class StripeService:
                     'quantity': quantity,
                 }],
                 mode='payment',
-                success_url=f"{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/purchase/success?session_id={{CHECKOUT_SESSION_ID}}",
-                cancel_url=f"{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/purchase/cancel",
+                success_url=f"{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/purchase-result?session_id={{CHECKOUT_SESSION_ID}}",
+                cancel_url=f"{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/purchase-result?session_id={{CHECKOUT_SESSION_ID}}",
                 metadata={
                     'user_id': str(user.id),
                     'credit_quantity': str(quantity),
