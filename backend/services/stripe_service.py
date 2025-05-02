@@ -12,12 +12,11 @@ logger = logging.getLogger(__name__)
 # Initialize Stripe with the secret key
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
-STRIPE_PRICE_ID = os.getenv('STRIPE_PRICE_ID')
+# STRIPE_PRICE_ID is not used for dynamic pricing here, maybe keep for other potential uses or remove if confirmed unused.
+# STRIPE_PRICE_ID = os.getenv('STRIPE_PRICE_ID')
 
 # Constants
-CREDIT_PRICE_NET = 0.60  # €0.60 net per credit
-STRIPE_FEE_PERCENTAGE = 2.9  # 2.9% + €0.30 fixed fee
-STRIPE_FIXED_FEE = 0.30  # €0.30 fixed fee
+FIXED_CREDIT_PRICE_CENTS = 100  # €1.00 per credit in cents
 
 class StripeService:
     def __init__(self):
@@ -25,35 +24,26 @@ class StripeService:
             raise ValueError("STRIPE_SECRET_KEY environment variable is not set")
         if not STRIPE_WEBHOOK_SECRET:
             raise ValueError("STRIPE_WEBHOOK_SECRET environment variable is not set")
-        if not STRIPE_PRICE_ID:
-            raise ValueError("STRIPE_PRICE_ID environment variable is not set")
-
-    def _calculate_gross_price(self, quantity: int) -> int:
-        """
-        Calculate the gross price needed to achieve €0.60 net per credit after Stripe fees.
-        Returns the amount in cents.
-        """
-        net_amount = CREDIT_PRICE_NET * quantity
-        gross_amount = (net_amount + STRIPE_FIXED_FEE) / (1 - STRIPE_FEE_PERCENTAGE / 100)
-        return round(gross_amount * 100)  # Convert to cents
+        # if not STRIPE_PRICE_ID:
+        #     raise ValueError("STRIPE_PRICE_ID environment variable is not set")
 
     async def create_checkout_session(self, user: User, quantity: int) -> Dict[str, Any]:
         """
-        Create a Stripe Checkout session for credit purchase.
+        Create a Stripe Checkout session for credit purchase with a fixed price.
         """
         if quantity <= 0:
             raise ValueError("Quantity must be positive")
 
         try:
-            # Calculate the unit price based on quantity to achieve €0.60 net per credit
-            unit_amount = self._calculate_gross_price(1)  # Price per credit in cents
+            # Use the fixed unit price
+            unit_amount = FIXED_CREDIT_PRICE_CENTS
 
             session = stripe.checkout.Session.create(
                 customer_email=user.email,
                 line_items=[{
                     'price_data': {
                         'currency': 'eur',
-                        'unit_amount': unit_amount,
+                        'unit_amount': unit_amount, # Fixed price per credit
                         'product_data': {
                             'name': 'Learning Path Credits',
                             'description': f'Purchase {quantity} credits for generating learning paths'
@@ -67,7 +57,7 @@ class StripeService:
                 metadata={
                     'user_id': str(user.id),
                     'credit_quantity': str(quantity),
-                    'unit_amount': str(unit_amount)
+                    'unit_amount': str(unit_amount) # Store the fixed unit amount used
                 }
             )
 
