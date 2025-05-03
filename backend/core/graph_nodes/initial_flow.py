@@ -42,66 +42,46 @@ async def generate_search_queries(state: LearningPathState) -> Dict[str, Any]:
     search_language = state.get('search_language', 'en')
     
     prompt_text = """
-# EXPERT LEARNING PATH ARCHITECT INSTRUCTIONS
+# EXPERT LEARNING PATH ARCHITECT & CURRICULUM DESIGNER INSTRUCTIONS
 
-Your task is to design optimal search queries that will retrieve information specifically for structuring a comprehensive learning path on "{user_topic}".
+Your task is to generate 5 diverse search queries that will gather the necessary information to DESIGN an optimal and comprehensive learning path for the topic: "{user_topic}".
 
-## LEARNING PATH DESIGN FOCUS
+## INFORMATION GATHERING FOR DESIGN
 
-These searches are NOT for content development, but specifically for determining the optimal STRUCTURE and ORGANIZATION of the learning path.
+These searches are NOT just for finding pre-existing course structures, but for collecting the essential building blocks and insights needed to CREATE a well-structured path. Your goal is to gather information covering various facets required for effective curriculum design.
 
-## TOPIC ANALYSIS
+## TARGET INFORMATION CATEGORIES
 
-Analyze the topic "{user_topic}" to identify key structural components:
+Analyze the topic "{user_topic}" and design queries to gather information relevant to these aspects:
 
-### STRUCTURAL ELEMENTS
-- Essential knowledge domains and sub-domains
-- Natural progression and prerequisites 
-- Critical learning milestones
-- Logical teaching sequence
-- Different skill/proficiency levels (beginner to expert)
-
-### EDUCATIONAL FRAMEWORK
-- Pedagogical approaches specific to this topic
-- Standard curriculum structures in this field
-- Expert-recommended learning sequences
-- Typical module organization in courses/tutorials
-- Academic vs practical learning progressions
-
-### SCOPE AND BOUNDARIES
-- Core vs peripheral concepts
-- Essential vs optional topics
-- Foundational prerequisites
-- Advanced specializations
-- Interdisciplinary connections
+1.  **Fundamental Concepts & Prerequisites:** What are the absolute foundational ideas? What knowledge is assumed before starting?
+2.  **Core Sub-domains & Key Topics:** What are the major distinct areas within this topic? What specific subjects must be covered?
+3.  **Logical Sequencing & Dependencies:** How do concepts typically build upon each other? What's a natural progression for learning? Are there critical paths or dependencies?
+4.  **Practical Applications & Skills:** What can learners *do* with this knowledge? What are the key practical skills to develop at different stages?
+5.  **Common Challenges & Advanced Concepts:** Where do learners often get stuck? What are typical difficulties? What constitutes advanced knowledge or specialization in this area?
 
 ## LANGUAGE INSTRUCTIONS
 - Generate all of your analysis and responses in {output_language}.
-- For search queries, use {search_language} to maximize retrieving high-quality curriculum design information.
+- For the search queries themselves, use {search_language} to maximize retrieving high-quality information relevant to curriculum design.
 
-## SEARCH STRATEGY
+## SEARCH STRATEGY & QUERY DESIGN
 
-Design EXACTLY 5 search queries that will:
-1. Retrieve information about optimal learning path structures for this topic
-2. Discover how experts organize curriculum on this subject
-3. Identify standard modules and their sequencing
-4. Find information about pedagogical progressions specific to this topic
-5. Uncover recommended learning sequences and prerequisites
+Design EXACTLY 5 distinct search queries. Each query should ideally target a DIFFERENT aspect or category from the list above to ensure comprehensive information gathering.
 
 For each search query:
-- Make it specific to retrieving STRUCTURAL and ORGANIZATIONAL information. These queries should NOT search for HOW TO DO {user_topic}, but HOW TO STRUCTURE THE LEARNING of {user_topic}.
-- Focus on curriculum design, learning path structure, and module organization.
-- Target educational resources, discussions, or examples that reveal how knowledge in this domain is best structured (e.g., syllabi, course outlines, pedagogical guides).
-- Consider terms like: 'curriculum design {user_topic}', 'learning path structure {user_topic}', 'module sequence {user_topic}', 'pedagogical framework {user_topic}', 'skill progression {user_topic}', 'example syllabus {user_topic}', '{user_topic} prerequisites'.
-- CRITICAL: Ensure each query balances specificity (finding CURRICULUM STRUCTURE info) with breadth (getting actual results). Avoid terms so specific they describe only a hypothetical course.
-- QUOTE USAGE RULE: NEVER use more than ONE quoted phrase per query. Quotes are ONLY for essential multi-word concepts that MUST be searched together (e.g., "machine learning" if the topic is broad, or a specific framework name). DO NOT put quotes around every keyword. Combine specific structural terms without quotes.
-    - BAD Example (Too many quotes): `"curriculum design" "machine learning" "module sequence" "prerequisites"`
-    - GOOD Example (One quote): `"machine learning" curriculum design syllabus example`
-    - GOOD Example (No quotes): `machine learning curriculum design module sequence prerequisites`
-- Getting *some* relevant structural examples/discussions is ALWAYS better than getting *zero* results from excessive quoting.
-- Explain precisely how this query will help determine the optimal modules and their sequence.
+- Frame it to retrieve information that INFORMS the design process (e.g., finding lists of prerequisites, common course outlines, discussions of skill progression, examples of practical projects, analyses of difficult concepts).
+- Focus on gathering the raw materials for curriculum design, rather than just finding finished examples.
+- Target educational resources, expert discussions, syllabi, textbooks, or technical documentation that reveal how knowledge in this domain is structured, taught, and applied.
+- Consider terms related to the categories: e.g., '"{user_topic}" fundamental concepts', '"{user_topic}" key subtopics', '"{user_topic}" learning progression', '"{user_topic}" practical skills examples', '"{user_topic}" common difficulties'.
+- CRITICAL: Ensure each query balances specificity (finding relevant design information) with breadth (getting actual results).
+- QUOTE USAGE RULE: NEVER use more than ONE quoted phrase per query. Quotes are ONLY for essential multi-word concepts that MUST be searched together (e.g., "machine learning" if the topic is broad, or a specific framework name). DO NOT put quotes around every keyword. Combine specific structural/category terms without quotes.
+    - BAD Example (Too many quotes): `"fundamental concepts" "machine learning" "prerequisites"`
+    - GOOD Example (One quote): `"machine learning" prerequisites foundational concepts`
+    - GOOD Example (No quotes): `machine learning subtopics logical sequence examples`
+- Getting *some* relevant information across *different* categories is ALWAYS better than getting *zero* results or redundant results.
+- Explain precisely how the information retrieved by this specific query will contribute to DESIGNING the optimal learning path structure (e.g., "This query helps identify the starting point by finding prerequisites," or "This query explores potential advanced modules by looking at specializations").
 
-Your response should be exactly 5 search queries, each with a detailed rationale explaining how it contributes to creating the perfect learning path STRUCTURE.
+Your response should be exactly 5 search queries, each targeting a different facet of curriculum design information, and each with a detailed rationale explaining its contribution to the design process.
 
 {format_instructions}
 """
