@@ -212,7 +212,7 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
       }
       // clearInterval(pollingInterval);
     };
-  }, [sortBy, filterSource, searchTerm, page, perPage, loadHistoryAndGenerations]);
+  }, [sortBy, filterSource, searchTerm, page, perPage]);
   
   /**
    * Force reload the history entries (resets to page 1 potentially, or current page?)
