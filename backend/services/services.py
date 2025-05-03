@@ -40,6 +40,11 @@ TRAFILATURA_MIN_LENGTH_FALLBACK = 100
 PDF_HEADER_MARGIN_PERCENT = 0.10 # 10%
 PDF_FOOTER_MARGIN_PERCENT = 0.10 # 10%
 
+# --- New Constants for Scraping Enhancement ---
+TARGET_SUCCESSFUL_SCRAPES = 3 # Desired minimum number of successful scrapes
+FETCH_BUFFER = 3 # How many extra results to fetch beyond max_results
+# --- End New Constants ---
+
 # Shared rate limiter for Brave Search API (1 call per second)
 # brave_search_rate_limiter = aiolimiter.AsyncLimiter(1, 1) # Removed
 
@@ -383,10 +388,14 @@ async def perform_search_and_scrape(
 
     try:
         api_key = await brave_key_provider.get_key()
-        # Use BraveSearch.from_api_key and pass max_results via search_kwargs
+        # Calculate the number of results to fetch including the buffer
+        fetch_count = max_results + FETCH_BUFFER
+        logger.debug(f"Requesting {fetch_count} search results (max_results={max_results}, buffer={FETCH_BUFFER}) for query: '{query}'")
+
+        # Use BraveSearch.from_api_key and pass fetch_count via search_kwargs
         brave_search = BraveSearch.from_api_key(
-            api_key=api_key, 
-            search_kwargs={"count": max_results}
+            api_key=api_key,
+            search_kwargs={"count": fetch_count} # Use fetch_count here
         )
 
         # --- Thread-safe Rate Limiting --- 
@@ -491,24 +500,99 @@ async def perform_search_and_scrape(
                     logger.error(f"Unexpected scrape outcome type for {url}: {type(scrape_outcome)} - {scrape_outcome}")
                     scraped_data_map[url] = (None, f"Unexpected scrape result type: {type(scrape_outcome).__name__}")
 
-        # Populate the final result object using the mapped search_info
-        for url in urls_to_scrape:
-            search_info = search_result_map.get(url) # Get corresponding mapped Brave info
+        # --- Start Prioritization Logic ---
+        successful_scrapes = []
+        failed_scrapes = []
+
+        # Populate successful_scrapes and failed_scrapes lists
+        for url in urls_to_scrape: # Iterate through all fetched URLs
+            search_info = search_result_map.get(url)
             if search_info:
                 content, error = scraped_data_map.get(url, (None, "Scraping task result missing"))
-                service_result.results.append(
-                    ScrapedResult(
-                        title=search_info.get("title"),
-                        url=url,
-                        search_snippet=search_info.get("search_snippet"), # Use the standardized field name
-                        scraped_content=content,
-                        scrape_error=error
-                    )
-                )
-            else:
-                 logger.error(f"Could not find original Brave Search result info for scraped URL: {url}")
+                # Treat empty string "" as failure too
+                if content: # Check if content is not None and not empty string
+                    successful_scrapes.append((url, search_info, content))
+                else:
+                    # Ensure error string is present, provide default if None
+                    error_msg = error if error is not None else "No content found or scrape failed"
+                    failed_scrapes.append((url, search_info, error_msg))
 
-        logger.info(f"Successfully processed search and scrape for query: '{query}', found {len(service_result.results)} results.")
+        logger.debug(f"Scraping yielded {len(successful_scrapes)} successful scrapes and {len(failed_scrapes)} failed scrapes out of {len(urls_to_scrape)} attempted.")
+
+        final_scraped_results_data = []
+
+        # 1. Add successful scrapes up to TARGET_SUCCESSFUL_SCRAPES, capped by max_results
+        num_successful_added = 0
+        for url, search_info, content in successful_scrapes:
+            # Check if we've reached the overall max_results limit for the final list
+            if len(final_scraped_results_data) < max_results:
+                # Prioritize adding successful scrapes until the target is met OR max_results is hit
+                if num_successful_added < TARGET_SUCCESSFUL_SCRAPES:
+                    final_scraped_results_data.append(
+                        ScrapedResult(
+                            title=search_info.get("title"),
+                            url=url,
+                            search_snippet=search_info.get("search_snippet"),
+                            scraped_content=content,
+                            scrape_error=None
+                        )
+                    )
+                    num_successful_added += 1
+                else:
+                    # If target met, only add more successful ones if space allows
+                    # (This case might be less common if max_results is close to target)
+                    pass # Optionally add more successful ones here if needed up to max_results
+            else:
+                break # Stop if we hit max_results cap
+
+        # If target was not met, add remaining successful scrapes up to max_results
+        successful_added_beyond_target = 0
+        if num_successful_added < TARGET_SUCCESSFUL_SCRAPES:
+            for url, search_info, content in successful_scrapes[num_successful_added:]: # Start from where we left off
+                if len(final_scraped_results_data) < max_results:
+                    final_scraped_results_data.append(
+                        ScrapedResult(
+                            title=search_info.get("title"),
+                            url=url,
+                            search_snippet=search_info.get("search_snippet"),
+                            scraped_content=content,
+                            scrape_error=None
+                        )
+                    )
+                    successful_added_beyond_target += 1
+                else:
+                    break # Stop if max_results is reached
+
+        total_successful_added = num_successful_added + successful_added_beyond_target
+        logger.debug(f"Added {total_successful_added} successful scrapes to the final list (Target: {TARGET_SUCCESSFUL_SCRAPES}).")
+
+
+        # 2. Fill remaining slots up to max_results with failed scrapes (for snippets/errors)
+        remaining_slots = max_results - len(final_scraped_results_data)
+        num_failed_added = 0
+        if remaining_slots > 0:
+            for url, search_info, error in failed_scrapes:
+                 if num_failed_added < remaining_slots:
+                     final_scraped_results_data.append(
+                         ScrapedResult(
+                             title=search_info.get("title"),
+                             url=url,
+                             search_snippet=search_info.get("search_snippet"),
+                             scraped_content=None,
+                             scrape_error=error
+                         )
+                     )
+                     num_failed_added += 1
+                 else:
+                     break # Stop if we fill the remaining slots
+
+        logger.debug(f"Added {num_failed_added} failed scrapes to fill remaining {remaining_slots} slots (cap: {max_results}).")
+
+        # Assign the prioritized list to the service result
+        service_result.results = final_scraped_results_data
+        # --- End Prioritization Logic ---
+
+        logger.info(f"Successfully processed search and scrape for query: '{query}', returning {len(service_result.results)} prioritized results.")
 
     except aiohttp.ClientError as http_err:
         logger.exception(f"Network error during Brave Search/scrape for query '{query}': {http_err}")
