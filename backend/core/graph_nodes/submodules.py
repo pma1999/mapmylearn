@@ -1378,6 +1378,12 @@ async def develop_submodule_specific_content(
     }
     explanation_style_description = style_descriptions.get(style, style_descriptions["standard"])
 
+    # ---> MODIFICATION START <---
+    # If the style is standard, we don't want to add any specific style instructions.
+    if style == 'standard':
+        explanation_style_description = ""
+    # ---> MODIFICATION END <---
+
     # Build context from various sources
     # 1. Learning Path Context
     learning_path_context = ""
@@ -1453,7 +1459,23 @@ async def develop_submodule_specific_content(
 
     # Prepare prompt for content development
     # Using an f-string for dynamic prompt construction based on available context
-    prompt_text = f"""
+
+    # ---> MODIFICATION START <---
+    # Conditionally add the style instruction part to the prompt
+    style_instruction_part = ""
+    if explanation_style_description:
+        # Use triple quotes directly for the f-string content
+        style_instruction_part = f'''
+8.  **Style:** Adhere strictly to the requested explanation style: **{explanation_style_description}**. Ensure tone, vocabulary, sentence structure, and examples align consistently with this style.
+9.  **Output Format:** Provide ONLY the developed content for the submodule in well-formatted Markdown. Do NOT include introductions like "Here is the content..." or summaries unless requested as part of the content itself.
+'''
+    else:
+        # Use triple quotes directly for the f-string content
+        style_instruction_part = f'''
+8.  **Output Format:** Provide ONLY the developed content for the submodule in well-formatted Markdown. Do NOT include introductions like "Here is the content..." or summaries unless requested as part of the content itself.
+'''
+
+    prompt_text = f'''
 # EXPERT CONTENT DEVELOPER & EDUCATOR
 
 ## YOUR TASK
@@ -1488,11 +1510,10 @@ Depth Level: {escape_curly_braces(submodule.depth_level)}
 5.  **Accuracy:** Ensure the technical information presented is accurate based on the provided research.
 6.  **Language:** Write ALL content in {output_language}.
 7.  **Focus:** Strictly focus on the content for THIS submodule. Do not repeat content from other submodules unless necessary for context.
-8.  **Style:** Adhere strictly to the requested explanation style: **{explanation_style_description}**. Ensure tone, vocabulary, sentence structure, and examples align consistently with this style.
-9.  **Output Format:** Provide ONLY the developed content for the submodule in well-formatted Markdown. Do NOT include introductions like "Here is the content..." or summaries unless requested as part of the content itself.
-
+{style_instruction_part}
 ## DEVELOPED CONTENT FOR "{escape_curly_braces(submodule.title)}":
-"""
+'''
+    # ---> MODIFICATION END <---
 
     prompt = ChatPromptTemplate.from_template(prompt_text)
 

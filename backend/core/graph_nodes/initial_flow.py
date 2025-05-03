@@ -470,6 +470,10 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
     }
     explanation_style_description = style_descriptions.get(style, style_descriptions["standard"])
 
+    # If the style is standard, use an empty description
+    if style == 'standard':
+        explanation_style_description = ""
+
     progress_callback = state.get('progress_callback')
     if progress_callback:
         await progress_callback(
@@ -546,13 +550,18 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
 
         escaped_topic = escape_curly_braces(state["user_topic"])
 
-        # Update prompt to mention scraped content
-        prompt_text = f"""
+        # Conditionally add the style instruction part to the prompt
+        style_instruction_part = ""
+        if explanation_style_description:
+            style_instruction_part = f"\n\n**Style Requirement:** Write all module titles and descriptions using the following style: **{explanation_style_description}**"
+
+        # Update prompt to mention scraped content and include style instruction
+        prompt_text = f'''
 You are an expert curriculum designer. Create a comprehensive learning path for the topic: {escaped_topic}.
 
 Based on the following search results and scraped web content snippets, organize the learning into logical modules:
 {results_text}
-{module_count_instruction}{language_instruction}
+{module_count_instruction}{language_instruction}{style_instruction_part}
 
 For each module:
 1. Give it a clear, descriptive title.
@@ -560,12 +569,10 @@ For each module:
 3. Define the single, primary learning objective for this module in one concise, action-oriented sentence.
 4. Explain why this module is important in the overall learning journey and how it connects to other modules.
 
-**Style Requirement:** Write all module titles and descriptions using the following style: **{explanation_style_description}**
-
 Format your response as a structured curriculum. Each module should build logically on previous knowledge.
 
 {{format_instructions}}
-"""
+'''
         prompt = ChatPromptTemplate.from_template(prompt_text)
 
         result = await run_chain(
@@ -574,7 +581,7 @@ Format your response as a structured curriculum. Each module should build logica
             enhanced_modules_parser,
             {
                 "format_instructions": enhanced_modules_parser.get_format_instructions(),
-                "explanation_style_description": explanation_style_description # Pass style description
+                "explanation_style_description": explanation_style_description # Pass style description (might be empty)
             }
         )
         modules = result.modules

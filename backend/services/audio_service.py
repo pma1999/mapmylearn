@@ -205,8 +205,8 @@ async def generate_submodule_audio(
     # --- Define Audio Style Configurations EARLY --- #
     audio_style_config = {
         "standard": {
-            "llm_script_instruction": "Write the script clearly and informatively, balancing detail with accessibility. Use standard language and maintain a helpful, encouraging tutor persona.",
-            "tts_instruction_suffix": "Maintain a standard, clear, and friendly tutor delivery."
+            "llm_script_instruction": "", # Use default prompt behavior
+            "tts_instruction_suffix": ""  # Use default TTS instructions
         },
         "engaging": {
             "llm_script_instruction": "Write with extra energy and enthusiasm! Use more dynamic language, rhetorical questions, and encouraging phrases. Keep paragraphs relatively short and punchy.",
