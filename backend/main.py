@@ -122,7 +122,8 @@ async def generate_learning_path(
     brave_key_provider: Optional[BraveKeyProvider] = None,
     desired_module_count: Optional[int] = None,
     desired_submodule_count: Optional[int] = None,
-    language: str = "en"
+    language: str = "en",
+    explanation_style: str = "standard"
 ) -> Dict[str, Any]:
     """
     Asynchronous interface for learning path generation.
@@ -138,6 +139,7 @@ async def generate_learning_path(
         desired_module_count: Desired number of modules
         desired_submodule_count: Desired number of submodules per module
         language: ISO language code for content generation (e.g., 'en', 'es')
+        explanation_style: Style for content explanations (e.g., 'standard', 'simple')
         
     Returns:
         Dictionary with the learning path data
@@ -181,7 +183,8 @@ async def generate_learning_path(
         "steps": [],
         "progress_callback": progress_callback,
         "language": language,
-        "search_language": search_language
+        "search_language": search_language,
+        "explanation_style": explanation_style
     }
     
     # Add desired module count if specified
@@ -205,7 +208,8 @@ def build_learning_path(
     brave_key_token: Optional[str] = None,
     desired_module_count: Optional[int] = None,
     desired_submodule_count: Optional[int] = None,
-    language: str = "en"
+    language: str = "en",
+    explanation_style: str = "standard"
 ) -> Dict[str, Any]:
     """
     Build a learning path for the given topic using a submodule-enhanced approach.
@@ -221,6 +225,7 @@ def build_learning_path(
         desired_module_count: Optional desired number of modules
         desired_submodule_count: Optional desired number of submodules per module
         language: ISO language code for content generation (e.g., 'en', 'es')
+        explanation_style: Style for content explanations (e.g., 'standard', 'simple')
         
     Returns:
         Dictionary with the learning path data
@@ -244,7 +249,8 @@ def build_learning_path(
         brave_key_provider=brave_provider,
         desired_module_count=desired_module_count,
         desired_submodule_count=desired_submodule_count,
-        language=language
+        language=language,
+        explanation_style=explanation_style
     ))
     return result
 
@@ -261,6 +267,7 @@ if __name__ == "__main__":
     parser.add_argument("--modules", type=int, help="Desired number of modules")
     parser.add_argument("--submodules", type=int, help="Desired number of submodules per module")
     parser.add_argument("--language", type=str, default="en", help="ISO language code for content generation (e.g., 'en', 'es')")
+    parser.add_argument("--style", type=str, default="standard", help="Explanation style (standard, simple, technical, example, conceptual)")
     args = parser.parse_args()
     
     result = build_learning_path(
@@ -272,7 +279,8 @@ if __name__ == "__main__":
         brave_key_token=args.brave_key_token,
         desired_module_count=args.modules,
         desired_submodule_count=args.submodules,
-        language=args.language
+        language=args.language,
+        explanation_style=args.style
     )
     
     # Print the learning path

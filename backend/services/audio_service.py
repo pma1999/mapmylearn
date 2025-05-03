@@ -19,6 +19,8 @@ from backend.models.auth_models import LearningPath, Base
 from backend.services.services import _scrape_single_url, get_llm
 # Import the dictionary of prompts instead of the single prompt string
 from backend.prompts.audio_prompts import AUDIO_SCRIPT_PROMPTS_BY_LANG
+# Import the character limit constant
+from backend.core.graph_nodes.helpers import MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +137,7 @@ async def generate_submodule_audio(
     module_index: int,
     submodule_index: int,
     language: str, # Expecting ISO code 'en', 'es', etc.
+    audio_style: str = "standard", # Add audio style parameter
     force_regenerate: bool = False # Add parameter
 ) -> str:
     """
@@ -199,6 +202,32 @@ async def generate_submodule_audio(
 
     submodule = submodules[submodule_index]
 
+    # --- Define Audio Style Configurations EARLY --- #
+    audio_style_config = {
+        "standard": {
+            "llm_script_instruction": "Write the script clearly and informatively, balancing detail with accessibility. Use standard language and maintain a helpful, encouraging tutor persona.",
+            "tts_instruction_suffix": "Maintain a standard, clear, and friendly tutor delivery."
+        },
+        "engaging": {
+            "llm_script_instruction": "Write with extra energy and enthusiasm! Use more dynamic language, rhetorical questions, and encouraging phrases. Keep paragraphs relatively short and punchy.",
+            "tts_instruction_suffix": "Inject extra energy and enthusiasm. Vary pitch and pace more dynamically than normal, while still ensuring clarity. Sound genuinely excited about the topic."
+        },
+        "calm_narrator": {
+            "llm_script_instruction": "Write using clear, objective, and slightly formal language. Ensure smooth transitions between points. Focus on conveying information precisely and calmly. Avoid overly casual phrases or exclamations.",
+            "tts_instruction_suffix": "Adopt a calm, measured, and objective narrator tone. Use consistent pacing with clear articulation. Minimize excessive pitch variation."
+        },
+        "conversational": {
+            "llm_script_instruction": "Write in a relaxed, informal, and conversational style. Use simpler language, direct address (\"you might notice...\", \"think of it like this...\"), and occasional natural interjections or questions. Keep it friendly and approachable.",
+            "tts_instruction_suffix": "Speak in a relaxed, friendly, and conversational manner. Use natural pauses and intonation as if talking to a friend. Avoid sounding overly formal or robotic."
+        },
+        "grumpy_genius": {
+            "llm_script_instruction": "Adopt the persona of an incredibly smart expert who finds it slightly tedious to explain this topic *yet again*. Write clear and accurate explanations, but frame them with comedic reluctance and mild intellectual impatience. Use phrases like 'Okay, *fine*, let\'s break down this supposedly \"difficult\" concept...', 'The surprisingly straightforward reason for this is (though most get it wrong)...', 'Look, pay attention, this part is actually important...', or '*Sigh*... Why they make this so complicated, I\'ll never know, but here\'s the deal...'. Inject relatable (and slightly exaggerated) sighs or comments about the inherent (or perceived) difficulty/complexity, but always follow through immediately with a correct and clear explanation. Use explicit \'*sigh\'* where a sigh should occur.",
+            "tts_instruction_suffix": "Deliver the lines with the tone of a highly intelligent but slightly impatient and world-weary expert. Audibly produce a sigh sound where \'*sigh\'* appears in the script. Use a slightly dry, perhaps subtly sarcastic or exasperated, but ultimately clear and authoritative delivery."
+        },
+    }
+    # Select the config based on the input style
+    selected_style_config = audio_style_config.get(audio_style, audio_style_config["standard"])
+
     # --- Scraping ---
     scraped_content_parts = []
     resource_urls = [res.get('url') for res in submodule.get('resources', []) if res.get('url')]
@@ -215,7 +244,11 @@ async def generate_submodule_audio(
             if isinstance(result, Exception):
                 logger.warning(f"Scraping failed for {url}: {result}")
             elif isinstance(result, tuple) and result[0]: # Successful scrape with content
-                scraped_content_parts.append(f"--- Content from {url} ---\n{result[0][:5000]}...\n---") # Limit length per resource
+                # Use the imported constant for truncation
+                truncated_content = result[0][:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
+                if len(result[0]) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
+                    truncated_content += "... (truncated)"
+                scraped_content_parts.append(f"--- Content from {url} ---\n{truncated_content}\n---")
             elif isinstance(result, tuple) and result[1]: # Scrape error reported
                  logger.warning(f"Scraping failed for {url}: {result[1]}")
 
@@ -226,7 +259,10 @@ async def generate_submodule_audio(
     # --- LLM Script Generation ---
     submodule_main_content = submodule.get('content', '')
     if not submodule_main_content and not scraped_context:
-         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No content available (submodule or resources) to generate audio script.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No content available (submodule or resources) to generate audio script.")
+
+    # Retrieve the LLM instruction from the selected style config
+    llm_script_instruction = selected_style_config["llm_script_instruction"]
 
     llm_context = f"Submodule Title: {submodule.get('title', 'N/A')}\nSubmodule Description: {submodule.get('description', 'N/A')}\n\nSubmodule Content:\n{submodule_main_content}\n\nAdditional Content from Resources:\n{scraped_context}"
 
@@ -236,7 +272,10 @@ async def generate_submodule_audio(
         llm = await get_llm()
         prompt = ChatPromptTemplate.from_template(selected_prompt_template)
         chain = prompt | llm | StrOutputParser()
-        audio_script = await chain.ainvoke({"context": llm_context[:30000]}) # Limit context for LLM
+        audio_script = await chain.ainvoke({
+            "context": llm_context[:30000], # Limit context for LLM
+            "audio_style_script_instruction": llm_script_instruction # Pass the style instruction
+        })
         logger.info(f"LLM script generation successful (lang: {language}).")
     except Exception as e:
         logger.exception(f"Error generating audio script with LLM (lang: {language})")
@@ -247,6 +286,9 @@ async def generate_submodule_audio(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Generated audio script was invalid or empty.")
 
     # --- Text-to-Speech (OpenAI SDK) ---
+    # llm_instruction is used in the prompt, handled in Phase 5
+    tts_instruction_suffix = selected_style_config["tts_instruction_suffix"]
+
     logger.info(f"Initiating audio generation with OpenAI TTS model '{OPENAI_TTS_MODEL}' and voice '{OPENAI_TTS_VOICE}'...")
 
     # Instantiate Async Client
@@ -260,11 +302,10 @@ async def generate_submodule_audio(
          logger.warning(f"No specific accent mapping found for language '{language}' or fallback 'en'. Using generic instruction.")
 
     instruction_text = (
-        f"Act as an {TTS_PERSONA} explaining '{submodule_title}' to a learner. "
-        f"Maintain a {Tts_tone} tone throughout. "
-        f"Speak clearly at a {Tts_pacing}. "
-        f"Use natural speech patterns and {Tts_intonation}. "
-        f"Ensure accurate pronunciation using a {target_accent} in the {language} language."
+        f"Base Persona: Act as an {TTS_PERSONA} explaining '{submodule_title}' to a learner. "
+        f"Base Tone/Pacing: Maintain a {Tts_tone} tone. Speak clearly at a {Tts_pacing}. Use natural speech patterns and {Tts_intonation}. "
+        f"Language/Accent: Ensure accurate pronunciation using a {target_accent} in the {language} language. "
+        f"Specific Style Guidance: {tts_instruction_suffix}" # Append style-specific instructions
     )
     logger.info(f"Using Rich TTS instruction: {instruction_text}")
 
@@ -300,14 +341,23 @@ async def generate_submodule_audio(
             # Generate TTS for each chunk concurrently
             tasks = []
             for i, chunk in enumerate(script_chunks):
-                temp_file = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False, dir=STATIC_AUDIO_DIR) # Use static dir for temp to avoid cross-device issues if temp is on different volume
-                temp_files.append(temp_file.name)
+                # Use mkstemp for better handle control on Windows
+                try:
+                    fd, temp_path = tempfile.mkstemp(suffix=".mp3", dir=STATIC_AUDIO_DIR)
+                    os.close(fd) # Immediately close the file descriptor
+                    temp_files.append(temp_path)
+                except Exception as temp_err:
+                    logger.error(f"Failed to create temporary file for chunk {i}: {temp_err}")
+                    # Decide how to handle: skip chunk? raise error?
+                    # For now, let's skip this chunk and log it.
+                    continue # Skip adding task for this chunk
+
                 tasks.append(
                     _generate_tts_chunk(
                         async_openai_client,
                         chunk,
                         instruction_text, # Pass the same instruction to maintain consistency
-                        temp_file.name
+                        temp_path # Pass the path obtained from mkstemp
                     )
                 )
             
@@ -367,14 +417,34 @@ async def generate_submodule_audio(
     finally:
         # --- Cleanup Temporary Files ---
         if temp_files:
-            logger.info(f"Cleaning up {len(temp_files)} temporary audio chunk files...")
+            logger.info(f"Cleaning up {len(temp_files)} temporary audio chunk files... Attempting garbage collection first.")
+            # Attempt to force garbage collection to release potential file handles
+            import gc
+            gc.collect()
+            # Add a small delay to allow file handles to be released
+            await asyncio.sleep(0.2)
             for temp_path in temp_files:
-                try:
-                    if os.path.exists(temp_path):
-                        os.remove(temp_path)
-                        logger.debug(f"Removed temp file: {temp_path}")
-                except OSError as e:
-                    logger.error(f"Error removing temporary file {temp_path}: {e}")
+                retries = 3
+                delay = 0.1
+                while retries > 0:
+                    try:
+                        if os.path.exists(temp_path):
+                            os.remove(temp_path)
+                            logger.debug(f"Removed temp file: {temp_path}")
+                            break # Success, exit retry loop
+                        else:
+                            break # File doesn't exist, exit retry loop
+                    except OSError as e:
+                        logger.warning(f"Attempt {4-retries}/3 failed to remove {temp_path}: {e}")
+                        retries -= 1
+                        if retries == 0:
+                            logger.error(f"Final attempt failed to remove temporary file {temp_path}. Giving up. Error: {e}")
+                        else:
+                            await asyncio.sleep(delay)
+                            delay *= 2 # Optional: increase delay
+                    except Exception as e:
+                        logger.error(f"Unexpected error removing temporary file {temp_path}: {e}")
+                        break # Exit retry loop on unexpected error
 
     if not audio_url:
          # Should not happen if logic is correct, but as a safeguard

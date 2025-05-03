@@ -1356,13 +1356,27 @@ async def develop_submodule_specific_content(
     sub_search_results: List[SearchServiceResult]
 ) -> str:
     """
-    Develops the specific content for a submodule using LLM, informed by search results.
+    Develops the specific content for a submodule using LLM, informed by search results and user-selected style.
     """
     logger = logging.getLogger("learning_path.content_developer")
     logger.info(f"Developing content for submodule: {submodule.title}")
 
     # Get language settings
     output_language = state.get('language', 'en')
+
+    # Get explanation style
+    style = state.get('explanation_style', 'standard')
+
+    # Define style descriptions based on user input
+    style_descriptions = {
+        "standard": "Provide a balanced, clear, and informative explanation suitable for a general audience. Use standard terminology and provide sufficient detail without oversimplification or excessive jargon. Assume general intelligence but not deep prior knowledge.",
+        "simple": "Explain like you're talking to someone smart but new to the topic. Prioritize clarity and understanding over technical precision. Use simple vocabulary and sentence structure. Incorporate basic analogies if helpful.",
+        "technical": "Be precise and detailed. Use correct technical terms and formal language. Dive into specifics, mechanisms, and underlying principles. Assume the reader has prerequisite knowledge.",
+        "example": "Illustrate every key concept with concrete, practical examples. If the topic is technical, provide relevant code snippets or pseudocode where applicable. Focus on application and real-world scenarios.",
+        "conceptual": "Emphasize the core principles, the 'why' behind concepts, relationships between ideas, and the overall context. Focus on mental models. De-emphasize specific implementation steps unless critical to the concept.",
+        "grumpy_genius": "Adopt the persona of an incredibly smart expert who finds it slightly tedious to explain this topic *yet again*. Write clear and accurate explanations, but frame them with comedic reluctance and mild intellectual impatience. Use phrases like 'Okay, *fine*, let\'s break down this supposedly \"difficult\" concept...', 'The surprisingly straightforward reason for this is (though most get it wrong)...', 'Look, pay attention, this part is actually important...', or '*Sigh*... Why they make this so complicated, I\'ll never know, but here\'s the deal...'. Inject relatable (and slightly exaggerated) sighs or comments about the inherent (or perceived) difficulty/complexity, but always follow through immediately with a correct and clear explanation. The humor comes from the grumpy-but-brilliant persona."
+    }
+    explanation_style_description = style_descriptions.get(style, style_descriptions["standard"])
 
     # Build context from various sources
     # 1. Learning Path Context
@@ -1474,7 +1488,8 @@ Depth Level: {escape_curly_braces(submodule.depth_level)}
 5.  **Accuracy:** Ensure the technical information presented is accurate based on the provided research.
 6.  **Language:** Write ALL content in {output_language}.
 7.  **Focus:** Strictly focus on the content for THIS submodule. Do not repeat content from other submodules unless necessary for context.
-8.  **Output Format:** Provide ONLY the developed content for the submodule in well-formatted Markdown. Do NOT include introductions like "Here is the content..." or summaries unless requested as part of the content itself.
+8.  **Style:** Adhere strictly to the requested explanation style: **{explanation_style_description}**. Ensure tone, vocabulary, sentence structure, and examples align consistently with this style.
+9.  **Output Format:** Provide ONLY the developed content for the submodule in well-formatted Markdown. Do NOT include introductions like "Here is the content..." or summaries unless requested as part of the content itself.
 
 ## DEVELOPED CONTENT FOR "{escape_curly_braces(submodule.title)}":
 """
@@ -1488,9 +1503,9 @@ Depth Level: {escape_curly_braces(submodule.depth_level)}
     chain = prompt | llm | StrOutputParser()
 
     # Execute the chain
-    developed_content = await chain.ainvoke({})
+    developed_content = await chain.ainvoke({"explanation_style_description": explanation_style_description})
 
-    logger.info(f"Developed content for submodule: {submodule.title} (Length: {len(developed_content)})")
+    logger.info(f"Developed content for submodule: {submodule.title} (Length: {len(developed_content)}) with style: {style}")
     return developed_content
 
 async def generate_submodule_quiz(

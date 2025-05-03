@@ -44,6 +44,9 @@ const GeneratorPage = () => {
     showNotification
   );
 
+  // Destructure explanation style from formState
+  const { explanationStyle, setExplanationStyle } = formState;
+
   // Destructure necessary props for the save dialog
   const { 
     saveDialogOpen, 
@@ -80,6 +83,8 @@ const GeneratorPage = () => {
           formState={formState}
           historyState={historyState}
           progressState={progressTrackingState}
+          explanationStyle={explanationStyle}
+          setExplanationStyle={setExplanationStyle}
           isMobile={isMobile}
         />
       </Paper>

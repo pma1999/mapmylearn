@@ -3,6 +3,16 @@ import { useState, useCallback } from 'react';
 import * as apiService from '../../../services/api';
 import * as languageService from '../../../services/languageService';
 
+// Define default styles
+const defaultStyles = {
+  standard: "Standard",
+  simple: "Simple & Clear",
+  technical: "Technical Deep Dive",
+  example: "Learn by Example",
+  conceptual: "Big Picture Focus",
+  grumpy_genius: "Grumpy Genius Mode"
+};
+
 /**
  * Custom hook for managing generator form state and submission
  * @param {Object} progressTrackingState - Progress tracking state from useProgressTracking hook
@@ -36,6 +46,9 @@ const useGeneratorForm = (
   
   // Accordion state
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
+  
+  // Explanation style state
+  const [explanationStyle, setExplanationStyle] = useState('standard');
   
   // Save language preference whenever it changes
   const handleLanguageChange = (newLanguage) => {
@@ -83,7 +96,8 @@ const useGeneratorForm = (
         submoduleParallelCount,
         desiredModuleCount: autoModuleCount ? null : desiredModuleCount,
         desiredSubmoduleCount: autoSubmoduleCount ? null : desiredSubmoduleCount,
-        language
+        language: language,
+        explanationStyle: explanationStyle
       });
       
       // Store task ID and set generating state
@@ -147,6 +161,10 @@ const useGeneratorForm = (
     // Language
     language,
     setLanguage: handleLanguageChange,
+    
+    // Explanation style
+    explanationStyle,
+    setExplanationStyle,
     
     // Accordion state
     advancedSettingsOpen,

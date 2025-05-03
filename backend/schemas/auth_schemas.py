@@ -265,6 +265,7 @@ class GenerateAudioRequest(BaseModel):
     path_data: Optional[Dict[str, Any]] = None # Needed for temporary paths
     language: str # ISO language code like 'en', 'es'
     force_regenerate: bool = False # Add this field
+    audio_style: Optional[str] = Field("standard", description="Desired style for audio script and TTS delivery (e.g., standard, engaging, calm_narrator, conversational, grumpy_genius)")
 
 
 class GenerateAudioResponse(BaseModel):

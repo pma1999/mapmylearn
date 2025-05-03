@@ -177,6 +177,7 @@ class LearningPathState(TypedDict):
     brave_key_token: Optional[str] # Changed tavily_key_token to brave_key_token
     # Language settings
     language: Optional[str]  # ISO language code for content generation
+    explanation_style: Optional[str] # Style for content explanations
     search_language: Optional[str]  # ISO language code for search queries
     # Other optional settings
     desired_module_count: Optional[int]

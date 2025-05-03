@@ -476,6 +476,20 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
     # Get language information from state
     output_language = state.get('language', 'en')
 
+    # Get explanation style
+    style = state.get('explanation_style', 'standard')
+
+    # Define style descriptions (can reuse from submodules or define here)
+    style_descriptions = {
+        "standard": "Provide a balanced, clear, and informative explanation suitable for a general audience. Use standard terminology and provide sufficient detail without oversimplification or excessive jargon. Assume general intelligence but not deep prior knowledge.",
+        "simple": "Explain like you're talking to someone smart but new to the topic. Prioritize clarity and understanding over technical precision. Use simple vocabulary and sentence structure. Incorporate basic analogies if helpful.",
+        "technical": "Be precise and detailed. Use correct technical terms and formal language. Dive into specifics, mechanisms, and underlying principles. Assume the reader has prerequisite knowledge.",
+        "example": "Illustrate every key concept with concrete, practical examples. If the topic is technical, provide relevant code snippets or pseudocode where applicable. Focus on application and real-world scenarios.",
+        "conceptual": "Emphasize the core principles, the 'why' behind concepts, relationships between ideas, and the overall context. Focus on mental models. De-emphasize specific implementation steps unless critical to the concept.",
+        "grumpy_genius": "Adopt the persona of an incredibly smart expert who finds it slightly tedious to explain this topic *yet again*. Write clear and accurate explanations, but frame them with comedic reluctance and mild intellectual impatience. Use phrases like 'Okay, *fine*, let\'s break down this supposedly \"difficult\" concept...', 'The surprisingly straightforward reason for this is (though most get it wrong)...', 'Look, pay attention, this part is actually important...', or '*Sigh*... Why they make this so complicated, I\'ll never know, but here\'s the deal...'. Inject relatable (and slightly exaggerated) sighs or comments about the inherent (or perceived) difficulty/complexity, but always follow through immediately with a correct and clear explanation. The humor comes from the grumpy-but-brilliant persona."
+    }
+    explanation_style_description = style_descriptions.get(style, style_descriptions["standard"])
+
     progress_callback = state.get('progress_callback')
     if progress_callback:
         await progress_callback(
@@ -522,7 +536,7 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
                 else:
                      # If scrape failed and no snippet, mention the failure
                      error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
-                     context_parts.append(f"Content: Not available.{error_info}")
+                     # context_parts.append(f"Content: Not available.{error_info}") # Let's omit results with no content at all for this prompt
                      # Optionally decide if this counts towards max_context_per_query
 
                 context_parts.append("---")
@@ -566,6 +580,8 @@ For each module:
 3. Define the single, primary learning objective for this module in one concise, action-oriented sentence.
 4. Explain why this module is important in the overall learning journey and how it connects to other modules.
 
+**Style Requirement:** Write all module titles and descriptions using the following style: **{explanation_style_description}**
+
 Format your response as a structured curriculum. Each module should build logically on previous knowledge.
 
 {{format_instructions}}
@@ -576,7 +592,10 @@ Format your response as a structured curriculum. Each module should build logica
             prompt,
             lambda: get_llm(key_provider=google_key_provider),
             enhanced_modules_parser,
-            { "format_instructions": enhanced_modules_parser.get_format_instructions() }
+            {
+                "format_instructions": enhanced_modules_parser.get_format_instructions(),
+                "explanation_style_description": explanation_style_description # Pass style description
+            }
         )
         modules = result.modules
 

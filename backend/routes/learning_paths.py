@@ -18,7 +18,7 @@ from backend.schemas.auth_schemas import (
     LearningPathList, MigrationRequest, MigrationResponse,
     GenerateAudioRequest, GenerateAudioResponse, LearningPathPublicityUpdate # Import new schema
 )
-from backend.utils.auth_middleware import get_current_user
+from backend.utils.auth_middleware import get_current_user, get_optional_user
 from backend.utils.pdf_generator import generate_pdf, create_filename
 # Import the new audio generation service
 from backend.services.audio_service import generate_submodule_audio 
@@ -687,6 +687,7 @@ async def generate_or_get_submodule_audio(
                     module_index=module_index,
                     submodule_index=submodule_index,
                     language=requested_language, # Pass language
+                    audio_style=request_data.audio_style, # Pass audio style
                     force_regenerate=request_data.force_regenerate # Pass flag
                 )
             # If context manager exits without error, credit is deducted and committed.
@@ -728,6 +729,7 @@ async def generate_or_get_submodule_audio(
                     module_index=module_index,
                     submodule_index=submodule_index,
                     language=requested_language, # Pass language
+                    audio_style=request_data.audio_style, # Pass audio style for temp paths too
                     force_regenerate=request_data.force_regenerate # Pass flag for temp paths too
                 )
             # If context manager exits without error, credit is deducted and committed.

@@ -21,7 +21,8 @@ import {
   Grid,
   Divider,
   Checkbox,
-  FormControlLabel
+  FormControlLabel,
+  FormHelperText
 } from '@mui/material';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
@@ -32,6 +33,11 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import SkipNextIcon from '@mui/icons-material/SkipNext'; // For next module
+import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver'; // Standard
+import CampaignIcon from '@mui/icons-material/Campaign'; // Engaging
+import MicNoneIcon from '@mui/icons-material/MicNone'; // Calm Narrator
+import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline'; // Conversational
+import PsychologyAltIcon from '@mui/icons-material/PsychologyAlt';
 
 // Shared components
 import MarkdownRenderer from '../../MarkdownRenderer';
@@ -79,6 +85,35 @@ const supportedLanguages = [
 const defaultLanguageCode = 'en';
 const AUDIO_CREDIT_COST = 1; // Define or import this
 
+// Define audio style configurations
+const audioStyleConfig = {
+  standard: {
+    label: 'Standard Tutor',
+    description: 'Clear, encouraging, and informative delivery with a balanced pace.',
+    icon: <RecordVoiceOverIcon sx={{ mr: 1.5, verticalAlign: 'middle' }} fontSize="small" />
+  },
+  engaging: {
+    label: 'Engaging & Energetic',
+    description: 'A more enthusiastic and dynamic delivery, suitable for motivating learners.',
+    icon: <CampaignIcon sx={{ mr: 1.5, verticalAlign: 'middle' }} fontSize="small" />
+  },
+  calm_narrator: {
+    label: 'Calm Narrator',
+    description: 'A measured, clear, and calm delivery, like a documentary narrator.',
+    icon: <MicNoneIcon sx={{ mr: 1.5, verticalAlign: 'middle' }} fontSize="small" />
+  },
+  conversational: {
+    label: 'Friendly & Conversational',
+    description: 'A relaxed, informal, and friendly style, as if explaining to a friend.',
+    icon: <ChatBubbleOutlineIcon sx={{ mr: 1.5, verticalAlign: 'middle' }} fontSize="small" />
+  },
+  grumpy_genius: {
+    label: 'Grumpy Genius Mode',
+    description: 'Accurate explanations delivered with comedic reluctance and intellectual sighs.',
+    icon: <PsychologyAltIcon sx={{ mr: 1.5, verticalAlign: 'middle' }} fontSize="small" />
+  },
+};
+
 // Wrap component definition with forwardRef
 const ContentPanel = forwardRef(({ 
   module, 
@@ -119,6 +154,9 @@ const ContentPanel = forwardRef(({
   const [audioError, setAudioError] = useState(null);
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'info' });
 
+  // Audio Style State
+  const [selectedAudioStyle, setSelectedAudioStyle] = useState('standard');
+
   // --- Language State ---
   const getInitialLanguage = useCallback(() => {
     const pathLang = actualPathData?.language;
@@ -144,7 +182,11 @@ const ContentPanel = forwardRef(({
           setNotification({ open: true, message: 'Audio generation is disabled for public views.', severity: 'info' });
           return;
       }
-      if (!submodule || !pathId) return; // Safety check
+      if (!submodule || !pathId || !selectedLanguage || !selectedAudioStyle) {
+          console.error('Missing required data for audio generation:', { submodule, pathId, selectedLanguage, selectedAudioStyle });
+          setNotification({ open: true, message: 'Cannot generate audio. Missing required data.', severity: 'error' });
+          return;
+      }
 
       setIsAudioLoading(true);
       setAudioError(null);
@@ -155,6 +197,7 @@ const ContentPanel = forwardRef(({
       const requestBody = {
           path_data: isTemporaryPath ? actualPathData : undefined,
           language: selectedLanguage,
+          audio_style: selectedAudioStyle, // Include selected audio style
           force_regenerate: isRegeneration // Add the flag
       };
 
@@ -199,6 +242,11 @@ const ContentPanel = forwardRef(({
     // Reset audio URL when language changes to force re-generation if desired
     // setAudioUrl(null); 
     setAudioError(null); 
+  };
+
+  const handleAudioStyleChange = (event) => {
+    setSelectedAudioStyle(event.target.value);
+    setAudioError(null); // Reset error if style changes
   };
 
   const handleNotificationClose = (event, reason) => {
@@ -439,7 +487,8 @@ const ContentPanel = forwardRef(({
                        />
                    )}
                    {tab.component === 'Audio' && (
-                       <Box data-tut="content-panel-tab-audio" sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, p: 2 }}>
+                       <Box data-tut="content-panel-tab-audio" sx={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 2.5, p: { xs: 2, sm: 3 } }}>
+                           {/* Language Selector */}
                            <FormControl fullWidth sx={{ maxWidth: '300px' }} disabled={isAudioLoading}>
                                <InputLabel id={`language-select-label-panel`}>Script Language</InputLabel>
                                <Select
@@ -454,9 +503,37 @@ const ContentPanel = forwardRef(({
                                        <MenuItem key={lang.code} value={lang.code}>{lang.name}</MenuItem>
                                    ))}
                                </Select>
+                               <FormHelperText>Language used for the audio script and voice.</FormHelperText>
                            </FormControl>
 
-                           {isAudioLoading && <CircularProgress sx={{ my: 2 }} />}
+                           {/* Audio Style Selector */}
+                           <FormControl fullWidth sx={{ maxWidth: '300px' }} disabled={isAudioLoading}>
+                               <InputLabel id="audio-style-select-label">Audio Style</InputLabel>
+                               <Select
+                                   labelId="audio-style-select-label"
+                                   value={selectedAudioStyle}
+                                   label="Audio Style"
+                                   onChange={handleAudioStyleChange}
+                                   variant="outlined"
+                                   size="small"
+                                   sx={{ '.MuiSelect-select': { display: 'flex', alignItems: 'center' } }} // Align icon and text
+                               >
+                                   {Object.entries(audioStyleConfig).map(([styleKey, config]) => (
+                                       <MenuItem key={styleKey} value={styleKey}>
+                                           {config.icon} {config.label}
+                                       </MenuItem>
+                                   ))}
+                                   {/* Explicitly add grumpy_genius if not dynamically added */}
+                                   { !audioStyleConfig.grumpy_genius && (
+                                       <MenuItem key="grumpy_genius" value="grumpy_genius">
+                                           <PsychologyAltIcon sx={{ mr: 1.5, verticalAlign: 'middle' }} fontSize="small" /> Grumpy Genius Mode
+                                       </MenuItem>
+                                   ) }
+                               </Select>
+                               <FormHelperText>{audioStyleConfig[selectedAudioStyle]?.description || 'Select an audio delivery style.'}</FormHelperText>
+                           </FormControl>
+
+                           {isAudioLoading && <CircularProgress sx={{ my: 2, alignSelf: 'center' }} />}
                            {audioError && !isAudioLoading && <Alert severity="error" sx={{ width: '100%', mb: 1 }}>{audioError}</Alert>}
                            
                            {audioUrl && !isAudioLoading && (

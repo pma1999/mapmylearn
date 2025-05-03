@@ -593,7 +593,8 @@ export const generateLearningPath = async (topic, options = {}) => {
     googleKeyToken = null,
     pplxKeyToken = null,
     rememberTokens = false,
-    language = 'en'  // Language parameter with English as default
+    language = 'en',  // Language parameter with English as default
+    explanationStyle = 'standard' // Added explanation style with default
   } = options;
   
   try {
@@ -605,7 +606,8 @@ export const generateLearningPath = async (topic, options = {}) => {
       parallel_count: parallelCount,
       search_parallel_count: searchParallelCount,
       submodule_parallel_count: submoduleParallelCount,
-      language // Include the language parameter
+      language, // Include the language parameter
+      explanation_style: explanationStyle // Added explanation style
     };
     
     // Add desired module count if specified

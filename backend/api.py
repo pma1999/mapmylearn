@@ -485,6 +485,7 @@ class LearningPathRequest(BaseModel):
     google_key_token: Optional[str] = Field(None, description="Token for Google API key")
     brave_key_token: Optional[str] = Field(None, description="Token for Brave Search API key")
     language: Optional[str] = Field("en", description="ISO language code for content generation (e.g., 'en', 'es')")
+    explanation_style: Optional[str] = Field("standard", description="Desired style for content explanation (e.g., standard, simple, technical, example, conceptual, grumpy_genius)")
 
 class ApiKeyAuthRequest(BaseModel):
     google_api_key: Optional[str] = Field(None, description="Google API key for LLM operations")
@@ -728,6 +729,7 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
         submoduleParallelCount=request.submodule_parallel_count,
         desiredModuleCount=request.desired_module_count,
         desiredSubmoduleCount=request.desired_submodule_count,
+        explanation_style=request.explanation_style,
         googleKeyProvider=google_provider,
         braveKeyProvider=brave_provider,
         progressCallback=progress_callback,
@@ -756,6 +758,7 @@ async def generate_learning_path_task(
     braveKeyProvider = None,
     desiredModuleCount: Optional[int] = None,
     desiredSubmoduleCount: Optional[int] = None,
+    explanation_style: str = "standard",
     language: str = "en",
     user_id: Optional[int] = None
 ):
@@ -882,6 +885,7 @@ async def generate_learning_path_task(
                 brave_key_provider=braveKeyProvider,
                 desired_module_count=desiredModuleCount,
                 desired_submodule_count=desiredSubmoduleCount,
+                explanation_style=explanation_style,
                 language=language
             )
         except Exception as e:
