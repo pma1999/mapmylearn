@@ -9,7 +9,7 @@ const useHistoryFilters = () => {
   const [sortBy, setSortBy] = useState('creation_date');
   const [filterSource, setFilterSource] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-
+  
   /**
    * Handle sort option change
    * @param {string} option - Sort option value

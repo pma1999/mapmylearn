@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import {
   Grid,
@@ -14,6 +14,7 @@ import {
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListOffIcon from '@mui/icons-material/FilterListOff';
+import useDebounce from '../../../hooks/useDebounce';
 
 /**
  * Component for filtering and sorting history entries
@@ -26,6 +27,7 @@ import FilterListOffIcon from '@mui/icons-material/FilterListOff';
  * @param {Function} props.onSearchChange - Handler for search term change
  * @param {Function} props.clearFilters - Handler for clearing filters
  * @param {boolean} props.hasFilters - Whether any filters are applied
+ * @param {boolean} props.isLoading - Whether the component is loading
  * @returns {JSX.Element} History filters component
  */
 const HistoryFilters = ({ 
@@ -36,14 +38,29 @@ const HistoryFilters = ({
   search, 
   onSearchChange,
   clearFilters,
-  hasFilters
+  hasFilters,
+  isLoading
 }) => {
+  const [inputValue, setInputValue] = useState(search);
+  const debouncedInputValue = useDebounce(inputValue, 400);
+
+  useEffect(() => {
+    if (debouncedInputValue !== search) {
+        onSearchChange(debouncedInputValue);
+    }
+  }, [debouncedInputValue, onSearchChange, search]);
+
+  useEffect(() => {
+    setInputValue(search);
+  }, [search]);
+
   return (
     <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2 }}>
       <TextField
         placeholder="Search by topic..."
-        value={search}
-        onChange={(e) => onSearchChange(e.target.value)}
+        value={inputValue}
+        onChange={(e) => setInputValue(e.target.value)}
+        disabled={isLoading}
         InputProps={{
           startAdornment: (
             <InputAdornment position="start">
@@ -56,7 +73,7 @@ const HistoryFilters = ({
       />
       
       <Box sx={{ display: 'flex', gap: 2, width: { xs: '100%', md: 'auto' } }}>
-        <FormControl size="small" sx={{ minWidth: 150, flexGrow: { xs: 1, md: 0 } }}>
+        <FormControl size="small" sx={{ minWidth: 150, flexGrow: { xs: 1, md: 0 } }} disabled={isLoading}>
           <InputLabel id="sort-by-label">Sort By</InputLabel>
           <Select
             labelId="sort-by-label"
@@ -71,7 +88,7 @@ const HistoryFilters = ({
           </Select>
         </FormControl>
         
-        <FormControl size="small" sx={{ minWidth: 120, flexGrow: { xs: 1, md: 0 } }}>
+        <FormControl size="small" sx={{ minWidth: 120, flexGrow: { xs: 1, md: 0 } }} disabled={isLoading}>
           <InputLabel id="filter-source-label">Source</InputLabel>
           <Select
             labelId="filter-source-label"
@@ -92,6 +109,7 @@ const HistoryFilters = ({
             size="small"
             startIcon={<FilterListOffIcon />}
             onClick={clearFilters}
+            disabled={isLoading || !hasFilters}
             sx={{ flexShrink: 0, alignSelf: 'center' }}
           >
             Clear Filters
@@ -109,7 +127,8 @@ HistoryFilters.propTypes = {
   search: PropTypes.string.isRequired,
   onSearchChange: PropTypes.func.isRequired,
   clearFilters: PropTypes.func.isRequired,
-  hasFilters: PropTypes.bool.isRequired
+  hasFilters: PropTypes.bool.isRequired,
+  isLoading: PropTypes.bool
 };
 
 export default HistoryFilters; 

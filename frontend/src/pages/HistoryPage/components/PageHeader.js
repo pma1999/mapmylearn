@@ -89,7 +89,12 @@ const PageHeader = ({ hasEntries, onImport, onExport, onClear, isLoading = false
         spacing={{ xs: 1, sm: 1.5 }}
         alignItems="center"
       >
-        <ButtonGroup variant="outlined" size="small" aria-label="History management actions" disabled={isLoading || isProcessing}>
+        <ButtonGroup 
+          variant="outlined" 
+          size="small" 
+          aria-label="History management actions" 
+          disabled={isLoading || isProcessing}
+        >
           <Button
             startIcon={<UploadIcon />}
             onClick={onImport}
@@ -100,7 +105,7 @@ const PageHeader = ({ hasEntries, onImport, onExport, onClear, isLoading = false
           <Button
             startIcon={<DownloadIcon />}
             onClick={onExport}
-            disabled={!hasEntries || isLoading || isProcessing}
+            disabled={!hasEntries}
             sx={{ textTransform: 'none' }}
           >
             Export All
@@ -109,7 +114,7 @@ const PageHeader = ({ hasEntries, onImport, onExport, onClear, isLoading = false
             color="error"
             startIcon={<ClearAllIcon />}
             onClick={onClear}
-            disabled={!hasEntries || isLoading || isProcessing}
+            disabled={!hasEntries}
             sx={{ textTransform: 'none' }}
           >
             Clear All

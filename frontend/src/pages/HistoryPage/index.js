@@ -126,7 +126,7 @@ const HistoryPage = () => {
   const {
     sortBy,
     filterSource,
-    searchTerm,
+    searchTerm, // Only need searchTerm now
     handleSortChange,
     handleFilterChange,
     handleSearchChange,
@@ -143,7 +143,8 @@ const HistoryPage = () => {
     initialLoadComplete,
     refreshEntries
   } = useHistoryEntries(
-    { sortBy, filterSource, searchTerm, page, perPage: ITEMS_PER_PAGE },
+    // Pass the (effectively debounced) searchTerm directly
+    { sortBy, filterSource, searchTerm, page, perPage: ITEMS_PER_PAGE }, 
     showNotification
   );
   
@@ -277,21 +278,22 @@ const HistoryPage = () => {
     // The useHistoryEntries hook should re-fetch data when 'page' changes
   };
 
+  // Determine if filters are applied using the immediate search term
   const hasFiltersApplied = useMemo(() => {
       return searchTerm !== '' || filterSource !== null || sortBy !== 'creation_date';
   }, [searchTerm, filterSource, sortBy]);
 
   // Calculate grid parameters
   const columnCount = isMobile ? 1 : isTablet ? 2 : isLargeScreen ? 4 : 3;
-  const isLoadingSkeletons = loading && !initialLoadComplete;
-  // Use ITEMS_PER_PAGE for skeletons, actual entries length for data
-  const displayData = isLoadingSkeletons ? Array(ITEMS_PER_PAGE).fill({ isSkeleton: true }) : entries;
-  const rowCount = Math.ceil(displayData.length / columnCount);
+  // const isLoadingSkeletons = loading && !initialLoadComplete; // Remove this
+  // Use ITEMS_PER_PAGE for skeletons when loading, actual entries length when not loading
+  const displayItemCount = loading ? ITEMS_PER_PAGE : entries.length;
+  const rowCount = Math.ceil(displayItemCount / columnCount);
   const cardHeight = 380;
 
   // Memoize itemData for react-window, include loading state and skeleton count
   const itemData = useMemo(() => ({
-    entries: displayData, // Use potentially skeleton-filled array
+    entries: loading ? Array(ITEMS_PER_PAGE).fill(null) : entries, // Pass skeletons or real entries
     columnCount,
     onView: handleViewLearningPath,
     onDelete: handleDeleteLearningPath,
@@ -301,10 +303,11 @@ const HistoryPage = () => {
     onExport: handleExportEntry,
     onTogglePublic: handleTogglePublic,
     onCopyShareLink: handleCopyShareLink,
-    isLoading: isLoadingSkeletons, // Pass loading flag
+    isLoading: loading, // Pass loading flag directly
     skeletonCount: ITEMS_PER_PAGE // Pass expected skeleton count (used by EntryCell)
   }), [
-    displayData, // Depends on loading state
+    entries, // Depends on entries AND loading state
+    loading, // Add loading as dependency
     columnCount, 
     handleViewLearningPath, 
     handleDeleteLearningPath, 
@@ -314,13 +317,13 @@ const HistoryPage = () => {
     handleExportEntry, 
     handleTogglePublic, 
     handleCopyShareLink,
-    isLoadingSkeletons // Add dependency
+    // isLoadingSkeletons // Remove dependency
   ]);
   
   // Render Logic
   const renderContent = () => {
-    // Check for EmptyState AFTER checking for loading, otherwise it might flash empty state briefly
-    if (!isLoadingSkeletons && entries.length === 0) {
+    // Check for EmptyState AFTER checking for loading
+    if (!loading && entries.length === 0) {
       return (
         <EmptyState 
           hasFilters={hasFiltersApplied}
@@ -329,22 +332,21 @@ const HistoryPage = () => {
       );
     }
     
-    // Always render the grid: it shows skeletons when loading, entries when loaded
+    // Render the grid: shows skeletons when loading, entries when loaded
     return (
-        <Box sx={{ height: 'calc(100vh - 250px)', width: '100%' }}> {/* Adjust height */} 
+        <Box sx={{ height: 'calc(100vh - 250px)', width: '100%' }}> {/* Adjust height */}
             <AutoSizer>
             {({
                 height,
                 width
             }) => {
                 const cardWidth = width / columnCount;
-                const effectiveRowCount = Math.max(1, rowCount);
                 return (
                 <FixedSizeGrid
                     columnCount={columnCount}
                     columnWidth={cardWidth}
                     height={height}
-                    rowCount={effectiveRowCount} 
+                    rowCount={rowCount} // Use calculated rowCount
                     rowHeight={cardHeight}
                     width={width}
                     itemData={itemData}
@@ -366,7 +368,7 @@ const HistoryPage = () => {
         onImport={handleImport}
         onExport={handleExportAll}
         onClear={handleClearHistory}
-        isLoading={loading && !initialLoadComplete}
+        isLoading={loading} // Pass loading state directly
         isProcessing={isProcessing}
       />
       
@@ -376,19 +378,21 @@ const HistoryPage = () => {
           onSortChange={handleSortChange}
           filterSource={filterSource}
           onFilterChange={handleFilterChange}
-          search={searchTerm}
+          search={searchTerm} // Pass searchTerm (used for initial value & external clear)
           onSearchChange={handleSearchChange}
           clearFilters={clearFilters}
           hasFilters={hasFiltersApplied}
+          isLoading={loading} // Pass loading state
         />
       </Paper>
       
       {renderContent()}
       
-      {!isLoadingSkeletons && pagination && pagination.total > 0 && pagination.total > ITEMS_PER_PAGE && (
+      {/* Only show pagination if not loading and there are items */}
+      {!loading && pagination && pagination.total > 0 && pagination.total > ITEMS_PER_PAGE && (
         <Stack spacing={2} sx={{ mt: 3, alignItems: 'center' }}>
             <Typography variant="body2" color="text.secondary">
-                Showing {entries.length} of {pagination.total} paths
+                Showing {pagination.total > entries.length ? entries.length - (entries.filter(e => e.isActive)?.length || 0) : pagination.total} of {pagination.total} saved paths
             </Typography>
             <Pagination 
                 count={Math.ceil(pagination.total / ITEMS_PER_PAGE)}
@@ -397,6 +401,7 @@ const HistoryPage = () => {
                 color="primary"
                 showFirstButton 
                 showLastButton 
+                disabled={loading} // Disable pagination while loading
                 sx={{ 
                   '& .MuiPaginationItem-root': {
                     fontSize: '0.875rem'

@@ -61,6 +61,9 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
       // Create a new abort controller for this request
       abortControllerRef.current = new AbortController();
       
+      // Set loading state immediately before potentially showing cache or fetching
+      setLoading(true);
+      
       // Start measuring load time
       const startTime = performance.now();
       
@@ -85,11 +88,11 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
             serverTime: cachedData.serverTime
           });
           setInitialLoadComplete(true);
-          setLoading(false);
+          // setLoading(false); // Remove: Loading remains true for background fetch
         }
       } else if (!initialLoadComplete) {
-        // Show loading state for first load
-        setLoading(true);
+        // Show loading state for first load (already handled by setLoading(true) above)
+        // setLoading(true); // Remove duplicate
       }
       
       // Check auth status first to handle invalid tokens
