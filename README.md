@@ -56,7 +56,7 @@ MapMyLearn leverages a sophisticated stack to deliver its powerful features:
 
 Accessing MapMyLearn is simple:
 
-1.  **Visit the Application:** Go to [https://mapmylearn.com/](https://mapmylearn.com/) (Replace with the actual URL if different).
+1.  **Visit the Application:** Go to [https://mapmylearn.com/](https://mapmylearn.com/).
 2.  **Register (Recommended):** Create a free account to save your learning paths, track progress, use the credit system, and access all features. You'll receive **3 free credits** upon verifying your email!
 3.  **Generate a Path:** Navigate to the "Generator", enter your desired topic, select your preferred language and explanation style, and click "Generate Learning Path" (this uses 1 credit).
 4.  **Learn:** Explore your personalized path, read content, take quizzes, chat with the AI tutor, and generate audio summaries.
