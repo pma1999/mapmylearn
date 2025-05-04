@@ -47,7 +47,7 @@ const styleDescriptions = {
 };
 
 /**
- * Form component for the learning path generator
+ * Form component for the course generator
  * @param {Object} props - Component props
  * @param {Object} props.formState - Form state from useGeneratorForm hook
  * @param {Object} props.progressState - Progress state from useProgressTracking hook
@@ -118,7 +118,7 @@ const GeneratorForm = ({
         }}
       >
         <AutoAwesomeIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: { xs: '1.8rem', sm: '2.2rem' } }} />
-        Generate Learning Path
+        Generate Course
       </Typography>
       
       <Typography variant="body1" sx={{ 
@@ -126,7 +126,7 @@ const GeneratorForm = ({
         textAlign: 'center',
         fontSize: { xs: '0.875rem', sm: '1rem' }
       }}>
-        Enter any topic you want to learn about and we'll create a personalized learning path for you.
+        Enter any topic you want to learn about and we'll create a personalized course for you.
       </Typography>
       
       {/* Display error from generation submission */}
@@ -248,7 +248,7 @@ const GeneratorForm = ({
                </Button>
              }
            >
-             You need credits to generate a learning path.
+             You need credits to generate a course.
           </Alert>
         )}
 
@@ -277,11 +277,11 @@ const GeneratorForm = ({
               width: { xs: '100%', sm: 'auto' } 
             }}
           >
-            {isGenerating ? 'Generating...' : 'Generate Learning Path'}
+            {isGenerating ? 'Generating...' : 'Generate Course'}
           </Button>
 
           {/* Credit Cost Hint */} 
-          <Tooltip title="Generating a new learning path costs 1 credit.">
+          <Tooltip title="Generating a new course costs 1 credit.">
              <Chip 
                icon={<TokenIcon fontSize="small" />} 
                label={helpTexts.generatorCostHint} 

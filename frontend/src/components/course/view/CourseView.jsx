@@ -8,7 +8,7 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { motion } from 'framer-motion';
 
 // Import API service
-import * as apiService from '../../../services/api';
+import * as apiService from '../../../services/api'; 
 
 // Import necessary icons for availableTabs calculation
 import MenuBookIcon from '@mui/icons-material/MenuBook';
@@ -48,7 +48,7 @@ const TUTORIAL_STORAGE_KEY = 'learniTutorialCompleted'; // Key for localStorage
  * 
  * @param {Object} props Component props
  * @param {string} props.source Source of the course ('history', 'public' or null/undefined for generation)
- * @returns {JSX.Element} course view component
+ * @returns {JSX.Element} Learning path view component
  */
 const LearningPathView = ({ source }) => {
   const { taskId, entryId, shareId } = useParams();
@@ -251,21 +251,21 @@ const LearningPathView = ({ source }) => {
     // Use shareId from params directly as that's what identifies the public path
     const publicShareId = shareId; // Use shareId from the top-level useParams call
     if (!publicShareId) {
-      showNotification('Cannot copy course: Missing share ID.', 'error');
+      showNotification('Cannot copy path: Missing share ID.', 'error');
       return;
     }
     if (!isAuthenticated) {
-       showNotification('Please log in to save this course to your history.', 'warning');
+       showNotification('Please log in to save this path to your history.', 'warning');
        // Optional: navigate('/login?redirect=' + encodeURIComponent(location.pathname));
        return;
     }
 
     setIsCopying(true); // Set loading state before starting
-    showNotification('Copying course to your history...', 'info');
+    showNotification('Copying path to your history...', 'info');
     try {
       const newPathData = await apiService.copyPublicPath(publicShareId);
       if (newPathData && newPathData.path_id) {
-        showNotification('Course successfully copied to your history!', 'success');
+        showNotification('Path successfully copied to your history!', 'success');
         // Navigate to the new private copy in the user's history
         navigate(`/history/${newPathData.path_id}`); 
       } else {
@@ -273,12 +273,12 @@ const LearningPathView = ({ source }) => {
         throw new Error('Copy operation response did not contain a new path ID.');
       }
     } catch (error) {
-      console.error("Failed to copy public course:", error);
+      console.error("Failed to copy public path:", error);
       // Check for specific 409 conflict error
       if (error.response?.status === 409) {
-          showNotification(error.message || 'You already have a copy of this course.', 'warning');
+          showNotification(error.message || 'You already have a copy of this path.', 'warning');
       } else {
-          showNotification(`Failed to copy course: ${error.message || 'Please try again.'}`, 'error');
+          showNotification(`Failed to copy path: ${error.message || 'Please try again.'}`, 'error');
       }
     }
     finally {
@@ -295,8 +295,8 @@ const LearningPathView = ({ source }) => {
     }
 
     if (!currentEntryId) {
-      console.warn('Cannot toggle progress: Course is not persisted yet.');
-      // Optionally show a notification to save the course first
+      console.warn('Cannot toggle progress: Path is not persisted yet.');
+      // Optionally show a notification to save the path first
       showNotification('Please save the course to track progress.', 'warning');
       return;
     }
@@ -341,8 +341,8 @@ const LearningPathView = ({ source }) => {
           a.href = url;
           // Use the *topic* from the top-level learningPath state for the filename
           const fileName = topic 
-              ? `course_${topic.replace(/\s+/g, '_').substring(0, 30)}.json`
-              : 'course.json';
+              ? `learning_path_${topic.replace(/\s+/g, '_').substring(0, 30)}.json`
+              : 'learning_path.json';
           a.download = fileName;
           document.body.appendChild(a);
           a.click();
@@ -350,10 +350,10 @@ const LearningPathView = ({ source }) => {
           URL.revokeObjectURL(url);
           // Use showNotification from useLearningPathActions if available
           if (showNotification) {
-              showNotification('Course downloaded successfully', 'success');
+              showNotification('Learning path downloaded successfully', 'success');
           } else {
               // Fallback or handle differently if showNotification isn't returned
-              console.log('Course downloaded successfully');
+              console.log('Learning path downloaded successfully');
           }
       } catch (err) {
           console.error('Error downloading JSON:', err);
@@ -518,7 +518,7 @@ const LearningPathView = ({ source }) => {
     const commonSteps = [
       {
         target: '[data-tut="lp-header"]',
-        content: 'Welcome to your Course! This header shows the main topic.',
+        content: 'Welcome to your Learning Path! This header shows the main topic.',
         placement: 'bottom',
         disableBeacon: true,
       },
@@ -626,7 +626,7 @@ const LearningPathView = ({ source }) => {
       },
       {
         target: '[data-tut="save-path-button"]',
-        content: 'Remember to save your course to track progress and access it later!',
+        content: 'Remember to save your path to track progress and access it later!',
         placement: 'bottom',
         disableBeacon: true,
       },
@@ -703,7 +703,7 @@ const LearningPathView = ({ source }) => {
       },
        {
         target: '[data-tut="save-path-button"]',
-        content: 'Remember to save your course to track progress and access it later!',
+        content: 'Remember to save your path to track progress and access it later!',
         placement: 'bottom',
         disableBeacon: true,
       },
@@ -755,7 +755,7 @@ const LearningPathView = ({ source }) => {
           sx={{ mb: 2, flexShrink: 0 }} 
           onClose={handleDismissFirstViewAlert}
         >
-          <AlertTitle>Your Course is Ready!</AlertTitle>
+          <AlertTitle>Your Learning Path is Ready!</AlertTitle>
           {helpTexts.lpFirstViewAlert}
         </Alert>
       )}
@@ -777,7 +777,7 @@ const LearningPathView = ({ source }) => {
           }
         >
           <AlertTitle>Explore More!</AlertTitle>
-          Log in or sign up to save this course, track your progress, and create your own learning journeys.
+          Log in or sign up to save this path, track your progress, and create your own learning journeys.
         </Alert>
       )}
 

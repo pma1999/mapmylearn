@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import * as api from '../services/api';
 
 /**
- * Hook providing actions related to learning path sharing.
+ * Hook providing actions related to course sharing.
  * 
  * @param {Function} showNotification - Function to display notifications.
  * @param {Function} onComplete - Callback function to execute after an action completes successfully (e.g., refresh data).
@@ -15,15 +15,15 @@ const usePathSharingActions = (showNotification, onComplete) => {
     const actionVerb = newIsPublic ? 'making' : 'making';
     
     try {
-      showNotification(`${actionVerb.charAt(0).toUpperCase() + actionVerb.slice(1)} path ${action}...`, 'info');
+      showNotification(`${actionVerb.charAt(0).toUpperCase() + actionVerb.slice(1)} course ${action}...`, 'info');
       const updatedPath = await api.updateLearningPathPublicity(pathId, newIsPublic);
-      showNotification(`Learning path successfully made ${action}.`, 'success');
+      showNotification(`Course successfully made ${action}.`, 'success');
       if (onComplete) {
         onComplete(updatedPath); // Pass updated path data to callback if needed
       }
     } catch (error) {
-      console.error(`Error ${actionVerb} path ${action}:`, error);
-      showNotification(`Error ${actionVerb} path ${action}: ${error.message || 'Unknown error'}`, 'error');
+      console.error(`Error ${actionVerb} course ${action}:`, error);
+      showNotification(`Error ${actionVerb} course ${action}: ${error.message || 'Unknown error'}`, 'error');
     }
   }, [showNotification, onComplete]);
 

@@ -8,7 +8,7 @@ class LearningPathHistoryEntry(BaseModel):
     topic: str = Field(..., description="Learning path topic")
     creation_date: datetime = Field(default_factory=datetime.now, description="Creation datetime")
     last_modified_date: Optional[datetime] = Field(None, description="Last modification datetime")
-    path_data: Dict[str, Any] = Field(..., description="Complete learning path data")
+    path_data: Dict[str, Any] = Field(..., description="Complete course data")
     favorite: bool = Field(False, description="Favorite flag")
     tags: List[str] = Field(default_factory=list, description="User-defined tags")
     source: str = Field("generated", description="Source: 'generated' or 'imported'")
@@ -30,7 +30,7 @@ class LearningPathHistoryEntry(BaseModel):
         }
 
 class LearningPathHistory(BaseModel):
-    entries: List[LearningPathHistoryEntry] = Field(default_factory=list, description="Saved learning paths")
+    entries: List[LearningPathHistoryEntry] = Field(default_factory=list, description="Saved courses")
     last_updated: datetime = Field(default_factory=datetime.now, description="Last update datetime")
     
     def add_entry(self, entry: LearningPathHistoryEntry) -> None:

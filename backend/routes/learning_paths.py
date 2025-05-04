@@ -51,13 +51,13 @@ async def get_learning_paths(
     search: Optional[str] = Query(None, description="Search term for topic or tags"),
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(10, ge=1, le=100, description="Items per page"),
-    favorite_only: bool = Query(False, description="Only return favorite learning paths"),
+    favorite_only: bool = Query(False, description="Only return favorite courses"),
     include_full_data: bool = Query(False, description="Include full path_data in response"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Get all learning paths for the current user with filtering and pagination.
+    Get all courses for the current user with filtering and pagination.
     """
     # Start timing the request for performance monitoring
     start_time = datetime.utcnow()
@@ -224,21 +224,21 @@ async def export_all_learning_paths(
     db: Session = Depends(get_db)
 ):
     """
-    Export all learning paths (including full path_data) for the current user.
+    Export all courses (including full path_data) for the current user.
     """
     try:
         learning_paths = db.query(LearningPath).filter(
             LearningPath.user_id == user.id
         ).order_by(LearningPath.creation_date.desc()).all()
         
-        logger.info(f"Exporting {len(learning_paths)} learning paths for user {user.id}")
+        logger.info(f"Exporting {len(learning_paths)} courses for user {user.id}")
         # The LearningPathResponse schema will handle serialization
         return learning_paths
     except Exception as e:
-        logger.exception(f"Error exporting learning paths for user {user.id}: {str(e)}")
+        logger.exception(f"Error exporting courses for user {user.id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Could not export learning paths due to a server error."
+            detail="Could not export courses due to a server error."
         )
 
 
@@ -249,7 +249,7 @@ async def get_learning_path(
     db: Session = Depends(get_db)
 ):
     """
-    Get a specific learning path by ID, including user progress map and last visited position.
+    Get a specific course by ID, including user progress map and last visited position.
     The LearningPathResponse schema automatically includes the full path_data.
     """
     learning_path = db.query(LearningPath).filter(
@@ -311,14 +311,14 @@ async def create_learning_path(
     db: Session = Depends(get_db)
 ):
     """
-    Create a new learning path entry in the history.
+    Create a new course entry in the history.
     Also updates the GenerationTask record if a taskId is provided.
     """
     # Check if topic is provided
     if not learning_path.topic:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Topic is required.")
 
-    # Generate a unique UUID for the new learning path entry
+    # Generate a unique UUID for the new course entry
     new_path_id = str(uuid.uuid4())
     
     # Create a new LearningPath record
@@ -370,7 +370,7 @@ async def create_learning_path(
     except Exception as e:
         db.rollback()
         logger.exception(f"Error creating history entry for user {user.id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save learning path to history.")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save course to history.")
 
 
 @router.put("/{path_id}", response_model=LearningPathResponse)
@@ -381,7 +381,7 @@ async def update_learning_path(
     db: Session = Depends(get_db)
 ):
     """
-    Update a learning path (favorite status or tags).
+    Update a course (favorite status or tags).
     """
     learning_path = db.query(LearningPath).filter(
         LearningPath.path_id == path_id,
@@ -417,7 +417,7 @@ async def clear_all_learning_paths(
     db: Session = Depends(get_db)
 ):
     """
-    Delete ALL learning paths for the current user. Use with caution!
+    Delete ALL courses for the current user. Use with caution!
     """
     try:
         # Perform bulk delete
@@ -426,16 +426,16 @@ async def clear_all_learning_paths(
         ).delete(synchronize_session=False) # Use synchronize_session=False for potentially better performance
         
         db.commit()
-        logger.info(f"Cleared {deleted_count} learning paths for user {user.id}")
+        logger.info(f"Cleared {deleted_count} courses for user {user.id}")
         # Return No Content response
         return Response(status_code=status.HTTP_204_NO_CONTENT)
         
     except Exception as e:
         db.rollback()
-        logger.exception(f"Error clearing all learning paths for user {user.id}: {str(e)}")
+        logger.exception(f"Error clearing all courses for user {user.id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Could not clear learning paths due to a server error."
+            detail="Could not clear courses due to a server error."
         )
 
 
@@ -446,7 +446,7 @@ async def delete_learning_path(
     db: Session = Depends(get_db)
 ):
     """
-    Delete a learning path.
+    Delete a course.
     """
     learning_path = db.query(LearningPath).filter(
         LearningPath.path_id == path_id,
@@ -472,7 +472,7 @@ async def migrate_learning_paths(
     db: Session = Depends(get_db)
 ):
     """
-    Migrate learning paths from local storage to the database.
+    Migrate courses from local storage to the database.
     """
     if not migration_data.learning_paths:
         return MigrationResponse(success=True, migrated_count=0)
@@ -481,7 +481,7 @@ async def migrate_learning_paths(
     errors = []
     
     # Log the incoming data for debugging
-    print(f"Received {len(migration_data.learning_paths)} learning paths to migrate")
+    print(f"Received {len(migration_data.learning_paths)} courses to migrate")
     
     for path_data in migration_data.learning_paths:
         try:
@@ -503,9 +503,9 @@ async def migrate_learning_paths(
             # If still no ID, generate one
             path_id = original_id if original_id else str(uuid.uuid4())
             
-            print(f"Migrating learning path: '{topic}' with ID: {path_id}")
+            print(f"Migrating course: '{topic}' with ID: {path_id}")
             
-            # Check if a learning path with this ID already exists for this user
+            # Check if a course with this ID already exists for this user
             existing_path = db.query(LearningPath).filter(
                 LearningPath.user_id == user.id,
                 LearningPath.path_id == path_id
@@ -552,7 +552,7 @@ async def migrate_learning_paths(
             
             db.add(db_learning_path)
             migrated_count += 1
-            print(f"Successfully added learning path '{topic}' with ID {path_id}")
+            print(f"Successfully added course '{topic}' with ID {path_id}")
             
         except Exception as e:
             error_msg = f"Error migrating path '{path_data.get('topic', 'unknown')}': {str(e)}"
@@ -562,7 +562,7 @@ async def migrate_learning_paths(
     if migrated_count > 0:
         try:
             db.commit()
-            print(f"Successfully committed {migrated_count} learning paths to database")
+            print(f"Successfully committed {migrated_count} courses to database")
         except Exception as e:
             db.rollback()
             error_msg = f"Database error during commit: {str(e)}"
@@ -587,9 +587,9 @@ async def download_learning_path_pdf(
     db: Session = Depends(get_db)
 ):
     """
-    Generate and download a PDF version of a specific learning path.
+    Generate and download a PDF version of a specific course.
     """
-    # Find the learning path
+    # Find the course
     learning_path = db.query(LearningPath).filter(
         LearningPath.path_id == path_id,
         LearningPath.user_id == user.id
@@ -638,7 +638,7 @@ async def download_learning_path_pdf(
 )
 async def generate_or_get_submodule_audio(
     request_data: GenerateAudioRequest, # Moved first
-    path_id: str = Path(..., description="ID of the learning path (can be temporary task ID or persistent UUID)"),
+    path_id: str = Path(..., description="ID of the course (can be temporary task ID or persistent UUID)"),
     module_index: int = Path(..., ge=0, description="Zero-based index of the module"),
     submodule_index: int = Path(..., ge=0, description="Zero-based index of the submodule"),
     user: User = Depends(get_current_user),
@@ -706,7 +706,7 @@ async def generate_or_get_submodule_audio(
         if not temp_path_data:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="path_data is required in the request body for temporary learning paths."
+                detail="path_data is required in the request body for temporary courses."
             )
 
         # Create a temporary LearningPath-like object for the service function
@@ -749,7 +749,7 @@ async def get_active_generations(
     db: Session = Depends(get_db)
 ):
     """
-    Get a list of currently active (PENDING or RUNNING) learning path generations for the current user.
+    Get a list of currently active (PENDING or RUNNING) course generations for the current user.
     """
     try:
         active_tasks = db.query(GenerationTask).filter(
@@ -783,7 +783,7 @@ async def update_submodule_progress(
     """
     logger.info(f"User {user.id} updating progress for path {path_id}, mod {progress_data.module_index}, sub {progress_data.submodule_index} to completed={progress_data.completed}")
 
-    # Find the learning path ID (integer PK)
+    # Find the course ID (integer PK)
     learning_path = db.query(LearningPath.id).filter(
         LearningPath.path_id == path_id,
         LearningPath.user_id == user.id
@@ -878,7 +878,7 @@ async def update_last_visited(
     db: Session = Depends(get_db)
 ):
     """
-    Update the last visited module and submodule index for a learning path.
+    Update the last visited module and submodule index for a course.
     """
     logger.debug(f"User {user.id} updating last visited for path {path_id} to M:{visited_data.module_index}, S:{visited_data.submodule_index}")
 
@@ -924,7 +924,7 @@ async def update_learning_path_publicity(
     db: Session = Depends(get_db)
 ):
     """
-    Update the public sharing status of a learning path.
+    Update the public sharing status of a course.
     Only the owner can perform this action.
     Generates a share_id when made public for the first time.
     """
@@ -946,14 +946,14 @@ async def update_learning_path_publicity(
                 learning_path.share_id = generate_unique_share_id(db)
             learning_path.is_public = True
             learning_path.last_modified_date = datetime.utcnow()
-            logger.info(f"User {user.id} made learning path {path_id} public (share_id: {learning_path.share_id})")
+            logger.info(f"User {user.id} made course {path_id} public (share_id: {learning_path.share_id})")
         elif not update_data.is_public and learning_path.is_public:
             # Making private
             learning_path.is_public = False
             # Optional: Clear share_id when making private? Let's keep it for potential re-sharing.
             # learning_path.share_id = None 
             learning_path.last_modified_date = datetime.utcnow()
-            logger.info(f"User {user.id} made learning path {path_id} private.")
+            logger.info(f"User {user.id} made course {path_id} private.")
         # No change if requested state is the same as current state
         
         db.commit()
@@ -969,7 +969,7 @@ async def update_learning_path_publicity(
         logger.exception(f"Error updating publicity for path {path_id}, user {user.id}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update sharing status.")
 
-# --- NEW: Public endpoint to get a shared learning path ---
+# --- NEW: Public endpoint to get a shared course ---
 # Note: This uses a separate router or prefix if needed, but adding here for simplicity
 # It should NOT have the /v1 prefix if intended to be truly public without API key assumptions
 # For now, adding under the same router but with a distinct path.
@@ -981,7 +981,7 @@ async def get_public_learning_path(
     db: Session = Depends(get_db)
 ):
     """
-    Get a publicly shared learning path by its share_id.
+    Get a publicly shared course by its share_id.
     Does not require authentication.
     """
     learning_path = db.query(LearningPath).filter(
@@ -992,7 +992,7 @@ async def get_public_learning_path(
     if not learning_path:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Public learning path not found or is not shared."
+            detail="Public course not found or is not shared."
         )
 
     # TODO: Decide if progress_map and last_visited should be included for public view?
@@ -1002,18 +1002,18 @@ async def get_public_learning_path(
     # For simplicity, return the standard response. Frontend will handle UI differences.
     return learning_path
 
-# --- NEW: Endpoint to copy a public learning path ---
+# --- NEW: Endpoint to copy a public course ---
 @router.post("/copy/{share_id}", response_model=LearningPathResponse, status_code=status.HTTP_201_CREATED)
 async def copy_public_learning_path(
-    share_id: str = Path(..., description="Share ID of the public learning path to copy"),
+    share_id: str = Path(..., description="Share ID of the public course to copy"),
     user: User = Depends(get_current_user), # Require authentication
     db: Session = Depends(get_db)
 ):
     """
-    Copies a public learning path (specified by share_id) to the authenticated user's history.
+    Copies a public course (specified by share_id) to the authenticated user's history.
     The new copy is private by default and has its own independent progress tracking.
     """
-    logger.info(f"User {user.id} attempting to copy public learning path with share_id: {share_id}")
+    logger.info(f"User {user.id} attempting to copy public course with share_id: {share_id}")
     
     # 1. Fetch the original public path
     original_path = db.query(LearningPath).filter(
@@ -1023,10 +1023,10 @@ async def copy_public_learning_path(
     
     # 2. Handle Not Found
     if not original_path:
-        logger.warning(f"Public learning path with share_id {share_id} not found or not public for copy attempt by user {user.id}")
+        logger.warning(f"Public course with share_id {share_id} not found or not public for copy attempt by user {user.id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Public learning path not found or sharing is disabled."
+            detail="Public course not found or sharing is disabled."
         )
         
     # 3. Check if user already has a path with the same source topic (optional, prevents duplicates for the same user)
@@ -1043,7 +1043,7 @@ async def copy_public_learning_path(
          # For now, let's raise a 409 Conflict.
          raise HTTPException(
              status_code=status.HTTP_409_CONFLICT,
-             detail=f"You already have a copy of the learning path '{original_path.topic}' in your history."
+             detail=f"You already have a copy of the course '{original_path.topic}' in your history."
          )
          # Alternatively, to return the existing copy (requires fetching it):
          # existing_path_full = db.query(LearningPath).filter(LearningPath.path_id == existing_copy.path_id).first()
@@ -1079,11 +1079,11 @@ async def copy_public_learning_path(
     except IntegrityError as e:
         db.rollback()
         logger.error(f"IntegrityError copying public path {share_id} for user {user.id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not copy learning path due to a database conflict.")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not copy course due to a database conflict.")
     except Exception as e:
         db.rollback()
         logger.exception(f"Error copying public path {share_id} for user {user.id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to copy learning path.")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to copy course.")
         
     # 7. Return Response (serialized by LearningPathResponse)
     return new_learning_path

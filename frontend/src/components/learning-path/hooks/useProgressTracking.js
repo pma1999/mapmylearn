@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { getProgressUpdates, getLearningPath } from '../../../services/api';
 
 /**
- * Custom hook for tracking progress of learning path generation
+ * Custom hook for tracking progress of course generation
  * 
  * @param {string} taskId - ID of the task being generated
  * @param {Function} onTaskComplete - Callback function to execute when task completes

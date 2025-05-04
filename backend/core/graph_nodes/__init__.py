@@ -1,7 +1,7 @@
 """
-LangGraph nodes for learning path generation.
+LangGraph nodes for course generation.
 
-This package contains all the nodes used in the learning path generation graph,
+This package contains all the nodes used in the course generation graph,
 organized by their function in the generation process.
 """
 

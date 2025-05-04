@@ -34,29 +34,29 @@ import InfoTooltip from '../../shared/InfoTooltip';
 import { helpTexts } from '../../../constants/helpTexts';
 
 /**
- * Header component for learning path display
+ * Header component for course display
  * 
  * @param {Object} props Component props 
- * @param {string} props.topic Learning path topic/title
+ * @param {string} props.topic Course topic/title
  * @param {boolean} props.detailsHaveBeenSet Whether tags/favorites have been set
  * @param {boolean} props.isPdfReady Whether the PDF download is ready/enabled
  * @param {Function} props.onDownload Handler for JSON download
  * @param {Function} props.onDownloadPDF Handler for PDF download
  * @param {Function} props.onSaveToHistory Handler for opening save details dialog
- * @param {Function} props.onNewLearningPath Handler for creating a new learning path
+ * @param {Function} props.onNewLearningPath Handler for creating a new course
  * @param {Function} [props.onOpenMobileNav] Optional handler to open mobile navigation
  * @param {boolean} [props.showMobileNavButton] Optional flag to show the mobile nav button
  * @param {Object} [props.progressMap] Optional map of submodule completion status
- * @param {Object} [props.actualPathData] Optional full learning path data for calculating totals
+ * @param {Object} [props.actualPathData] Optional full course data for calculating totals
  * @param {Function} props.onStartTutorial Callback to start the interactive tutorial
  * @param {boolean} [props.isPublicView=false] Flag indicating if this is a public view
- * @param {boolean} [props.isPublic=false] Current public status of the path
+ * @param {boolean} [props.isPublic=false] Current public status of the course
  * @param {string|null} [props.shareId=null] Share ID if public
  * @param {Function} [props.onTogglePublic] Handler to toggle public status
  * @param {Function} [props.onCopyShareLink] Handler to copy share link
- * @param {string|null} [props.entryId=null] Persistent ID of the path (if saved)
+ * @param {string|null} [props.entryId=null] Persistent ID of the course (if saved)
  * @param {boolean} [props.isLoggedIn=false] Whether the current user is logged in
- * @param {Function} [props.onCopyToHistory] Handler to copy public path to user's history
+ * @param {Function} [props.onCopyToHistory] Handler to copy public course to user's history
  * @param {boolean} [props.isCopying=false] Loading state for the copy operation
  * @returns {JSX.Element} Header component
  */
@@ -185,7 +185,7 @@ const LearningPathHeader = ({
                   color: theme.palette.text.primary
                 }}
               >
-                Learning Path
+                Course
               </Typography>
             </Box>
             {!isPublicView && (
@@ -380,7 +380,7 @@ const LearningPathHeader = ({
                     onClick={onNewLearningPath}
                     size={isMobile ? "small" : "medium"}
                   >
-                    Create New Path
+                    Create New Course
                   </Button>
                 </motion.div>
               </Stack>
@@ -417,7 +417,7 @@ const LearningPathHeader = ({
                 
                 {!isPublicView && (
                   <motion.div variants={buttonVariants}>
-                    <Tooltip title={detailsHaveBeenSet ? "Details Saved" : "Save to History (Add Tags/Favorite)"}>
+                    <Tooltip title={detailsHaveBeenSet ? "Details Saved" : "Save Course (Add Tags/Favorite)"}>
                       <span>
                         <Button
                           data-tut="save-path-button"
@@ -426,7 +426,7 @@ const LearningPathHeader = ({
                           onClick={onSaveToHistory}
                           disabled={detailsHaveBeenSet}
                         >
-                          {detailsHaveBeenSet ? 'Saved' : 'Save Path'}
+                          {detailsHaveBeenSet ? 'Saved' : 'Save Course'}
                         </Button>
                       </span>
                     </Tooltip>
@@ -460,7 +460,7 @@ const LearningPathHeader = ({
                     startIcon={<SchoolIcon />}
                     onClick={onNewLearningPath}
                   >
-                    New Path
+                    New Course
                   </Button>
                 </motion.div>
               </Stack>

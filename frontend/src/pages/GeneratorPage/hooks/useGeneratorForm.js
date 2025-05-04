@@ -79,7 +79,7 @@ const useGeneratorForm = (
     if (e) e.preventDefault();
     
     if (!topic.trim()) {
-      setError('Please enter a topic to generate a learning path for.');
+      setError('Please enter a topic to generate a course for.');
       return;
     }
     

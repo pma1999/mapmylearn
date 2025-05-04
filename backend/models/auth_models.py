@@ -149,7 +149,7 @@ class CreditTransaction(Base):
 
 class LearningPath(Base):
     """
-    Learning path model for storing user's learning paths.
+    Learning path model for storing user's courses.
     """
     __tablename__ = "learning_paths"
 

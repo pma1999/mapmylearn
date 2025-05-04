@@ -13,12 +13,12 @@ import AddIcon from '@mui/icons-material/Add';
 import { motion } from 'framer-motion';
 
 /**
- * Component to display error state for learning path
+ * Component to display error state for course
  * 
  * @param {Object} props Component props
  * @param {string} props.error Error message
  * @param {Function} props.onHomeClick Handler for home button click
- * @param {Function} props.onNewLearningPathClick Handler for new learning path button click
+ * @param {Function} props.onNewLearningPathClick Handler for new course button click
  * @returns {JSX.Element} Error state component
  */
 const ErrorState = ({ error, onHomeClick, onNewLearningPathClick }) => {
@@ -63,7 +63,7 @@ const ErrorState = ({ error, onHomeClick, onNewLearningPathClick }) => {
           
           <Typography variant="body1" sx={{ mb: 3 }}>
             {error.includes("not found") 
-              ? "The learning path you're looking for couldn't be found. It may have been deleted or not properly migrated from your local storage."
+              ? "The course you're looking for couldn't be found. It may have been deleted or not properly migrated from your local storage."
               : error
             }
           </Typography>

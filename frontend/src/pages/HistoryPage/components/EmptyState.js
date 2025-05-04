@@ -17,8 +17,8 @@ const EmptyState = ({ onClearFilters, hasFilters = false }) => {
     <Box sx={{ textAlign: 'center', py: { xs: 3, sm: 5 } }}>
       <Typography variant="h6" color="text.secondary" gutterBottom>
         {hasFilters 
-          ? 'No learning paths match your filters' 
-          : 'No learning paths found in your history'}
+          ? 'No courses match your filters' 
+          : 'No courses found in your history'}
       </Typography>
       <Typography variant="body1" color="text.secondary" paragraph>
         {hasFilters
@@ -44,7 +44,7 @@ const EmptyState = ({ onClearFilters, hasFilters = false }) => {
         to="/generator"
         sx={{ mt: 2 }}
       >
-        Create New Path
+        Create New Course
       </Button>
     </Box>
   );

@@ -201,7 +201,7 @@ export const checkAuthStatus = async () => {
 // Initialize auth token from storage on import
 initAuthFromStorage();
 
-// Get progress updates for a learning path using SSE (Server-Sent Events)
+// Get progress updates for a course using SSE (Server-Sent Events)
 export const getProgressUpdates = (taskId, onMessage, onError, onComplete) => {
   // Create the correct URL using the same API_URL base
   const url = new URL(`/api/progress/${taskId}`, API_URL);
@@ -288,14 +288,14 @@ export const getProgressUpdates = (taskId, onMessage, onError, onComplete) => {
   };
 };
 
-// Delete a learning path task
+// Delete a course task
 export const deleteLearningPath = async (taskId) => {
   try {
     const response = await api.delete(`/learning-path/${taskId}`);
     return response.data;
   } catch (error) {
-    console.error('Error deleting learning path:', error);
-    throw new Error(error.message || 'Failed to delete learning path. Please try again.');
+    console.error('Error deleting course:', error);
+    throw new Error(error.message || 'Failed to delete course. Please try again.');
   }
 };
 
@@ -449,7 +449,7 @@ export const logout = async () => {
 // Learn path migration function
 export const migrateLearningPaths = async (learningPaths) => {
   try {
-    // If learning paths weren't provided directly, get them from local storage
+    // If courses weren't provided directly, get them from local storage
     if (!learningPaths || !Array.isArray(learningPaths)) {
       // *** This part will require localHistoryService temporarily during migration phase ***
       // We need to get localHistoryService back temporarily or adjust this logic later.
@@ -462,7 +462,7 @@ export const migrateLearningPaths = async (learningPaths) => {
       }
     }
     
-    // Process the learning paths to ensure they're in the right format for migration
+    // Process the courses to ensure they're in the right format for migration
     const processedPaths = learningPaths.map(path => {
       // Create a new object to avoid modifying the original
       const processedPath = { ...path };
@@ -516,7 +516,7 @@ export const migrateLearningPaths = async (learningPaths) => {
       return processedPath;
     });
     
-    console.log("Migrating learning paths:", processedPaths);
+    console.log("Migrating courses:", processedPaths);
     
     const response = await api.post('/learning-paths/migrate', {
       learning_paths: processedPaths
@@ -582,7 +582,7 @@ export const validateApiKeys = async (googleKey, pplxKey) => {
   }
 };
 
-// Generate learning path with tokens
+// Generate course with tokens
 export const generateLearningPath = async (topic, options = {}) => {
   const { 
     parallelCount = 2, 
@@ -598,7 +598,7 @@ export const generateLearningPath = async (topic, options = {}) => {
   } = options;
   
   try {
-    console.log("Generating learning path with server-provided API keys");
+    console.log("Generating course with server-provided API keys");
     
     // Prepare request data
     const requestData = {
@@ -627,12 +627,12 @@ export const generateLearningPath = async (topic, options = {}) => {
     const response = await api.post('/generate-learning-path', requestData);
     return response.data;
   } catch (error) {
-    console.error('Error generating learning path:', error);
-    throw new Error(error.message || 'Failed to start learning path generation. Please try again.');
+    console.error('Error generating course:', error);
+    throw new Error(error.message || 'Failed to start course generation. Please try again.');
   }
 };
 
-// Get learning path by task ID
+// Get course by task ID
 export const getLearningPath = async (taskId) => {
   try {
     const response = await api.get(`/learning-path/${taskId}`);
@@ -641,7 +641,7 @@ export const getLearningPath = async (taskId) => {
     if (response.data.status === 'failed' && response.data.error) {
       const error = new Error(
         response.data.error.message || 
-        'The learning path generation failed. Please try again.'
+        'The course generation failed. Please try again.'
       );
       
       // Add additional details if available
@@ -666,7 +666,7 @@ export const getLearningPath = async (taskId) => {
     
     return response.data;
   } catch (error) {
-    console.error('Error fetching learning path:', error);
+    console.error('Error fetching course:', error);
     throw error;
   }
 };
@@ -723,11 +723,11 @@ export const getHistoryEntry = async (pathId) => {
   // Ensure user is authenticated
   if (!authToken) {
     console.error('getHistoryEntry Error: Authentication required.');
-    throw new Error('Authentication required to view learning path details.');
+    throw new Error('Authentication required to view course details.');
   }
   
   try {
-    console.log('Fetching learning path with path_id:', pathId);
+    console.log('Fetching course with path_id:', pathId);
     // Add /v1 prefix
     const response = await api.get(`/v1/learning-paths/${pathId}`); 
     // The response.data should now contain { ..., progress_map: {}, last_visited_module_idx: N, last_visited_submodule_idx: M }
@@ -740,21 +740,21 @@ export const getHistoryEntry = async (pathId) => {
 };
 
 /**
- * Saves a learning path (potentially temporary) to the user's history.
- * @param {Object} learningPathData The complete learning path data object to save.
- * @param {string} [source='generated'] The source of the learning path ('generated', 'imported').
+ * Saves a course (potentially temporary) to the user's history.
+ * @param {Object} learningPathData The complete course data object to save.
+ * @param {string} [source='generated'] The source of the course ('generated', 'imported').
  * @param {string} [taskId=null] The optional task ID if saving from a generation result.
  * @returns {Promise<Object>} Response data including the saved entry.
  * @throws {Error} If the save operation fails.
  */
 export const saveToHistory = async (learningPathData, source = 'generated', taskId = null) => {
   if (!learningPathData) {
-    console.error('saveToHistory Error: Invalid learning path data.');
-    throw new Error('Invalid learning path data.');
+    console.error('saveToHistory Error: Invalid course data.');
+    throw new Error('Invalid course data.');
   }
   
   try {
-    console.log('Saving learning path to server database:', learningPathData.topic);
+    console.log('Saving course to server database:', learningPathData.topic);
     
     // Prepare payload according to LearningPathCreate schema
     const payload = {
@@ -780,7 +780,7 @@ export const saveToHistory = async (learningPathData, source = 'generated', task
     };
 
   } catch (error) {
-    console.error('Error saving learning path via API:', error);
+    console.error('Error saving course via API:', error);
      // Re-throw the error for the hook to handle
     throw error;
   }
@@ -790,7 +790,7 @@ export const updateHistoryEntry = async (pathId, data) => {
   // Ensure user is authenticated
   if (!authToken) {
     console.error('updateHistoryEntry Error: Authentication required.');
-    throw new Error('Authentication required to update learning paths.');
+    throw new Error('Authentication required to update courses.');
   }
 
   // Validate data contains only allowed fields (favorite, tags)
@@ -804,7 +804,7 @@ export const updateHistoryEntry = async (pathId, data) => {
   }
 
   try {
-    console.log('Updating learning path with path_id:', pathId);
+    console.log('Updating course with path_id:', pathId);
     // Add /v1 prefix
     await api.put(`/v1/learning-paths/${pathId}`, updateData); 
     return { success: true };
@@ -819,11 +819,11 @@ export const deleteHistoryEntry = async (pathId) => {
   // Ensure user is authenticated
   if (!authToken) {
     console.error('deleteHistoryEntry Error: Authentication required.');
-    throw new Error('Authentication required to delete learning paths.');
+    throw new Error('Authentication required to delete courses.');
   }
 
   try {
-    console.log('Deleting learning path with path_id:', pathId);
+    console.log('Deleting course with path_id:', pathId);
     // Add /v1 prefix
     await api.delete(`/v1/learning-paths/${pathId}`);
     return { success: true };
@@ -921,8 +921,8 @@ export const clearAllHistoryAPI = async () => {
 // --- End Placeholders ---
 
 /**
- * Downloads a learning path as PDF
- * @param {string} pathId - ID of the learning path to download
+ * Downloads a course as PDF
+ * @param {string} pathId - ID of the course to download
  * @returns {Promise<Blob>} - PDF data as a Blob
  */
 export const downloadLearningPathPDF = async (pathId) => {
@@ -1118,7 +1118,7 @@ export const resetPassword = async (token, new_password) => {
 /**
  * Sends a message to the submodule chatbot.
  * @param {object} data - The chat request data.
- * @param {string} data.path_id - The ID of the learning path.
+ * @param {string} data.path_id - The ID of the course.
  * @param {number} data.module_index - The index of the current module.
  * @param {number} data.submodule_index - The index of the current submodule.
  * @param {string} data.user_message - The user's message.
@@ -1228,21 +1228,21 @@ export const getActiveGenerations = async () => {
   }
 };
 
-// --- NEW: Update learning path publicity ---
+// --- NEW: Update course publicity ---
 export const updateLearningPathPublicity = async (pathId, isPublic) => {
   try {
     const response = await api.patch(`/v1/learning-paths/${pathId}/publicity`, {
       is_public: isPublic,
     });
-    // Return the updated learning path data (including share_id if generated)
+    // Return the updated course data (including share_id if generated)
     return response.data; 
   } catch (error) {
-    console.error('API Error updating learning path publicity:', error);
+    console.error('API Error updating course publicity:', error);
     throw error; // Re-throw the formatted error
   }
 };
 
-// --- NEW: Get public learning path ---
+// --- NEW: Get public course ---
 export const getPublicLearningPath = async (shareId) => {
   try {
     // Note: This uses the base API URL, not the prefixed one, assuming /public is at the root
@@ -1255,12 +1255,12 @@ export const getPublicLearningPath = async (shareId) => {
     
     return response.data; // Returns the LearningPathResponse
   } catch (error) {
-    console.error('API Error fetching public learning path:', error);
+    console.error('API Error fetching public course:', error);
     throw error; // Re-throw the formatted error
   }
 };
 
-// --- NEW: Function to copy a public learning path ---
+// --- NEW: Function to copy a public course ---
 export const copyPublicPath = async (shareId) => {
   try {
     // Ensure auth token exists
@@ -1274,7 +1274,7 @@ export const copyPublicPath = async (shareId) => {
     // response.data should be the new LearningPathResponse object
     return response.data; 
   } catch (error) {
-    console.error(`Error copying public learning path ${shareId}:`, error);
+    console.error(`Error copying public course ${shareId}:`, error);
     throw error; // Re-throw formatted error from interceptor
   }
 };
@@ -1328,3 +1328,4 @@ export default {
   copyPublicPath,
 };
 
+    

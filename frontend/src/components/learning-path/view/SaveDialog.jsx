@@ -24,7 +24,7 @@ import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 
 /**
- * Dialog component for saving a learning path to history
+ * Dialog component for saving a course to history
  * 
  * @param {Object} props Component props
  * @param {boolean} props.open Whether the dialog is open
@@ -32,7 +32,7 @@ import StarBorderIcon from '@mui/icons-material/StarBorder';
  * @param {Function} props.onConfirm Handler for save confirmation
  * @param {Array} props.tags Array of tags
  * @param {string} props.newTag New tag input value
- * @param {boolean} props.favorite Whether the learning path is marked as favorite
+ * @param {boolean} props.favorite Whether the course is marked as favorite
  * @param {Function} props.onAddTag Handler for adding a tag
  * @param {Function} props.onDeleteTag Handler for deleting a tag
  * @param {Function} props.onTagChange Handler for tag input change
@@ -93,7 +93,7 @@ const SaveDialog = ({
       
       <DialogContent dividers>
         <DialogContentText sx={{ mb: 2, fontSize: { xs: '0.875rem', sm: '1rem' } }}>
-          This learning path will be saved to your browser's local storage. It will be available only on this device and browser.
+          This course will be saved to your browser's local storage. It will be available only on this device and browser.
         </DialogContentText>
         
         <FormControlLabel

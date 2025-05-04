@@ -22,7 +22,7 @@ import { formatDateDistance } from '../utils'; // Assuming a utility function li
 import { StyledCard } from '../styledComponents'; // Use the same styled card
 
 /**
- * Card component for displaying an active learning path generation task
+ * Card component for displaying an active course generation task
  * @param {Object} props - Component props
  * @param {Object} props.entry - Active generation task data (with isActive: true)
  * @param {boolean} props.virtualized - Whether the card is rendered in a virtualized list

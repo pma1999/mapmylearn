@@ -145,28 +145,28 @@ def add_learning_path(learning_path: Dict[str, Any], source: str = "generated") 
         history.add_entry(entry)
         return save_history(history)
     except Exception as e:
-        logger.error(f"Error adding learning path: {str(e)}")
+        logger.error(f"Error adding course: {str(e)}")
         return False
 
 def import_learning_path(json_data: str) -> Tuple[bool, str]:
     try:
         learning_path = json.loads(json_data)
         if not isinstance(learning_path, dict) or "topic" not in learning_path or "modules" not in learning_path:
-            return False, "JSON format is not valid for a learning path"
+            return False, "JSON format is not valid for a course"
         history = load_history()
         topic = learning_path.get("topic", "")
         for entry in history.entries:
             if entry.topic == topic:
-                logger.warning(f"A learning path with topic '{topic}' already exists")
+                logger.warning(f"A course with topic '{topic}' already exists")
         success = add_learning_path(learning_path, source="imported")
         if success:
             return True, f"Learning path '{topic}' imported successfully"
         else:
-            return False, "Error saving imported learning path"
+            return False, "Error saving imported course"
     except json.JSONDecodeError:
         return False, "File is not valid JSON"
     except Exception as e:
-        logger.error(f"Error importing learning path: {str(e)}")
+        logger.error(f"Error importing course: {str(e)}")
         return False, f"Error: {str(e)}"
 
 def get_history_preview() -> List[Dict[str, Any]]:

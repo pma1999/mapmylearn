@@ -13,34 +13,34 @@ const useHistoryActions = (showNotification, refreshEntries) => {
   const navigate = useNavigate();
   
   /**
-   * View a learning path by navigating to its detail page
+   * View a course by navigating to its detail page
    * @param {string} pathId - path_id of the entry to view
    */
   const handleViewLearningPath = (pathId) => {
     try {
       navigate(`/history/${pathId}`);
     } catch (error) {
-      console.error('Error navigating to learning path:', error);
-      showNotification('Error loading learning path: ' + (error.message || 'Unknown error'), 'error');
+      console.error('Error navigating to course:', error);
+      showNotification('Error loading course: ' + (error.message || 'Unknown error'), 'error');
     }
   };
   
   /**
-   * Delete a learning path
+   * Delete a course
    * @param {string} pathId - path_id of the entry to delete
    */
   const handleDeleteLearningPath = async (pathId) => {
     try {
       await api.deleteHistoryEntry(pathId);
-      showNotification('Learning path deleted successfully', 'success');
+      showNotification('Course deleted successfully', 'success');
       refreshEntries();
     } catch (error) {
-      showNotification('Error deleting learning path: ' + (error.message || 'Unknown error'), 'error');
+      showNotification('Error deleting course: ' + (error.message || 'Unknown error'), 'error');
     }
   };
   
   /**
-   * Toggle favorite status of a learning path
+   * Toggle favorite status of a course
    * @param {string} pathId - path_id of the entry to update
    * @param {boolean} favoriteStatus - New favorite status
    */
@@ -58,7 +58,7 @@ const useHistoryActions = (showNotification, refreshEntries) => {
   };
   
   /**
-   * Update tags for a learning path
+   * Update tags for a course
    * @param {string} pathId - path_id of the entry to update
    * @param {Array<string>} tags - New tags array
    */
@@ -73,7 +73,7 @@ const useHistoryActions = (showNotification, refreshEntries) => {
   };
   
   /**
-   * Download a single learning path as PDF file
+   * Download a single course as PDF file
    * @param {string} pathId - path_id of the entry to download as PDF
    */
   const handleDownloadPDF = async (pathId) => {
@@ -81,7 +81,7 @@ const useHistoryActions = (showNotification, refreshEntries) => {
       // Show loading notification
       showNotification('Generating PDF...', 'info');
       
-      // Get the learning path name for better feedback
+      // Get the course name for better feedback
       const response = await api.getHistoryEntry(pathId);
       const topic = response.entry.topic;
       
@@ -92,7 +92,7 @@ const useHistoryActions = (showNotification, refreshEntries) => {
       const url = URL.createObjectURL(pdfBlob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `learning_path_${topic.replace(/\s+/g, '_')}.pdf`;
+      a.download = `course_${topic.replace(/\s+/g, '_')}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

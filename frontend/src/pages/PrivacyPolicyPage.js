@@ -46,15 +46,15 @@ const PrivacyPolicyPage = () => {
       <List dense>
         <ListItem sx={{ pl: 2 }}><ListItemText primary="Registration Data: When you create an account, we collect your full name, email address, and password (we store a secure hash of your password, not the password itself)." /></ListItem>
         <ListItem sx={{ pl: 2 }}><ListItemText primary="Contact Data: If you contact us via email or other means, we may keep a record of that correspondence." /></ListItem>
-        <ListItem sx={{ pl: 2 }}><ListItemText primary="Learning Topics: We collect the topics or subjects you enter to generate learning paths." /></ListItem>
+        <ListItem sx={{ pl: 2 }}><ListItemText primary="Learning Topics: We collect the topics or subjects you enter to generate courses." /></ListItem>
         <ListItem sx={{ pl: 2 }}><ListItemText primary="(Optional) External API Keys: If you choose to use your own API keys (e.g., Google AI, Brave Search/Perplexity), we may store them temporarily and securely (encrypted and with an access token) to facilitate their use within the Service, as described in our T&C. We only store these keys if you select the 'remember' option." /></ListItem>
       </List>
         <Typography variant="subtitle1" component="h3" gutterBottom sx={{ mt: 2 }}>
         Information Collected Automatically:
       </Typography>
         <List dense>
-           <ListItem sx={{ pl: 2 }}><ListItemText primary="Usage Data: We collect information about how you interact with the Service, such as generated paths, paths saved to history, features used (e.g., audio generation, PDF export), access dates and times, and interface interactions." /></ListItem>
-           <ListItem sx={{ pl: 2 }}><ListItemText primary="Path History: If registered, we store the learning paths you generate and choose to save in your history, including their content and metadata like creation date." /></ListItem>
+           <ListItem sx={{ pl: 2 }}><ListItemText primary="Usage Data: We collect information about how you interact with the Service, such as generated courses, courses saved to history, features used (e.g., audio generation, PDF export), access dates and times, and interface interactions." /></ListItem>
+           <ListItem sx={{ pl: 2 }}><ListItemText primary="Path History: If registered, we store the courses you generate and choose to save in your history, including their content and metadata like creation date." /></ListItem>
            <ListItem sx={{ pl: 2 }}><ListItemText primary="Credit Information: We record your credit balance and associated transactions (purchase and consumption). If you purchase credits, our payment provider (Stripe) collects your payment information directly; we only receive transaction confirmation and limited data (like card type or last digits) for management purposes." /></ListItem>
            <ListItem sx={{ pl: 2 }}><ListItemText primary="Technical Data: We collect technical information about your device and connection, such as IP address, browser type, operating system, device identifiers (if applicable), and Service performance data." /></ListItem>
            <ListItem sx={{ pl: 2 }}><ListItemText primary="Analytics Data: We use analytics services (like Vercel Analytics) to collect aggregated and anonymous or pseudonymous information about Service usage to understand usage patterns and improve the platform." /></ListItem>
@@ -73,7 +73,7 @@ const PrivacyPolicyPage = () => {
         We use the collected information for the following purposes:
       </Typography>
        <List dense>
-           <ListItem sx={{ pl: 2 }}><ListItemText primary="Provide and Maintain the Service: Operate the platform, authenticate users, generate and display learning paths, manage history, process credit purchases, etc." /></ListItem>
+           <ListItem sx={{ pl: 2 }}><ListItemText primary="Provide and Maintain the Service: Operate the platform, authenticate users, generate and display courses, manage history, process credit purchases, etc." /></ListItem>
            <ListItem sx={{ pl: 2 }}><ListItemText primary="Personalize Experience: Adapt content and features to your preferences." /></ListItem>
            <ListItem sx={{ pl: 2 }}><ListItemText primary="Improve the Service: Analyze usage to identify areas for improvement, fix errors, and develop new features." /></ListItem>
            <ListItem sx={{ pl: 2 }}><ListItemText primary="Communication: Send you service-related emails (e.g., account verification, registration confirmation, important notifications about your account or changes to services/policies, password recovery). We will not send marketing communications without your explicit consent." /></ListItem>
@@ -89,7 +89,7 @@ const PrivacyPolicyPage = () => {
         We process your personal information based on the following legal bases under GDPR:
       </Typography>
        <List dense>
-           <ListItem sx={{ pl: 2 }}><ListItemText primary="Performance of a Contract: Processing is necessary to fulfill our Terms and Conditions and provide the Service you requested (e.g., registration, path generation, history)." /></ListItem>
+           <ListItem sx={{ pl: 2 }}><ListItemText primary="Performance of a Contract: Processing is necessary to fulfill our Terms and Conditions and provide the Service you requested (e.g., registration, course generation, history)." /></ListItem>
            <ListItem sx={{ pl: 2 }}><ListItemText primary="Consent: For certain activities, like sending marketing communications (if applicable) or using non-essential cookies, we will request your explicit consent. You can withdraw consent at any time." /></ListItem>
            <ListItem sx={{ pl: 2 }}><ListItemText primary="Legitimate Interests: We process certain data for our legitimate interests, such as improving the Service, ensuring security, and preventing fraud, provided these interests do not override your fundamental rights and freedoms." /></ListItem>
            <ListItem sx={{ pl: 2 }}><ListItemText primary="Legal Obligation: We may process your data to comply with applicable legal obligations." /></ListItem>
@@ -156,7 +156,7 @@ const PrivacyPolicyPage = () => {
         </Typography>
          <List dense>
            <ListItem sx={{ pl: 2 }}><ListItemText primary="Account Data: Retained while your account is active. If you request account deletion, we will securely delete your personal data, except for data we must retain due to legal obligations (e.g., billing data if you purchased credits) or for defense against potential claims, during the legal limitation periods." /></ListItem>
-           <ListItem sx={{ pl: 2 }}><ListItemText primary="Path History: Retained while your account is active or until you decide to delete specific entries or your entire account." /></ListItem>
+           <ListItem sx={{ pl: 2 }}><ListItemText primary="Course History: Retained while your account is active or until you decide to delete specific entries or your entire account." /></ListItem>
            <ListItem sx={{ pl: 2 }}><ListItemText primary="Usage and Technical Data: May be retained in aggregated or anonymized form for longer periods for analysis and service improvement purposes." /></ListItem>
        </List>
 

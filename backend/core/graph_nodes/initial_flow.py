@@ -44,7 +44,7 @@ async def generate_search_queries(state: LearningPathState) -> Dict[str, Any]:
     prompt_text = """
 # EXPERT LEARNING PATH ARCHITECT & CURRICULUM DESIGNER INSTRUCTIONS
 
-Your task is to generate 5 diverse search queries that will gather the necessary information to DESIGN an optimal and comprehensive learning path for the topic: "{user_topic}".
+Your task is to generate 5 diverse search queries that will gather the necessary information to DESIGN an optimal and comprehensive course for the topic: "{user_topic}".
 
 ## INFORMATION GATHERING FOR DESIGN
 
@@ -79,7 +79,7 @@ For each search query:
     - GOOD Example (One quote): `"machine learning" prerequisites foundational concepts`
     - GOOD Example (No quotes): `machine learning subtopics logical sequence examples`
 - Getting *some* relevant information across *different* categories is ALWAYS better than getting *zero* results or redundant results.
-- Explain precisely how the information retrieved by this specific query will contribute to DESIGNING the optimal learning path structure (e.g., "This query helps identify the starting point by finding prerequisites," or "This query explores potential advanced modules by looking at specializations").
+- Explain precisely how the information retrieved by this specific query will contribute to DESIGNING the optimal course structure (e.g., "This query helps identify the starting point by finding prerequisites," or "This query explores potential advanced modules by looking at specializations").
 
 Your response should be exactly 5 search queries, each targeting a different facet of curriculum design information, and each with a detailed rationale explaining its contribution to the design process.
 
@@ -153,7 +153,7 @@ async def regenerate_initial_structure_query(
     failed_query: SearchQuery
 ) -> SearchQuery:
     """
-    Regenerates a search query for learning path structure after a "no results found" error.
+    Regenerates a search query for course structure after a "no results found" error.
     
     This function uses an LLM to create an alternative search query when the original
     structure-focused query returns no results. It provides the failed query as context
@@ -181,7 +181,7 @@ async def regenerate_initial_structure_query(
     prompt_text = """
 # SEARCH QUERY RETRY SPECIALIST INSTRUCTIONS
 
-The following search query returned NO RESULTS when searching for information about how to structure a learning path on "{user_topic}":
+The following search query returned NO RESULTS when searching for information about how to structure a course on "{user_topic}":
 
 FAILED QUERY: {failed_query}
 
@@ -199,7 +199,7 @@ Analyze why the previous query might have failed:
 
 Create ONE alternative search query that:
 1. Is BROADER or uses more common terminology
-2. Maintains focus on curriculum design, learning path structure, and module organization
+2. Maintains focus on curriculum design, course structure, and module organization
 3. Uses fewer quoted phrases (one at most)
 4. Is more likely to match existing educational content
 5. Balances specificity (finding curriculum structure info) with generality (getting actual results)
@@ -430,20 +430,20 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
 
 async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
     """
-    Create a structured learning path from the scraped search results.
+    Create a structured course from the scraped search results.
     """
     # Type hint for clarity
     search_service_results: Optional[List[SearchServiceResult]] = state.get("search_results")
 
     if not search_service_results or len(search_service_results) == 0:
-        logging.info("No search results available to create learning path")
+        logging.info("No search results available to create course")
         return {
             "modules": [],
             "final_learning_path": {
                 "topic": state["user_topic"],
                 "modules": []
             },
-            "steps": state.get("steps", []) + ["No search results available to create learning path"]
+            "steps": state.get("steps", []) + ["No search results available to create course"]
         }
 
     # Get Google key provider from state
@@ -451,7 +451,7 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
     if not google_key_provider:
         logging.warning("Google key provider not found in state, using env fallback if available for LLM")
     else:
-        logging.debug("Found Google key provider in state, using for learning path creation")
+        logging.debug("Found Google key provider in state, using for course creation")
 
     # Get language information from state
     output_language = state.get('language', 'en')
@@ -477,7 +477,7 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
     progress_callback = state.get('progress_callback')
     if progress_callback:
         await progress_callback(
-            f"Creating initial learning path structure for '{state['user_topic']}'...",
+            f"Creating initial course structure for '{state['user_topic']}'...",
             phase="modules",
             phase_progress=0.0,
             overall_progress=0.4,
@@ -532,9 +532,9 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
         # Check if a specific number of modules was requested
         module_count_instruction = ""
         if state.get("desired_module_count"):
-            module_count_instruction = f"\nIMPORTANT: Create EXACTLY {state['desired_module_count']} modules for this learning path. Not more, not less."
+            module_count_instruction = f"\nIMPORTANT: Create EXACTLY {state['desired_module_count']} modules for this course. Not more, not less."
         else:
-            module_count_instruction = "\nCreate a structured learning path with 3-7 modules."
+            module_count_instruction = "\nCreate a structured course with 3-7 modules."
 
         # Add language instruction
         language_instruction = f"\nIMPORTANT: Create all content in {output_language}. All titles, descriptions, and content must be written in {output_language}."
@@ -557,7 +557,7 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
 
         # Update prompt to mention scraped content and include style instruction
         prompt_text = f'''
-You are an expert curriculum designer. Create a comprehensive learning path for the topic: {escaped_topic}.
+You are an expert curriculum designer. Create a comprehensive course for the topic: {escaped_topic}.
 
 Based on the following search results and scraped web content snippets, organize the learning into logical modules:
 {results_text}
@@ -601,7 +601,7 @@ Format your response as a structured curriculum. Each module should build logica
             }
         }
 
-        logging.info(f"Created learning path structure with {len(modules)} modules")
+        logging.info(f"Created course structure with {len(modules)} modules")
 
         preview_modules = []
         for module in modules:
@@ -617,7 +617,7 @@ Format your response as a structured curriculum. Each module should build logica
         if progress_callback and 'modules' in final_learning_path:
             module_count = len(final_learning_path['modules'])
             await progress_callback(
-                f"Created initial learning path with {module_count} modules",
+                f"Created initial course with {module_count} modules",
                 phase="modules",
                 phase_progress=1.0,
                 overall_progress=0.55,
@@ -628,13 +628,13 @@ Format your response as a structured curriculum. Each module should build logica
         return {
             "modules": modules,
             "final_learning_path": final_learning_path,
-            "steps": state.get("steps", []) + [f"Created learning path structure with {len(modules)} modules"]
+            "steps": state.get("steps", []) + [f"Created course structure with {len(modules)} modules"]
         }
     except Exception as e:
-        logging.exception(f"Error creating learning path: {str(e)}")
+        logging.exception(f"Error creating course: {str(e)}")
         if progress_callback:
             await progress_callback(
-                f"Error creating learning path: {str(e)}",
+                f"Error creating course: {str(e)}",
                 phase="modules",
                 phase_progress=0.5,
                 overall_progress=0.45,
@@ -646,5 +646,5 @@ Format your response as a structured curriculum. Each module should build logica
                 "topic": state["user_topic"],
                 "modules": []
             },
-            "steps": state.get("steps", []) + [f"Error creating learning path: {str(e)}"]
+            "steps": state.get("steps", []) + [f"Error creating course: {str(e)}"]
         }

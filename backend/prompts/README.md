@@ -1,6 +1,6 @@
 # Prompt System
 
-This directory contains the prompt templates used throughout the learning path generation system.
+This directory contains the prompt templates used throughout the course generation system.
 
 ## Overview
 

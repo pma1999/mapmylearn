@@ -25,7 +25,7 @@ const ResponsiveContainer = styled(Container)(({ theme }) => ({
 }));
 
 /**
- * Main GeneratorPage component that orchestrates the learning path generation
+ * Main GeneratorPage component that orchestrates the course generation
  * @returns {JSX.Element} Generator page component
  */
 const GeneratorPage = () => {

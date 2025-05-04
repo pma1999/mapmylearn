@@ -189,7 +189,7 @@ async def generate_submodule_audio(
     path_data = learning_path.path_data
     if not isinstance(path_data, dict):
         logger.error(f"Invalid path_data format for path_id {learning_path.path_id}. Expected dict, got {type(path_data)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid learning path data structure.")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid course data structure.")
 
     modules = path_data.get('modules', [])
     if not (0 <= module_index < len(modules)):

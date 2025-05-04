@@ -1,6 +1,6 @@
 """
 PDF Generator utility for Learning Paths.
-Converts learning path data structures into well-formatted PDF documents.
+Converts course data structures into well-formatted PDF documents.
 """
 
 import os
@@ -528,7 +528,7 @@ class MarkdownProcessor:
 
 
 class LearningPathExtractor:
-    """Extracts and processes learning path content."""
+    """Extracts and processes course content."""
     
     @staticmethod
     def format_date(date_obj: Union[str, datetime, None]) -> str:
@@ -561,10 +561,10 @@ class LearningPathExtractor:
     @staticmethod
     def extract_modules(path_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
-        Extract and process modules from learning path data.
+        Extract and process modules from course data.
         
         Args:
-            path_data: The learning path data structure
+            path_data: The course data structure
             
         Returns:
             List of processed modules with their content
@@ -637,7 +637,7 @@ class LearningPathExtractor:
 
 
 class PDFGenerator:
-    """Main class for generating PDFs from learning paths."""
+    """Main class for generating PDFs from courses."""
     
     def __init__(self):
         """Initialize the PDF Generator with template manager."""
@@ -645,17 +645,17 @@ class PDFGenerator:
     
     def generate(self, learning_path: Dict[str, Any], user_name: Optional[str] = None) -> str:
         """
-        Generate a PDF from a learning path.
+        Generate a PDF from a course.
         
         Args:
-            learning_path: The learning path data
+            learning_path: The course data
             user_name: Optional username to include in the PDF
             
         Returns:
             Path to the generated PDF file
         """
         try:
-            logger.info(f"Generating PDF for learning path: {learning_path.get('topic', 'Untitled')}")
+            logger.info(f"Generating PDF for course: {learning_path.get('topic', 'Untitled')}")
             
             # Extract important dates
             creation_date = LearningPathExtractor.format_date(learning_path.get("creation_date", datetime.now()))
@@ -713,7 +713,7 @@ def create_filename(topic: str) -> str:
     Create a sanitized filename from the topic.
     
     Args:
-        topic: The learning path topic
+        topic: The course topic
         
     Returns:
         Sanitized filename with timestamp
@@ -728,10 +728,10 @@ def create_filename(topic: str) -> str:
 # Main function to generate PDF
 def generate_pdf(learning_path: Dict[str, Any], user_name: Optional[str] = None) -> str:
     """
-    Generate a PDF from a learning path.
+    Generate a PDF from a course.
     
     Args:
-        learning_path: The learning path data
+        learning_path: The course data
         user_name: Optional username to include in the PDF
         
     Returns:

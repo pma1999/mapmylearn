@@ -107,7 +107,7 @@ const PerformanceStats = ({ stats, visible = false }) => {
 };
 
 /**
- * History page component for displaying and managing learning path history
+ * History page component for displaying and managing course history
  * @returns {JSX.Element} History page component
  */
 const HistoryPage = () => {
@@ -165,7 +165,7 @@ const HistoryPage = () => {
   const handlePerformImport = async (learningPathObject) => {
     setIsProcessing(true);
     setIsImportDialogOpen(false); // Close dialog immediately
-    showNotification('Importing learning path...', { severity: 'info' });
+    showNotification('Importing course...', { severity: 'info' });
     try {
       // Prepare payload for saveToHistory (matches LearningPathCreate schema)
       const payload = {
@@ -392,7 +392,7 @@ const HistoryPage = () => {
       {!loading && pagination && pagination.total > 0 && pagination.total > ITEMS_PER_PAGE && (
         <Stack spacing={2} sx={{ mt: 3, alignItems: 'center' }}>
             <Typography variant="body2" color="text.secondary">
-                Showing {pagination.total > entries.length ? entries.length - (entries.filter(e => e.isActive)?.length || 0) : pagination.total} of {pagination.total} saved paths
+                Showing {pagination.total > entries.length ? entries.length - (entries.filter(e => e.isActive)?.length || 0) : pagination.total} of {pagination.total} saved courses
             </Typography>
             <Pagination 
                 count={Math.ceil(pagination.total / ITEMS_PER_PAGE)}
@@ -421,7 +421,7 @@ const HistoryPage = () => {
       <ConfirmationDialog
         open={isClearConfirmOpen}
         title="Clear All History"
-        message="Are you sure you want to delete ALL learning paths from your history? This action cannot be undone."
+        message="Are you sure you want to delete ALL courses from your history? This action cannot be undone."
         onConfirm={handlePerformClear}
         onCancel={() => setIsClearConfirmOpen(false)}
         isDestructive={true}

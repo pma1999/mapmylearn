@@ -1142,7 +1142,7 @@ Current Submodule: {learning_context['submodule_title']}
 Description: {learning_context['submodule_description']}
 Depth Level: {learning_context['depth_level']}
 
-Other Modules in Learning Path:
+Other Modules in Course:
 """
     for m in other_modules:
         learning_path_context += f"- {'[Current] ' if m['is_current'] else ''}{m['title']}: {m['description']}\n"
@@ -1479,7 +1479,7 @@ async def develop_submodule_specific_content(
 # EXPERT CONTENT DEVELOPER & EDUCATOR
 
 ## YOUR TASK
-Develop comprehensive, engaging, and educational content for a specific submodule within a larger learning path. The content should be based on the provided context, including the submodule's description, its place within the module/path, and relevant information gathered from web searches.
+Develop comprehensive, engaging, and educational content for a specific submodule within a larger course. The content should be based on the provided context, including the submodule's description, its place within the module/path, and relevant information gathered from web searches.
 
 ## CONTEXT
 
@@ -1717,20 +1717,20 @@ async def generate_submodule_quiz(
 
 async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str, Any]:
     """
-    Finalizes the enhanced learning path with all processed submodules.
+    Finalizes the enhanced course with all processed submodules.
     
     Args:
         state: The current state with all processed submodules.
         
     Returns:
-        Final state with the complete enhanced learning path.
+        Final state with the complete enhanced course.
     """
-    logging.info("Finalizing enhanced learning path")
+    logging.info("Finalizing enhanced course")
     
     progress_callback = state.get("progress_callback")
     if progress_callback:
         await progress_callback(
-            "Finalizing your learning path with all enhanced content...",
+            "Finalizing your course with all enhanced content...",
             phase="final_assembly",
             phase_progress=0.0,
             overall_progress=0.95,
@@ -1738,7 +1738,7 @@ async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str,
         )
     
     logger = logging.getLogger("learning_path.finalizer")
-    logger.info("Finalizing enhanced learning path with submodules")
+    logger.info("Finalizing enhanced course with submodules")
     try:
         if not state.get("developed_submodules"):
             logger.warning("No developed submodules available")
@@ -1829,7 +1829,7 @@ async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str,
             
             final_modules.append(module_data)
             
-        # Create the final learning path structure with quiz questions
+        # Create the final course structure with quiz questions
         final_learning_path = {
             "topic": state["user_topic"], 
             "modules": final_modules, 
@@ -1842,7 +1842,7 @@ async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str,
             }
         }
         
-        logger.info(f"Finalized learning path with {len(final_modules)} modules and {total_quiz_questions} quiz questions")
+        logger.info(f"Finalized course with {len(final_modules)} modules and {total_quiz_questions} quiz questions")
         
         # Build preview data for frontend
         preview_modules = []
@@ -1875,14 +1875,14 @@ async def finalize_enhanced_learning_path(state: LearningPathState) -> Dict[str,
                 action="completed"
             )
             
-        return {"final_learning_path": final_learning_path, "steps": ["Finalized enhanced learning path"]}
+        return {"final_learning_path": final_learning_path, "steps": ["Finalized enhanced course"]}
     except Exception as e:
-        logger.exception(f"Error finalizing learning path: {str(e)}")
+        logger.exception(f"Error finalizing course: {str(e)}")
         
         # Send error progress update
         if progress_callback:
             await progress_callback(
-                f"Error finalizing learning path: {str(e)}",
+                f"Error finalizing course: {str(e)}",
                 phase="final_assembly",
                 phase_progress=0.5,
                 overall_progress=0.97,
@@ -2069,7 +2069,7 @@ Objective: Regenerate a search query suitable for finding curriculum examples or
     prompt_text = """
 # MODULE PLANNING SEARCH QUERY RETRY SPECIALIST
 
-The following search query returned NO RESULTS when searching for curriculum structures or syllabus examples for a learning path module:
+The following search query returned NO RESULTS when searching for curriculum structures or syllabus examples for a course module:
 
 FAILED QUERY: {failed_query}
 

@@ -61,7 +61,7 @@ const ResourcesSection = ({
       : 'Additional Resources Coming Soon';
       
   const defaultEmptyDescription = type === 'topic'
-    ? 'This section will contain curated resources for the entire learning path, including reading lists, video lectures, practice problems, and tools related to this topic.'
+    ? 'This section will contain curated resources for the entire course, including reading lists, video lectures, practice problems, and tools related to this topic.'
     : type === 'module'
       ? 'This section will contain resources specific to this module, including recommended readings, videos, and reference materials.'
       : 'This section will contain supplementary materials specifically relevant to this subtopic.';

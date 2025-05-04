@@ -76,7 +76,7 @@ const AdvancedSettings = ({
                   <Typography variant="body1">
                     Module Count
                   </Typography>
-                  <Tooltip title="Controls how many main modules your learning path will have.">
+                  <Tooltip title="Controls how many main modules your course will have.">
                     <InfoIcon fontSize="small" color="action" />
                   </Tooltip>
                 </Stack>

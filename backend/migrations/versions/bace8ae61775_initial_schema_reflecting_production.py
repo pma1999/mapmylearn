@@ -53,7 +53,7 @@ def upgrade() -> None:
     op.alter_column('learning_paths', 'language',
                existing_type=sa.VARCHAR(length=10),
                comment=None,
-               existing_comment='ISO 639-1 language code for the learning path content',
+               existing_comment='ISO 639-1 language code for the course content',
                existing_nullable=False)
     op.create_index('idx_learning_path_path_id', 'learning_paths', ['path_id'], unique=False)
     op.create_index('idx_learning_path_topic', 'learning_paths', ['topic'], unique=False)
@@ -126,7 +126,7 @@ def downgrade() -> None:
     op.drop_index('idx_learning_path_path_id', table_name='learning_paths')
     op.alter_column('learning_paths', 'language',
                existing_type=sa.VARCHAR(length=10),
-               comment='ISO 639-1 language code for the learning path content',
+               comment='ISO 639-1 language code for the course content',
                existing_nullable=False)
     op.alter_column('learning_paths', 'id',
                existing_type=sa.INTEGER(),

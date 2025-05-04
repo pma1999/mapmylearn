@@ -23,7 +23,7 @@ def build_graph():
     logging.info("Building graph with hierarchical submodule processing and resource generation")
     graph = StateGraph(LearningPathState)
     
-    # Initial learning path generation nodes
+    # Initial course generation nodes
     graph.add_node("generate_search_queries", generate_search_queries)
     graph.add_node("execute_web_searches", execute_web_searches)
     graph.add_node("create_learning_path", create_learning_path)

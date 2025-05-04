@@ -80,7 +80,7 @@ const useHistoryManagement = (showNotification) => {
 
   /**
    * Open the save dialog with current settings
-   * @param {Object} path - Generated learning path object
+   * @param {Object} path - Generated course object
    */
   const openSaveDialog = (path) => {
     setGeneratedPath(path);

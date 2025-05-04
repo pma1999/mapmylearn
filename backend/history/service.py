@@ -7,6 +7,7 @@ from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
 import logging
 from backend.history.history_models import LearningPathHistory, LearningPathHistoryEntry
+import uuid
 
 # Storage key configuration
 HISTORY_KEY = "learning_path_history"
@@ -187,7 +188,7 @@ def load_history() -> LearningPathHistory:
         return LearningPathHistory()
 
 def add_learning_path(learning_path: Dict[str, Any], source: str = "generated") -> bool:
-    """Adds a new learning path to the history."""
+    """Adds a new course to the history."""
     try:
         # Get current history
         history = load_history()
@@ -205,18 +206,18 @@ def add_learning_path(learning_path: Dict[str, Any], source: str = "generated") 
         # Save updated history
         return save_history(history)
     except Exception as e:
-        logger.error(f"Error adding learning path: {str(e)}")
+        logger.error(f"Error adding course: {str(e)}")
         return False
 
 def import_learning_path(json_data: str) -> Tuple[bool, str]:
-    """Imports a learning path from JSON."""
+    """Imports a course from JSON."""
     try:
         # Deserialize JSON
         learning_path = json.loads(json_data)
         
         # Validate that it has the expected basic structure
         if not isinstance(learning_path, dict) or "topic" not in learning_path or "modules" not in learning_path:
-            return False, "The JSON file does not have the correct learning path format"
+            return False, "The JSON file does not have the correct course format"
         
         # Check if a similar path already exists
         history = load_history()
@@ -225,19 +226,19 @@ def import_learning_path(json_data: str) -> Tuple[bool, str]:
         for entry in history.entries:
             if entry.topic == topic:
                 # We could implement a more sophisticated comparison here
-                logger.warning(f"A learning path with the topic '{topic}' already exists")
+                logger.warning(f"A course with the topic '{topic}' already exists")
                 # However, we still allow importing it
         
         # Add to history
         success = add_learning_path(learning_path, source="imported")
         if success:
-            return True, f"Learning path '{topic}' imported successfully"
+            return True, f"Course '{topic}' imported successfully"
         else:
-            return False, "Error saving the imported learning path"
+            return False, "Error saving the imported course"
     except json.JSONDecodeError:
         return False, "The file is not a valid JSON"
     except Exception as e:
-        logger.error(f"Error importing learning path: {str(e)}")
+        logger.error(f"Error importing course: {str(e)}")
         return False, f"Error: {str(e)}"
 
 def get_history_preview() -> List[Dict[str, Any]]:
@@ -247,7 +248,7 @@ def get_history_preview() -> List[Dict[str, Any]]:
     return [entry.to_preview_dict() for entry in entries]
 
 def get_learning_path(entry_id: str) -> Optional[Dict[str, Any]]:
-    """Gets a specific learning path by its ID."""
+    """Gets a specific course by its ID."""
     history = load_history()
     entry = history.get_entry(entry_id)
     if entry:
@@ -255,7 +256,7 @@ def get_learning_path(entry_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 def delete_learning_path(entry_id: str) -> bool:
-    """Deletes a learning path from the history."""
+    """Deletes a course from the history."""
     history = load_history()
     success = history.remove_entry(entry_id)
     if success:
@@ -263,7 +264,7 @@ def delete_learning_path(entry_id: str) -> bool:
     return False
 
 def update_learning_path_metadata(entry_id: str, favorite: bool = None, tags: List[str] = None) -> bool:
-    """Updates the metadata of a learning path in the history."""
+    """Updates the metadata of a course in the history."""
     history = load_history()
     updates = {}
     

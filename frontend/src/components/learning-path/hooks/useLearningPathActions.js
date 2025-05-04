@@ -8,16 +8,16 @@ import {
 } from '../../../services/api';
 
 /**
- * Custom hook for managing actions related to a learning path
+ * Custom hook for managing actions related to a course
  * 
- * @param {Object} learningPath - The learning path data
- * @param {boolean} isFromHistory - Whether the learning path is from history
+ * @param {Object} learningPath - The course data
+ * @param {boolean} isFromHistory - Whether the course is from history
  * @param {boolean} detailsHaveBeenSet - Whether tags/favorites have been set for the path
  * @param {string} entryId - ID of the history entry (if from history or after save)
  * @param {string} taskId - ID of the task (if from generation)
  * @param {string} temporaryPathId - Newly added temporary ID (if applicable)
  * @param {Function} onSaveSuccess - Callback function invoked after successful save
- * @returns {Object} Actions and states for learning path management
+ * @returns {Object} Actions and states for course management
  */
 const useLearningPathActions = (
   learningPath, 
@@ -62,7 +62,7 @@ const useLearningPathActions = (
   };
 
   /**
-   * Downloads the learning path as JSON
+   * Downloads the course as JSON
    */
   const handleDownloadJSON = () => {
     if (!learningPath) return;
@@ -86,12 +86,12 @@ const useLearningPathActions = (
       showNotification('Learning path downloaded successfully', 'success');
     } catch (err) {
       console.error('Error downloading JSON:', err);
-      showNotification('Failed to download learning path', 'error');
+      showNotification('Failed to download course', 'error');
     }
   };
 
   /**
-   * Downloads the learning path as PDF
+   * Downloads the course as PDF
    */
   const handleDownloadPDF = async () => {
     if (!learningPath) return;
@@ -104,7 +104,7 @@ const useLearningPathActions = (
       // This should ideally not happen if the button is correctly disabled
       // when !isPersisted, but as a safeguard:
       console.error("PDF Download Error: Cannot download PDF without a valid History Entry ID.");
-      showNotification('Please save the learning path to history first', 'error');
+      showNotification('Please save the course to history first', 'error');
       return { savedToHistory: false }; 
     }
 
@@ -145,7 +145,7 @@ const useLearningPathActions = (
   };
 
   /**
-   * Navigates to generator page to create a new learning path
+   * Navigates to generator page to create a new course
    */
   const handleNewLearningPathClick = () => {
     navigate('/generator');
@@ -174,7 +174,7 @@ const useLearningPathActions = (
   };
   
   /**
-   * Saves the learning path to history
+   * Saves the course to history
    */
   const handleSaveConfirm = async () => {
     if (!learningPath) {
@@ -242,8 +242,8 @@ const useLearningPathActions = (
       }
 
     } catch (error) {
-      console.error("Error saving learning path:", error);
-      showNotification(`Error saving learning path: ${error.message || 'Unknown error'}`, 'error');
+      console.error("Error saving course:", error);
+      showNotification(`Error saving course: ${error.message || 'Unknown error'}`, 'error');
       setSaveDialogOpen(false); // Close dialog on error too
       return null;
     }

@@ -67,7 +67,7 @@ const CreditPurchaseDialog = ({ open, onClose }) => {
       <DialogContent>
         <Box sx={{ my: 2 }}>
           <Typography variant="body1" gutterBottom>
-            Credits are used to generate learning paths. Each credit allows you to generate one learning path.
+            Credits are used to generate courses. Each credit allows you to generate one course.
           </Typography>
 
           <TextField

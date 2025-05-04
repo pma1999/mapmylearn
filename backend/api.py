@@ -94,7 +94,7 @@ key_manager = ApiKeyManager()
 # Create FastAPI app
 app = FastAPI(
     title="MapMyLearn API",
-    description="API for MapMyLearn Learning Path Generator",
+    description="API for MapMyLearn Course Generator",
     version="0.1.0"
 )
 
@@ -146,7 +146,7 @@ async def startup_db_and_limiter():
         logger.warning("Rate limiting will be DISABLED")
         # La aplicación seguirá funcionando, pero sin rate limiting
 
-# Include the auth, learning path, and admin routers
+# Include the auth, course, and admin routers
 app.include_router(auth_router, prefix="/api")
 app.include_router(learning_paths_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
@@ -466,9 +466,9 @@ app.add_middleware(
 # Fin de configuración automática de CORS
 # --------------------------------------------------------------------------------
 
-# Custom error class for learning path generation errors
+# Custom error class for course generation errors
 class LearningPathGenerationError(Exception):
-    """Custom exception for learning path generation errors."""
+    """Custom exception for course generation errors."""
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
         self.message = message
         self.details = details or {}
@@ -615,9 +615,9 @@ async def authenticate_api_keys(request: ApiKeyAuthRequest, req: Request):
 @app.post("/api/generate-learning-path")
 async def api_generate_learning_path(request: LearningPathRequest, background_tasks: BackgroundTasks, req: Request):
     """
-    Generate a learning path for the specified topic.
+    Generate a course for the specified topic.
     
-    This endpoint starts a background task to generate the learning path.
+    This endpoint starts a background task to generate the course.
     API keys are now provided by the server - no need for user-provided keys.
     User API key tokens are still accepted for backward compatibility.
     
@@ -637,11 +637,11 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
         # If anonymous generation isn't allowed, raise an error here.
         # For now, we proceed, but credit check will fail if user is None.
         logger.warning("Learning path generation requested without authentication.")
-        # Optionally raise: HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required to generate learning paths.")
+        # Optionally raise: HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required to generate courses.")
     else:
         # --- Refactored Credit Handling --- 
         try:
-            notes = f"Generate learning path for topic: {request.topic}"
+            notes = f"Generate course for topic: {request.topic}"
             # Note: CreditService expects db in __init__, not Depends directly here
             credit_service = CreditService(db=db)
             async with credit_service.charge(user=user, amount=1, transaction_type=TransactionType.GENERATION_USE, notes=notes):
@@ -719,7 +719,7 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
         user_id=user_id
     ).set_operation("generate_learning_path")
     
-    # Start a background task to generate the learning path
+    # Start a background task to generate the course
     background_tasks.add_task(
         generate_learning_path_task,
         task_id=task_id,
@@ -763,7 +763,7 @@ async def generate_learning_path_task(
     user_id: Optional[int] = None
 ):
     """
-    Execute the learning path generation task with comprehensive error handling.
+    Execute the course generation task with comprehensive error handling.
     Ensures all exceptions are caught, logged, and reported through progress updates.
     Stores the latest progress update in Redis.
     """
@@ -845,10 +845,10 @@ async def generate_learning_path_task(
             db.rollback()
             # Let outer finally handle status update
 
-        logging.info(f"Starting learning path generation for: {topic} in language: {language}")
+        logging.info(f"Starting course generation for: {topic} in language: {language}")
         
         await enhanced_progress_callback(
-            f"Starting learning path generation for: {topic} in language: {language}",
+            f"Starting course generation for: {topic} in language: {language}",
             phase="initialization",
             phase_progress=0.0,
             overall_progress=0.0,
@@ -867,7 +867,7 @@ async def generate_learning_path_task(
         )
         
         await enhanced_progress_callback(
-            f"Preparing to generate learning path for '{topic}'",
+            f"Preparing to generate course for '{topic}'",
             phase="search_queries",
             phase_progress=0.0,
             overall_progress=0.15,
@@ -889,13 +889,13 @@ async def generate_learning_path_task(
                 language=language
             )
         except Exception as e:
-            # This is an unexpected error in the learning path generation process
+            # This is an unexpected error in the course generation process
             # Log the detailed error but provide a sanitized message to the user
-            error_message = f"Unexpected error during learning path generation: {str(e)}"
+            error_message = f"Unexpected error during course generation: {str(e)}"
             logging.exception(error_message)
             
             # Create a sanitized user-facing error message
-            user_error_msg = "An error occurred during learning path generation. Please try again later."
+            user_error_msg = "An error occurred during course generation. Please try again later."
             
             # Send error message to frontend
             await enhanced_progress_callback(
@@ -904,7 +904,7 @@ async def generate_learning_path_task(
                 action="error"
             )
             
-            # Automatically save failed learning path to history
+            # Automatically save failed course to history
             try:
                 error_path_id = str(uuid.uuid4())
                 err_lp = LearningPath(
@@ -926,7 +926,7 @@ async def generate_learning_path_task(
                     db.commit()
                 if progressCallback:
                     await progressCallback({
-                        "message": "Failed learning path saved to history.",
+                        "message": "Failed course saved to history.",
                         "persistentPathId": error_path_id,
                         "action": "history_saved",
                         "timestamp": datetime.now().isoformat()
@@ -975,7 +975,7 @@ async def generate_learning_path_task(
             overall_progress=1.0,
             action="completed"
         )
-        # Automatically save generated learning path to history
+        # Automatically save generated course to history
         try:
             serializable_result = make_path_data_serializable(result)
             new_lp = LearningPath(
@@ -997,13 +997,13 @@ async def generate_learning_path_task(
             # Notify frontend of the persistent history path ID via SSE
             if progressCallback:
                 await progressCallback({
-                    "message": "Learning path saved to history.",
+                    "message": "Course saved to history.",
                     "persistentPathId": new_lp.path_id,
                     "action": "history_saved",
                     "timestamp": datetime.now().isoformat()
                 })
         except Exception as save_err:
-            logger.error(f"Failed to save LearningPath for task {task_id}: {save_err}")
+            logger.error(f"Failed to save Course for task {task_id}: {save_err}")
             db.rollback() # Rollback on save failure
         
         # Store result in active_generations
@@ -1013,7 +1013,7 @@ async def generate_learning_path_task(
                 # Status will be updated in DB in finally block
                 active_generations[task_id]["status"] = "completed"
             
-        logging.info(f"Learning path generation completed for: {topic}")
+        logging.info(f"Course generation completed for: {topic}")
         
     except LearningPathGenerationError as e:
         # Handle specific, anticipated generation errors and auto-save to history
@@ -1032,7 +1032,7 @@ async def generate_learning_path_task(
                     "details": e.details
                 }
             
-        # Automatically save known error learning path to history
+        # Automatically save known error course to history
         try:
             error_path_id = str(uuid.uuid4())
             err_lp = LearningPath(
@@ -1053,13 +1053,13 @@ async def generate_learning_path_task(
                 db.commit()
             if progressCallback:
                 await progressCallback({
-                    "message": "Failed learning path saved to history.",
+                    "message": "Failed course saved to history.",
                     "persistentPathId": error_path_id,
                     "action": "history_saved",
                     "timestamp": datetime.now().isoformat()
                 })
         except Exception as save_err3:
-            logger.error(f"Failed to save known error LearningPath for task {task_id}: {save_err3}")
+            logger.error(f"Failed to save known error Course for task {task_id}: {save_err3}")
             db.rollback()
         
         # Restore credit for anticipated errors too
@@ -1153,9 +1153,9 @@ async def generate_learning_path_task(
                      # Try to capture specific error message if possible
                     if isinstance(e, LearningPathGenerationError):
                         user_error_msg = e.message
-                        error_type = "learning_path_generation_error"
+                        error_type = "course_generation_error"
                     else:
-                        user_error_msg = "An error occurred during learning path generation. Please try again later."
+                        user_error_msg = "An error occurred during course generation. Please try again later."
                         error_type = "unexpected_error"
                     error_msg_to_save = json.dumps({"message": user_error_msg, "type": error_type})
 
@@ -1238,7 +1238,7 @@ async def validate_api_keys(request: ApiKeyValidationRequest):
 @app.get("/api/learning-path/{task_id}")
 async def get_learning_path(task_id: str):
     """
-    Get the status and result of a learning path generation task.
+    Get the status and result of a course generation task.
     """
     try:
         async with active_generations_lock:
@@ -1260,16 +1260,16 @@ async def get_learning_path(task_id: str):
         # Re-raise HTTP exceptions to be handled by our custom handler
         raise
     except Exception as e:
-        logger.exception(f"Error retrieving learning path for task {task_id}: {str(e)}")
+        logger.exception(f"Error retrieving course for task {task_id}: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail="Failed to retrieve learning path data. Please try again later."
+            detail="Failed to retrieve course data. Please try again later."
         )
 
 @app.get("/api/progress/{task_id}")
 async def get_progress(task_id: str):
     """
-    Get progress updates for a learning path generation task using Server-Sent Events.
+    Get progress updates for a course generation task using Server-Sent Events.
     Sends the latest snapshot from Redis on connection, then streams live updates.
     """
     redis_client = await get_redis_client() # Get Redis client for this request
@@ -1425,7 +1425,7 @@ async def get_progress(task_id: str):
 @app.delete("/api/learning-path/{task_id}")
 async def delete_learning_path(task_id: str):
     """
-    Delete a learning path generation task and its progress queue.
+    Delete a course generation task and its progress queue.
     """
     try:
         # Check if the task exists
@@ -1448,16 +1448,16 @@ async def delete_learning_path(task_id: str):
                 detail="Learning path task not found. The task ID may be invalid or the task has already been deleted."
             )
         
-        logger.info(f"Deleted learning path task: {task_id}")
+        logger.info(f"Deleted course task: {task_id}")
         return {"status": "success", "message": "Learning path task deleted successfully."}
     except HTTPException:
         # Re-raise HTTP exceptions to be handled by our custom handler
         raise
     except Exception as e:
-        logger.exception(f"Error deleting learning path task {task_id}: {str(e)}")
+        logger.exception(f"Error deleting course task {task_id}: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail="Failed to delete learning path task. Please try again later."
+            detail="Failed to delete course task. Please try again later."
         )
 
 @app.get("/api/health")

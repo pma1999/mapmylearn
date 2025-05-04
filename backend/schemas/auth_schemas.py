@@ -65,7 +65,7 @@ class MessageResponse(BaseModel):
 
 
 class LearningPathBase(BaseModel):
-    """Base schema for learning path."""
+    """Base schema for course."""
     topic: str
     language: str = Field(..., min_length=2, max_length=10, description="ISO 639-1 language code")
     path_data: Dict[str, Any]
@@ -75,24 +75,24 @@ class LearningPathBase(BaseModel):
 
 
 class LearningPathCreate(LearningPathBase):
-    """Schema for creating a learning path."""
+    """Schema for creating a course."""
     pass
     task_id: Optional[str] = Field(None, description="Optional task ID from generation to link history entry")
 
 
 class LearningPathUpdate(BaseModel):
-    """Schema for updating a learning path."""
+    """Schema for updating a course."""
     favorite: Optional[bool] = None
     tags: Optional[List[str]] = None
 
 
 class LearningPathPublicityUpdate(BaseModel):
-    """Schema for updating the public status of a learning path."""
+    """Schema for updating the public status of a course."""
     is_public: bool
 
 
 class LearningPathResponse(LearningPathBase):
-    """Schema for learning path in responses."""
+    """Schema for course in responses."""
     id: int
     path_id: str
     user_id: int
@@ -113,7 +113,7 @@ class LearningPathResponse(LearningPathBase):
 
 
 class LearningPathList(BaseModel):
-    """Schema for list of learning paths."""
+    """Schema for list of courses."""
     entries: List[LearningPathResponse]
     total: int
     page: int
@@ -121,7 +121,7 @@ class LearningPathList(BaseModel):
 
 
 class MigrationRequest(BaseModel):
-    """Schema for migrating local storage learning paths to database."""
+    """Schema for migrating local storage courses to database."""
     learning_paths: List[Dict[str, Any]]
 
 

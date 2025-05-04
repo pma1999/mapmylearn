@@ -1,8 +1,8 @@
 """
-Resource generation functionality for learning paths.
+Resource generation functionality for courses.
 
 This module contains all the functions for generating additional resources
-at various levels (topic, module, submodule) of the learning path.
+at various levels (topic, module, submodule) of the course.
 """
 
 import asyncio
@@ -42,7 +42,7 @@ logger = logging.getLogger("learning_path.resources")
 
 async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
     """
-    Generates high-quality resources for the entire learning path topic using Brave+Scraper.
+    Generates high-quality resources for the entire course topic using Brave+Scraper.
     """
     logger.info(f"Generating topic-level resources for: {state['user_topic']}")
 
@@ -71,7 +71,7 @@ async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
         search_language = state.get('search_language', 'en')
         escaped_topic = escape_curly_braces(state["user_topic"])
 
-        # Build learning path context (same logic as before)
+        # Build course context (same logic as before)
         learning_path_context = ""
         if state.get("final_learning_path") and "modules" in state["final_learning_path"]:
             modules = state["final_learning_path"]["modules"]
@@ -156,7 +156,7 @@ async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
 
         # 3. Extract and format resources from scraped content (using Google LLM)
         resource_extractor_prompt = ChatPromptTemplate.from_template(RESOURCE_EXTRACTION_PROMPT)
-        additional_context = f"This is the top-level topic of the learning path. Resources should provide comprehensive coverage of {escaped_topic}."
+        additional_context = f"This is the top-level topic of the course. Resources should provide comprehensive coverage of {escaped_topic}."
 
         # Prepare context from scraped results
         scraped_context_parts = []
@@ -281,7 +281,7 @@ async def generate_module_resources(state: LearningPathState, module_id: int, mo
         search_language = state.get('search_language', 'en')
         escaped_topic = escape_curly_braces(state["user_topic"])
 
-        # Build learning path context (same as before)
+        # Build course context (same as before)
         learning_path_context = ""
         modules = state.get("enhanced_modules", [])
         for i, mod in enumerate(modules):
@@ -367,7 +367,7 @@ async def generate_module_resources(state: LearningPathState, module_id: int, mo
 
         # 3. Extract and format resources from scraped content
         resource_extractor_prompt = ChatPromptTemplate.from_template(RESOURCE_EXTRACTION_PROMPT)
-        additional_context = f"This is module {module_id+1} of the learning path focused on {module_title}. Resources should be specific to this module's content."
+        additional_context = f"This is module {module_id+1} of the course focused on {module_title}. Resources should be specific to this module's content."
 
         # Prepare context from scraped results
         scraped_context_parts = []
@@ -911,15 +911,15 @@ async def integrate_resources_with_submodule_processing(
 
 async def add_resources_to_final_learning_path(state: LearningPathState) -> Dict[str, Any]:
     """
-    Adds the generated topic resources to the final learning path structure.
+    Adds the generated topic resources to the final course structure.
     Module/submodule resources should already be attached to their respective objects.
     """
-    logger.info("Adding generated topic resources to the final learning path structure.")
+    logger.info("Adding generated topic resources to the final course structure.")
     final_path = state.get("final_learning_path")
     topic_resources = state.get("topic_resources", [])
 
     if not final_path:
-        logger.warning("Final learning path not found in state. Cannot add topic resources.")
+        logger.warning("Final course not found in state. Cannot add topic resources.")
         return {} # Or raise error?
 
     if state.get("resource_generation_enabled") is False:
@@ -944,7 +944,7 @@ async def add_resources_to_final_learning_path(state: LearningPathState) -> Dict
     else:
         # Add topic resources
         final_path["topic_resources"] = topic_resources
-        logger.info(f"Added {len(topic_resources)} topic resources to the final learning path.")
+        logger.info(f"Added {len(topic_resources)} topic resources to the final course.")
 
         # Add module resources from the processed state
         module_resources_data = state.get("module_resources_in_process", {})

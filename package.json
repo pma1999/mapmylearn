@@ -13,7 +13,7 @@
   },
   "name": "mapmylearn",
   "version": "1.0.0",
-  "description": "MapMyLearn is an AI-powered application designed to create personalized learning paths based on your interests and goals. The platform leverages advanced language models and web search capabilities to generate comprehensive, structured learning content tailored to any topic you wish to explore.",
+  "description": "MapMyLearn is an AI-powered application designed to create personalized courses based on your interests and goals. The platform leverages advanced language models and web search capabilities to generate comprehensive, structured learning content tailored to any topic you wish to explore.",
   "main": "migrate-db.js",
   "directories": {
     "test": "tests"

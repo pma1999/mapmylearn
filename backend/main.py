@@ -126,10 +126,10 @@ async def generate_learning_path(
     explanation_style: str = "standard"
 ) -> Dict[str, Any]:
     """
-    Asynchronous interface for learning path generation.
+    Asynchronous interface for course generation.
     
     Args:
-        topic: The topic to generate a learning path for
+        topic: The topic to generate a course for
         parallel_count: Number of modules to process in parallel
         search_parallel_count: Number of search queries to process in parallel
         submodule_parallel_count: Number of submodules to process in parallel
@@ -142,9 +142,9 @@ async def generate_learning_path(
         explanation_style: Style for content explanations (e.g., 'standard', 'simple')
         
     Returns:
-        Dictionary with the learning path data
+        Dictionary with the course data
     """
-    logger.info(f"Generating learning path for topic: {topic} with {parallel_count} parallel modules, " +
+    logger.info(f"Generating course for topic: {topic} with {parallel_count} parallel modules, " +
                 f"{submodule_parallel_count} parallel submodules, {search_parallel_count} parallel searches, " +
                 f"and language: {language}")
     
@@ -212,7 +212,7 @@ def build_learning_path(
     explanation_style: str = "standard"
 ) -> Dict[str, Any]:
     """
-    Build a learning path for the given topic using a submodule-enhanced approach.
+    Build a course for the given topic using a submodule-enhanced approach.
     
     Args:
         topic: The user's learning topic
@@ -228,9 +228,9 @@ def build_learning_path(
         explanation_style: Style for content explanations (e.g., 'standard', 'simple')
         
     Returns:
-        Dictionary with the learning path data
+        Dictionary with the course data
     """
-    logger.info(f"Generating learning path for topic: {topic} with {parallel_count} parallel modules, " +
+    logger.info(f"Generating course for topic: {topic} with {parallel_count} parallel modules, " +
                 f"{submodule_parallel_count} parallel submodules, {search_parallel_count} parallel searches, " +
                 f"and language: {language}")
     
@@ -257,8 +257,8 @@ def build_learning_path(
 # For testing purposes when run as a script
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Generate a learning path for a given topic")
-    parser.add_argument("topic", type=str, help="The topic to create a learning path for")
+    parser = argparse.ArgumentParser(description="Generate a course for a given topic")
+    parser.add_argument("topic", type=str, help="The topic to create a course for")
     parser.add_argument("--parallel", type=int, default=2, help="Number of modules to process in parallel")
     parser.add_argument("--search-parallel", type=int, default=3, help="Number of search queries to execute in parallel")
     parser.add_argument("--submodule-parallel", type=int, default=2, help="Number of submodules to process in parallel")
@@ -283,5 +283,5 @@ if __name__ == "__main__":
         explanation_style=args.style
     )
     
-    # Print the learning path
+    # Print the course
     print(json.dumps(result, indent=2))

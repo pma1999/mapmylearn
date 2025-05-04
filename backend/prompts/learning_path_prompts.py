@@ -1,7 +1,7 @@
 """
 Learning path prompt templates.
 
-This module contains all the prompt templates used in the learning path
+This module contains all the prompt templates used in the course
 generation process, organized by their function in the system.
 """
 
@@ -21,7 +21,7 @@ Your task is to break down a learning module into logical submodules that provid
 Title: {module_title}
 Description: {module_description}
 
-This module is part of a learning path about "{user_topic}".
+This module is part of a course about "{user_topic}".
 
 ## CONTEXT
 {learning_path_context}
@@ -95,7 +95,7 @@ Learning Path Topic: "{user_topic}"
 {learning_path_context}
 
 ## LANGUAGE STRATEGY
-- The final learning path will be presented in {language}.
+- The final course will be presented in {language}.
 - Generate search queries in {search_language} to maximize retrieval of structural information (e.g., syllabi, curriculum design discussions, standard breakdowns).
 
 ## SEARCH FOCUS: MODULE STRUCTURE
@@ -180,7 +180,7 @@ SUBMODULE_CONTENT_DEVELOPMENT_PROMPT = """
 # EXPERT TEACHING ASSISTANT INSTRUCTIONS
 
 Your task is to create comprehensive educational content for a submodule titled "{submodule_title}" 
-which is part of the module "{module_title}" in a learning path about "{user_topic}".
+which is part of the module "{module_title}" in a course about "{user_topic}".
 
 ## SUBMODULE INFORMATION
 Description: {submodule_description}
@@ -335,10 +335,10 @@ Your 10 questions should assess comprehensively the submodule's content.
 TOPIC_RESOURCE_QUERY_GENERATION_PROMPT = """
 # EXPERT RESEARCHER INSTRUCTIONS
 
-Your task is to create the SINGLE MOST EFFECTIVE search query to find **high-quality, comprehensive external learning resources** (e.g., books, articles, online courses, tutorials, videos, official documentation) for a learning path on "{user_topic}".
+Your task is to create the SINGLE MOST EFFECTIVE search query to find **high-quality, comprehensive external learning resources** (e.g., books, articles, online courses, tutorials, videos, official documentation) for a course on "{user_topic}".
 
 ## LEARNING PATH OVERVIEW
-This search query aims to find top-tier external learning materials providing broad, authoritative coverage of the entire learning path topic.
+This search query aims to find top-tier external learning materials providing broad, authoritative coverage of the entire course topic.
 
 ## LEARNING PATH STRUCTURE
 {learning_path_context}
@@ -399,10 +399,10 @@ Your task is to create the SINGLE MOST EFFECTIVE search query to find **high-qua
 ## MODULE DETAILS
 Title: "{module_title}"
 Description: {module_description}
-Part of learning path on: "{user_topic}"
+Part of course on: "{user_topic}"
 
 ## MODULE CONTEXT
-This module is part of a larger learning path:
+This module is part of a larger course:
 {learning_path_context}
 
 ## LANGUAGE STRATEGY
@@ -591,7 +591,7 @@ Submodule Description: {submodule_description}
     *   **Crucially:** Always relate these explanations back to the context of "{submodule_title}".
     *   **Transparency:** If you use general knowledge that significantly extends beyond the provided text, briefly mention it (e.g., "Drawing on general concepts of X..." or "While the text focuses on Y, it's related to the broader idea of Z...").
 3.  **Strict Boundaries:**
-    *   DO NOT answer questions about topics unrelated to "{submodule_title}" or its immediate context within the learning path.
+    *   DO NOT answer questions about topics unrelated to "{submodule_title}" or its immediate context within the course.
     *   DO NOT invent information or speculate. If the provided content and your reliable general knowledge don't cover a user's question adequately, state that clearly and politely.
     *   Politely redirect users asking about other submodules or topics, suggesting they navigate to the relevant section using the Learning Path Structure.
 

@@ -105,7 +105,7 @@ const LoginPage = () => {
     <Container maxWidth="sm">
       <Helmet>
         <title>Sign In | MapMyLearn</title>
-        <meta name="description" content="Sign in to MapMyLearn to access your personalized learning paths, history, and settings." />
+        <meta name="description" content="Sign in to MapMyLearn to access your personalized courses, history, and settings." />
       </Helmet>
       <Paper elevation={3} sx={{ p: 4, mt: 6 }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -219,7 +219,7 @@ const LoginPage = () => {
       
       <Box sx={{ mt: 3, textAlign: 'center' }}>
         <Typography variant="body2" color="text.secondary">
-          By signing in, you'll be able to save your learning paths to the cloud.
+          By signing in, you'll be able to save your courses to the cloud.
         </Typography>
       </Box>
     </Container>

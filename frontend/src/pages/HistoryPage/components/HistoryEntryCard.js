@@ -375,7 +375,7 @@ const HistoryEntryCard = memo(({
 
       <ConfirmationDialog
         open={confirmDelete}
-        title="Delete Learning Path"
+        title="Delete Course"
         message={`Are you sure you want to delete "${entry.topic}"? This action cannot be undone.`}
         onConfirm={handleDelete}
         onCancel={handleCancelDelete}

@@ -142,7 +142,7 @@ const RegisterPage = () => {
     <Container maxWidth="sm">
       <Helmet>
         <title>Create Account | MapMyLearn</title>
-        <meta name="description" content="Sign up for MapMyLearn to start generating personalized learning paths and save your progress." />
+        <meta name="description" content="Sign up for MapMyLearn to start generating personalized courses and save your progress." />
       </Helmet>
       <Paper elevation={3} sx={{ p: 4, mt: 6 }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -291,7 +291,7 @@ const RegisterPage = () => {
       
       <Box sx={{ mt: 3, textAlign: 'center' }}>
         <Typography variant="body2" color="text.secondary">
-          By creating an account, you'll be able to save your learning paths to the cloud.
+          By creating an account, you'll be able to save your courses to the cloud.
         </Typography>
       </Box>
     </Container>

@@ -186,8 +186,8 @@ async def handle_chat(
 
         # If after all checks, we don't have valid content, raise an error
         if actual_learning_content is None:
-             logger.error(f"Could not determine valid learning path content for path {request.path_id}")
-             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid learning path data structure encountered.")
+             logger.error(f"Could not determine valid course content for path {request.path_id}")
+             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid course data structure encountered.")
 
         # 2. Extract Context using the normalized 'actual_learning_content'
         modules = actual_learning_content.get('modules', []) # Use the normalized content
@@ -220,7 +220,7 @@ async def handle_chat(
             language_code = actual_learning_content.get('language', 'en') # Check ephemeral data too
             language_name = get_full_language_name(language_code)
             if db_entry:
-                logger.error(f"Stored learning path {db_entry.path_id} missing language; defaulting to '{language_name}'.")
+                logger.error(f"Stored course {db_entry.path_id} missing language; defaulting to '{language_name}'.")
             elif using_ephemeral_data:
                  logger.info(f"Using language '{language_name}' from ephemeral data for path {request.path_id}.")
             else: # Should not happen given checks above, but defensively log

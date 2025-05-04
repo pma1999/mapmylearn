@@ -58,7 +58,7 @@ const HistorySettings = ({
       </AccordionSummary>
       <AccordionDetails>
         <Typography variant="body2" color="text.secondary" paragraph sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
-          Configure how your learning path will be saved to your history.
+          Configure how your course will be saved to your history.
         </Typography>
         
         <Grid container spacing={isMobile ? 2 : 3} direction="column">

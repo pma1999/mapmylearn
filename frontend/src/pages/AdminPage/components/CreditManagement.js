@@ -209,7 +209,7 @@ const CreditManagement = ({ setError }) => {
         Credit Management
       </Typography>
       <Typography variant="body1" color="text.secondary" paragraph>
-        Assign credits to users for generating learning paths. Each learning path generation consumes one credit.
+        Assign credits to users for generating courses. Each course generation consumes one credit.
       </Typography>
       
       <Collapse in={alertInfo.show}>

@@ -36,7 +36,7 @@ const PHASES = {
   initialization: {
     icon: <TerminalIcon />,
     title: 'Initializing',
-    description: 'Setting up the learning path pipeline',
+    description: 'Setting up the course pipeline',
     weight: 0.05,
     color: '#607D8B', // blue grey
     typicalDuration: 10 // seconds
@@ -60,7 +60,7 @@ const PHASES = {
   modules: {
     icon: <MenuBookIcon />,
     title: 'Module Creation',
-    description: 'Organizing research into a logical learning path structure',
+    description: 'Organizing research into a logical course structure',
     weight: 0.10,
     color: '#66BB6A', // green
     typicalDuration: 45 // seconds
@@ -92,7 +92,7 @@ const PHASES = {
   final_assembly: {
     icon: <AutoAwesomeMotionIcon />,
     title: 'Final Assembly',
-    description: 'Assembling all components into your complete learning path',
+    description: 'Assembling all components into your complete course',
     weight: 0.10,
     color: '#8E24AA', // purple
     typicalDuration: 20 // seconds
@@ -100,7 +100,7 @@ const PHASES = {
   completion: {
     icon: <AutoAwesomeIcon />,
     title: 'Completed',
-    description: 'Your learning path is ready',
+    description: 'Your course is ready',
     weight: 0,
     color: '#2E7D32', // dark green
     typicalDuration: 0 // seconds
@@ -108,7 +108,7 @@ const PHASES = {
   unknown: {
     icon: <AutoAwesomeIcon />,
     title: 'Processing',
-    description: 'Creating your learning path',
+    description: 'Creating your course',
     weight: 1,
     color: '#757575', // grey
     typicalDuration: 300 // seconds
@@ -551,7 +551,7 @@ const ProgressTracker = ({ progressMessages, estimatedTotalTime = 300 }) => {
                 color="text.secondary" 
                 sx={{ mb: 1.5 }}
               >
-                {PHASES[currentPhase]?.description || 'Creating your learning path...'}
+                {PHASES[currentPhase]?.description || 'Creating your course...'}
               </Typography>
               
               <LinearProgress 

@@ -73,7 +73,7 @@ function Footer() {
                 textAlign: { xs: 'center', md: 'left' }
               }}
             >
-              Personalized learning paths powered by AI. Discover your optimal learning journey with our cutting-edge technology.
+              Personalized courses powered by AI. Discover your optimal learning journey with our cutting-edge technology.
             </Typography>
           </Grid>
           
@@ -188,7 +188,7 @@ function Footer() {
             <Link color="inherit" component={RouterLink} to="/" underline="hover">
               MapMyLearn
             </Link>
-            {' - AI-Powered Learning Path Generator'}
+            {' - AI-Powered Course Generator'}
           </Typography>
           
           {/* Legal Links */}

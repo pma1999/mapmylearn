@@ -46,7 +46,7 @@ class StripeService:
                         'unit_amount': unit_amount, # Fixed price per credit
                         'product_data': {
                             'name': 'Learning Path Credits',
-                            'description': f'Purchase {quantity} credits for generating learning paths'
+                            'description': f'Purchase {quantity} credits for generating courses'
                         },
                     },
                     'quantity': quantity,

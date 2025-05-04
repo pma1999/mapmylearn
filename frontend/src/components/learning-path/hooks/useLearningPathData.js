@@ -3,7 +3,7 @@ import { useParams, useLocation } from 'react-router';
 import { getLearningPath, getHistoryEntry, getPublicLearningPath, API_URL } from '../../../services/api';
 
 /**
- * Custom hook to load learning path data from different sources.
+ * Custom hook to load course data from different sources.
  * Handles direct history loads or generation via taskId, including SSE progress.
  * Also handles loading public paths via shareId.
  * 
@@ -98,7 +98,7 @@ const useLearningPathData = (source = null) => {
            return { status: 'processing' };
         } else {
            // On final attempt after SSE/retries, this is unexpected
-           setError('Failed to retrieve the completed learning path data (unexpected status).');
+           setError('Failed to retrieve the completed course data (unexpected status).');
            setData(null);
            setLoading(false);
            setIsReconnecting(false); 
@@ -113,7 +113,7 @@ const useLearningPathData = (source = null) => {
             return { status: 'processing' };
         } else {
              // After SSE/retries, a 404 is a more definite error
-             setError('Failed to retrieve the learning path. Task not found.');
+             setError('Failed to retrieve the course. Task not found.');
              setData(null);
              setLoading(false);
              setIsReconnecting(false);
@@ -210,13 +210,13 @@ const useLearningPathData = (source = null) => {
           setIsFromHistory(false); 
           
           if (!shareId) {
-            throw new Error('Missing shareId for public learning path.');
+            throw new Error('Missing shareId for public course.');
           }
           
           const publicResponse = await getPublicLearningPath(shareId);
           
           if (!publicResponse) {
-             throw new Error('Public learning path not found or invalid response format.');
+             throw new Error('Public course not found or invalid response format.');
           }
 
           // Update data partially first with topic
@@ -252,12 +252,12 @@ const useLearningPathData = (source = null) => {
           
         } else {
            console.error("useLearningPathData: Missing taskId/entryId/shareId for loading.");
-           setError("ID is missing, cannot load learning path.");
+           setError("ID is missing, cannot load course.");
             setLoading(false);
         }
       } catch (err) {
         console.error('Error in loadData setup:', err);
-        setError(err.message || 'Error loading learning path.');
+        setError(err.message || 'Error loading course.');
         setLoading(false);
         cleanup(); // Ensure cleanup on outer catch
       }

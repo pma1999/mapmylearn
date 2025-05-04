@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from backend.api import app, generate_learning_path_task, LearningPathGenerationError, active_generations, active_generations_lock
 
 class TestErrorHandling(unittest.TestCase):
-    """Test error handling improvements in the learning path generation API."""
+    """Test error handling improvements in the course generation API."""
     
     def setUp(self):
         self.client = TestClient(app)

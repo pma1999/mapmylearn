@@ -1,6 +1,6 @@
 """
-Prompt templates for the learning path generation system.
+Prompt templates for the course generation system.
 
 This package contains modular prompt templates for various components
-of the learning path generation system.
+of the course generation system.
 """ 

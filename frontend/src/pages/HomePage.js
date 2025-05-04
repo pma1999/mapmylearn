@@ -45,7 +45,7 @@ const whyFeatures = [
 
 const howSteps = [
   { number: 1, title: 'Enter Your Topic', text: 'Tell us exactly what you want to learn.' },
-  { number: 2, title: 'AI Generates Your Course', text: 'Our advanced AI builds a custom learning path with structured modules.' },
+  { number: 2, title: 'AI Generates Your Course', text: 'Our advanced AI builds a custom course with structured modules.' },
   { number: 3, title: 'Start Learning Immediately', text: 'Dive straight into content tailored specifically for you.' }
 ];
 
@@ -59,10 +59,10 @@ function HomePage() {
   return (
     <Box>
       <Helmet>
-        <title>MapMyLearn: Personalized AI Learning Paths</title>
+        <title>MapMyLearn: Personalized AI Courses</title>
         <meta
           name="description"
-          content="Generate personalized learning paths with AI. MapMyLearn creates courses with interactive modules, AI chat, and audio summaries to help you learn any topic efficiently."
+          content="Generate personalized courses with AI. MapMyLearn creates courses with interactive modules, AI chat, and audio summaries to help you learn any topic efficiently."
         />
       </Helmet>
 
@@ -73,7 +73,7 @@ function HomePage() {
             MAPMYLEARN
           </Typography>
           <Typography variant="h5" color="text.secondary" sx={{ mb: 2 }}>
-            Personalized Learning Paths Powered by AI
+            Personalized Courses Powered by AI
           </Typography>
           <Typography variant="body1" sx={{ maxWidth: '750px', mx: 'auto' }}>
             Supercharge your learning journey with fully personalized, AI-generated courses designed specifically for your interests and goals.
@@ -191,7 +191,7 @@ function HomePage() {
       >
         <Container maxWidth="lg">
           <Typography variant="h3" component="h2" gutterBottom align="center">
-            📚 Example Learning Paths
+            📚 Example Courses
           </Typography>
           <Typography variant="body1" color="text.secondary" align="center" sx={{ maxWidth: '700px', mx: 'auto', mb: 5 }}>
             Explore some popular AI-generated courses:
@@ -260,7 +260,7 @@ function HomePage() {
               <CardGiftcardIcon fontSize="large" /> Exclusive Beta Offer!
             </Typography>
             <Typography variant="body1" sx={{ mb: 3, px: 2 }}>
-              Join now and receive <Typography component="span" sx={{ fontWeight: 'bold', color: 'secondary.light' }}>3 free credits</Typography> to create and explore your personalized learning paths.
+              Join now and receive <Typography component="span" sx={{ fontWeight: 'bold', color: 'secondary.light' }}>3 free credits</Typography> to create and explore your personalized courses.
             </Typography>
             <Button
               component={RouterLink}

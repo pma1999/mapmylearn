@@ -52,11 +52,11 @@ def print_log_summary(entries: List[Dict[str, Any]]) -> None:
     print("\n=== FINAL DATA STRUCTURE ===")
     final_learning_path = None
     for entry in reversed(entries):
-        if "final learning path structure" in entry.get("message", "").lower():
+        if "final course structure" in entry.get("message", "").lower():
             final_learning_path = entry.get("data")
             break
     if not final_learning_path:
-        print("Final learning path structure not found in logs.")
+        print("Final course structure not found in logs.")
         return
     print(f"Topic: {final_learning_path.get('topic', 'N/A')}")
     print(f"Number of modules: {len(final_learning_path.get('modules', []))}")
@@ -70,7 +70,7 @@ def print_log_summary(entries: List[Dict[str, Any]]) -> None:
             print(f"  Submodule {j+1}: {submodule.get('title', 'No title')} - {len(content)} chars - {status}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Diagnostic tool for learning path logs")
+    parser = argparse.ArgumentParser(description="Diagnostic tool for course logs")
     parser.add_argument("log_file", help="Path to log file")
     parser.add_argument("--level", help="Filter by log level (INFO, DEBUG, etc.)")
     parser.add_argument("--module", help="Filter by module")

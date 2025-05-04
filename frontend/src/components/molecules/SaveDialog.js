@@ -68,7 +68,7 @@ const SaveDialog = ({
           mb: 3,
           fontSize: { xs: '0.875rem', sm: '1rem' }  
         }}>
-          Your learning path has been generated. Would you like to save it to your history?
+          Your course has been generated. Would you like to save it to your history?
         </Typography>
         
         <Box sx={{ mb: 3 }}>

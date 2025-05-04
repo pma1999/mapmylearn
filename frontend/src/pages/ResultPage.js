@@ -5,7 +5,7 @@ import { useParams } from 'react-router';
 import LearningPathView from '../components/learning-path/view/LearningPathView';
 
 /**
- * ResultPage component for displaying a learning path
+ * ResultPage component for displaying a course
  * This is now a thin wrapper around the shared LearningPathView component
  * 
  * @param {Object} props Component props

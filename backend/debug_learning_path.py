@@ -5,7 +5,7 @@ Debug Learning Path Generator
 Usage:
   python debug_learning_path.py "Learning Topic" --log-level DEBUG
 
-Provides extended diagnostic options to debug the learning path generation process.
+Provides extended diagnostic options to debug the course generation process.
 """
 
 import logging
@@ -27,7 +27,7 @@ from backend.config.log_config import setup_logging, get_log_level
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Debug Learning Path Generator")
-    parser.add_argument("topic", help="Topic for learning path generation")
+    parser.add_argument("topic", help="Topic for course generation")
     parser.add_argument("--parallel", type=int, default=2, help="Number of modules in parallel")
     parser.add_argument("--search-parallel", type=int, default=3, help="Number of parallel searches")
     parser.add_argument("--submodule-parallel", type=int, default=2, help="Number of parallel submodules")

@@ -24,7 +24,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 
 /**
- * Dialog for importing learning paths from JSON
+ * Dialog for importing courses from JSON
  * @param {Object} props - Component props
  * @param {boolean} props.open - Whether the dialog is open
  * @param {Function} props.onClose - Handler for dialog close
@@ -204,11 +204,11 @@ const ImportDialog = ({ open, onClose, onImport }) => {
             <ArrowBackIcon />
           </IconButton>
         )}
-        Import Learning Path
+        Import Course
       </DialogTitle>
       <DialogContent>
         <DialogContentText sx={{ mb: 2 }}>
-          Paste a valid learning path JSON or upload/drop a JSON file to import it into your history.
+          Paste a valid course JSON or upload/drop a JSON file to import it into your history.
         </DialogContentText>
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
@@ -294,7 +294,7 @@ const ImportDialog = ({ open, onClose, onImport }) => {
           variant="outlined"
           value={jsonInput}
           onChange={handleTextInputChange}
-          placeholder="Paste your learning path JSON content here..."
+          placeholder="Paste your course JSON content here..."
           error={isValidJson === false}
           sx={{ 
              fontFamily: 'monospace',
@@ -324,7 +324,7 @@ const ImportDialog = ({ open, onClose, onImport }) => {
           startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <UploadIcon />}
           fullWidth={isMobile}
         >
-          {loading ? 'Importing...' : 'Import Path'}
+          {loading ? 'Importing...' : 'Import Course'}
         </Button>
       </DialogActions>
     </Dialog>

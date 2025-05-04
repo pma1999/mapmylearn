@@ -22,7 +22,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ModuleIcon from '@mui/icons-material/AccountTree';
 
 /**
- * Component to display loading and progress updates for learning path generation.
+ * Component to display loading and progress updates for course generation.
  * Shows current phase, overall progress, latest message, and optional preview/history.
  * 
  * @param {Object} props Component props

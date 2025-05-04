@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import * as apiService from '../../../services/api';
 
 /**
- * Custom hook for tracking progress of learning path generation via SSE
+ * Custom hook for tracking progress of course generation via SSE
  * @returns {Object} Progress state and management functions
  */
 const useProgressTracking = () => {
@@ -25,7 +25,7 @@ const useProgressTracking = () => {
       return 20;
     } else if (lastMessage.includes("Executed") && lastMessage.includes("web searches")) {
       return 30;
-    } else if (lastMessage.includes("Created learning path with")) {
+    } else if (lastMessage.includes("Created course with")) {
       return 40;
     } else if (lastMessage.includes("Planned") && lastMessage.includes("submodules")) {
       return 50;

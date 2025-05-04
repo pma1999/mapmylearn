@@ -68,7 +68,7 @@ const LanguageSelector = ({ language, setLanguage, sx = {}, disabled = false }) 
         </Select>
       </FormControl>
       <Tooltip
-        title="Select the language for your learning path content. Note: Search will still use the most information-rich language for your topic (typically English)."
+        title="Select the language for your course content. Note: Search will still use the most information-rich language for your topic (typically English)."
         placement="top"
         arrow
       >
