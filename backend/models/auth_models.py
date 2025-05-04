@@ -226,7 +226,7 @@ class GenerationTask(Base):
     )
 
 
-# New Model for Tracking User Progress in Learning Paths
+# New Model for Tracking User Progress in Courses
 class LearningPathProgress(Base):
     __tablename__ = "learning_path_progress"
     

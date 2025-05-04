@@ -101,7 +101,7 @@ def get_full_language_name(language_code):
 def format_path_structure(path_data):
     structure = []
     topic = path_data.get('topic', 'N/A')
-    structure.append(f"Learning Path: {topic}")
+    structure.append(f"Course: {topic}")
     modules = path_data.get('modules', [])
     for i, module in enumerate(modules):
         module_title = module.get('title', f'Module {i+1}')

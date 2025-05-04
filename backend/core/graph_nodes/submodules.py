@@ -1385,7 +1385,7 @@ async def develop_submodule_specific_content(
     # ---> MODIFICATION END <---
 
     # Build context from various sources
-    # 1. Learning Path Context
+    # 1. Course Context
     learning_path_context = ""
     modules = state.get("enhanced_modules", [])
     for i, mod in enumerate(modules):
@@ -1485,7 +1485,7 @@ Develop comprehensive, engaging, and educational content for a specific submodul
 
 ### Overall Topic: {escape_curly_braces(state["user_topic"])}
 
-### Learning Path Structure:
+### Course Structure:
 {learning_path_context}
 ### Current Module Context:
 {module_context}

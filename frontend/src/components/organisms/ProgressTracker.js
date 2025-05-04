@@ -437,8 +437,8 @@ const ProgressTracker = ({ progressMessages, estimatedTotalTime = 300 }) => {
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
           <Typography variant={isMobile ? "h6" : "h5"} fontWeight="500" color="primary">
             {overallProgress >= 0.99 
-              ? 'Learning Path Complete!' 
-              : `Generating Learning Path: ${storedTopic}`}
+              ? 'Course Complete!' 
+              : `Generating Course: ${storedTopic}`}
           </Typography>
           <Chip
             label={timeRemaining > 0 ? formatTimeRemaining(timeRemaining) : "Almost done..."}
@@ -706,7 +706,7 @@ const PreviewModules = ({ modules, showSubmodules = false }) => {
     <Card variant="outlined" sx={{ borderRadius: 2 }}>
       <CardContent>
         <Typography variant="subtitle1" fontWeight={500} gutterBottom>
-          {showSubmodules ? 'Module Structure' : 'Learning Path Structure'}
+          {showSubmodules ? 'Module Structure' : 'Course Structure'}
         </Typography>
         
         <Stack spacing={1}>
@@ -814,7 +814,7 @@ const PreviewPath = ({ modules, totalModules, totalSubmodules }) => {
       <CardContent>
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
           <Typography variant="subtitle1" fontWeight={500}>
-            Learning Path Summary
+            Course Summary
           </Typography>
           <Chip 
             label={`${totalModules} modules • ${totalSubmodules} submodules`}

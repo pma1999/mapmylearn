@@ -207,7 +207,7 @@ const useLearningPathActions = (
         console.log('Saving new entry to history...');
         const payload = {
           path_data: learningPath,        
-          topic: learningPath.topic || 'Untitled Learning Path', 
+          topic: learningPath.topic || 'Untitled Course', 
           favorite: favorite,             
           tags: tags,                     
           source_task_id: taskId,         

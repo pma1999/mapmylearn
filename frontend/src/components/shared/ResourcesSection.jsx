@@ -55,7 +55,7 @@ const ResourcesSection = ({
   
   // Set appropriate default empty state messages based on type
   const defaultEmptyTitle = type === 'topic' 
-    ? 'Learning Path Resources Coming Soon'
+    ? 'Course Resources Coming Soon'
     : type === 'module'
       ? 'Module Resources Coming Soon'
       : 'Additional Resources Coming Soon';

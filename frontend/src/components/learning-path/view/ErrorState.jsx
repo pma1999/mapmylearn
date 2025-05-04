@@ -58,7 +58,7 @@ const ErrorState = ({ error, onHomeClick, onNewLearningPathClick }) => {
           <ErrorIcon color="error" sx={{ fontSize: 60, mb: 2 }} />
           
           <Typography variant="h5" component="h2" gutterBottom fontWeight="bold">
-            Error Generating Learning Path
+            Error Generating Course
           </Typography>
           
           <Typography variant="body1" sx={{ mb: 3 }}>

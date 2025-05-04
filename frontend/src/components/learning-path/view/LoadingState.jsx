@@ -99,7 +99,7 @@ const LoadingState = ({ progressMessages = [], isReconnecting = false, retryAtte
             }}
           >
             <Typography variant="h5" component="h2" gutterBottom fontWeight="bold">
-              {displayTopic ? `Building Path: "${displayTopic}"` : 'Loading Learning Path...'}
+              {displayTopic ? `Building Path: "${displayTopic}"` : 'Loading Course...'}
             </Typography>
             
             {/* Phase Indicator */}

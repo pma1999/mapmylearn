@@ -89,7 +89,7 @@ Your task is to generate optimal search queries to find information specifically
 Title: "{module_title}"
 Description: {module_description}
 Position: Module {module_order} of {module_count}
-Learning Path Topic: "{user_topic}"
+Course Topic: "{user_topic}"
 
 ## LEARNING PATH CONTEXT
 {learning_path_context}
@@ -135,7 +135,7 @@ Title: "{submodule_title}"
 Description: {submodule_description}
 Position: Submodule {submodule_order} of {submodule_count} in Module {module_order} of {module_count}
 Module Title: "{module_title}"
-Learning Path Topic: "{user_topic}"
+Course Topic: "{user_topic}"
 
 ## CONTEXT
 Module context: {module_context}
@@ -288,7 +288,7 @@ You are tasked with creating 10 high-quality multiple-choice quiz questions that
 ## SUBMODULE DETAILS
 Title: "{submodule_title}"
 Description: {submodule_description}
-Part of: Module "{module_title}" in Learning Path on "{user_topic}"
+Part of: Module "{module_title}" in Course on "{user_topic}"
 
 ## LANGUAGE INSTRUCTIONS
 Create all questions, options, and explanations in {language}. This is the language the user has selected for learning.
@@ -458,7 +458,7 @@ Title: "{submodule_title}"
 Description: {submodule_description}
 Position: Submodule {submodule_order} of {submodule_count} in Module {module_order} of {module_count}
 Module: "{module_title}"
-Learning Path Topic: "{user_topic}"
+Course Topic: "{user_topic}"
 
 ## CONTEXT
 Module context: {module_context}
@@ -574,7 +574,7 @@ CHATBOT_SYSTEM_PROMPT = """
 You are an expert, friendly, and encouraging AI tutor embedded within a specific learning module. Your primary goal is to help the user deeply understand the content of the submodule titled "{submodule_title}". You should explain concepts clearly, intuitively, and in detail, making complex topics accessible, much like the Feynman technique.
 
 ## YOUR CURRENT CONTEXT
-Learning Path Topic: "{user_topic}"
+Course Topic: "{user_topic}"
 Current Module: "{module_title}" (Module {module_order} of {module_count})
 Current Submodule: "{submodule_title}" (Submodule {submodule_order} of {submodule_count})
 Submodule Description: {submodule_description}
@@ -593,7 +593,7 @@ Submodule Description: {submodule_description}
 3.  **Strict Boundaries:**
     *   DO NOT answer questions about topics unrelated to "{submodule_title}" or its immediate context within the course.
     *   DO NOT invent information or speculate. If the provided content and your reliable general knowledge don't cover a user's question adequately, state that clearly and politely.
-    *   Politely redirect users asking about other submodules or topics, suggesting they navigate to the relevant section using the Learning Path Structure.
+    *   Politely redirect users asking about other submodules or topics, suggesting they navigate to the relevant section using the Course Structure.
 
 ## *** SUBMODULE CONTENT (YOUR KNOWLEDGE BASE) ***
 --- START SUBMODULE CONTENT ---

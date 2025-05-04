@@ -45,7 +45,7 @@ class StripeService:
                         'currency': 'eur',
                         'unit_amount': unit_amount, # Fixed price per credit
                         'product_data': {
-                            'name': 'Learning Path Credits',
+                            'name': 'Course Credits',
                             'description': f'Purchase {quantity} credits for generating courses'
                         },
                     },

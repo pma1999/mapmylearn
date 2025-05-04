@@ -1,5 +1,5 @@
 """
-PDF Generator utility for Learning Paths.
+PDF Generator utility for Courses.
 Converts course data structures into well-formatted PDF documents.
 """
 
@@ -37,7 +37,7 @@ class TemplateManager:
 @page {
     margin: 1cm;
     @top-center {
-        content: "Learning Path";
+        content: "Course";
         font-family: 'Helvetica', sans-serif;
         font-size: 9pt;
         color: #888;

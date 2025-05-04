@@ -518,7 +518,7 @@ const LearningPathView = ({ source }) => {
     const commonSteps = [
       {
         target: '[data-tut="lp-header"]',
-        content: 'Welcome to your Learning Path! This header shows the main topic.',
+        content: 'Welcome to your Course! This header shows the main topic.',
         placement: 'bottom',
         disableBeacon: true,
       },
@@ -755,7 +755,7 @@ const LearningPathView = ({ source }) => {
           sx={{ mb: 2, flexShrink: 0 }} 
           onClose={handleDismissFirstViewAlert}
         >
-          <AlertTitle>Your Learning Path is Ready!</AlertTitle>
+          <AlertTitle>Your Course is Ready!</AlertTitle>
           {helpTexts.lpFirstViewAlert}
         </Alert>
       )}
@@ -949,7 +949,7 @@ const LearningPathView = ({ source }) => {
             <Box sx={{ mt: 4, flexShrink: 0 }}>
               <ResourcesSection 
                 resources={actualPathData.topic_resources} 
-                title="Learning Path Resources"
+                title="Course Resources"
                 type="topic"
               />
             </Box>

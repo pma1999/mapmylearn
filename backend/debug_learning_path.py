@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Debug Learning Path Generator
+Debug Course Generator
 
 Usage:
   python debug_learning_path.py "Learning Topic" --log-level DEBUG
@@ -26,7 +26,7 @@ from backend.main import generate_learning_path
 from backend.config.log_config import setup_logging, get_log_level
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(description="Debug Learning Path Generator")
+    parser = argparse.ArgumentParser(description="Debug Course Generator")
     parser.add_argument("topic", help="Topic for course generation")
     parser.add_argument("--parallel", type=int, default=2, help="Number of modules in parallel")
     parser.add_argument("--search-parallel", type=int, default=3, help="Number of parallel searches")

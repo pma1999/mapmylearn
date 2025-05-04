@@ -949,7 +949,7 @@ const LearningPathView = ({ source }) => {
             <Box sx={{ mt: 4, flexShrink: 0 }}>
               <ResourcesSection 
                 resources={actualPathData.topic_resources} 
-                title="Learning Path Resources"
+                title="Course Resources"
                 type="topic"
               />
             </Box>
