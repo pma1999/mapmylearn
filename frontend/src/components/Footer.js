@@ -17,6 +17,7 @@ import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import XIcon from '@mui/icons-material/X';
 import EmailIcon from '@mui/icons-material/Email';
+import Logo from './shared/Logo';
 
 function Footer() {
   const theme = useTheme();
@@ -53,38 +54,16 @@ function Footer() {
           <Grid item xs={12} md={4}>
             <Box 
               sx={{ 
-                display: 'flex', 
+                display: 'flex',
                 alignItems: 'center',
                 mb: 2,
                 flexDirection: { xs: 'column', sm: 'row' },
                 justifyContent: { xs: 'center', md: 'flex-start' }
               }}
             >
-              <SchoolIcon 
-                sx={{ 
-                  mr: { xs: 0, sm: 1 },
-                  mb: { xs: 1, sm: 0 },
-                  fontSize: 36,
-                  color: theme => theme.palette.primary.main
-                }} 
-              />
-              <Typography
-                variant="h5"
-                component={RouterLink}
-                to="/"
-                sx={{
-                  fontWeight: 700,
-                  letterSpacing: '0.2rem',
-                  color: 'text.primary',
-                  textDecoration: 'none',
-                  background: theme => `linear-gradient(45deg, ${theme.palette.primary.main} 30%, ${theme.palette.primary.light} 90%)`,
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  textAlign: { xs: 'center', md: 'left' }
-                }}
-              >
-                MAPMYLEARN
-              </Typography>
+              <RouterLink to="/" aria-label="MapMyLearn homepage" style={{ textDecoration: 'none', color: 'inherit', display: 'inline-block' }}>
+                <Logo height={58} sx={{ mr: { xs: 0, sm: 1 }, mb: { xs: 1, sm: 0 } }} />
+              </RouterLink>
             </Box>
             <Typography 
               variant="body2" 

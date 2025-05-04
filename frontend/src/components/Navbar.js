@@ -34,6 +34,7 @@ import { useAuth } from '../services/authContext';
 import CreditPurchaseDialog from './payments/CreditPurchaseDialog';
 import InfoTooltip from './shared/InfoTooltip';
 import { helpTexts } from '../constants/helpTexts';
+import Logo from './shared/Logo';
 
 const navItems = [
   { text: 'Home', path: '/', ariaLabel: 'Go to homepage' },
@@ -78,9 +79,9 @@ function ScrollTop(props) {
 }
 
 const NavLogo = React.memo(() => (
-  <Box 
-    sx={{ 
-      display: 'flex', 
+  <Box
+    sx={{
+      display: 'flex',
       alignItems: 'center',
       transition: 'transform 0.3s ease-in-out',
       '&:hover': {
@@ -88,34 +89,9 @@ const NavLogo = React.memo(() => (
       }
     }}
   >
-    <SchoolIcon 
-      sx={{ 
-        mr: 1,
-        fontSize: { xs: 28, md: 32 },
-        color: theme => theme.palette.primary.light
-      }} 
-    />
-    <Typography
-      variant="h6"
-      component={RouterLink}
-      to="/"
-      sx={{
-        mr: 2,
-        fontWeight: 700,
-        letterSpacing: '0.3rem',
-        color: 'inherit',
-        textDecoration: 'none',
-        flexGrow: 1,
-        fontSize: { xs: '1.1rem', sm: '1.25rem', md: '1.4rem' },
-        background: 'linear-gradient(45deg, #FFF 30%, rgba(255,255,255,0.8) 90%)',
-        WebkitBackgroundClip: 'text',
-        WebkitTextFillColor: 'transparent',
-        textShadow: '0px 2px 3px rgba(0,0,0,0.1)',
-      }}
-      aria-label="MapMyLearn homepage"
-    >
-      MAPMYLEARN
-    </Typography>
+    <RouterLink to="/" aria-label="MapMyLearn homepage" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center' }}>
+      <Logo height={58} sx={{ display: 'block' }} />
+    </RouterLink>
   </Box>
 ));
 
@@ -229,15 +205,15 @@ function Navbar() {
           transition: 'all 0.3s ease',
           ml: 1,
           cursor: 'pointer',
-          backgroundColor: 'rgba(255, 255, 255, 0.15)',
-          color: 'white',
+          color: theme.palette.primary.contrastText,
+          backgroundColor: theme.palette.primary.main,
+          border: `1px solid ${theme.palette.primary.dark}`,
           '& .MuiChip-icon': {
-            color: 'white'
+            color: theme.palette.primary.contrastText
           },
           '&:hover': {
-             backgroundColor: 'rgba(255, 255, 255, 0.25)',
+             backgroundColor: theme.palette.primary.dark,
           },
-          border: '1px solid rgba(255, 255, 255, 0.3)'
         }}
       />
     </Tooltip>
@@ -260,7 +236,7 @@ function Navbar() {
             onKeyDown={(e) => handleKeyDown(e, item.path)}
             aria-current={location.pathname === item.path ? 'page' : undefined}
             sx={{ 
-              color: 'white', 
+              color: theme.palette.primary.main, 
               mx: 1.5,
               py: 1,
               px: 2,
@@ -271,6 +247,7 @@ function Navbar() {
               textTransform: 'none',
               fontSize: '1rem',
               letterSpacing: '0.05rem',
+              backgroundColor: location.pathname === item.path ? theme.palette.action.hover : 'transparent',
               '&::after': {
                 content: '""',
                 position: 'absolute',
@@ -278,12 +255,12 @@ function Navbar() {
                 left: 0,
                 width: location.pathname === item.path ? '100%' : '0%',
                 height: '3px',
-                backgroundColor: theme => theme.palette.secondary.light,
+                backgroundColor: theme.palette.secondary.light,
                 transition: 'width 0.3s ease-in-out',
                 borderRadius: '3px 3px 0 0',
               },
               '&:hover': {
-                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                backgroundColor: theme.palette.action.hover,
                 '&::after': {
                   width: '100%',
                 },
@@ -311,10 +288,10 @@ function Navbar() {
               onClick={handleUserMenuOpen}
               sx={{ 
                 ml: 2,
-                border: '2px solid rgba(255,255,255,0.7)',
+                border: `2px solid ${theme.palette.primary.light}`,
                 transition: 'all 0.3s ease',
                 '&:hover': {
-                  borderColor: 'white',
+                  borderColor: theme.palette.primary.main,
                   transform: 'scale(1.05)'
                 }
               }}
@@ -385,11 +362,11 @@ function Navbar() {
             variant="outlined"
             startIcon={<LoginIcon />}
             sx={{ 
-              color: 'white',
-              borderColor: 'rgba(255,255,255,0.5)',
+              color: theme.palette.primary.main,
+              borderColor: theme.palette.primary.light,
               '&:hover': {
-                borderColor: 'white',
-                backgroundColor: 'rgba(255,255,255,0.1)',
+                borderColor: theme.palette.primary.main,
+                backgroundColor: theme.palette.action.hover, 
               }
             }}
           >
@@ -431,7 +408,7 @@ function Navbar() {
           transition: 'transform 0.2s ease',
           transform: open ? 'rotate(90deg)' : 'rotate(0)',
           '&:hover': {
-            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+            backgroundColor: theme.palette.action.hover,
           },
           '&:focus-visible': {
             outline: `2px solid ${theme.palette.secondary.light}`,
@@ -531,7 +508,7 @@ function Navbar() {
       <AppBar 
         position="sticky" 
         sx={{ 
-          backgroundColor: scrolled ? 'rgba(25, 118, 210, 0.95)' : 'rgba(25, 118, 210, 0.8)',
+          backgroundColor: scrolled ? 'rgba(255, 255, 255, 0.85)' : 'rgba(255, 255, 255, 0.75)',
           backdropFilter: 'blur(8px)',
           boxShadow: scrolled ? 3 : 0,
           transition: 'all 0.3s ease',

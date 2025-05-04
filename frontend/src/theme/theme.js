@@ -3,46 +3,46 @@ import { createTheme } from '@mui/material/styles';
 // Define color palette
 const palette = {
   primary: {
-    main: '#007AFF', // Apple Blue
-    light: '#58a6ff',
-    dark: '#0050b2',
+    main: '#136090', // Darker Logo Blue
+    light: '#588fc7', // Estimated Light Blue
+    dark: '#003762', // Estimated Dark Blue
     contrastText: '#ffffff',
   },
   secondary: {
-    main: '#FF3B30', // Apple Red
-    light: '#ff6c60',
-    dark: '#c2000a',
-    contrastText: '#ffffff',
+    main: '#52b8cc', // Lighter Logo Teal
+    light: '#86eaff', // Estimated Light Teal
+    dark: '#00889b', // Estimated Dark Teal
+    contrastText: '#042645', // Dark text for contrast on light teal
   },
   error: {
-    main: '#FF3B30', // Apple Red
+    main: '#D32F2F', // Standard Red
   },
   warning: {
-    main: '#FF9500', // Apple Orange
+    main: '#ED6C02', // Standard Orange
   },
   info: {
-    main: '#007AFF', // Apple Blue
+    main: '#136090', // Using Primary Blue
   },
   success: {
-    main: '#34C759', // Apple Green
+    main: '#2E7D32', // Standard Green
   },
   background: {
     default: '#F2F2F7', // Slightly off-white
     paper: '#FFFFFF',
   },
   text: {
-    primary: '#1D1D1F', // Near Black
-    secondary: '#6E6E73', // Medium Gray
-    disabled: '#AEAEB2', // Light Gray
+    primary: '#042645', // Logo Text Navy
+    secondary: '#5A6D7C', // Estimated Medium Gray/Blue
+    disabled: '#AEB7C0', // Estimated Light Gray
   },
   divider: '#E5E5EA', // Light Gray Divider
   action: {
-    active: 'rgba(0, 0, 0, 0.54)',
-    hover: 'rgba(0, 0, 0, 0.04)',
-    selected: 'rgba(0, 122, 255, 0.08)', // primary.main with low alpha
-    disabled: 'rgba(0, 0, 0, 0.26)',
-    disabledBackground: 'rgba(0, 0, 0, 0.12)',
-    focus: 'rgba(0, 0, 0, 0.12)'
+    active: 'rgba(4, 38, 69, 0.54)', // Derived from text.primary
+    hover: 'rgba(4, 38, 69, 0.04)',  // Derived from text.primary
+    selected: 'rgba(19, 96, 144, 0.08)', // Derived from primary.main
+    disabled: 'rgba(4, 38, 69, 0.26)', // Derived from text.primary
+    disabledBackground: 'rgba(4, 38, 69, 0.12)', // Derived from text.primary
+    focus: 'rgba(4, 38, 69, 0.12)' // Derived from text.primary
   }
 };
 
