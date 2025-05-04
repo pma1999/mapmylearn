@@ -89,6 +89,7 @@ const LearningPathView = ({ source }) => {
     lastVisitedModuleIdx,
     lastVisitedSubmoduleIdx,
     isPublicView, // Get public view status from hook
+    accumulatedPreviewData, // <-- GET STATE FROM HOOK
   } = useLearningPathData(source); 
   
   // State for Focus Flow navigation
@@ -728,6 +729,7 @@ const LearningPathView = ({ source }) => {
         isReconnecting={isReconnecting}
         retryAttempt={retryAttempt}
         topic={learningPath?.topic} // Pass topic directly from learningPath object
+        accumulatedPreviewData={accumulatedPreviewData} // <-- PASS PROP
       /> 
     );
   }

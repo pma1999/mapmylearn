@@ -8,7 +8,7 @@ import { getLearningPath, getHistoryEntry, getPublicLearningPath, API_URL } from
  * Also handles loading public paths via shareId.
  * 
  * @param {string} source - Optional source override ('history', 'public' or null for generation)
- * @returns {Object} { learningPath, loading, error, isFromHistory, initialDetailsWereSet, persistentPathId, temporaryPathId, progressMessages, isReconnecting, retryAttempt, refreshData, progressMap, setProgressMap, lastVisitedModuleIdx, lastVisitedSubmoduleIdx, isPublicView }
+ * @returns {Object} { learningPath, loading, error, isFromHistory, initialDetailsWereSet, persistentPathId, temporaryPathId, progressMessages, isReconnecting, retryAttempt, refreshData, progressMap, setProgressMap, lastVisitedModuleIdx, lastVisitedSubmoduleIdx, isPublicView, accumulatedPreviewData }
  */
 const useLearningPathData = (source = null) => {
   const { taskId, entryId, shareId } = useParams();
@@ -26,6 +26,7 @@ const useLearningPathData = (source = null) => {
   const [progressMap, setProgressMap] = useState({});
   const [lastVisitedModuleIdx, setLastVisitedModuleIdx] = useState(null);
   const [lastVisitedSubmoduleIdx, setLastVisitedSubmoduleIdx] = useState(null);
+  const [accumulatedPreviewData, setAccumulatedPreviewData] = useState(null);
   
   // NEW: State to explicitly track if it's a public view
   const [isPublicView, setIsPublicView] = useState(source === 'public' || !!shareId);
@@ -164,6 +165,7 @@ const useLearningPathData = (source = null) => {
       setProgressMap({});
       setLastVisitedModuleIdx(null);
       setLastVisitedSubmoduleIdx(null);
+      setAccumulatedPreviewData(null);
       setIsPublicView(source === 'public' || !!shareId);
       
       try {
@@ -334,6 +336,13 @@ const useLearningPathData = (source = null) => {
           // Parse and process regular progress messages
           const progressData = JSON.parse(event.data);
           console.log('SSE Message Received:', progressData);
+
+          // Persist preview data if received and valid
+          if (progressData.preview_data && progressData.preview_data.modules && progressData.preview_data.modules.length > 0) {
+            console.log('Received and storing preview data via SSE:', progressData.preview_data);
+            setAccumulatedPreviewData(progressData.preview_data);
+          }
+          // --- End Persist Preview Data ---
           
           // Check for specific error messages from the backend stream
           if (progressData.error && progressData.type === 'stream_error') {
@@ -472,6 +481,7 @@ const useLearningPathData = (source = null) => {
     lastVisitedModuleIdx,
     lastVisitedSubmoduleIdx,
     isPublicView, // Return public view status
+    accumulatedPreviewData, // <-- RETURN STATE
   };
 };
 

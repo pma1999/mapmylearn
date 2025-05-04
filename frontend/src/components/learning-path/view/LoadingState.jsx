@@ -30,9 +30,10 @@ import ModuleIcon from '@mui/icons-material/AccountTree';
  * @param {boolean} props.isReconnecting - Flag indicating if reconnecting
  * @param {number} props.retryAttempt - Current retry attempt number
  * @param {string|null} props.topic - The topic from the partially/fully loaded path data
+ * @param {Object|null} props.accumulatedPreviewData - Persisted preview data from the hook
  * @returns {JSX.Element} Loading state component
  */
-const LoadingState = ({ progressMessages = [], isReconnecting = false, retryAttempt = 0, topic = null }) => {
+const LoadingState = ({ progressMessages = [], isReconnecting = false, retryAttempt = 0, topic = null, accumulatedPreviewData = null }) => {
   const theme = useTheme();
   const [showHistory, setShowHistory] = React.useState(false);
   
@@ -58,7 +59,7 @@ const LoadingState = ({ progressMessages = [], isReconnecting = false, retryAtte
   const progressPercent = overallProgress !== null && !isNaN(overallProgress) ? overallProgress * 100 : null;
   const currentPhase = latestUpdate?.phase || 'Initialization';
   const latestMessage = latestUpdate?.message || 'Initializing generation...';
-  const previewModules = latestUpdate?.preview_data?.modules;
+  const previewModules = accumulatedPreviewData?.modules;
   
   // Determine progress bar variant and value
   const progressBarVariant = progressPercent !== null ? "determinate" : "indeterminate";
@@ -263,6 +264,7 @@ LoadingState.propTypes = {
   isReconnecting: PropTypes.bool, 
   retryAttempt: PropTypes.number, 
   topic: PropTypes.string, // Topic prop can be string or null
+  accumulatedPreviewData: PropTypes.object, // <-- ADD PROP TYPE
 };
 
 export default LoadingState; 
