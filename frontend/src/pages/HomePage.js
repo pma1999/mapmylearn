@@ -19,6 +19,8 @@ import VolumeUpIcon from '@mui/icons-material/VolumeUp';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import ArrowRightAltIcon from '@mui/icons-material/ArrowRightAlt';
 import CardGiftcardIcon from '@mui/icons-material/CardGiftcard';
+import Logo from '../components/shared/Logo';
+import { visuallyHidden } from '@mui/utils';
 
 const fadeInUp = {
   hidden: { opacity: 0, y: 20 },
@@ -66,7 +68,8 @@ function HomePage() {
 
       <motion.div initial="hidden" animate="visible" variants={fadeInUp}>
         <Container maxWidth="md" sx={{ py: { xs: 4, md: 6 }, textAlign: 'center' }}>
-          <Typography variant="h2" component="h1" gutterBottom sx={{ fontWeight: 'bold' }}>
+          <Logo height={74} sx={{ mb: 2, display: 'block', mx: 'auto' }} />
+          <Typography variant="h2" component="h1" gutterBottom sx={{ ...visuallyHidden }}>
             MAPMYLEARN
           </Typography>
           <Typography variant="h5" color="text.secondary" sx={{ mb: 2 }}>
