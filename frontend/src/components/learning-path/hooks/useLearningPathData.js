@@ -337,12 +337,79 @@ const useLearningPathData = (source = null) => {
           const progressData = JSON.parse(event.data);
           console.log('SSE Message Received:', progressData);
 
-          // Persist preview data if received and valid
-          if (progressData.preview_data && progressData.preview_data.modules && progressData.preview_data.modules.length > 0) {
-            console.log('Received and storing preview data via SSE:', progressData.preview_data);
-            setAccumulatedPreviewData(progressData.preview_data);
+          // ---> MODIFICATION START: Handle partial module updates <---
+          if (progressData.preview_data && progressData.preview_data.module_update) {
+            const moduleUpdate = progressData.preview_data.module_update;
+            setAccumulatedPreviewData(prevData => {
+              // Initialize state if it's the first update or null
+              let newData = prevData ? { ...prevData } : { modules: [] };
+              // Ensure modules array exists
+              newData.modules = newData.modules || []; 
+
+              // Find the index of the module to update
+              const moduleIndex = newData.modules.findIndex(m => m.id === moduleUpdate.module_id);
+
+              if (moduleIndex > -1) {
+                // Module exists, update its title and submodules
+                newData.modules[moduleIndex] = {
+                    ...newData.modules[moduleIndex], // Keep existing fields
+                    title: moduleUpdate.title,
+                    submodules: moduleUpdate.submodules,
+                    id: moduleUpdate.module_id // Ensure id is set
+                };
+              } else {
+                // Module doesn't exist, add it
+                newData.modules.push({
+                  id: moduleUpdate.module_id,
+                  title: moduleUpdate.title,
+                  submodules: moduleUpdate.submodules
+                });
+                // Ensure modules are sorted by id after adding a new one
+                newData.modules.sort((a, b) => (a.id ?? Infinity) - (b.id ?? Infinity)); 
+              }
+              
+              console.log('Merged module update into preview data:', newData);
+              return newData;
+            });
+          } else if (progressData.preview_data && progressData.preview_data.modules && !progressData.preview_data.module_update) {
+             // ---> MODIFICATION START: Merge incoming module list, don't replace <---
+             const incomingModules = progressData.preview_data.modules;
+             console.log('Received base module preview data, merging:', incomingModules);
+             setAccumulatedPreviewData(prevData => {
+                let newData = prevData ? { ...prevData } : { modules: [] };
+                newData.modules = newData.modules || [];
+                
+                const existingModuleMap = new Map(newData.modules.map(m => [m.id, m]));
+
+                incomingModules.forEach((incomingMod, index) => {
+                  // --- Ensure incoming module has an ID (use index as fallback) ---
+                  const modId = incomingMod.id ?? index; 
+                  if (existingModuleMap.has(modId)) {
+                    // Module exists, update basic info but keep existing submodules
+                    const existingMod = existingModuleMap.get(modId);
+                    existingMod.title = incomingMod.title;
+                    // Optionally update description if provided
+                    if (incomingMod.description) {
+                        existingMod.description = incomingMod.description;
+                    }
+                  } else {
+                    // Module is new, add it (without submodules initially)
+                     newData.modules.push({
+                       ...incomingMod, // Spread incoming data (like title, desc)
+                       id: modId, // Ensure ID is set
+                       submodules: [] // Initialize empty submodules
+                     });
+                  }
+                });
+
+                // Ensure final array is sorted by ID
+                newData.modules.sort((a, b) => (a.id ?? Infinity) - (b.id ?? Infinity));
+                
+                return newData;
+             });
+             // ---> MODIFICATION END <---
           }
-          // --- End Persist Preview Data ---
+          // ---> MODIFICATION END <---
           
           // Check for specific error messages from the backend stream
           if (progressData.error && progressData.type === 'stream_error') {

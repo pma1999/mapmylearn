@@ -604,8 +604,9 @@ Format your response as a structured curriculum. Each module should build logica
         logging.info(f"Created course structure with {len(modules)} modules")
 
         preview_modules = []
-        for module in modules:
+        for module_index, module in enumerate(modules):
             preview_modules.append({
+                "id": module_index,
                 "title": module.title,
                 "description": module.description[:150] + "..." if len(module.description) > 150 else module.description
             })

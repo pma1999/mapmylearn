@@ -20,6 +20,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ModuleIcon from '@mui/icons-material/AccountTree';
+import SubdirectoryArrowRightIcon from '@mui/icons-material/SubdirectoryArrowRight';
 
 /**
  * Component to display loading and progress updates for course generation.
@@ -59,7 +60,9 @@ const LoadingState = ({ progressMessages = [], isReconnecting = false, retryAtte
   const progressPercent = overallProgress !== null && !isNaN(overallProgress) ? overallProgress * 100 : null;
   const currentPhase = latestUpdate?.phase || 'Initialization';
   const latestMessage = latestUpdate?.message || 'Initializing generation...';
-  const previewModules = accumulatedPreviewData?.modules;
+  
+  // Ensure we handle the structure { modules: [...] } potentially with submodules inside
+  const previewModules = accumulatedPreviewData?.modules || [];
   
   // Determine progress bar variant and value
   const progressBarVariant = progressPercent !== null ? "determinate" : "indeterminate";
@@ -74,6 +77,21 @@ const LoadingState = ({ progressMessages = [], isReconnecting = false, retryAtte
   const itemVariants = {
     hidden: { opacity: 0, y: 15 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
+  };
+
+  // Animation variants for submodules list
+  const listVariants = {
+    hidden: { opacity: 0, height: 0 },
+    visible: {
+      opacity: 1,
+      height: 'auto',
+      transition: { staggerChildren: 0.05, delayChildren: 0.1 }
+    }
+  };
+
+  const subItemVariants = {
+    hidden: { opacity: 0, x: -10 },
+    visible: { opacity: 1, x: 0 }
   };
 
   const handleToggleHistory = () => {
@@ -173,22 +191,57 @@ const LoadingState = ({ progressMessages = [], isReconnecting = false, retryAtte
                 )}
             </Box>
 
-            {/* Preview Data (Optional) */}
+            {/* Enhanced Preview Data Display */}
             {previewModules && previewModules.length > 0 && (
                 <motion.div variants={itemVariants} layout>
                      <Typography variant="caption" display="block" sx={{ mt: 2, mb: 1, color: 'text.secondary' }}>
-                         Drafting Modules...
+                         Drafting Modules & Submodules...
                      </Typography>
-                    <List dense disablePadding sx={{ maxHeight: 150, overflowY: 'auto', textAlign: 'left', border: `1px solid ${theme.palette.divider}`, borderRadius: 1 }}>
-                        {previewModules.map((mod, index) => (
-                             <ListItem key={mod.title || index} dense>
-                                 <ListItemIcon sx={{ minWidth: 32}}><ModuleIcon fontSize="small" color="action" /></ListItemIcon>
-                                <ListItemText 
-                                    primary={mod.title || `Module ${index + 1}`}
-                                    primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
-                                />
-                             </ListItem>
-                        ))}
+                    <List dense disablePadding sx={{ maxHeight: 250, overflowY: 'auto', textAlign: 'left', border: `1px solid ${theme.palette.divider}`, borderRadius: 1, p: 1 }}>
+                        <AnimatePresence>
+                            {previewModules.map((mod, index) => (
+                                <motion.div key={mod.id ?? index} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                    <ListItem key={`mod-${mod.id ?? index}`} dense sx={{ pt: 0.5, pb: 0.5, display: 'flex', alignItems: 'center' }}>
+                                        <ListItemIcon sx={{ minWidth: 32}}><ModuleIcon fontSize="small" color="primary" /></ListItemIcon>
+                                        <ListItemText 
+                                            primary={mod.title || `Module ${index + 1}`}
+                                            primaryTypographyProps={{ variant: 'body1', fontWeight: 'medium', color: 'text.primary' }}
+                                        />
+                                    </ListItem>
+                                    
+                                    {mod.submodules && mod.submodules.length > 0 && (
+                                        <motion.div
+                                            style={{ width: '100%', overflow: 'hidden' }}
+                                            variants={listVariants}
+                                            initial="hidden"
+                                            animate="visible"
+                                            exit="hidden"
+                                        >
+                                            <List dense disablePadding sx={{ pl: 4, pt: 0, pb: 0.5 }}>
+                                                {mod.submodules.map((sub, subIndex) => (
+                                                    <ListItem 
+                                                        key={`sub-${mod.id ?? index}-${subIndex}`} 
+                                                        component={motion.li}
+                                                        variants={subItemVariants}
+                                                        dense 
+                                                        disableGutters 
+                                                        sx={{ pb: 0.25, listStyleType: 'none' }}
+                                                    >
+                                                        <ListItemIcon sx={{ minWidth: 28 }}>
+                                                            <SubdirectoryArrowRightIcon sx={{ fontSize: '1rem', color: theme.palette.text.secondary }}/>
+                                                        </ListItemIcon>
+                                                        <ListItemText 
+                                                            primary={sub.title}
+                                                            primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
+                                                        />
+                                                    </ListItem>
+                                                ))}
+                                            </List>
+                                        </motion.div>
+                                    )}
+                                </motion.div>
+                            ))}
+                        </AnimatePresence>
                     </List>
                  </motion.div>
             )}
@@ -212,7 +265,7 @@ const LoadingState = ({ progressMessages = [], isReconnecting = false, retryAtte
                     <Box sx={{ mt: 1, maxWidth: 700, mx: 'auto' }}> 
                         {progressMessages.slice(0, -1).reverse().map((msg, index) => (
                             <motion.div 
-                                key={msg.timestamp || index}
+                                key={`${msg.timestamp || 'ts'}-${index}`}
                                 variants={itemVariants}
                                 initial="hidden"
                                 animate="visible"
@@ -258,13 +311,13 @@ LoadingState.propTypes = {
     timestamp: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
     phase: PropTypes.string,
     overall_progress: PropTypes.number,
-    preview_data: PropTypes.object,
+    preview_data: PropTypes.object, // Can now contain module_update or modules
     action: PropTypes.string
   })),
   isReconnecting: PropTypes.bool, 
   retryAttempt: PropTypes.number, 
   topic: PropTypes.string, // Topic prop can be string or null
-  accumulatedPreviewData: PropTypes.object, // <-- ADD PROP TYPE
+  accumulatedPreviewData: PropTypes.object, // <-- Contains { modules: [{ id, title, submodules: [{title, description?}] }] }
 };
 
 export default LoadingState; 

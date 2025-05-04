@@ -2453,26 +2453,33 @@ async def plan_module_submodules(
             for submodule in submodules:
                 submodule_previews.append({
                     "title": submodule.title,
-                    "description": submodule.description[:100] + "..." if len(submodule.description) > 100 else submodule.description
+                    # Truncate description for preview
+                    "description": submodule.description[:75] + "..." if len(submodule.description) > 75 else submodule.description 
                 })
                 
             # Calculate progress more accurately
             module_progress_complete = (idx + 1) / max(1, total_modules)
             overall_progress = 0.55 + (module_progress_complete * 0.15)
+
+            # ---> NEW: Construct structured preview data for this module update <---
+            module_preview_update = {
+                "module_update": {
+                    "module_id": idx,
+                    "title": enhanced_module.title, # Use title from the created/updated enhanced_module
+                    "submodules": submodule_previews
+                }
+            }
+            # ---> END NEW <---
             
             await progress_callback(
                 f"Planned {len(submodules)} submodules for module {idx+1}: {module.title}",
                 phase="submodule_planning",
                 phase_progress=module_progress_complete,
                 overall_progress=overall_progress,
-                preview_data={
-                    "current_module": {
-                        "title": module.title, 
-                        "index": idx,
-                        "submodules": submodule_previews
-                    }
-                },
-                action="completed"
+                # ---> MODIFIED: Pass the structured preview data <---
+                preview_data=module_preview_update,
+                # ---> END MODIFIED <---
+                action="completed" # Mark this module's planning as completed
             )
         
         return enhanced_module

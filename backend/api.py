@@ -518,7 +518,7 @@ class ProgressUpdate(BaseModel):
     phase: Optional[str] = None  # e.g., "search_queries", "web_searches", "modules", "submodules", "content"
     phase_progress: Optional[float] = None  # 0.0 to 1.0 indicating progress within current phase
     overall_progress: Optional[float] = None  # 0.0 to 1.0 estimated overall progress
-    preview_data: Optional[PreviewData] = None  # Early preview data
+    preview_data: Optional[Dict[str, Any]] = None  # Early preview data
     action: Optional[str] = None  # e.g., "started", "processing", "completed", "error"
 
 class ImportPathRequest(BaseModel):
@@ -782,23 +782,13 @@ async def generate_learning_path_task(
         nonlocal redis_client # Allow modification of the outer scope variable
         timestamp = datetime.now().isoformat()
         
-        preview_data_model = None
-        if preview_data:
-            try:
-                # Ensure preview_data is serializable before creating the model
-                serializable_preview = make_path_data_serializable(preview_data)
-                preview_data_model = PreviewData(**serializable_preview)
-            except Exception as preview_err:
-                 logger.error(f"Error creating PreviewData model for task {task_id}: {preview_err}")
-                 preview_data_model = None # Set to None if validation fails
-
         update = ProgressUpdate(
             message=message, 
             timestamp=timestamp,
             phase=phase,
             phase_progress=phase_progress,
             overall_progress=overall_progress,
-            preview_data=preview_data_model,
+            preview_data=preview_data,
             action=action
         )
         
