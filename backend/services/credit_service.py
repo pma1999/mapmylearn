@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession # Assuming async session if using async context manager
 from sqlalchemy.orm import Session # Use standard Session if not async
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, NoResultFound # Import NoResultFound
 
 from backend.config.database import get_db
 from backend.models.auth_models import User, CreditTransaction, TransactionType
@@ -14,218 +14,187 @@ from backend.models.auth_models import User, CreditTransaction, TransactionType
 logger = logging.getLogger(__name__)
 
 
-class _CreditOperationContextManager:
-    """Async context manager to handle credit deduction and refunds."""
-
-    def __init__(self, db: Session, user: User, amount: int, transaction_type: str, notes: str):
-        self.db = db
-        self.user = user
-        self.amount = amount
-        self.transaction_type = transaction_type
-        self.notes = notes
-        self.deducted = False
-
-    async def __aenter__(self):
-        logger.debug(f"Entering credit charge context for user {self.user.id}, type: {self.transaction_type}, amount: {self.amount}")
-        try:
-            # Ensure user object is up-to-date within the session
-            # self.db.refresh(self.user) # Use refresh if user object might be stale
-
-            # 1. Check Credits
-            if self.user.credits < self.amount:
-                logger.warning(f"Insufficient credits for user {self.user.id}. Required: {self.amount}, Available: {self.user.credits}")
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Insufficient credits. You need {self.amount} credit(s) for this operation, but have {self.user.credits}."
-                )
-
-            # 2. Deduct Credit
-            self.user.credits -= self.amount
-            balance_after_deduction = self.user.credits
-            logger.info(f"Deducting {self.amount} credits from user {self.user.id}. New balance: {balance_after_deduction}")
-
-            # 3. Log Deduction Transaction
-            deduction_transaction = CreditTransaction(
-                user_id=self.user.id,
-                amount=-self.amount,
-                transaction_type=self.transaction_type,
-                notes=self.notes,
-                balance_after=balance_after_deduction
-            )
-            self.db.add(deduction_transaction)
-
-            # 4. Commit Deduction
-            await asyncio.to_thread(self.db.commit) # Use asyncio.to_thread for sync commit in async context
-            self.deducted = True
-            logger.info(f"Committed credit deduction transaction for user {self.user.id}, type: {self.transaction_type}")
-
-            # Optional: Refresh user state after commit
-            # await asyncio.to_thread(self.db.refresh, self.user)
-
-        except SQLAlchemyError as e:
-            logger.exception(f"Database error during credit deduction for user {self.user.id}: {e}")
-            await asyncio.to_thread(self.db.rollback)
-            self.deducted = False # Ensure refund logic doesn't run if deduction failed
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Database error during credit check or deduction."
-            )
-        except HTTPException: # Re-raise HTTP exceptions (like 403)
-            raise
-        except Exception as e:
-            logger.exception(f"Unexpected error during credit deduction for user {self.user.id}: {e}")
-            await asyncio.to_thread(self.db.rollback)
-            self.deducted = False
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="An unexpected error occurred while processing credits."
-            )
-        return self # Return self or None
-
-    async def __aexit__(self, exc_type, exc_value, traceback):
-        logger.debug(f"Exiting credit charge context for user {self.user.id}, type: {self.transaction_type}. Exception Type: {exc_type}")
-        if exc_type is not None and self.deducted:
-            logger.warning(
-                f"Operation failed for user {self.user.id} (Type: {self.transaction_type}). Attempting refund of {self.amount} credits. Error: {exc_value}"
-            )
-            try:
-                # Ensure user object is fresh before refund
-                await asyncio.to_thread(self.db.refresh, self.user)
-
-                # 1. Refund Credit
-                self.user.credits += self.amount
-                balance_after_refund = self.user.credits
-                logger.info(f"Refunding {self.amount} credits to user {self.user.id}. New balance: {balance_after_refund}")
-
-                # 2. Log Refund Transaction
-                refund_notes = f"Refund for failed {self.transaction_type}: {str(exc_value)[:150]}"
-                refund_transaction = CreditTransaction(
-                    user_id=self.user.id,
-                    amount=self.amount,
-                    transaction_type=TransactionType.REFUND,
-                    notes=refund_notes,
-                    balance_after=balance_after_refund
-                )
-                self.db.add(refund_transaction)
-
-                # 3. Commit Refund
-                await asyncio.to_thread(self.db.commit)
-                logger.info(f"Successfully refunded {self.amount} credits to user {self.user.id} due to operation failure.")
-
-            except SQLAlchemyError as refund_err:
-                logger.error(f"CRITICAL: Database error during credit refund for user {self.user.id}! Error: {refund_err}")
-                await asyncio.to_thread(self.db.rollback)
-                # Do not suppress the original exception!
-            except Exception as refund_err:
-                 logger.error(f"CRITICAL: Unexpected error during credit refund for user {self.user.id}! Error: {refund_err}")
-                 await asyncio.to_thread(self.db.rollback)
-                 # Do not suppress the original exception!
-
-        # Return False/None to propagate the original exception if one occurred
-        return False
+# Define custom exception for insufficient credits
+class InsufficientCreditsError(HTTPException):
+    def __init__(self, detail: str = "Insufficient credits for the operation."):
+        super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
 class CreditService:
     """Service class for managing user credits."""
 
-    def __init__(self, db: Session = Depends(get_db)):
-        if db is None:
-             raise ValueError("Database session is required for CreditService")
-        self.db = db
+    def __init__(self, db: Optional[Session] = Depends(get_db)):
+        # Allow db to be None initially, but raise error if methods are called without it
+        # This supports scenarios where the service might be instantiated without immediate DB access
+        self._db = db
 
-    @contextlib.asynccontextmanager
-    async def charge(self, user: User, amount: int, transaction_type: str, notes: str):
+    @property
+    def db(self) -> Session:
+        """Ensures the database session is available when needed."""
+        if self._db is None:
+            # This condition might occur if the service is instantiated outside a request context
+            # where Depends(get_db) doesn't work as expected, or if get_db returns None.
+            logger.error("CreditService accessed without a valid database session.")
+            raise ValueError("Database session is required for CreditService operations but was not provided or is None.")
+        return self._db
+
+    async def charge_credits(self, user_id: int, amount: int, transaction_type: str, notes: Optional[str] = None) -> int:
         """
-        Context manager to charge credits for an operation.
+        Atomically deducts credits from a user within an existing transaction.
 
-        Handles checking balance, deducting credits, logging the transaction,
-        and automatically refunding if an exception occurs within the context.
+        This method assumes it is called within an active SQLAlchemy transaction block
+        (e.g., inside `with db.begin():` or after `db.begin()`).
+        It uses SELECT FOR UPDATE to lock the user row.
 
         Args:
-            user: The User object performing the action.
-            amount: The number of credits to deduct (positive integer).
-            transaction_type: The type of transaction (e.g., TransactionType.AUDIO_GENERATION_USE).
-            notes: A description of the transaction.
+            user_id: The ID of the user to charge.
+            amount: The positive integer amount of credits to deduct.
+            transaction_type: The type of transaction.
+            notes: Optional description of the transaction.
+
+        Returns:
+            The user's new credit balance after deduction.
 
         Raises:
-            HTTPException(403): If the user has insufficient credits.
-            HTTPException(500): On database errors or unexpected issues.
+            InsufficientCreditsError: If the user does not have enough credits.
+            SQLAlchemyError: If a database error occurs.
+            NoResultFound: If the user_id does not exist.
+            ValueError: If amount is not positive.
         """
         if amount <= 0:
             raise ValueError("Charge amount must be positive")
+        if not self._db:
+             raise ValueError("Database session is required for charge_credits")
 
-        # We pass the same db session used by the service to the context manager
-        context_manager = _CreditOperationContextManager(
-            db=self.db,
-            user=user,
-            amount=amount,
-            transaction_type=transaction_type,
-            notes=notes
-        )
-        async with context_manager as cm:
-             yield cm # Yield control to the `async with` block
-
-    async def direct_deduct(self, user: User, amount: int, transaction_type: str, notes: Optional[str] = None):
-        """
-        Directly deducts credits without automatic refund on context exit.
-
-        Performs check, deduct, log, and commit.
-        Raises HTTPException on insufficient credits or DB errors.
-        """
-        if amount <= 0:
-            raise ValueError("Deduction amount must be positive")
-
-        logger.debug(f"Attempting direct credit deduction for user {user.id}, type: {transaction_type}, amount: {amount}")
+        logger.debug(f"Attempting to charge {amount} credits from user {user_id} (type: {transaction_type}) within transaction.")
         try:
-            # Ensure user object is available in the session if needed (may not be required depending on usage)
-            # await asyncio.to_thread(self.db.refresh, user)
+            # Lock the user row for the duration of the transaction block and get current state
+            # Use .one() to ensure the user exists, raises NoResultFound otherwise
+            user = self.db.query(User).filter(User.id == user_id).with_for_update().one()
 
-            # 1. Check Credits
+            # Check balance
             if user.credits < amount:
-                logger.warning(f"Insufficient credits for user {user.id}. Required: {amount}, Available: {user.credits}")
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Insufficient credits. You need {amount} credit(s) for this operation, but have {user.credits}."
+                logger.warning(f"Insufficient credits for user {user_id}. Required: {amount}, Available: {user.credits}")
+                raise InsufficientCreditsError(
+                    f"Insufficient credits. You need {amount} credit(s) for this operation, but have {user.credits}."
                 )
 
-            # 2. Deduct Credit
+            # Deduct credits
             user.credits -= amount
             balance_after_deduction = user.credits
-            logger.info(f"Directly deducting {amount} credits from user {user.id}. New balance: {balance_after_deduction}")
+            logger.info(f"Charged {amount} credits from user {user_id}. New balance: {balance_after_deduction}")
 
-            # 3. Log Deduction Transaction
+            # Log transaction
             deduction_transaction = CreditTransaction(
                 user_id=user.id,
-                amount=-amount,
+                amount=-amount, # Store deducted amount as negative
                 transaction_type=transaction_type,
                 notes=notes,
                 balance_after=balance_after_deduction
             )
             self.db.add(deduction_transaction)
+            
+            # Flush to ensure transaction is in buffer, but DO NOT COMMIT here.
+            # The caller is responsible for committing the transaction.
+            # await asyncio.to_thread(self.db.flush) # Not strictly needed unless accessing transaction ID
 
-            # 4. Commit Deduction
-            # Using asyncio.to_thread for sync commit in async function
-            await asyncio.to_thread(self.db.commit)
-            logger.info(f"Committed direct credit deduction for user {user.id}, type: {transaction_type}")
-            
-            # Optional: Refresh user state after commit if needed downstream
-            # await asyncio.to_thread(self.db.refresh, user)
-            
+            return balance_after_deduction
+
+        except NoResultFound:
+            logger.error(f"User with ID {user_id} not found during credit charge.")
+            raise # Re-raise NoResultFound
+        except InsufficientCreditsError:
+            raise # Re-raise specific credit error
         except SQLAlchemyError as e:
-            logger.exception(f"Database error during direct credit deduction for user {user.id}: {e}")
-            await asyncio.to_thread(self.db.rollback)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Database error during credit deduction."
+            logger.exception(f"Database error during credit charge for user {user_id}: {e}")
+            # Do not rollback here; the caller's transaction manager handles it.
+            raise # Re-raise database error
+        except Exception as e:
+            logger.exception(f"Unexpected error during credit charge for user {user_id}: {e}")
+            # Do not rollback here.
+            raise # Re-raise unexpected error
+
+    async def grant_credits(
+        self,
+        user_id: int,
+        amount: int,
+        transaction_type: str,
+        notes: Optional[str] = None,
+        related_transaction_id: Optional[int] = None, # For linking refunds etc.
+        stripe_checkout_session_id: Optional[str] = None, # For purchase linking
+        stripe_payment_intent_id: Optional[str] = None, # For purchase linking
+        purchase_metadata: Optional[dict] = None, # For purchase linking
+        admin_user_id: Optional[int] = None # For admin grants
+    ) -> int:
+        """
+        Atomically grants credits to a user within an existing transaction.
+
+        This method assumes it is called within an active SQLAlchemy transaction block.
+        It uses SELECT FOR UPDATE to lock the user row.
+
+        Args:
+            user_id: The ID of the user to grant credits to.
+            amount: The positive integer amount of credits to grant.
+            transaction_type: The type of transaction (e.g., purchase, refund, admin_add).
+            notes: Optional description of the transaction.
+            related_transaction_id: Optional ID of a related transaction (e.g., the charge being refunded).
+            stripe_checkout_session_id: Optional Stripe session ID for purchases.
+            stripe_payment_intent_id: Optional Stripe payment intent ID for purchases.
+            purchase_metadata: Optional dictionary of metadata for purchases.
+            admin_user_id: Optional ID of the admin performing the grant.
+
+        Returns:
+            The user's new credit balance after the grant.
+
+        Raises:
+            SQLAlchemyError: If a database error occurs.
+            NoResultFound: If the user_id does not exist.
+            ValueError: If amount is not positive.
+        """
+        if amount <= 0:
+            raise ValueError("Grant amount must be positive")
+        if not self._db:
+             raise ValueError("Database session is required for grant_credits")
+
+        logger.debug(f"Attempting to grant {amount} credits to user {user_id} (type: {transaction_type}) within transaction.")
+        try:
+            # Lock the user row
+            user = self.db.query(User).filter(User.id == user_id).with_for_update().one()
+
+            # Grant credits
+            user.credits += amount
+            balance_after_grant = user.credits
+            logger.info(f"Granted {amount} credits to user {user_id}. New balance: {balance_after_grant}")
+
+            # Log transaction
+            grant_transaction = CreditTransaction(
+                user_id=user.id,
+                amount=amount, # Store granted amount as positive
+                transaction_type=transaction_type,
+                notes=notes,
+                balance_after=balance_after_grant,
+                admin_user_id=admin_user_id,
+                # learning_path_id=related_transaction_id, # TODO: Clarify if learning_path_id should be used for related TXN
+                stripe_checkout_session_id=stripe_checkout_session_id,
+                stripe_payment_intent_id=stripe_payment_intent_id,
+                purchase_metadata=purchase_metadata
             )
-        except HTTPException: # Re-raise HTTP exceptions (like 403)
+            self.db.add(grant_transaction)
+
+            # Flush optional, DO NOT COMMIT here.
+
+            return balance_after_grant
+
+        except NoResultFound:
+            logger.error(f"User with ID {user_id} not found during credit grant.")
+            raise
+        except SQLAlchemyError as e:
+            logger.exception(f"Database error during credit grant for user {user_id}: {e}")
+            # Do not rollback here.
             raise
         except Exception as e:
-            logger.exception(f"Unexpected error during direct credit deduction for user {user.id}: {e}")
-            await asyncio.to_thread(self.db.rollback)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="An unexpected error occurred while processing credits."
-            )
+            logger.exception(f"Unexpected error during credit grant for user {user_id}: {e}")
+            # Do not rollback here.
+            raise
 
-    # Potential future methods: grant_credits, check_balance, etc. 
+    # Potential future methods: check_balance, etc. 

@@ -4,6 +4,7 @@ import logging
 from typing import Optional, Dict, Any
 from datetime import datetime
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError, NoResultFound
 from backend.models.auth_models import User, CreditTransaction
 from backend.config.database import get_db
 
@@ -73,86 +74,125 @@ class StripeService:
     async def handle_webhook_event(self, payload: bytes, sig_header: str, db: Session) -> bool:
         """
         Handle Stripe webhook events, particularly successful payments.
-        Returns True if the event was handled successfully.
+        Returns True if the event was handled successfully (or ignored idempotently).
         """
+        event = None # Define event outside try block
         try:
             # Verify webhook signature
             event = stripe.Webhook.construct_event(
                 payload, sig_header, STRIPE_WEBHOOK_SECRET
             )
+            logger.info(f"Received Stripe event: {event['type']}, ID: {event['id']}")
 
-            # Handle the event
-            if event['type'] == 'checkout.session.completed':
-                return await self._handle_successful_payment(event['data']['object'], db)
+        except ValueError as e:
+            # Invalid payload
+            logger.error(f"Invalid Stripe webhook payload: {e}")
+            raise # Re-raise as it indicates a problem with the request itself
+        except stripe.error.SignatureVerificationError as e:
+            logger.error(f"Invalid Stripe webhook signature: {e}")
+            raise # Re-raise signature error
 
-            return True  # Successfully processed (or ignored) the event
+        # Handle the event
+        if event and event['type'] == 'checkout.session.completed':
+            # Use a database transaction for handling the payment
+            try:
+                with db.begin(): # Start transaction
+                    payment_handled = await self._handle_successful_payment(
+                        event['data']['object'], db
+                    )
+                # Transaction committed successfully if no exception
+                return payment_handled
+            except IntegrityError as e:
+                 # This specifically catches the unique constraint violation if the
+                 # _handle_successful_payment tries to commit a duplicate transaction.
+                 # The rollback is handled automatically by `with db.begin()`.
+                 logger.warning(f"Webhook IntegrityError for event {event['id']} (likely duplicate): {e}. Handled idempotently.")
+                 return True # Treat as success (idempotency handled)
+            except Exception as e:
+                 # Catch other errors during _handle_successful_payment or commit
+                 # Rollback is handled automatically.
+                 logger.error(f"Error processing successful checkout event {event['id']}: {str(e)}", exc_info=True)
+                 # Decide if we should raise or return False. Returning False might cause Stripe to retry.
+                 # Let's return False to indicate processing failure for this attempt.
+                 return False
+        else:
+            logger.info(f"Ignoring Stripe event type: {event['type'] if event else 'N/A'}")
+            return True  # Indicate we successfully ignored the event
 
-        except stripe.error.SignatureVerificationError:
-            logger.error("Invalid webhook signature")
-            raise
-        except Exception as e:
-            logger.error(f"Error processing webhook: {str(e)}")
-            raise
-
-    async def _handle_successful_payment(self, session: Dict[str, Any], db: Session) -> bool:
+    async def _handle_successful_payment(self, session_data: Dict[str, Any], db: Session) -> bool:
         """
         Handle a successful payment by updating user credits and creating a transaction record.
+        Assumes it's called within an active transaction block.
+        Uses SELECT FOR UPDATE on the User row.
+        Relies on database unique constraint for idempotency.
+        Returns True on success, raises exceptions on failure.
         """
+        checkout_session_id = session_data['id']
+        payment_status = session_data['payment_status']
+        payment_intent_id = session_data.get('payment_intent')
+
         # Check if payment was successful
-        if session['payment_status'] != 'paid':
-            logger.warning(f"Session {session['id']} not paid")
-            return False
+        if payment_status != 'paid':
+            logger.warning(f"Checkout session {checkout_session_id} status is not 'paid' ({payment_status}). Skipping credit grant.")
+            return False # Indicate not processed due to status
 
         # Extract metadata
-        user_id = int(session['metadata']['user_id'])
-        quantity = int(session['metadata']['credit_quantity'])
-
-        # Check for existing transaction
-        existing_transaction = db.query(CreditTransaction).filter_by(
-            stripe_checkout_session_id=session['id']
-        ).first()
-
-        if existing_transaction:
-            logger.info(f"Session {session['id']} already processed")
-            return True
-
         try:
-            # Get user
-            user = db.query(User).filter_by(id=user_id).first()
-            if not user:
-                logger.error(f"User {user_id} not found")
-                return False
+            user_id = int(session_data['metadata']['user_id'])
+            quantity = int(session_data['metadata']['credit_quantity'])
+        except (KeyError, ValueError) as e:
+             logger.error(f"Missing or invalid metadata in checkout session {checkout_session_id}: {e}")
+             # Cannot proceed without valid user_id and quantity
+             raise ValueError(f"Invalid metadata in session {checkout_session_id}") from e
 
-            # Update user credits
-            user.credits += quantity
+        # --- Modification Block (within the caller's transaction) ---
+        try:
+            # Get user with row lock
+            user = db.query(User).filter(User.id == user_id).with_for_update().one()
 
-            # Create transaction record
+            # Create transaction record BEFORE updating user credits
+            # This ensures that if the INSERT fails due to the unique constraint,
+            # we don't proceed with the credit update.
             transaction = CreditTransaction(
                 user_id=user_id,
                 amount=quantity,
                 transaction_type='purchase',
-                stripe_checkout_session_id=session['id'],
-                stripe_payment_intent_id=session.get('payment_intent'),
+                stripe_checkout_session_id=checkout_session_id,
+                stripe_payment_intent_id=payment_intent_id,
                 purchase_metadata={
-                    'amount_total': session['amount_total'],
-                    'currency': session['currency'],
-                    'payment_status': session['payment_status'],
-                    'customer_email': session['customer_email']
+                    'amount_total': session_data['amount_total'],
+                    'currency': session_data['currency'],
+                    'payment_status': payment_status,
+                    'customer_email': session_data['customer_email']
                 },
-                balance_after=user.credits,
-                notes=f"Purchased {quantity} credits via Stripe"
+                # Calculate balance_after based on current credits + grant amount
+                balance_after=user.credits + quantity, 
+                notes=f"Purchased {quantity} credits via Stripe (Session: {checkout_session_id})"
             )
-
             db.add(transaction)
-            db.commit()
-
-            logger.info(f"Successfully processed payment for user {user_id}")
+            
+            # Flush to check unique constraint before updating credits
+            # If this fails with IntegrityError, the outer handler will catch it.
+            db.flush() 
+            
+            # Update user credits only AFTER successful transaction flush
+            user.credits += quantity
+            logger.info(f"Successfully processed payment for user {user_id} (Session: {checkout_session_id}). New balance: {user.credits}")
             return True
 
+        except NoResultFound:
+            logger.error(f"User {user_id} not found for checkout session {checkout_session_id}")
+            # Re-raise or handle as appropriate, indicates data inconsistency
+            raise ValueError(f"User {user_id} not found processing session {checkout_session_id}")
+        except IntegrityError:
+             # This is expected if the transaction/session ID already exists.
+             # Log and re-raise so the outer handler can catch it and return True (idempotent).
+             logger.warning(f"IntegrityError likely due to duplicate webhook for session {checkout_session_id}")
+             raise 
         except Exception as e:
-            logger.error(f"Error processing payment: {str(e)}")
-            db.rollback()
-            raise
+             # Catch unexpected errors during DB operations
+             logger.exception(f"Error processing payment DB operations for user {user_id} (Session: {checkout_session_id}): {e}")
+             raise # Re-raise to be caught by the outer handler and trigger rollback
 
     async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         """

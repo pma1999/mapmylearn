@@ -32,6 +32,7 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 
 import * as api from '../../../services/api';
 import UserManagement from './UserManagement';
+import { useAuth } from '../../../services/authContext';
 
 // Maximum credits allowed per transaction
 const MAX_CREDITS_PER_TRANSACTION = 1000;
@@ -58,6 +59,7 @@ const CreditManagement = ({ setError }) => {
     user: '',
     amount: ''
   });
+  const { fetchUserCredits } = useAuth();
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -142,6 +144,10 @@ const CreditManagement = ({ setError }) => {
   };
 
   const handleAddCredits = async () => {
+    if (!selectedUser) {
+       setAlertInfo({ show: true, severity: 'error', message: 'No user selected.' });
+       return;
+    }
     try {
       setLoading(true);
       
@@ -154,37 +160,35 @@ const CreditManagement = ({ setError }) => {
       // API call to add credits
       await api.addCredits(selectedUser.id, amountNum, notes);
       
-      // Reset form first to avoid Autocomplete warning issues
-      const updatedUser = {...selectedUser, credits: selectedUser.credits + amountNum};
+      // Refresh global user state
+      if (fetchUserCredits) {
+         await fetchUserCredits();
+         console.log("AuthContext refreshed after adding credits.");
+      } else {
+         console.warn("fetchUserCredits function not available from AuthContext.");
+      }
+
+      // Show success message AFTER refresh
+      setSuccess(true);
+
+      // Reset form
       setSelectedUser(null);
       setAmount('');
       setNotes('');
       setConfirmDialogOpen(false);
-      
-      // Update local state to reflect changes
-      setUsers(prevUsers => prevUsers.map(u => {
-        if (u.id === updatedUser.id) {
-          return { ...u, credits: updatedUser.credits };
-        }
-        return u;
-      }));
-      
-      // Show success message
-      setSuccess(true);
-      
-      // Refresh users data to ensure it's up to date
-      setTimeout(() => {
-        fetchUsers();
-      }, 500);
+            
+      // Refresh users data list in this component to ensure it's up to date
+      fetchUsers();
       
     } catch (error) {
       console.error('Error adding credits:', error);
       setAlertInfo({
         show: true,
         severity: 'error',
-        message: error.message || 'Failed to add credits. Please try again.'
+        message: error.response?.data?.detail || error.message || 'Failed to add credits. Please try again.'
       });
-      setError(error.message || 'Failed to add credits');
+      setError(error.response?.data?.detail || error.message || 'Failed to add credits');
+      setConfirmDialogOpen(false);
     } finally {
       setLoading(false);
     }

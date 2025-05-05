@@ -22,7 +22,7 @@ from backend.utils.auth_middleware import get_current_user, get_optional_user
 from backend.utils.pdf_generator import generate_pdf, create_filename
 # Import the new audio generation service
 from backend.services.audio_service import generate_submodule_audio 
-from backend.services.credit_service import CreditService # Import CreditService
+from backend.services.credit_service import CreditService, InsufficientCreditsError # Import CreditService and specific errors
 from pydantic import BaseModel
 
 # Import sharing utility
@@ -647,14 +647,15 @@ async def generate_or_get_submodule_audio(
 ):
     """
     Generates audio narration for a specific submodule in the requested language.
+    Charges 1 credit atomically with the audio generation process if applicable.
 
-    - If `force_regenerate` is false and audio already exists for the language, returns the existing URL.
+    - If `force_regenerate` is false and audio already exists for the language, returns the existing URL (no charge).
     - If `force_regenerate` is true or audio doesn't exist, generates it, saves/updates the URL, charges credits, and returns it.
     - If the path ID is temporary, uses `request_data.path_data` to generate and returns URL (without persisting).
     """
     logger.info(f"Received audio generation request for path {path_id}, module {module_index}, sub {submodule_index}, lang {request_data.language}, force: {request_data.force_regenerate}")
 
-    # --- Validate Language ---
+    # --- Validate Language --- 
     requested_language = request_data.language
     if requested_language not in SUPPORTED_AUDIO_LANGUAGES:
         raise HTTPException(
@@ -671,77 +672,92 @@ async def generate_or_get_submodule_audio(
     is_persisted = learning_path is not None
     temp_path_data = request_data.path_data if not is_persisted else None
 
-    if is_persisted:
-        logger.info(f"Path {path_id} found in DB (persisted). Proceeding to audio service for potential generation/retrieval.")
-        # --- REMOVED CACHE CHECK BLOCK ---
-        # The audio service will now handle caching logic based on force_regenerate flag.
-
-        # Proceed to generate/retrieve via service
-        notes = f"Audio generation ({requested_language}) for persisted path {path_id}, Mod {module_index}, Sub {submodule_index}"
+    # --- Early Exit if Cached (Persisted Paths Only) ---
+    # Check cache only if persisted and not forced.
+    if is_persisted and not request_data.force_regenerate:
         try:
-            # Use credit service context manager
-            async with credit_service.charge(user=user, amount=1, transaction_type=TransactionType.AUDIO_GENERATION_USE, notes=notes):
-                generated_url = await generate_submodule_audio(
-                    db=db,
-                    learning_path=learning_path,
-                    module_index=module_index,
-                    submodule_index=submodule_index,
-                    language=requested_language, # Pass language
-                    audio_style=request_data.audio_style, # Pass audio style
-                    force_regenerate=request_data.force_regenerate # Pass flag
-                )
-            # If context manager exits without error, credit is deducted and committed.
-            return GenerateAudioResponse(audio_url=generated_url)
-        except HTTPException as http_exc:
-            # If charge() raised 403, or generate_submodule_audio raised HTTPException
-            # The context manager's __aexit__ handles refund if needed. Re-raise.
-            raise http_exc
+            path_data_json = learning_path.path_data
+            if isinstance(path_data_json, dict):
+                modules = path_data_json.get('modules', [])
+                if 0 <= module_index < len(modules):
+                    submodules = modules[module_index].get('submodules', [])
+                    if 0 <= submodule_index < len(submodules):
+                        # TODO: Add language check here when schema supports it
+                        existing_url = submodules[submodule_index].get('audio_url')
+                        if existing_url:
+                            logger.info(f"Cached audio URL found for persisted path {path_id}/{module_index}/{submodule_index}. Returning cached URL.")
+                            return GenerateAudioResponse(audio_url=existing_url)
+            logger.info(f"No suitable cached audio URL found for persisted path {path_id}/{module_index}/{submodule_index} (or force_regenerate=True). Proceeding to generation.")
         except Exception as e:
-            # Context manager's __aexit__ handles refund. Log and raise standard 500.
-            logger.exception(f"Unexpected error during credit charge or audio generation for persisted path {path_id}: {e}")
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Audio generation failed unexpectedly.")
+            logger.exception(f"Error checking audio cache for {path_id}/{module_index}/{submodule_index}: {e}")
+            # Proceed to generation if cache check fails
 
-    else: # Temporary path
-        logger.info(f"Path {path_id} not found in DB (temporary). Charging credit and generating audio in '{requested_language}' using request body data.")
+    # --- Perform Charge and Generation --- 
+    notes = f"Audio generation ({requested_language}) for path '{path_id}', M{module_index}, S{submodule_index}"
+    generated_url = None
+
+    # Create a temporary LearningPath-like object if needed
+    if not is_persisted:
         if not temp_path_data:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="path_data is required in the request body for temporary courses."
             )
-
-        # Create a temporary LearningPath-like object for the service function
         class TempLearningPath:
             def __init__(self, data, temp_id):
                 self.path_data = data
-                self.id = None # Indicate it's not from DB
-                self.path_id = temp_id # Keep temporary ID if needed
+                self.id = None
+                self.path_id = temp_id
+        path_object_for_generation = TempLearningPath(temp_path_data, path_id)
+        db_session_for_generation = None # Pass None DB for temporary paths
+    else:
+        path_object_for_generation = learning_path
+        db_session_for_generation = db # Use the actual DB session for persisted paths
 
-        temp_lp_obj = TempLearningPath(temp_path_data, path_id) # Use the path_id from the endpoint
+    try:
+        # Use a single transaction for charge and audio generation/DB update
+        with db.begin(): # This starts a transaction or savepoint
+            # Charge credits first using the new method
+            await credit_service.charge_credits(
+                user_id=user.id,
+                amount=1,
+                transaction_type=TransactionType.AUDIO_GENERATION_USE,
+                notes=notes
+            )
+            logger.info(f"Credit charged successfully for audio generation (user: {user.id}, path: {path_id})")
+            
+            # Now call the audio generation service
+            # It might modify learning_path.path_data if persisted
+            generated_url = await generate_submodule_audio(
+                db=db_session_for_generation, # Pass appropriate session
+                learning_path=path_object_for_generation,
+                module_index=module_index,
+                submodule_index=submodule_index,
+                language=requested_language,
+                audio_style=request_data.audio_style,
+                force_regenerate=request_data.force_regenerate # Pass flag (service handles cache logic)
+            )
+            # If generate_submodule_audio modified learning_path.path_data,
+            # the changes are part of this transaction and will be committed.
+            
+        # If the `with db.begin()` block finishes without exceptions, 
+        # the transaction (charge + potential path_data update) is committed.
+        logger.info(f"Successfully generated audio and committed transaction for path {path_id}")
+        return GenerateAudioResponse(audio_url=generated_url)
 
-        notes = f"Audio generation ({requested_language}) for temporary path {path_id}, Mod {module_index}, Sub {submodule_index}"
-        try:
-            # Use credit service context manager
-            async with credit_service.charge(user=user, amount=1, transaction_type=TransactionType.AUDIO_GENERATION_USE, notes=notes):
-                # Call the main service, it should skip DB ops based on temp_lp_obj.id == None
-                generated_url = await generate_submodule_audio(
-                    db=None, # Pass None for DB session for temp path
-                    learning_path=temp_lp_obj,
-                    module_index=module_index,
-                    submodule_index=submodule_index,
-                    language=requested_language, # Pass language
-                    audio_style=request_data.audio_style, # Pass audio style for temp paths too
-                    force_regenerate=request_data.force_regenerate # Pass flag for temp paths too
-                )
-            # If context manager exits without error, credit is deducted and committed.
-            return GenerateAudioResponse(audio_url=generated_url)
-
-        except HTTPException as http_exc:
-            # Context manager handles refund if needed. Re-raise.
-            raise http_exc
-        except Exception as e:
-            # Context manager handles refund. Log and raise standard 500.
-            logger.exception(f"Unexpected error during credit charge or audio generation for temporary path {path_id}: {e}")
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Audio generation failed unexpectedly for temporary path.") 
+    except InsufficientCreditsError as ice:
+        # Rollback is handled automatically by db.begin() context manager
+        logger.warning(f"Insufficient credits for audio generation (user: {user.id}, path: {path_id}): {ice.detail}")
+        # Re-raise the specific 403 error
+        raise ice 
+    except HTTPException as http_exc:
+        # Rollback handled automatically. Re-raise other HTTP exceptions from audio service.
+        logger.warning(f"HTTP exception during audio generation for path {path_id}: {http_exc.detail}")
+        raise http_exc
+    except Exception as e:
+        # Rollback handled automatically. Log and raise standard 500 for unexpected errors.
+        logger.exception(f"Unexpected error during credit charge or audio generation for path {path_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Audio generation failed unexpectedly: {str(e)}")
 
 @router.get("/generations/active", response_model=List[ActiveGenerationResponse])
 async def get_active_generations(
