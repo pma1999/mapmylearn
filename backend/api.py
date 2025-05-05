@@ -146,6 +146,19 @@ async def startup_db_and_limiter():
         logger.warning("Rate limiting will be DISABLED")
         # La aplicación seguirá funcionando, pero sin rate limiting
 
+# --- Add X-Frame-Options Middleware ---
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    # Prevent clickjacking
+    response.headers["X-Frame-Options"] = "DENY"
+    # You might consider adding other security headers here too, like:
+    # response.headers["X-Content-Type-Options"] = "nosniff"
+    # response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+# --- End X-Frame-Options Middleware ---
+
 # Include the auth, course, and admin routers
 app.include_router(auth_router, prefix="/api")
 app.include_router(learning_paths_router, prefix="/api")
