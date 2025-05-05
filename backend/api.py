@@ -21,6 +21,7 @@ import traceback
 # import redis.asyncio as redis # Check if still needed
 # --- Add redis import back --- 
 import redis.asyncio as redis
+from sqlalchemy import update
 
 # Database imports
 from backend.config.database import engine, Base, get_db, SessionLocal
