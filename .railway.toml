@@ -2,4 +2,4 @@
 startCommand = "/bin/bash /app/startup.sh"
 restartPolicyType = "ON_FAILURE"
 healthcheckPath = "/api/health"
-healthcheckTimeout = 30 
+healthcheckTimeout = 60 
