@@ -124,10 +124,10 @@ if __name__ == "__main__":
         # Import here to ensure environment is fully set up first
         import uvicorn
         
-        logger.info(f"Starting uvicorn server on host '::', port {port}")
+        logger.info(f"Starting uvicorn server on host '0.0.0.0', port {port}")
         uvicorn.run(
             "backend.api:app", 
-            host="::", # Changed from "0.0.0.0"
+            host="0.0.0.0", # Changed back from "::"
             port=port,
             log_level=os.environ.get("LOG_LEVEL", "info").lower(),
             proxy_headers=True, # Keep True
