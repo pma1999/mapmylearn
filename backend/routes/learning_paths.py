@@ -23,19 +23,19 @@ from backend.utils.pdf_generator import generate_pdf, create_filename
 # Import the new audio generation service
 from backend.services.audio_service import generate_submodule_audio 
 from backend.services.credit_service import CreditService, InsufficientCreditsError # Import CreditService and specific errors
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 # Import sharing utility
 from backend.utils.sharing import generate_unique_share_id
 
 # Define a response model for active generations
 class ActiveGenerationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     task_id: str
     status: str
     created_at: datetime
     request_topic: str
-    class Config:
-        orm_mode = True # Use orm_mode for compatibility
 
 router = APIRouter(prefix="/v1/learning-paths", tags=["learning-paths"])
 logger = logging.getLogger(__name__) # Add logger instance
