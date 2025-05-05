@@ -2,16 +2,20 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 from typing import Optional
 import uuid
 from pydantic import BaseModel, EmailStr, Field
 import logging
+from fastapi_limiter.depends import RateLimiter
 
 from backend.config.database import get_db
 from backend.models.auth_models import User, Session as UserSession
-from backend.schemas.auth_schemas import UserCreate, UserLogin, UserResponse, Token, MessageResponse, ForgotPasswordRequest, ResetPasswordRequest
+from backend.schemas.auth_schemas import (
+    UserCreate, UserLogin, UserResponse, Token, MessageResponse,
+    ForgotPasswordRequest, ResetPasswordRequest
+)
 from backend.utils.auth import get_password_hash, verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
 from backend.utils.auth_middleware import get_current_user
 from backend.utils.token_manager import (
@@ -19,20 +23,14 @@ from backend.utils.token_manager import (
     generate_password_reset_token, hash_token, get_password_reset_link, PASSWORD_RESET_TOKEN_EXPIRY_MINUTES
 )
 from backend.services.email_service import send_verification_email, send_password_reset_email, send_password_reset_confirmation_email
-from backend.utils.custom_rate_limiter import rate_limit
 
 # Initialize logger for this file
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
-# Rate limit: 5 requests per 15 minutes per IP
-FORGOT_PASSWORD_LIMIT = rate_limit(times=5, minutes=15)
-# Rate limit: 10 requests per hour per IP (slightly more lenient for actual resets)
-RESET_PASSWORD_LIMIT = rate_limit(times=10, minutes=60)
-
-
-@router.post("/register", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=MessageResponse, status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(RateLimiter(times=5, minutes=1))])
 async def register(user: UserCreate, db: Session = Depends(get_db)):
     """
     Register a new user and send verification email.
@@ -96,7 +94,8 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
     return MessageResponse(message="Registration successful. Please check your email to verify your account.")
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=Token,
+             dependencies=[Depends(RateLimiter(times=10, minutes=1))])
 async def login(response: Response, request: Request, user_credentials: UserLogin, db: Session = Depends(get_db)):
     """
     Authenticate a user and return a JWT token.
@@ -206,10 +205,11 @@ async def login(response: Response, request: Request, user_credentials: UserLogi
     }
 
 
-@router.post("/refresh", response_model=Token)
+@router.post("/refresh", response_model=Token,
+             dependencies=[Depends(RateLimiter(times=10, minutes=1))])
 async def refresh_token(response: Response, request: Request, db: Session = Depends(get_db)):
     """
-    Refresh an expired access token using a refresh token.
+    Refresh an expired access token using a refresh token cookie.
     """
     # Get refresh token from cookie
     refresh_token = request.cookies.get("refresh_token")
@@ -372,7 +372,7 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
 class ResendRequest(BaseModel):
     email: EmailStr
 
-@router.post("/resend-verification", response_model=MessageResponse, dependencies=[Depends(rate_limit(times=5, minutes=1))])
+@router.post("/resend-verification", response_model=MessageResponse, dependencies=[Depends(RateLimiter(times=5, minutes=1))])
 async def resend_verification_email(request: ResendRequest, db: Session = Depends(get_db)):
     """Resends the verification email to a user if their account is not yet verified."""
     user = db.query(User).filter(User.email == request.email).first()
@@ -404,7 +404,8 @@ async def resend_verification_email(request: ResendRequest, db: Session = Depend
     # Always return a generic message to prevent email enumeration
     return MessageResponse(message="If an account with that email exists and requires verification, a new email has been sent.") 
 
-@router.post("/forgot-password", response_model=MessageResponse, dependencies=[Depends(FORGOT_PASSWORD_LIMIT)])
+@router.post("/forgot-password", response_model=MessageResponse,
+             dependencies=[Depends(RateLimiter(times=5, minutes=15))])
 async def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
     """
     Initiates the password reset process for a user.
@@ -439,7 +440,8 @@ async def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(
     return MessageResponse(message="If an account with that email exists and is verified, a password reset link has been sent.")
 
 
-@router.post("/reset-password", response_model=MessageResponse, dependencies=[Depends(RESET_PASSWORD_LIMIT)])
+@router.post("/reset-password", response_model=MessageResponse,
+             dependencies=[Depends(RateLimiter(times=10, minutes=60))])
 async def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
     """
     Resets the user's password using a valid reset token.
