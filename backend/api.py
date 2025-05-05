@@ -19,6 +19,8 @@ import httpx
 import traceback
 # Removed redis import here if no longer needed globally, or kept if used elsewhere.
 # import redis.asyncio as redis # Check if still needed
+# --- Add redis import back --- 
+import redis.asyncio as redis
 
 # Database imports
 from backend.config.database import engine, Base, get_db, SessionLocal
