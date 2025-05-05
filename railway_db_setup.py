@@ -3,6 +3,7 @@ import sys
 import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from datetime import datetime
+import bcrypt # Import bcrypt globally
 
 def setup_database():
     """
@@ -146,31 +147,82 @@ def setup_database():
             cursor.execute("UPDATE alembic_version SET version_num = '3877029518ce';")
             print("Versión de alembic actualizada correctamente")
         
-        # 7. Verificar si existe el usuario admin
-        cursor.execute("SELECT EXISTS (SELECT 1 FROM users WHERE email = 'admin@mapmylearn.app');")
+        # ------------------------------------------------------------------------
+        # Crear usuario administrador inicial si no existe NINGUNO
+        # ------------------------------------------------------------------------
+        cursor.execute("SELECT EXISTS (SELECT 1 FROM users WHERE is_admin = TRUE);")
         admin_exists = cursor.fetchone()[0]
-        
+
         if not admin_exists:
-            # Crear un hash bcrypt para la contraseña 'admin123'
-            # Nota: Esta contraseña es predefinida para simplificar el ejemplo
-            hashed_password = '$2b$12$8VK5NL.wBV.LD9kx9Ulhme/R/M.QyD1m9F/FA8qSh5CH3kB3CzKJi'
-            
-            cursor.execute("""
-            INSERT INTO users (email, hashed_password, full_name, is_active, is_admin, credits, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s);
-            """, ('admin@mapmylearn.app', hashed_password, 'Admin User', True, True, 1000, datetime.now()))
-            print("Usuario admin creado correctamente")
+            print("\nAttempting to create initial admin user as none exist...")
+            initial_admin_email = os.environ.get("INITIAL_ADMIN_EMAIL")
+            initial_admin_password = os.environ.get("INITIAL_ADMIN_PASSWORD")
+
+            if not initial_admin_email or not initial_admin_password:
+                print("\nERROR: INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD environment variables are required")
+                print("       to create the initial admin user, but one or both are missing.")
+                print("       Please set these variables securely in Railway secrets and redeploy.")
+                print("       Skipping initial admin creation.")
+                # Exit to make the failure explicit in Railway deployment logs
+                conn.rollback()
+                cursor.close()
+                conn.close()
+                sys.exit("Exiting due to missing initial admin credentials.")
+            else:
+                print(f"Found INITIAL_ADMIN_EMAIL: {initial_admin_email}")
+                print("WARNING: INITIAL_ADMIN_PASSWORD found (value not shown).")
+                print("WARNING: These environment variables are sensitive and should only be")
+                print("         used for the very first setup. Ensure they are stored securely")
+                print("         in Railway secrets.")
+
+                # Hash the password securely at runtime
+                hashed_password = bcrypt.hashpw(initial_admin_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                current_time = datetime.now()
+
+                print(f"Creating initial admin user: {initial_admin_email}...")
+                try:
+                    cursor.execute("""
+                    INSERT INTO users (email, hashed_password, full_name, is_active, is_admin, credits, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s);
+                    """, (initial_admin_email, hashed_password, 'Initial Admin', True, True, 1000, current_time))
+                    print("Initial admin user created successfully.")
+                    print("RECOMMENDATION: Log in as this user and change the password immediately.")
+                except psycopg2.Error as db_err:
+                    print(f"\nERROR: Failed to insert initial admin user: {db_err}")
+                    print("       Please check Railway database logs and secrets.")
+                    conn.rollback()
+                    cursor.close()
+                    conn.close()
+                    sys.exit("Exiting due to initial admin creation failure.")
         else:
-            print("El usuario admin ya existe")
-        
+            print("\nAn admin user already exists. Skipping initial admin creation.")
+
+        # Commit changes if admin was created or not needed
+        conn.commit()
+
         # Cerrar la conexión
         cursor.close()
         conn.close()
         
         print("\nEstructura de la base de datos configurada con éxito")
         
+    except psycopg2.Error as db_err:
+        print(f"\nDATABASE ERROR during setup: {str(db_err)}")
+        # Attempt to close connection if it exists and is open
+        if 'conn' in locals() and conn and not conn.closed:
+            conn.rollback()
+            if 'cursor' in locals() and cursor and not cursor.closed:
+                cursor.close()
+            conn.close()
+        sys.exit(1)
     except Exception as e:
-        print(f"ERROR: {str(e)}")
+        print(f"\nGENERAL ERROR during setup: {str(e)}")
+        # Attempt to close connection if it exists and is open
+        if 'conn' in locals() and conn and not conn.closed:
+            conn.rollback()
+            if 'cursor' in locals() and cursor and not cursor.closed:
+                cursor.close()
+            conn.close()
         sys.exit(1)
 
 if __name__ == "__main__":

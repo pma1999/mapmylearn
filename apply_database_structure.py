@@ -3,6 +3,7 @@ import sys
 import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from datetime import datetime
+import bcrypt # Import bcrypt globally as it might be needed
 
 def apply_database_structure():
     """Aplica la estructura completa de la base de datos según los modelos del proyecto"""
@@ -186,34 +187,85 @@ def apply_database_structure():
             """)
             print("Versión de alembic actualizada correctamente")
         
-        # Crear usuario admin si no existe
+        # ------------------------------------------------------------------------
+        # Crear usuario administrador inicial si no existe NINGUNO
+        # ------------------------------------------------------------------------
         cursor.execute("""
         SELECT EXISTS (
-            SELECT 1 FROM users 
-            WHERE email = 'admin@mapmylearn.app'
+            SELECT 1 FROM users
+            WHERE is_admin = TRUE
         );
         """)
-        
+
         if not cursor.fetchone()[0]:
-            # Contraseña hasheada para 'admin123' (solo para fines de demostración)
-            import bcrypt
-            password = 'admin123'
-            hashed_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-            current_time = datetime.now()
-            
-            print("Creando usuario admin...")
-            cursor.execute("""
-            INSERT INTO users (email, hashed_password, full_name, is_active, is_admin, created_at, credits)
-            VALUES (%s, %s, %s, %s, %s, %s, %s);
-            """, ('admin@mapmylearn.app', hashed_password, 'Admin User', True, True, current_time, 1000))
-            print("Usuario admin creado correctamente")
-        
+            print("\nAttempting to create initial admin user as none exist...")
+            initial_admin_email = os.environ.get("INITIAL_ADMIN_EMAIL")
+            initial_admin_password = os.environ.get("INITIAL_ADMIN_PASSWORD")
+
+            if not initial_admin_email or not initial_admin_password:
+                print("\nERROR: INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD environment variables are required")
+                print("       to create the initial admin user, but one or both are missing.")
+                print("       Please set these variables securely and rerun the script.")
+                print("       Skipping initial admin creation.")
+                # Decide whether to exit or continue without admin creation.
+                # For setup scripts, it might be better to exit if admin setup fails when expected.
+                # Let's exit to make the failure explicit.
+                conn.rollback() # Rollback any potential transaction state change
+                cursor.close()
+                conn.close()
+                sys.exit("Exiting due to missing initial admin credentials.")
+            else:
+                print(f"Found INITIAL_ADMIN_EMAIL: {initial_admin_email}")
+                print("WARNING: INITIAL_ADMIN_PASSWORD found (value not shown).")
+                print("WARNING: These environment variables are sensitive and should only be")
+                print("         used for the very first setup. Ensure they are stored securely")
+                print("         (e.g., in a .env file NOT committed to git, or system environment).")
+
+                # Hash the password securely at runtime
+                hashed_password = bcrypt.hashpw(initial_admin_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                current_time = datetime.now()
+
+                print(f"Creating initial admin user: {initial_admin_email}...")
+                try:
+                    cursor.execute("""
+                    INSERT INTO users (email, hashed_password, full_name, is_active, is_admin, created_at, credits)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s);
+                    """, (initial_admin_email, hashed_password, 'Initial Admin', True, True, current_time, 1000)) # Default credits for initial admin
+                    print("Initial admin user created successfully.")
+                    print("RECOMMENDATION: Log in as this user and change the password immediately.")
+                except psycopg2.Error as db_err:
+                    print(f"\nERROR: Failed to insert initial admin user: {db_err}")
+                    print("       Please check database logs and ensure the environment variables are correct.")
+                    conn.rollback()
+                    cursor.close()
+                    conn.close()
+                    sys.exit("Exiting due to initial admin creation failure.")
+        else:
+            print("\nAn admin user already exists. Skipping initial admin creation.")
+
+        # Commit changes if admin was created successfully or no admin creation was needed
+        conn.commit()
         cursor.close()
         conn.close()
         print("\nEstructura de la base de datos aplicada con éxito")
-        
+
+    except psycopg2.Error as db_err:
+        print(f"\nDATABASE ERROR during structure application: {str(db_err)}")
+        # Attempt to close connection if it exists and is open
+        if 'conn' in locals() and conn and not conn.closed:
+            conn.rollback() # Rollback any partial transaction
+            if 'cursor' in locals() and cursor and not cursor.closed:
+                cursor.close()
+            conn.close()
+        sys.exit(1)
     except Exception as e:
-        print(f"ERROR durante la aplicación de la estructura: {str(e)}")
+        print(f"\nGENERAL ERROR during structure application: {str(e)}")
+        # Attempt to close connection if it exists and is open
+        if 'conn' in locals() and conn and not conn.closed:
+            conn.rollback() # Rollback any partial transaction
+            if 'cursor' in locals() and cursor and not cursor.closed:
+                cursor.close()
+            conn.close()
         sys.exit(1)
 
 if __name__ == "__main__":
