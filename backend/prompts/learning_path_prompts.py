@@ -108,7 +108,7 @@ Generate EXACTLY 3 search queries that will help determine the optimal submodule
 
 For each search query:
 - Make it specific to retrieving STRUCTURAL and ORGANIZATIONAL information about "{module_title}".
-- Use terms like: '"{module_title}" curriculum structure', '"{module_title}" module breakdown', 'teaching "{module_title}" sequence', '"{module_title}" syllabus example', '"{module_title}" learning objectives progression'.
+- Combine the essence of "{module_title}" with terms indicating structural or organizational aspects. For example, think about using keywords such as "curriculum structure", "module breakdown", "teaching sequence", "syllabus example", or "learning objectives progression" in conjunction with the specific concepts of "{module_title}".
 - QUOTE USAGE RULE: Use quotes sparingly, ONLY for the exact module title "{module_title}" if it's a multi-word phrase or a very specific term that needs to be searched together. Combine structural keywords without quotes otherwise.
     - GOOD Example (Title quoted): `"Machine Learning Foundations"` curriculum design breakdown
     - GOOD Example (Title not quoted): `Physics kinematics module structure syllabus example`
@@ -150,7 +150,6 @@ Based on thorough analysis of this submodule's requirements, generate 5 search q
 
 For each search query:
 - Make it specific and targeted to return useful results
-- Prioritize queries that find detailed explanations ('how {key_concept} works', 'explanation {key_concept}'), practical examples ('{key_concept} code example', '{key_concept} use case'), tutorials ('{key_concept} tutorial'), common pitfalls ('{key_concept} common errors'), and best practices ('{key_concept} best practices') relevant to '{submodule_title}'.
 - Explain why this search is essential for developing this submodule
 - Ensure it addresses a different aspect needed for comprehensive coverage
 - Design it to return high-quality educational content
@@ -347,8 +346,7 @@ This search query aims to find top-tier external learning materials providing br
 
 ### 1. Keyword-Focused Format for Finding Quality Resources
 Your query MUST be optimized for a search engine API (like Google or Brave Search) to find **excellent learning materials**:
-- Combine the core topic "{user_topic}" with a smart combination of quality indicators and resource type keywords.
-- Use a mix like: **best {user_topic} tutorial**, **comprehensive {user_topic} guide**, **recommended {user_topic} online course**, **definitive {user_topic} book**, **official {user_topic} documentation**, **essential {user_topic} reference**, **{user_topic} video course**, **authoritative {user_topic} article**.
+- Combine the core topic "{user_topic}" with a smart combination of quality indicators (e.g., "best", "comprehensive", "authoritative", "definitive", "essential", "recommended") and resource type keywords (e.g., "tutorial", "guide", "online course", "book", "official documentation", "reference", "video course", "article"). The goal is to find top-tier learning materials.
 - **QUOTE USAGE RULE: NEVER use more than ONE quoted phrase per query.** Quotes are ONLY appropriate if the core "{user_topic}" itself is an essential multi-word phrase (e.g., "machine learning").
 - **DO NOT add quotes around quality indicators or resource types.** Combine terms without quotes.
     - BAD Example (Too many quotes): `"best" "machine learning" "tutorial" "guide"`
@@ -409,8 +407,7 @@ This module is part of a larger course:
 
 ### 1. Keyword-Focused Format for Finding Quality Resources
 Your query MUST be optimized for a search engine API (like Google or Brave Search) to find **excellent learning materials** relevant to this module:
-- Combine specific keywords from "{module_title}" and its description with terms indicating resource types or learning goals. Ensure the query reflects the key concepts and objectives mentioned in the module description: {module_description}.
-- Use keywords like: **tutorial {module_title}**, **practical guide {module_title}**, **{module_title} applied examples**, **{module_title} key concepts**, **detailed tutorial {module_title}**, **{module_title} exercises**, **article {module_title}**, **{module_title} video lecture**, **documentation {module_title}**, **best practices {module_title}**.
+- Combine specific keywords derived from the essence of "{module_title}" and its description ({module_description}) with terms indicating resource types (e.g., "tutorial", "practical guide", "article", "video lecture", "documentation") or learning goals/content aspects (e.g., "applied examples", "key concepts", "exercises", "best practices"). Ensure the query reflects the key concepts and objectives of the module.
 - **QUOTE USAGE RULE: NEVER use more than ONE quoted phrase per query.** Quotes are ONLY for the most essential multi-word technical term specific to this module (e.g., "React Hooks"), if absolutely necessary.
 - **DO NOT put quotes around every keyword.** Combine specific module terms without quotes.
     - BAD Example (Too many quotes): `"tutorial" "React Hooks" "examples" "best practices"`
@@ -468,8 +465,7 @@ Adjacent submodules: {adjacent_context}
 
 ### 1. Keyword-Focused Format for Finding Specific Resources
 Your query MUST be optimized for a search engine API (like Google or Brave Search) to find **specific, high-quality learning materials** for this submodule:
-- Combine very specific technical terms from "{submodule_title}" and its description with terms indicating resource types, application, or specific content areas.
-- Use keywords like: **tutorial {submodule_title}**, **{submodule_title} code example**, **{submodule_title} explanation**, **{submodule_title} case study**, **implement {submodule_title}**, **apply {submodule_title}**, **debug {submodule_title}**, **{submodule_title} common issues**, **{submodule_title} practical example**, **how to use {submodule_title}**, **{submodule_title} video tutorial**, **official documentation {submodule_title}**, **{submodule_title} practice exercise**.
+- Combine very specific technical terms derived from the essence of "{submodule_title}" and its description with terms indicating resource types (e.g., "tutorial", "video tutorial", "official documentation"), content focus (e.g., "code example", "explanation", "case study", "common issues", "practical example", "practice exercise"), or actions relevant to learning (e.g., "implement", "apply", "debug").
 - **QUOTE USAGE RULE: NEVER use more than ONE quoted phrase per query.** Quotes are ONLY for the SINGLE most critical multi-word technical term defining this submodule (e.g., a specific API name like "useState Hook"), IF ABSOLUTELY NECESSARY.
 - **DO NOT put quotes around every keyword.** Combine specific keywords without quotes.
     - BAD Example (Too many quotes): `"hominin fossil record" "key examples" "Lucy" "Taung Child"`

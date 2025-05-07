@@ -69,10 +69,9 @@ Analyze the topic "{user_topic}" and design queries to gather information releva
 Design EXACTLY 5 distinct search queries. Each query should ideally target a DIFFERENT aspect or category from the list above to ensure comprehensive information gathering.
 
 For each search query:
-- Frame it to retrieve information that INFORMS the design process (e.g., finding lists of prerequisites, common course outlines, discussions of skill progression, examples of practical projects, analyses of difficult concepts).
-- Focus on gathering the raw materials for curriculum design, rather than just finding finished examples.
+- Frame it to retrieve information that INFORMS the design process. Focus on gathering the raw materials for curriculum design, rather than just finding finished examples.
+- Combine the core concepts of "{user_topic}" with terms related to the TARGET INFORMATION CATEGORIES listed above (e.g., for "Fundamental Concepts & Prerequisites", you might use terms like "foundational concepts", "prerequisites", "core principles"; for "Logical Sequencing & Dependencies", terms like "learning progression", "concept map", "dependency structure", etc.).
 - Target educational resources, expert discussions, syllabi, textbooks, or technical documentation that reveal how knowledge in this domain is structured, taught, and applied.
-- Consider terms related to the categories: e.g., '"{user_topic}" fundamental concepts', '"{user_topic}" key subtopics', '"{user_topic}" learning progression', '"{user_topic}" practical skills examples', '"{user_topic}" common difficulties'.
 - CRITICAL: Ensure each query balances specificity (finding relevant design information) with breadth (getting actual results).
 - QUOTE USAGE RULE: NEVER use more than ONE quoted phrase per query. Quotes are ONLY for essential multi-word concepts that MUST be searched together (e.g., "machine learning" if the topic is broad, or a specific framework name). DO NOT put quotes around every keyword. Combine specific structural/category terms without quotes.
     - BAD Example (Too many quotes): `"fundamental concepts" "machine learning" "prerequisites"`
