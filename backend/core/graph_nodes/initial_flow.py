@@ -557,19 +557,34 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
 
         # Update prompt to mention scraped content and include style instruction
         prompt_text = f'''
-You are an expert curriculum designer. Create a comprehensive course for the topic: {escaped_topic}.
+# EXPERT CURRICULUM ARCHITECT INSTRUCTIONS
 
-Based on the following search results and scraped web content snippets, organize the learning into logical modules:
+You are a world-class curriculum architect with expertise in educational design. Transform the following search results into a cohesive, comprehensive course on {escaped_topic}.
+
+## SEARCH CONTEXT
 {results_text}
-{module_count_instruction}{language_instruction}{style_instruction_part}
 
-For each module:
-1. Give it a clear, descriptive title.
-2. Write a comprehensive overview (100-200 words) summarizing the module's purpose and content.
-3. Define the single, primary learning objective for this module in one concise, action-oriented sentence.
-4. Explain why this module is important in the overall learning journey and how it connects to other modules.
+## CURRICULUM REQUIREMENTS
+- Language: {language_instruction}
+- Module Count: {module_count_instruction}
+- {style_instruction_part}
 
-Format your response as a structured curriculum. Each module should build logically on previous knowledge.
+## DESIGN PRINCIPLES
+1. **Evidence-Based Structure**: Analyze the search results to identify key concepts, standard approaches, and natural divisions within this subject.
+2. **Progressive Complexity**: Arrange modules in a sequence that builds knowledge systematically from foundations to advanced concepts.
+3. **Conceptual Independence**: Each module must cover a distinct aspect of the topic with minimal overlap.
+4. **Collective Completeness**: Together, all modules must comprehensively cover the entire subject.
+
+## MODULE CREATION INSTRUCTIONS
+For each module, provide:
+
+1. **Title**: A clear, descriptive title reflecting the module's core focus (8-10 words maximum)
+2. **Overview**: A comprehensive explanation of the module's content and scope (100-200 words)
+3. **Primary Objective**: ONE specific, measurable learning outcome expressed as: "After completing this module, learners will be able to..." (1 sentence)
+4. **Strategic Relevance**: Explain this module's importance in the overall learning journey and how it connects to other modules (2-3 sentences)
+
+## RESPONSE FORMAT
+Structure your response as a complete curriculum outline with sequential, interconnected modules. Number each module clearly and ensure all content follows the specified language and style requirements.
 
 {{format_instructions}}
 '''

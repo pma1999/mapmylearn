@@ -13,65 +13,60 @@ __version__ = "1.0.0"
 # =========================================================================
 
 SUBMODULE_PLANNING_PROMPT = """
-# EXPERT TEACHING ASSISTANT INSTRUCTIONS
+# EXPERT LEARNING ARCHITECT INSTRUCTIONS
 
-Your task is to break down a learning module into logical submodules that provide deep, comprehensive coverage.
+As an expert in educational microstructure design, your task is to decompose a course module into focused, sequential submodules that collectively provide comprehensive coverage while maintaining conceptual atomicity.
 
-## MODULE INFORMATION
-Title: {module_title}
-Description: {module_description}
+## MODULE CONTEXT
+- **Module Title**: {module_title}
+- **Module Description**: {module_description}
+- **Course Topic**: "{user_topic}"
+- **Course Structure**: {learning_path_context}
 
-This module is part of a course about "{user_topic}".
-
-## CONTEXT
-{learning_path_context}
-
-## STRUCTURAL RESEARCH INSIGHTS
-Based on web searches about how to structure the topic "{module_title}", here are some insights:
+## STRUCTURAL RESEARCH
+Based on web searches about structuring "{module_title}":
 {planning_search_context}
----
 
-## LANGUAGE INSTRUCTIONS
-Generate all content (titles, descriptions, explanations) in {language}.
+## REQUIREMENTS
+- **Language**: Generate all content in {language}
+- **Quantity**: Create 3-5 distinct submodules
+- **Atomicity**: Each submodule must focus on ONE specific concept/skill
 
-## SUBMODULE PLANNING PRINCIPLES
+## DESIGN PRINCIPLES
+1. **Search-Optimized Atomicity**: Each submodule must address a single, distinct concept that would yield specific, relevant search results.
 
-### A) Progressive Depth Development
-- First submodule must establish fundamental concepts for this module
-- Each subsequent submodule builds depth systematically
-- Technical complexity increases progressively
-- Final submodules should reach deep understanding of this module's focus
+2. **Progressive Mastery Path**:
+   - Begin with fundamental concepts essential for this module
+   - Gradually increase complexity and depth
+   - End with advanced application or integration
 
-### B) Narrative and Conceptual Flow
-- Submodules should flow naturally like chapters in a story
-- Each submodule must have ONE clear conceptual focus
-- Ensure conceptual continuity between submodules
-- Create a narrative arc that builds understanding
+3. **Conceptual Narrative Flow**:
+   - Each submodule must build directly on knowledge from previous submodules
+   - Create clear conceptual dependencies between successive submodules
+   - Ensure smooth transitions between adjacent topics
 
-### C) Exhaustive Coverage
-- Together, submodules must cover ALL aspects of the module's topic
-- Each submodule should be thorough within its focused scope
-- Ensure no critical components or concepts are missed
-- Provide both breadth and depth through careful submodule design
+4. **Comprehensive Coverage**:
+   - The submodules must collectively cover ALL aspects of the module
+   - Eliminate critical knowledge gaps
+   - Balance breadth and depth appropriately
 
-## INSTRUCTIONS & REQUIREMENTS
-**Critically evaluate the STRUCTURAL RESEARCH INSIGHTS provided above.** Use these insights, along with the module description and overall path context, to inform your submodule plan.
+## ANALYTICAL PROCESS
+1. First, analyze the research insights to identify standard topic divisions and approaches
+2. Map the conceptual dependencies within the module topic
+3. Determine optimal sequencing for progressive learning
+4. Identify distinct, searchable concepts for each submodule
 
-Create 3-5 logical submodules that:
-1. Cover different aspects of the module topic, informed by common structures found in the research.
-2. Build upon each other in a narrative sequence.
-3. Are comprehensive yet focused.
-4. Together completely fulfill the module's description.
+## SUBMODULE SPECIFICATION
+For each submodule, provide:
 
-For each submodule provide:
-1. A clear, descriptive title reflecting its place in the structure.
-2. A detailed description explaining what this submodule will cover.
-3. The core concept this submodule focuses on.
-4. Clear learning objectives.
-5. Key components to be covered.
-6. The depth level (basic, intermediate, advanced, or expert).
+1. **Title**: Clear, concept-focused title (searchable keyword phrase)
+2. **Description**: Detailed explanation of submodule content and boundaries (50-100 words)
+3. **Core Concept**: The ONE central idea/skill this submodule focuses on (1 sentence)
+4. **Learning Objectives**: 2-3 specific, measurable outcomes
+5. **Key Components**: 3-5 essential elements/topics covered
+6. **Depth Level**: Specify as Basic, Intermediate, Advanced, or Expert
 
-Ensure the submodules create a complete, cohesive learning experience for this module, leveraging insights from the structural research.
+Ensure each submodule has clear conceptual boundaries and could stand alone as a searchable learning unit.
 
 {format_instructions}
 """
