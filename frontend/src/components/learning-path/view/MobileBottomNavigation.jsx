@@ -50,9 +50,9 @@ const MobileBottomNavigation = ({
             color="primary"
             aria-label="open module navigation"
             onClick={onOpenMobileNav} 
-            size="large"
+            sx={{ p: { xs: 0.75, sm: 1 } }}
           >
-            <MenuIcon />
+            <MenuIcon sx={{ fontSize: { xs: '1.4rem', sm: '1.6rem' } }} />
           </IconButton>
         </Tooltip>
 
@@ -63,9 +63,9 @@ const MobileBottomNavigation = ({
               aria-label="previous submodule"
               onClick={() => onNavigate('prev')}
               disabled={isFirstSubmodule}
-              size="large"
+              sx={{ p: { xs: 0.75, sm: 1 } }}
             >
-              <NavigateBeforeIcon />
+              <NavigateBeforeIcon sx={{ fontSize: { xs: '1.4rem', sm: '1.6rem' } }} />
             </IconButton>
           </span>
         </Tooltip>
@@ -79,21 +79,34 @@ const MobileBottomNavigation = ({
           size="small"
           sx={{ 
             flexShrink: 1, 
-            minWidth: 0, 
+            minWidth: 0,
+            overflowX: 'auto',
+            whiteSpace: 'nowrap',
+            '&::-webkit-scrollbar': {
+              display: 'none',
+            },
+            scrollbarWidth: 'none',
             '& .MuiToggleButtonGroup-grouped': { 
-               mx: 0.25, 
+               mx: { xs: 0.15, sm: 0.2 },
                border: 0,
                '&.Mui-disabled': { border: 0 },
-               '&:not(:first-of-type)': { borderRadius: '50%', marginLeft: '2px' },
-               '&:first-of-type': { borderRadius: '50%', marginLeft: '2px' }
+               '&:not(:first-of-type)': { borderRadius: '50%', marginLeft: { xs: '2px', sm: '2px'} },
+               '&:first-of-type': { borderRadius: '50%', marginLeft: { xs: '2px', sm: '2px'} }
             },
-            mx: { xs: 0, sm: 0.5 },
+            mx: { xs: 0.1, sm: 0.25 },
           }}
         >
           {availableTabs.map((tab) => (
             <Tooltip key={tab.index} title={tab.tooltip || tab.label} arrow>
-              <ToggleButton value={tab.index} aria-label={tab.label} sx={{ borderRadius: '50%', p: 1 }}>
-                {React.cloneElement(tab.icon, { fontSize: 'medium' })} 
+              <ToggleButton 
+                value={tab.index} 
+                aria-label={tab.label} 
+                sx={{ 
+                  borderRadius: '50%', 
+                  p: { xs: 0.8, sm: 1 }
+                }}
+              >
+                {React.cloneElement(tab.icon, { sx: { fontSize: { xs: '1.1rem', sm: '1.2rem' } } })} 
               </ToggleButton>
             </Tooltip>
           ))}
@@ -106,9 +119,9 @@ const MobileBottomNavigation = ({
               aria-label="next submodule"
               onClick={() => onNavigate('next')}
               disabled={isLastSubmodule}
-              size="large"
+              sx={{ p: { xs: 0.75, sm: 1 } }}
             >
-              <NavigateNextIcon />
+              <NavigateNextIcon sx={{ fontSize: { xs: '1.4rem', sm: '1.6rem' } }} />
             </IconButton>
           </span>
         </Tooltip>

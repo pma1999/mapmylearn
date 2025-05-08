@@ -22,6 +22,19 @@ import { motion } from 'framer-motion';
 // Import the placeholder component
 import PlaceholderContent from './PlaceholderContent';
 
+// Helper function to validate URLs
+const isValidHttpUrl = (string) => {
+  if (!string) return false; // Handle null or empty strings
+  let url;
+  try {
+    url = new URL(string);
+  } catch (_) {
+    return false; // Invalid URL format
+  }
+  // Allow only http and https protocols for external resources
+  return url.protocol === "http:" || url.protocol === "https:";
+};
+
 /**
  * Reusable component for displaying lists of resources
  * 
@@ -131,51 +144,58 @@ const ResourceList = ({
             overflow: 'hidden'
           }}
         >
-          {resources.map((resource, index) => (
-            <React.Fragment key={index}>
-              <motion.div variants={itemVariants}>
-                <ListItem 
-                  button 
-                  component={resource.url ? "a" : "div"}
-                  href={resource.url}
-                  target={resource.url ? "_blank" : undefined}
-                  rel={resource.url ? "noopener noreferrer" : undefined}
-                  sx={{ 
-                    py: 1.5,
-                    px: 2,
-                    '&:hover': {
-                      bgcolor: alpha(theme.palette.primary.main, 0.05)
-                    }
-                  }}
-                >
-                  <ListItemIcon sx={{ minWidth: 40 }}>
-                    {getResourceIcon(resource.type)}
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary={
-                      <Typography variant="body1" fontWeight={500}>
-                        {resource.title}
-                      </Typography>
-                    }
-                    secondary={resource.description}
-                    primaryTypographyProps={{ 
-                      color: 'textPrimary',
-                      variant: 'subtitle2'
+          {resources.map((resource, index) => {
+            // Validate URL before using it
+            const isUrlValid = isValidHttpUrl(resource.url);
+            const safeUrl = isUrlValid ? resource.url : undefined; // Use undefined if invalid
+            const componentType = safeUrl ? "a" : "div"; // Render as 'a' only if URL is valid
+            
+            return (
+              <React.Fragment key={index}>
+                <motion.div variants={itemVariants}>
+                  <ListItem 
+                    button 
+                    component={componentType}
+                    href={safeUrl}
+                    target={safeUrl ? "_blank" : undefined}
+                    rel={safeUrl ? "noopener noreferrer" : undefined}
+                    sx={{ 
+                      py: 1.5,
+                      px: 2,
+                      '&:hover': {
+                        bgcolor: alpha(theme.palette.primary.main, 0.05)
+                      }
                     }}
-                    secondaryTypographyProps={{ 
-                      color: 'textSecondary',
-                      variant: 'body2',
-                      sx: { mt: 0.5 }
-                    }}
-                  />
-                </ListItem>
-              </motion.div>
-              
-              {dividers && index < resources.length - 1 && (
-                <Divider component="li" />
-              )}
-            </React.Fragment>
-          ))}
+                  >
+                    <ListItemIcon sx={{ minWidth: 40 }}>
+                      {getResourceIcon(resource.type)}
+                    </ListItemIcon>
+                    <ListItemText 
+                      primary={
+                        <Typography variant="body1" fontWeight={500}>
+                          {resource.title}
+                        </Typography>
+                      }
+                      secondary={resource.description}
+                      primaryTypographyProps={{ 
+                        color: 'textPrimary',
+                        variant: 'subtitle2'
+                      }}
+                      secondaryTypographyProps={{ 
+                        color: 'textSecondary',
+                        variant: 'body2',
+                        sx: { mt: 0.5 }
+                      }}
+                    />
+                  </ListItem>
+                </motion.div>
+                
+                {dividers && index < resources.length - 1 && (
+                  <Divider component="li" />
+                )}
+              </React.Fragment>
+            );
+          })}
         </List>
       </motion.div>
     </Box>

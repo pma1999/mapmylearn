@@ -5,7 +5,7 @@ module.exports = function(app) {
   const csp = [
     "default-src 'self'",
     "script-src 'self' https://js.stripe.com https://va.vercel-scripts.com",
-    "style-src 'self' https://fonts.googleapis.com https://cdn.goin.cloud",
+    "style-src 'self' https://fonts.googleapis.com https://cdn.goin.cloud 'unsafe-inline'",
     "img-src 'self' data: https: http:",
     "font-src 'self' https://fonts.gstatic.com https://cdn.goin.cloud",
     "connect-src 'self' https://web-production-62f88.up.railway.app http://localhost:8000 https://api.stripe.com",

@@ -19,6 +19,19 @@ import XIcon from '@mui/icons-material/X';
 import EmailIcon from '@mui/icons-material/Email';
 import Logo from './shared/Logo';
 
+// Helper function to validate URLs (allows http, https, mailto)
+const isValidLinkUrl = (string) => {
+  if (!string) return false;
+  let url;
+  try {
+    url = new URL(string);
+  } catch (_) {
+    return false; 
+  }
+  // Allow http, https, and mailto protocols
+  return url.protocol === "http:" || url.protocol === "https:" || url.protocol === "mailto:";
+};
+
 function Footer() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -147,6 +160,7 @@ function Footer() {
                   <IconButton
                     aria-label={`Visit our ${link.label} page`}
                     size="medium"
+                    href={isValidLinkUrl(link.url) ? link.url : undefined}
                     sx={{
                       mr: 1,
                       color: 'text.secondary',
@@ -158,7 +172,6 @@ function Footer() {
                         color: 'primary.main',
                       },
                     }}
-                    href={link.url}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
