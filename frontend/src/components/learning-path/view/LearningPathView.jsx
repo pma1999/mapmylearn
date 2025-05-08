@@ -748,7 +748,19 @@ const LearningPathView = ({ source }) => {
   // Success state - Render Focus Flow Layout
   return (
     // Use theme background implicitly via CssBaseline
-    <Container maxWidth="xl" sx={{ pt: { xs: 2, md: 3 }, pb: { xs: theme.spacing(8), md: 4 }, display: 'flex', flexDirection: 'column', flexGrow: 1 }}> 
+    <Container 
+      maxWidth="xl" 
+      sx={{ 
+        pt: { xs: 2, md: 3 }, 
+        pb: { 
+          xs: `calc(${theme.spacing(8)} + env(safe-area-inset-bottom, 0px))`,
+          md: theme.spacing(4) 
+        }, 
+        display: 'flex', 
+        flexDirection: 'column', 
+        flexGrow: 1 
+      }}
+    > 
       {/* Render the dismissible alert */}
       {showFirstViewAlert && (
         <Alert 

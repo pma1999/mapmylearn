@@ -38,7 +38,7 @@ const MobileBottomNavigation = ({
       color="inherit"
       sx={{ 
         top: 'auto', 
-        bottom: 0, 
+        bottom: 'calc(0px + env(safe-area-inset-bottom, 0px))',
         borderTop: (theme) => `1px solid ${theme.palette.divider}`,
         boxShadow: 'none',
       }}
@@ -52,7 +52,7 @@ const MobileBottomNavigation = ({
             onClick={onOpenMobileNav} 
             sx={{ p: { xs: 0.75, sm: 1 } }}
           >
-            <MenuIcon sx={{ fontSize: { xs: '1.4rem', sm: '1.6rem' } }} />
+            <MenuIcon sx={{ fontSize: { xs: '1.4rem', sm: '1.75rem' } }} />
           </IconButton>
         </Tooltip>
 
@@ -65,7 +65,7 @@ const MobileBottomNavigation = ({
               disabled={isFirstSubmodule}
               sx={{ p: { xs: 0.75, sm: 1 } }}
             >
-              <NavigateBeforeIcon sx={{ fontSize: { xs: '1.4rem', sm: '1.6rem' } }} />
+              <NavigateBeforeIcon sx={{ fontSize: { xs: '1.4rem', sm: '1.75rem' } }} />
             </IconButton>
           </span>
         </Tooltip>
@@ -106,7 +106,7 @@ const MobileBottomNavigation = ({
                   p: { xs: 0.8, sm: 1 }
                 }}
               >
-                {React.cloneElement(tab.icon, { sx: { fontSize: { xs: '1.1rem', sm: '1.2rem' } } })} 
+                {React.cloneElement(tab.icon, { sx: { fontSize: { xs: '1.1rem', sm: '1.5rem' } } })} 
               </ToggleButton>
             </Tooltip>
           ))}
@@ -121,7 +121,7 @@ const MobileBottomNavigation = ({
               disabled={isLastSubmodule}
               sx={{ p: { xs: 0.75, sm: 1 } }}
             >
-              <NavigateNextIcon sx={{ fontSize: { xs: '1.4rem', sm: '1.6rem' } }} />
+              <NavigateNextIcon sx={{ fontSize: { xs: '1.4rem', sm: '1.75rem' } }} />
             </IconButton>
           </span>
         </Tooltip>
