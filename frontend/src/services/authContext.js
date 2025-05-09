@@ -73,54 +73,76 @@ export const AuthProvider = ({ children }) => {
   
   // Logout function
   const logout = async () => {
+    if (isLoggingOut) {
+      console.log('Logout already in progress, skipping redundant call.');
+      return;
+    }
     setIsLoggingOut(true);
     console.log('Logging out user...');
+
     if (tokenRefreshTimer) {
       clearTimeout(tokenRefreshTimer);
       setTokenRefreshTimer(null);
     }
-    setUser(null);
-    setError(null); // Or consider setError('session_expired') or similar
-    api.clearAuthToken();
-    localStorage.removeItem('auth');
-    // Also clear the welcome flag on logout?
-    // localStorage.removeItem(WELCOME_FLAG_KEY); // Optional: uncomment to show welcome again on next login
-    setShowWelcomeModal(false); // Ensure modal is hidden on logout
-    refreshPromise.current = null; // Clear any pending refresh promise
-    setRefreshInProgress(false); // Ensure refresh flag is reset
-    refreshAttempts.current = 0; // Reset attempts on logout
-    
+    refreshPromise.current = null; // Clear any pending refresh promise immediately
+
+    // All other state updates and API calls will be in a try/finally
     try {
-      // Inform the backend about logout (optional, but good practice)
-      await api.logout(); 
-    } catch (err) {
-      console.warn('Logout API call failed (might be expected if already logged out):', err);
+      setUser(null);
+      // setError(null); // setError should be called based on actual errors, not generically on logout.
+                      // If a session expiration message is desired, it should be set by the caller or a specific event.
+      api.clearAuthToken();
+      localStorage.removeItem('auth');
+      // localStorage.removeItem(WELCOME_FLAG_KEY); // Optional: uncomment to show welcome again on next login
+      setShowWelcomeModal(false); // Ensure modal is hidden on logout
+      setRefreshInProgress(false); // Ensure refresh flag is reset
+      refreshAttempts.current = 0; // Reset attempts on logout
+      
+      try {
+        // Inform the backend about logout (optional, but good practice)
+        await api.logout(); 
+      } catch (err) {
+        // Log non-critical API logout failure, but don't let it stop the client-side logout.
+        console.warn('Logout API call failed (might be expected if token is already invalid or server unavailable):', err);
+      }
+      
+      // Navigation is handled by ProtectedRoute via state change
+    } finally {
+      // This ensures that isLoggingOut is set to false even if an error occurs above (e.g., in api.logout())
+      // though most critical state clearing is done before await.
+      setIsLoggingOut(false); 
     }
-    
-    // Removed window.location.replace - Navigation is now handled by ProtectedRoute via state change
-    setIsLoggingOut(false); // Reset logout flag after completion
   };
 
   // Unified and Robust Token Refresh Function
   const refreshToken = async () => {
+    if (isLoggingOut) {
+      console.warn('Token refresh aborted: Logout is in progress.');
+      return Promise.reject(new Error('Logout in progress, refresh aborted'));
+    }
+
     // If a refresh is already in progress, return the existing promise
     if (refreshInProgress && refreshPromise.current) {
       console.log('Refresh already in progress, returning existing promise.');
       return refreshPromise.current;
     }
 
-    // Prevent multiple simultaneous refresh attempts
-    if (refreshInProgress) {
-      console.log('Refresh already in progress but promise missing, skipping.');
-      // Avoid returning undefined, maybe return a rejected promise?
-      return Promise.reject(new Error("Refresh conflict")); 
-    }
-
     setRefreshInProgress(true);
-    refreshAttempts.current = 0; // Reset attempts for a new refresh sequence
+    // refreshAttempts.current = 0; // Reset attempts for a new refresh sequence. Moved into executeRefresh start.
     console.log('Starting token refresh sequence.');
 
     const executeRefresh = async (attempt = 1) => {
+      if (attempt === 1) { // Reset attempts only at the beginning of a new sequence
+        refreshAttempts.current = 0;
+      }
+      refreshAttempts.current = attempt; // Keep track of current attempt for logging
+
+      if (isLoggingOut) {
+        console.warn('Token refresh attempt aborted mid-sequence: Logout is in progress.');
+        setRefreshInProgress(false); // Clean up flag
+        throw new Error('Logout in progress, refresh attempt cancelled');
+      }
+      
       console.log(`Attempting token refresh (Attempt ${attempt}/${MAX_REFRESH_ATTEMPTS})`);
       try {
         const response = await api.refreshAuthToken();
@@ -137,13 +159,19 @@ export const AuthProvider = ({ children }) => {
         
         // Check if it's an auth error (e.g., invalid refresh token) or max attempts reached
         if (err.response?.status === 401 || attempt >= MAX_REFRESH_ATTEMPTS) {
-          console.warn(`Refresh failed permanently (status ${err.response?.status}) or max attempts reached. Logging out.`);
-          // Call logout (which now only updates state)
-          await logout(); 
+          if (isLoggingOut) {
+            console.warn('Refresh failed likely due to an ongoing logout. Aborting this refresh path and not calling logout again.');
+            // Do not call logout() again if one is already in progress.
+          } else {
+            console.warn(`Refresh failed permanently (status ${err.response?.status}) or max attempts reached. Logging out.`);
+            // Call logout (which now only updates state and has its own guards)
+            await logout(); 
+          }
+          // Common cleanup for permanent failure path
           setRefreshInProgress(false); 
           refreshPromise.current = null; // Clear the promise on failure
           // Throw the specific error to signal permanent failure upstream
-          throw new Error("Token refresh failed permanently."); 
+          throw new Error("Token refresh failed permanently or due to logout."); 
         } else {
           // Schedule retry with exponential backoff
           const backoffTime = Math.pow(2, attempt) * 1000; // Exponential backoff (1s, 2s, 4s...)
@@ -182,7 +210,9 @@ export const AuthProvider = ({ children }) => {
   // Initialize auth state and trigger migration check
   const initAuth = async () => {
     try {
-      setLoading(true);
+      // setLoading(true); // setLoading(true) is already called by the caller of initAuth in some cases or at the start of AuthProvider
+      // Ensure loading is true at the start of this specific process
+      setLoading(true); 
       setError(null); // Clear errors on init
       const authData = localStorage.getItem('auth');
       let isAuthenticated = false; // Track if user is authenticated after init
@@ -201,23 +231,20 @@ export const AuthProvider = ({ children }) => {
               console.log("Silent refresh successful during init.");
               isAuthenticated = true; // User is authenticated after successful refresh
               authUpdatedDuringInit = true; // updateAuthState called in refreshToken
-              // Ensure loading is false only after *successful* refresh or if token was valid
-              setLoading(false); 
+              // setLoading(false); // setLoading will be handled by the finally block of initAuth
             } catch (refreshError) {
               // Check if it's the specific error from refreshToken failure
-              if (refreshError.message === "Token refresh failed permanently.") {
-                console.error("Silent refresh failed permanently during init (logout state set):", refreshError.message);
-                // Logout state is already set by refreshToken calling logout()
+              if (refreshError.message === "Token refresh failed permanently." || refreshError.message === "Token refresh failed permanently or due to logout." || refreshError.message === "Logout in progress, refresh aborted") {
+                console.error("Silent refresh failed permanently or due to logout during init:", refreshError.message);
+                // Logout state is already set by refreshToken calling logout() or refresh being aborted
                 // We just need to ensure loading is false and stop further init steps
-                setLoading(false);
-                return; // Stop initialization here, user is logged out
+                // setLoading(false); // Handled by finally
+                return; // Stop initialization here, user is logged out or logout is in progress
               } else {
                 // Unexpected error during silent refresh attempt
                 console.error("Unexpected error during silent refresh:", refreshError);
                 setError("Failed to initialize session."); // Set a generic error
-                setLoading(false);
-                // Consider if logout is appropriate here, or just show error
-                // For now, just stop init and let ProtectedRoute handle !isAuthenticated
+                // setLoading(false); // Moved to a finally block
                 return; 
                 // Optionally re-throw for higher-level error boundary: throw refreshError;
               }
@@ -228,18 +255,18 @@ export const AuthProvider = ({ children }) => {
             isAuthenticated = true; // User is authenticated with existing token
             authUpdatedDuringInit = true; // updateAuthState called here
             fetchUserCredits(); // Assuming this is defined later
-            setLoading(false); // Set loading false if token was valid
+            // setLoading(false); // Set loading false if token was valid
           }
         } else {
            console.log("Stored auth data incomplete, clearing.");
            // Logout ensures state is cleared properly
            await logout(); 
-           setLoading(false); 
+           // setLoading(false); 
         }
       } else {
          console.log("No stored auth data found.");
          setUser(null); 
-         setLoading(false); // No auth data, loading complete
+         // setLoading(false); // No auth data, loading complete
       }
       
       // If user is authenticated but updateAuthState wasn't called during *this* init run
@@ -254,7 +281,7 @@ export const AuthProvider = ({ children }) => {
       // --- Automatic Local History Migration --- 
       // REMOVED MIGRATION BLOCK
       // Ensure loading is false at the end of the process if not already set
-      setLoading(false); 
+      // setLoading(false); // Moved to a finally block
     } catch (err) {
       // Catch any unexpected errors during the broader init process (e.g., JSON parse)
       console.error("Critical error during auth initialization:", err);
@@ -262,6 +289,9 @@ export const AuthProvider = ({ children }) => {
       setUser(null); // Ensure user is logged out
       api.clearAuthToken();
       localStorage.removeItem('auth');
+      // setLoading(false); // Moved to a finally block
+    } finally {
+      // Always set loading to false at the end of initialization, regardless of path.
       setLoading(false);
     }
   };
@@ -312,9 +342,9 @@ export const AuthProvider = ({ children }) => {
         if (!e.newValue) {
           // Auth was cleared in another tab - logout here too
           console.log("Auth cleared elsewhere. Logging out this tab.");
-          if (user) { // Only logout if currently logged in this tab
+          // if (user) { // Only logout if currently logged in this tab -- logout() itself now handles if already logging out.
              logout();
-          }
+          // }
         } else {
            // Auth was updated in another tab - re-initialize this tab's state from storage
            console.log("Auth updated elsewhere. Re-initializing this tab.");
@@ -345,13 +375,26 @@ export const AuthProvider = ({ children }) => {
       clearTimeout(tokenRefreshTimer);
     }
 
-     // Calculate time until token is considered "expiring" based on our check
-    const bufferTimeSeconds = 60; // Match the buffer in isTokenExpiredOrExpiring
+    // Calculate time until token is considered "expiring" based on our check
+    // const bufferTimeSeconds = 60; // Match the buffer in isTokenExpiredOrExpiring
+    // Reduced buffer slightly to ensure refresh attempt starts before token is truly invalid for API calls.
+    // The isTokenExpiredOrExpiring check still uses 60s for "is it considered expired by UI/logic"
+    // This timer aims to refresh *before* that point.
+    const refreshInitiationBufferSeconds = 90; // Try to refresh 90 seconds before it's "checked" as expired.
+    
     const nowSeconds = Math.floor(Date.now() / 1000);
-    const timeUntilExpiryCheck = (tokenExpiry - bufferTimeSeconds - nowSeconds) * 1000;
+    // Time until we should *start* the refresh process
+    let timeUntilRefreshStart = (tokenExpiry - refreshInitiationBufferSeconds - nowSeconds) * 1000;
+
 
     // Ensure refresh time is positive and has a minimum delay to avoid loops
-    const safeRefreshTime = Math.max(timeUntilExpiryCheck, 10000); // At least 10 seconds
+    // If calculated time is negative (meaning we are already past the ideal refresh start time), refresh soon.
+    if (timeUntilRefreshStart <= 0) {
+        console.warn(`Token is already within the refresh initiation window (or past it). Scheduling refresh very soon.`);
+        timeUntilRefreshStart = 5000; // Refresh in 5 seconds if already "late"
+    }
+    
+    const safeRefreshTime = Math.max(timeUntilRefreshStart, 10000); // At least 10 seconds from now in any case.
 
     console.log(`Scheduling next token refresh check in ${safeRefreshTime / 1000} seconds`);
     
@@ -484,7 +527,7 @@ export const AuthProvider = ({ children }) => {
     user,
     loading,
     error,
-    isAuthenticated: !!user && !loading, // More accurate isAuthenticated check
+    isAuthenticated: !!user && !loading && !isLoggingOut, // Added !isLoggingOut
     isLoggingOut,
     login,
     logout,

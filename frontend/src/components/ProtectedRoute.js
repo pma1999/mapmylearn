@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useRef } from 'react';
 import { Navigate, useLocation } from 'react-router';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { useAuth } from '../services/authContext';
@@ -6,76 +6,14 @@ import { useAuth } from '../services/authContext';
 /**
  * A wrapper component for routes that require authentication.
  * Redirects to login page if user is not authenticated.
- * Handles session rehydration for expired tokens.
+ * Relies on AuthContext for loading and authentication state.
  */
 const ProtectedRoute = ({ children, adminOnly = false }) => {
-  const { isAuthenticated, user, loading, initAuth, isLoggingOut } = useAuth();
+  const { isAuthenticated, user, loading, isLoggingOut } = useAuth();
   const location = useLocation();
-  const [authChecked, setAuthChecked] = useState(false);
-  const [isRehydrating, setIsRehydrating] = useState(false);
-  const [rehydrationAttempted, setRehydrationAttempted] = useState(false);
-  const isMountedRef = useRef(true);
 
-  // Effect to handle session rehydration
-  useEffect(() => {
-    // Set mount status on mount
-    isMountedRef.current = true;
-
-    const checkAndRehydrateSession = async () => {
-      // Skip rehydration if logout is in progress
-      if (isLoggingOut) { 
-        console.log('Logout in progress, skipping rehydration check.');
-        // Ensure authChecked is true if we skip, otherwise loading might persist
-        if (isMountedRef.current) {
-          setAuthChecked(true); 
-        }
-        return; 
-      }
-
-      // Only attempt rehydration if not authenticated and not already attempted
-      // Also ensure component is still mounted before starting async operation
-      if (!isAuthenticated && !rehydrationAttempted && !loading && isMountedRef.current) {
-        try {
-          console.log('Attempting to rehydrate session');
-          // Check mount status before setting state
-          if (isMountedRef.current) setIsRehydrating(true); 
-          
-          // Force a re-initialization of auth state
-          await initAuth();
-          
-          // Mark rehydration as attempted regardless of outcome
-          // Check mount status before setting state
-          if (isMountedRef.current) setRehydrationAttempted(true); 
-
-        } catch (err) {
-          // Handle errors potentially thrown by initAuth (other than the caught refresh error)
-          console.error('Session rehydration failed in ProtectedRoute:', err);
-          // Potentially set an error state here if needed
-        } finally {
-          // Check mount status before setting state in finally block
-          if (isMountedRef.current) {
-            setIsRehydrating(false);
-            setAuthChecked(true);
-          }
-        }
-      } else if (!authChecked && isMountedRef.current) {
-        // If no rehydration needed, mark auth as checked (only if mounted)
-        setAuthChecked(true);
-      }
-    };
-
-    checkAndRehydrateSession();
-
-    // Cleanup function: Set mount status to false when component unmounts
-    return () => {
-      isMountedRef.current = false;
-    };
-    // Dependencies: Ensure all necessary dependencies are included.
-    // initAuth is a stable function from context, but including it follows linting rules.
-  }, [isAuthenticated, rehydrationAttempted, loading, initAuth, authChecked, isLoggingOut]);
-
-  // Show loading spinner while checking authentication or rehydrating
-  if (loading || isRehydrating) {
+  // Show loading spinner while AuthContext is initializing or a logout is actively processing.
+  if (loading) {
     return (
       <Box sx={{ 
         display: 'flex', 
@@ -86,24 +24,29 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
       }}>
         <CircularProgress />
         <Typography variant="body2" sx={{ mt: 2 }}>
-          {isRehydrating ? 'Restoring your session...' : 'Verifying authentication...'}
+          Verifying authentication...
         </Typography>
       </Box>
     );
   }
 
-  // After rehydration attempt, if still not authenticated, redirect to login
-  if (!isAuthenticated && authChecked) {
+  // After AuthContext is done loading (loading is false):
+  // If a logout is in progress, we might want to show a specific message or rely on isAuthenticated being false.
+  // For simplicity, if isLoggingOut is true, isAuthenticated should also be false, leading to login redirect.
+  if (!isAuthenticated) { 
+    // If isLoggingOut is true, the user is effectively not authenticated for accessing protected routes.
+    // The redirect to login is appropriate.
+    console.log('ProtectedRoute: Not authenticated, redirecting to login.', { isAuthenticated, loading, isLoggingOut, user: !!user });
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   // Check admin access if required
   if (adminOnly && !user?.is_admin) {
-    // Redirect to home if not an admin but trying to access admin-only route
+    console.log('ProtectedRoute: Admin access required, but user is not admin. Redirecting.');
     return <Navigate to="/" replace />;
   }
 
-  // Render the protected content if authenticated
+  // Render the protected content if authenticated (and admin check passes if applicable)
   return children;
 };
 

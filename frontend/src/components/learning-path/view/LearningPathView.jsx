@@ -31,7 +31,7 @@ import LoadingState from './LoadingState';
 import ErrorState from './ErrorState';
 import SaveDialog from './SaveDialog';
 
-// Import the new ResourcesSection component instead of PlaceholderContent
+// Import the new ResourcesSection component
 import ResourcesSection from '../../shared/ResourcesSection';
 
 // Import the new layout components
@@ -94,6 +94,9 @@ const LearningPathView = ({ source }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
+  // --- NEW: State for ContentPanel display type ---
+  const [contentPanelDisplayType, setContentPanelDisplayType] = useState('submodule'); // 'submodule' or 'module_resources'
+
   // Local state for tracking if details (tags/favorites) have been set via dialog
   const [localDetailsHaveBeenSet, setLocalDetailsHaveBeenSet] = useState(false);
   const [localEntryId, setLocalEntryId] = useState(null);
@@ -154,11 +157,32 @@ const LearningPathView = ({ source }) => {
   const relevantShareIdForHeader = isPublicView ? shareIdFromParams : loadedShareId;
   // --- End NEW ---
 
+  // --- NEW: Callback to select a submodule and update display type ---
+  const selectSubmodule = useCallback((modIdx, subIdx) => {
+    setActiveModuleIndex(modIdx);
+    setActiveSubmoduleIndex(subIdx);
+    setContentPanelDisplayType('submodule');
+    setActiveTab(0); // Default to content tab
+    if (contentPanelRef.current) {
+      contentPanelRef.current.scrollTop = 0;
+    }
+  }, [setActiveModuleIndex, setActiveSubmoduleIndex, setContentPanelDisplayType, setActiveTab]);
+
+  // --- NEW: Callback to select module resources ---
+  const handleSelectModuleResources = useCallback((moduleIndex) => {
+    setActiveModuleIndex(moduleIndex);
+    setActiveSubmoduleIndex(null); // No specific submodule
+    setContentPanelDisplayType('module_resources');
+    setActiveTab(0); // Reset tab, ContentPanel will adapt
+    if (contentPanelRef.current) {
+      contentPanelRef.current.scrollTop = 0;
+    }
+  }, [setActiveModuleIndex, setActiveSubmoduleIndex, setContentPanelDisplayType, setActiveTab]);
+
+
   // Effect to set initial active module/submodule from last visited or default
   useEffect(() => {
-      // Only run once after the initial load is complete
       if (initialLoadComplete && actualPathData && actualPathData.modules && actualPathData.modules.length > 0) {
-          // Check if last visited indices are valid
           const isValidLastVisited = 
               lastVisitedModuleIdx !== null && lastVisitedModuleIdx >= 0 && lastVisitedModuleIdx < actualPathData.modules.length &&
               lastVisitedSubmoduleIdx !== null && lastVisitedSubmoduleIdx >= 0 && 
@@ -166,35 +190,36 @@ const LearningPathView = ({ source }) => {
 
           if (isValidLastVisited) {
               console.log('Setting initial navigation from last visited:', lastVisitedModuleIdx, lastVisitedSubmoduleIdx);
-              setActiveModuleIndex(lastVisitedModuleIdx);
-              setActiveSubmoduleIndex(lastVisitedSubmoduleIdx);
-          } else if (activeModuleIndex === null) {
-              // Default to first module/submodule if last visited is invalid or not set
+              selectSubmodule(lastVisitedModuleIdx, lastVisitedSubmoduleIdx);
+          } else if (activeModuleIndex === null && activeSubmoduleIndex === null) { // Only if not already set by other means (e.g. tutorial) and nothing is active
               console.log('Setting initial navigation to default (0, 0)');
-              setActiveModuleIndex(0);
-              if (actualPathData.modules[0]?.submodules?.length > 0) {
-                  setActiveSubmoduleIndex(0);
+              const firstModuleSubmodules = actualPathData.modules[0]?.submodules;
+              if (firstModuleSubmodules && firstModuleSubmodules.length > 0) {
+                  selectSubmodule(0, 0);
+              } else if (actualPathData.modules[0]) { // If first module exists but no submodules
+                  setActiveModuleIndex(0);
+                  setActiveSubmoduleIndex(null); 
+                  // Check if module has resources and set display type accordingly
+                  setContentPanelDisplayType(actualPathData.modules[0].resources?.length > 0 ? 'module_resources' : 'submodule');
               }
           }
       } else if (initialLoadComplete && (!actualPathData || !actualPathData.modules || actualPathData.modules.length === 0)) {
           setActiveModuleIndex(null);
           setActiveSubmoduleIndex(null);
+          setContentPanelDisplayType('submodule'); // Reset display type
       }
-  // Run ONLY when initial load completes, or if path data/last visited changes AFTER initial load
-  }, [initialLoadComplete, actualPathData, lastVisitedModuleIdx, lastVisitedSubmoduleIdx]);
+  // Depend on selectSubmodule to avoid stale closures. activeModuleIndex removed to prevent re-running on user navigation.
+  }, [initialLoadComplete, actualPathData, lastVisitedModuleIdx, lastVisitedSubmoduleIdx, selectSubmodule, setActiveModuleIndex, setActiveSubmoduleIndex, setContentPanelDisplayType]);
 
   // Effect to update the last visited position on the backend when navigation changes
   useEffect(() => {
-    // Only run if the path is persisted and navigation indices are valid
-    // --- Disable for public view --- 
-    if (!isPublicView && currentEntryId && activeModuleIndex !== null && activeSubmoduleIndex !== null) {
-      // Debounce or throttle this call if needed, but for now, call directly
+    // Only run if the path is persisted, navigation indices are valid, and we are viewing a submodule
+    if (!isPublicView && currentEntryId && activeModuleIndex !== null && activeSubmoduleIndex !== null && contentPanelDisplayType === 'submodule') {
       console.log(`Updating last visited API: M ${activeModuleIndex}, S ${activeSubmoduleIndex}`);
       apiService.updateLastVisited(currentEntryId, activeModuleIndex, activeSubmoduleIndex)
-        .catch(warn => console.warn("Failed to update last visited position:", warn)); // Log warning on failure
+        .catch(warn => console.warn("Failed to update last visited position:", warn));
     }
-  // Depend on the navigation indices and the persisted ID
-  }, [currentEntryId, activeModuleIndex, activeSubmoduleIndex, isPublicView]);
+  }, [currentEntryId, activeModuleIndex, activeSubmoduleIndex, isPublicView, contentPanelDisplayType]);
 
   // Callback for when save is confirmed in the action hook
   const handleSaveSuccess = useCallback((result) => {
@@ -245,33 +270,28 @@ const LearningPathView = ({ source }) => {
 
   // --- NEW: Handler for Copying Public Path ---
   const handleCopyToHistory = async () => {
-    // Use shareId from params directly as that's what identifies the public path
-    const publicShareId = shareId; // Use shareId from the top-level useParams call
+    const publicShareId = shareId; 
     if (!publicShareId) {
       showNotification('Cannot copy course: Missing share ID.', 'error');
       return;
     }
     if (!isAuthenticated) {
        showNotification('Please log in to save this course to your history.', 'warning');
-       // Optional: navigate('/login?redirect=' + encodeURIComponent(location.pathname));
        return;
     }
 
-    setIsCopying(true); // Set loading state before starting
+    setIsCopying(true); 
     showNotification('Copying course to your history...', 'info');
     try {
       const newPathData = await apiService.copyPublicPath(publicShareId);
       if (newPathData && newPathData.path_id) {
         showNotification('Course successfully copied to your history!', 'success');
-        // Navigate to the new private copy in the user's history
         navigate(`/history/${newPathData.path_id}`); 
       } else {
-        // Should not happen if API returns correctly, but handle defensively
         throw new Error('Copy operation response did not contain a new path ID.');
       }
     } catch (error) {
       console.error("Failed to copy public course:", error);
-      // Check for specific 409 conflict error
       if (error.response?.status === 409) {
           showNotification(error.message || 'You already have a copy of this course.', 'warning');
       } else {
@@ -279,21 +299,18 @@ const LearningPathView = ({ source }) => {
       }
     }
     finally {
-      setIsCopying(false); // Reset loading state regardless of outcome
+      setIsCopying(false); 
     }
   };
 
   // Handler to toggle progress state
   const handleToggleProgress = useCallback(async (modIndex, subIndex) => {
-    // --- Disable for public view --- 
     if (isPublicView) {
       console.warn('Cannot toggle progress in public view.');
       return;
     }
 
     if (!currentEntryId) {
-      console.warn('Cannot toggle progress: Course is not persisted yet.');
-      // Optionally show a notification to save the course first
       showNotification('Please save the course to track progress.', 'warning');
       return;
     }
@@ -302,33 +319,26 @@ const LearningPathView = ({ source }) => {
     const currentCompletionStatus = progressMap[progressKey] || false;
     const newCompletionStatus = !currentCompletionStatus;
 
-    // Optimistic UI Update
     setProgressMap(prevMap => ({
       ...prevMap,
       [progressKey]: newCompletionStatus
     }));
 
-    // API Call
     try {
       await apiService.updateSubmoduleProgress(currentEntryId, modIndex, subIndex, newCompletionStatus);
       console.log(`Progress updated successfully for ${progressKey} to ${newCompletionStatus}`);
-      // Optional: Success notification
-      // showNotification(`Submodule ${modIndex + 1}.${subIndex + 1} marked as ${newCompletionStatus ? 'complete' : 'incomplete'}.`, 'success');
     } catch (error) {
       console.error(`Failed to update progress for ${progressKey}:`, error);
-      // Revert Optimistic Update on error
       setProgressMap(prevMap => ({
         ...prevMap,
-        [progressKey]: currentCompletionStatus // Revert to original state
+        [progressKey]: currentCompletionStatus 
       }));
-      // Show error notification
       showNotification(`Failed to update progress for submodule ${modIndex + 1}.${subIndex + 1}.`, 'error');
     }
   }, [currentEntryId, progressMap, setProgressMap, showNotification, isPublicView]);
 
   // Adjust action handlers
   const handleDownloadJSONAdjusted = () => {
-      // Use the *actualPathData* for JSON download content
       if (!actualPathData) return; 
       try {
           const json = JSON.stringify(actualPathData, null, 2);
@@ -336,7 +346,6 @@ const LearningPathView = ({ source }) => {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          // Use the *topic* from the top-level learningPath state for the filename
           const fileName = topic 
               ? `course_${topic.replace(/\s+/g, '_').substring(0, 30)}.json`
               : 'course.json';
@@ -345,11 +354,9 @@ const LearningPathView = ({ source }) => {
           a.click();
           document.body.removeChild(a);
           URL.revokeObjectURL(url);
-          // Use showNotification from useLearningPathActions if available
           if (showNotification) {
               showNotification('Course downloaded successfully', 'success');
           } else {
-              // Fallback or handle differently if showNotification isn't returned
               console.log('Course downloaded successfully');
           }
       } catch (err) {
@@ -363,15 +370,12 @@ const LearningPathView = ({ source }) => {
   };
 
   const handleDownloadPDFWithUpdate = async () => {
-    // Call original function from hook
-    await handleDownloadPDF(); // Removed state updates based on result
-    // No need to set localDetailsHaveBeenSet or localEntryId here
+    await handleDownloadPDF(); 
   };
 
   // Show dismissible alert on first view of a newly generated path
   useEffect(() => {
     const alertDismissedKey = `mapmylearn_alert_dismissed_${taskId}`;
-    // --- Disable for public view --- 
     if (!isPublicView && !loading && !error && taskId && !isFromHistory && !sessionStorage.getItem(alertDismissedKey)) {
       setShowFirstViewAlert(true);
     }
@@ -385,38 +389,72 @@ const LearningPathView = ({ source }) => {
 
   // Navigation Handler for ContentPanel and MobileBottomNavigation
   const handleNavigation = useCallback((direction) => {
-      if (!actualPathData || activeModuleIndex === null || activeSubmoduleIndex === null) return;
+    if (!actualPathData || !actualPathData.modules || actualPathData.modules.length === 0 || activeModuleIndex === null) {
+        return;
+    }
 
-      const currentModule = actualPathData.modules[activeModuleIndex];
-      const numSubmodules = currentModule?.submodules?.length || 0;
-      const numModules = actualPathData.modules.length;
+    let currentModIndex = activeModuleIndex;
+    let currentSubIdx = activeSubmoduleIndex; // Can be null if coming from module_resources
 
-      if (direction === 'prev') {
-          if (activeSubmoduleIndex > 0) {
-              setActiveSubmoduleIndex(prev => prev - 1);
-          } else if (activeModuleIndex > 0) {
-              const prevModuleIndex = activeModuleIndex - 1;
-              const prevModule = actualPathData.modules[prevModuleIndex];
-              const lastSubmoduleIndex = (prevModule?.submodules?.length || 1) - 1; // Handle modules with 0 submodules gracefully? Needs data structure assumption. Defaulting to 0.
-              setActiveModuleIndex(prevModuleIndex);
-              setActiveSubmoduleIndex(lastSubmoduleIndex >= 0 ? lastSubmoduleIndex : 0); // Ensure non-negative index
-          }
-      } else if (direction === 'next') {
-          if (activeSubmoduleIndex < numSubmodules - 1) {
-              setActiveSubmoduleIndex(prev => prev + 1);
-          } else if (activeModuleIndex < numModules - 1) {
-              const nextModuleIndex = activeModuleIndex + 1;
-              setActiveModuleIndex(nextModuleIndex);
-              setActiveSubmoduleIndex(0); // Go to first submodule of next module
-          }
-      } else if (direction === 'nextModule') {
-          if (activeModuleIndex < numModules - 1) {
-              const nextModuleIndex = activeModuleIndex + 1;
-              setActiveModuleIndex(nextModuleIndex);
-              setActiveSubmoduleIndex(0); // Go to first submodule of next module
-          }
-      }
-  }, [actualPathData, activeModuleIndex, activeSubmoduleIndex, setActiveModuleIndex, setActiveSubmoduleIndex]);
+    const numModules = actualPathData.modules.length;
+    const currentModuleData = actualPathData.modules[currentModIndex];
+    const numSubmodulesInCurrentModule = currentModuleData?.submodules?.length || 0;
+
+    let nextModIndex = currentModIndex;
+    let nextSubIdx = currentSubIdx;
+
+    if (direction === 'prev') {
+        if (currentSubIdx !== null && currentSubIdx > 0) {
+            nextSubIdx = currentSubIdx - 1;
+        } else if (currentSubIdx === null && numSubmodulesInCurrentModule > 0) { // From module_resources, go to last submodule of current module
+            nextSubIdx = numSubmodulesInCurrentModule - 1;
+        } else if (currentModIndex > 0) { // Go to previous module
+            nextModIndex = currentModIndex - 1;
+            const prevModuleData = actualPathData.modules[nextModIndex];
+            nextSubIdx = (prevModuleData?.submodules?.length || 1) - 1;
+            if (nextSubIdx < 0) nextSubIdx = 0; // Ensure non-negative for modules with 0 submodules
+        } else {
+            return; // Already at the very beginning
+        }
+    } else if (direction === 'next') {
+        if (currentSubIdx !== null && currentSubIdx < numSubmodulesInCurrentModule - 1) {
+            nextSubIdx = currentSubIdx + 1;
+        } else if (currentSubIdx === null && numSubmodulesInCurrentModule > 0) { // From module_resources, go to first submodule of current module
+            nextSubIdx = 0;
+        } else if (currentModIndex < numModules - 1) { // Go to next module
+            nextModIndex = currentModIndex + 1;
+            nextSubIdx = 0;
+        } else {
+            return; // Already at the very end
+        }
+    } else if (direction === 'nextModule') {
+        if (currentModIndex < numModules - 1) {
+            nextModIndex = currentModIndex + 1;
+            nextSubIdx = 0;
+        } else {
+            return; // Already at the last module
+        }
+    }
+
+    // Check if the target submodule exists
+    const targetModule = actualPathData.modules[nextModIndex];
+    if (targetModule && targetModule.submodules && targetModule.submodules[nextSubIdx]) {
+        selectSubmodule(nextModIndex, nextSubIdx);
+    } else if (targetModule) { // Target module exists, but submodule doesn't (e.g. module with 0 submodules)
+        // In this case, maybe we should navigate to the module's resources if available?
+        // For now, this will result in ContentPanel showing its placeholder for missing submodule.
+        // Or we can call handleSelectModuleResources if the target module has resources.
+        // This part needs careful consideration of desired UX.
+        // Let's stick to selecting the module and letting ContentPanel decide.
+        setActiveModuleIndex(nextModIndex);
+        setActiveSubmoduleIndex(null); // No valid submodule to select
+        setContentPanelDisplayType('submodule'); // ContentPanel will show placeholder
+        setActiveTab(0);
+        if (contentPanelRef.current) contentPanelRef.current.scrollTop = 0;
+    }
+
+  }, [actualPathData, activeModuleIndex, activeSubmoduleIndex, selectSubmodule, setActiveModuleIndex, setActiveSubmoduleIndex, setContentPanelDisplayType, setActiveTab]);
+
 
   // Mobile Navigation Handlers
   const handleMobileNavToggle = () => {
@@ -428,9 +466,7 @@ const LearningPathView = ({ source }) => {
   };
 
   const handleSubmoduleSelectFromDrawer = (modIndex, subIndex) => {
-     // No need to setActiveModuleIndex/setActiveSubmoduleIndex, 
-     // as the component itself already did that onClick.
-     // Just close the drawer.
+     // selectSubmodule is called by ModuleNavigationColumn's item click
      handleMobileNavClose();
   };
 
@@ -441,19 +477,20 @@ const LearningPathView = ({ source }) => {
                         ? modules[activeModuleIndex]
                         : null;
   const totalSubmodulesInModule = currentModule?.submodules?.length || 0;
-  const currentSubmodule = (currentModule && activeSubmoduleIndex !== null && activeSubmoduleIndex >= 0 && activeSubmoduleIndex < totalSubmodulesInModule)
+  
+  // Current submodule is only valid if displayType is 'submodule'
+  const currentSubmodule = (contentPanelDisplayType === 'submodule' && currentModule && activeSubmoduleIndex !== null && activeSubmoduleIndex >= 0 && activeSubmoduleIndex < totalSubmodulesInModule)
                          ? currentModule.submodules[activeSubmoduleIndex]
                          : null;
 
   const availableTabs = useMemo(() => {
-    if (!currentSubmodule) return [];
+    if (!currentSubmodule) return []; // No tabs if no submodule is active (e.g. viewing module resources)
 
     const hasQuiz = currentSubmodule.quiz_questions && currentSubmodule.quiz_questions.length > 0;
     const hasResources = currentSubmodule.resources && currentSubmodule.resources.length > 0;
 
     let tabIndexCounter = 0;
     const tabs = [
-        // Match the structure expected by MobileBottomNavigation (index, label, icon)
         { index: tabIndexCounter++, label: 'Content', icon: <MenuBookIcon />, tooltip: "View submodule content", dataTut: 'content-panel-tab-content' },
         ...(hasQuiz ? [{ index: tabIndexCounter++, label: 'Quiz', icon: <FitnessCenterIcon />, tooltip: helpTexts.submoduleTabQuiz, dataTut: 'content-panel-tab-quiz' }] : []),
         ...(hasResources ? [{ index: tabIndexCounter++, label: 'Resources', icon: <CollectionsBookmarkIcon />, tooltip: "View submodule resources", dataTut: 'content-panel-tab-resources' }] : []),
@@ -461,29 +498,25 @@ const LearningPathView = ({ source }) => {
         { index: tabIndexCounter++, label: 'Audio', icon: <GraphicEqIcon />, tooltip: helpTexts.submoduleTabAudio(AUDIO_CREDIT_COST), dataTut: 'content-panel-tab-audio' },
     ];
     return tabs;
-  }, [currentSubmodule]);
+  }, [currentSubmodule]); // Depends only on currentSubmodule
 
   // Effect to reset activeTab if it becomes invalid
   useEffect(() => {
-      // Only reset if the current tab index is out of bounds for the *new* set of available tabs
       if (availableTabs.length > 0 && activeTab >= availableTabs.length) {
-          setActiveTab(0); // Reset to the first tab (Content)
+          setActiveTab(0); 
       }
-      // If there are no tabs (e.g., no submodule selected), also reset (though activeTab=0 is fine)
       else if (availableTabs.length === 0 && activeTab !== 0) {
           setActiveTab(0);
       }
-  // Depend on availableTabs array (which depends on currentSubmodule) and the current activeTab index itself.
   }, [availableTabs, activeTab]);
 
   // Effect to check for first visit and start tutorial
   useEffect(() => {
     const tutorialCompleted = localStorage.getItem(TUTORIAL_STORAGE_KEY);
     if (!loading && !tutorialCompleted) {
-      // Delay slightly to allow layout to settle?
       setTimeout(() => setRunTutorial(true), 500); 
     }
-  }, [loading]); // Run only when loading status changes
+  }, [loading]); 
 
   // --- Tutorial Logic ---
   const startTutorial = () => {
@@ -495,21 +528,17 @@ const LearningPathView = ({ source }) => {
     const { action, index, status, type } = data;
 
     if ([EVENTS.STEP_AFTER, EVENTS.TARGET_NOT_FOUND].includes(type)) {
-      // Update the step index
       setTutorialStepIndex(index + (action === ACTIONS.PREV ? -1 : 1));
     } else if ([STATUS.FINISHED, STATUS.SKIPPED].includes(status)) {
-      // Tutorial finished or skipped
       setRunTutorial(false);
       setTutorialStepIndex(0);
       localStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
     }
-
     console.log('Joyride callback:', data);
   };
 
   // Define Tutorial Steps
   const getTutorialSteps = (isMobile) => {
-    // Helper to find tab index by dataTut attribute
     const findTabIndex = (dataTut) => availableTabs.findIndex(t => t.dataTut === dataTut);
 
     const commonSteps = [
@@ -519,13 +548,20 @@ const LearningPathView = ({ source }) => {
         placement: 'bottom',
         disableBeacon: true,
       },
+      // Add step for topic resources if they exist
+      ...(topicResources && topicResources.length > 0 ? [{
+        target: '[data-tut="topic-resources-section"]',
+        content: 'Global resources for the entire course are listed here. You can expand or collapse this section.',
+        placement: 'bottom',
+        disableBeacon: true,
+      }] : []),
     ];
 
     const desktopSteps = [
       ...commonSteps,
       {
         target: '[data-tut="module-navigation-column"]',
-        content: 'On the left, you have the modules. Click a module to see its submodules.',
+        content: 'On the left, you have the modules. Click a module to see its submodules and any module-specific resources.',
         placement: 'right',
         disableBeacon: true,
       },
@@ -534,45 +570,58 @@ const LearningPathView = ({ source }) => {
         content: 'Click here to expand the first module.',
         placement: 'right',
         disableBeacon: true,
-        // Callback to expand the first module before showing next step
-        callback: () => setActiveModuleIndex(0),
+        callback: () => setActiveModuleIndex(0), // Just expand, don't select submodule yet.
       },
-      {
+      // Assuming module 0 has submodules for this step
+      ...(actualPathData?.modules?.[0]?.submodules?.length > 0 ? [{
         target: '[data-tut="submodule-item-0-0"]',
         content: 'Now click the first submodule to view its content.',
         placement: 'right',
         disableBeacon: true,
-        // Callback to select the first submodule
-        callback: () => {
-          setActiveModuleIndex(0);
-          setActiveSubmoduleIndex(0);
+        callback: () => selectSubmodule(0, 0)
+      }] : []),
+      // Assuming module 0 has resources for this step (can be combined or conditional)
+      ...(actualPathData?.modules?.[0]?.resources?.length > 0 ? [{
+        target: '[data-tut="module-resources-item-0"]', // Ensure this data-tut is added in ModuleNavigationColumn
+        content: 'Modules can also have their own resources. Click here to view them.',
+        placement: 'right',
+        disableBeacon: true,
+        callback: () => handleSelectModuleResources(0)
+      }] : []),
+      {
+        target: '[data-tut="content-panel"]',
+        content: 'The main content area shows details for the selected submodule or module resources.',
+        placement: 'left',
+        disableBeacon: true,
+         // Add a delay or ensure submodule is selected before this step if needed
+        preStepCallback: () => { // Ensure a submodule is selected if previous step was module resources
+          if (contentPanelDisplayType === 'module_resources' && actualPathData?.modules?.[0]?.submodules?.length > 0) {
+            selectSubmodule(0,0);
+          }
         }
       },
       {
-        target: '[data-tut="content-panel"]',
-        content: 'The main content area shows details for the selected submodule.',
-        placement: 'left',
-        disableBeacon: true,
-      },
-      {
         target: '[data-tut="content-panel-tabs"]',
-        content: 'Use these tabs to explore different aspects of the submodule.',
+        content: 'If viewing a submodule, use these tabs to explore different aspects of it.',
         placement: 'bottom',
         disableBeacon: true,
+        // Condition: Only show if a submodule is active and tabs are present
+        condition: () => contentPanelDisplayType === 'submodule' && availableTabs.length > 0,
       },
       {
         target: '[data-tut="content-panel-tab-content"]',
         content: 'This is the main learning material for the submodule.',
         placement: 'top',
         disableBeacon: true,
+        condition: () => contentPanelDisplayType === 'submodule' && availableTabs.some(t => t.dataTut === 'content-panel-tab-content'),
         callback: () => setActiveTab(findTabIndex('content-panel-tab-content') ?? 0)
       },
-      // Add steps for other tabs if they exist, using callbacks to switch activeTab
       ...(availableTabs.some(t => t.dataTut === 'content-panel-tab-quiz') ? [{
         target: '[data-tut="content-panel-tab-quiz"]',
         content: 'Test your understanding with a short quiz.',
         placement: 'top',
         disableBeacon: true,
+        condition: () => contentPanelDisplayType === 'submodule',
         callback: () => setActiveTab(findTabIndex('content-panel-tab-quiz'))
       }] : []),
       ...(availableTabs.some(t => t.dataTut === 'content-panel-tab-resources') ? [{
@@ -580,6 +629,7 @@ const LearningPathView = ({ source }) => {
         content: 'Find additional resources like articles or videos here.',
         placement: 'top',
         disableBeacon: true,
+        condition: () => contentPanelDisplayType === 'submodule',
         callback: () => setActiveTab(findTabIndex('content-panel-tab-resources'))
       }] : []),
        {
@@ -587,6 +637,7 @@ const LearningPathView = ({ source }) => {
         content: 'Chat with an AI assistant about this specific submodule.',
         placement: 'top',
         disableBeacon: true,
+        condition: () => contentPanelDisplayType === 'submodule',
         callback: () => setActiveTab(findTabIndex('content-panel-tab-chat'))
       },
        {
@@ -594,6 +645,7 @@ const LearningPathView = ({ source }) => {
         content: 'Generate an audio version of the submodule content (costs credits!).',
         placement: 'top',
         disableBeacon: true,
+        condition: () => contentPanelDisplayType === 'submodule',
         callback: () => setActiveTab(findTabIndex('content-panel-tab-audio'))
       },
       {
@@ -601,25 +653,29 @@ const LearningPathView = ({ source }) => {
         content: 'Once you\'ve finished a submodule, check this box to mark it complete!',
         placement: 'top',
         disableBeacon: true,
-        callback: () => setActiveTab(findTabIndex('content-panel-tab-content') ?? 0) // Switch back to content tab
+        condition: () => contentPanelDisplayType === 'submodule',
+        callback: () => setActiveTab(findTabIndex('content-panel-tab-content') ?? 0) 
       },
       {
         target: '[data-tut="progress-checkbox-0-0"]',
         content: 'You can also mark submodules complete directly in the navigation list.',
         placement: 'right',
         disableBeacon: true,
+        condition: () => actualPathData?.modules?.[0]?.submodules?.length > 0,
       },
       {
         target: '[data-tut="content-panel-prev-button"]',
         content: 'Use these buttons to navigate between submodules...',
         placement: 'bottom',
         disableBeacon: true,
+        condition: () => contentPanelDisplayType === 'submodule',
       },
       {
         target: '[data-tut="content-panel-next-module-button"]',
         content: '...or jump to the next module entirely.',
         placement: 'bottom',
         disableBeacon: true,
+        condition: () => contentPanelDisplayType === 'submodule',
       },
       {
         target: '[data-tut="save-path-button"]',
@@ -642,61 +698,79 @@ const LearningPathView = ({ source }) => {
         content: 'Tap here to open the module navigation drawer.',
         placement: 'top',
         disableBeacon: true,
-        callback: () => setMobileNavOpen(true) // Open drawer for next step
+        callback: () => setMobileNavOpen(true) 
       },
       {
         target: '[data-tut="module-navigation-column"]',
-        content: 'Select modules and submodules here. Tap the first module.',
+        content: 'Select modules, submodules, or module resources here. Tap the first module to expand it.',
         placement: 'right',
-        isFixed: true, // Important for elements inside drawers/modals
+        isFixed: true, 
         disableBeacon: true,
-        callback: () => setActiveModuleIndex(0) // Expand module
+        callback: () => setActiveModuleIndex(0) 
       },
-      {
+      // Assuming module 0 has submodules
+      ...(actualPathData?.modules?.[0]?.submodules?.length > 0 ? [{
         target: '[data-tut="submodule-item-0-0"]',
         content: 'Now tap the first submodule to view it and close the drawer.',
         placement: 'right',
         isFixed: true,
         disableBeacon: true,
-        callback: () => { // Select submodule and close drawer
-          setActiveModuleIndex(0);
-          setActiveSubmoduleIndex(0);
+        callback: () => { 
+          selectSubmodule(0, 0);
           setMobileNavOpen(false);
+        }
+      }] : []),
+      // Assuming module 0 has resources
+      ...(actualPathData?.modules?.[0]?.resources?.length > 0 && !(actualPathData?.modules?.[0]?.submodules?.length > 0) ? [{ // Show if no submodules but has resources
+        target: '[data-tut="module-resources-item-0"]',
+        content: 'This module has resources. Tap to view them and close the drawer.',
+        placement: 'right',
+        isFixed: true,
+        disableBeacon: true,
+        callback: () => {
+          handleSelectModuleResources(0);
+          setMobileNavOpen(false);
+        }
+      }] : []),
+      {
+        target: '[data-tut="content-panel"]',
+        content: 'The main content for the selected item is shown here.',
+        placement: 'top',
+        disableBeacon: true,
+         preStepCallback: () => { 
+          if (contentPanelDisplayType === 'module_resources' && actualPathData?.modules?.[0]?.submodules?.length > 0) {
+            selectSubmodule(0,0);
+          }
         }
       },
       {
-        target: '[data-tut="content-panel"]',
-        content: 'The main content for the selected submodule is shown here.',
-        placement: 'top',
-        disableBeacon: true,
-      },
-      {
         target: '[data-tut="mobile-tab-buttons"]',
-        content: 'Use these icons to switch between Content, Quiz, Resources, Chat, and Audio for this submodule.',
+        content: 'If viewing a submodule, use these icons to switch between Content, Quiz, etc.',
         placement: 'top',
         disableBeacon: true,
+        condition: () => contentPanelDisplayType === 'submodule' && availableTabs.length > 0,
       },
-      // Add steps for mobile tabs if needed, similar to desktop, using setActiveTab callback
-      // ... (example: focus on content tab first)
       {
-        target: '[data-tut="content-panel-tab-content"]',
-        content: 'This is the main learning material.',
+        target: '[data-tut="content-panel-tab-content"]', // This is inside ContentPanel, but for mobile, tabs are at bottom
+        content: 'This is the main learning material (when a submodule is selected).',
         placement: 'top',
         disableBeacon: true,
+        condition: () => contentPanelDisplayType === 'submodule' && availableTabs.some(t => t.dataTut === 'content-panel-tab-content'),
         callback: () => setActiveTab(findTabIndex('content-panel-tab-content') ?? 0)
       },
-      // Add step for mobile progress checkbox (inside content)
       {
         target: '[data-tut="content-panel-progress-checkbox-container"]',
         content: 'Mark the submodule complete here when you\'re done.',
         placement: 'top',
         disableBeacon: true,
+        condition: () => contentPanelDisplayType === 'submodule',
       },
       {
-        target: '[data-tut="mobile-prev-button"]',
+        target: '[data-tut="mobile-prev-button"]', // Actually wraps both prev/next
         content: 'Tap these buttons to navigate to the previous or next submodule.',
         placement: 'top',
         disableBeacon: true,
+        // condition: () => contentPanelDisplayType === 'submodule', // Navigation should work even from module_resources view
       },
        {
         target: '[data-tut="save-path-button"]',
@@ -715,37 +789,33 @@ const LearningPathView = ({ source }) => {
     return isMobile ? mobileSteps : desktopSteps;
   };
 
-  const tutorialSteps = useMemo(() => getTutorialSteps(isMobileLayout), [isMobileLayout, availableTabs, actualPathData]);
+  const tutorialSteps = useMemo(() => getTutorialSteps(isMobileLayout), [isMobileLayout, availableTabs, actualPathData, topicResources, contentPanelDisplayType, selectSubmodule, handleSelectModuleResources, setActiveModuleIndex]);
 
-  // Use `loading` directly from hook
   if (loading) {
     return (
       <LoadingState 
-        topic={learningPath?.topic || sessionStorage.getItem('currentTopic')} // Pass topic from learningPath or session fallback
+        topic={learningPath?.topic || sessionStorage.getItem('currentTopic')} 
       /> 
     );
   }
   
-  // Use `error` directly from hook
   if (error) {
     return (
       <ErrorState 
-        error={error || 'An error occurred'} // Use error object/message
+        error={error || 'An error occurred'} 
         onHomeClick={handleHomeClick}
         onNewLearningPathClick={handleNewLearningPathClick}
       />
     );
   }
   
-  // Success state - Render Focus Flow Layout
   return (
-    // Use theme background implicitly via CssBaseline
     <Container 
       maxWidth="xl" 
       sx={{ 
         pt: { xs: 2, md: 3 }, 
         pb: { 
-          xs: `calc(${theme.spacing(8)} + env(safe-area-inset-bottom, 0px))`,
+          xs: `calc(${theme.spacing(8)} + env(safe-area-inset-bottom, 0px))`, // 8 for bottom nav
           md: theme.spacing(4) 
         }, 
         display: 'flex', 
@@ -753,11 +823,9 @@ const LearningPathView = ({ source }) => {
         flexGrow: 1 
       }}
     > 
-      {/* Render the dismissible alert */}
       {showFirstViewAlert && (
         <Alert 
           severity="info" 
-          // Use theme alert styling
           sx={{ mb: 2, flexShrink: 0 }} 
           onClose={handleDismissFirstViewAlert}
         >
@@ -766,7 +834,6 @@ const LearningPathView = ({ source }) => {
         </Alert>
       )}
 
-      {/* --- NEW: Login/Signup Prompt for Public View --- */}
       {isPublicView && !isAuthenticated && (
         <Alert 
           severity="info" 
@@ -786,70 +853,63 @@ const LearningPathView = ({ source }) => {
           Log in or sign up to save this course, track your progress, and create your own learning journeys.
         </Alert>
       )}
-
-      {/* Use actualPathData for rendering */}
-      {/* Check if learningPath (full object) exists before rendering */} 
+      
       {learningPath && (
         <>
-          {/* Header: Pass mobile nav props */}
-          {/* Use theme spacing */} 
           <Box sx={{ flexShrink: 0, mb: { xs: 2, md: 3 } }}> 
              <LearningPathHeader 
-               topic={topic} // Pass extracted topic (uses final topic after load)
+               topic={topic} 
                detailsHaveBeenSet={localDetailsHaveBeenSet} 
                isPdfReady={isPdfReady} 
                onDownload={handleDownloadJSONAdjusted} 
                onDownloadPDF={handleDownloadPDFWithUpdate}
                onSaveToHistory={handleSaveToHistory} 
                onNewLearningPath={handleNewLearningPathClick}
-               onOpenMobileNav={handleMobileNavToggle} // Pass handler
-               showMobileNavButton={isMobileLayout} // Show button only on mobile layout
+               onOpenMobileNav={handleMobileNavToggle} 
+               showMobileNavButton={isMobileLayout} 
                progressMap={progressMap}
-               actualPathData={actualPathData} // Pass the core path data for progress calculation
-               onStartTutorial={startTutorial} // Pass tutorial trigger
-               isPublicView={isPublicView} // Pass public view status
-               // --- NEW PROPS for Sharing ---
-               isPublic={isPublic} // Pass extracted isPublic (from learningPath)
-               shareId={relevantShareIdForHeader} // Pass the correctly determined shareId
-               entryId={currentEntryId} // Pass the determined entry ID
-               isLoggedIn={isAuthenticated} // Pass login status
-               onTogglePublic={() => handleTogglePublic(currentEntryId, !isPublic)} // Pass bound toggle handler
-               onCopyShareLink={handleCopyShareLink} // Pass the raw function reference
-               onCopyToHistory={handleCopyToHistory} // Pass the new handler for copying
-               isCopying={isCopying} // Pass the loading state
+               actualPathData={actualPathData} 
+               onStartTutorial={startTutorial} 
+               isPublicView={isPublicView} 
+               isPublic={isPublic} 
+               shareId={relevantShareIdForHeader} 
+               entryId={currentEntryId} 
+               isLoggedIn={isAuthenticated} 
+               onTogglePublic={() => handleTogglePublic(currentEntryId, !isPublic)} 
+               onCopyShareLink={handleCopyShareLink} 
+               onCopyToHistory={handleCopyToHistory} 
+               isCopying={isCopying} 
              />
-             {/* Optional: Add overall progress bar here */}
-             {/* Optional: Add Topic Resources link/button here */}
-              {/* Use extracted topicResources */}
+             {/* --- NEW: Topic Resources Section --- */}
               {topicResources && topicResources.length > 0 && (
-                <Box sx={{ mt: 2 }}>
-                   {/* Simple link for now, could be a button opening a modal/drawer */}
-                   <Typography variant="caption">
-                      {/* Maybe link to a dedicated section/modal */}
-                      {topicResources.length} topic resource(s) available. 
-                   </Typography>
+                <Box sx={{ mt: 2 }} data-tut="topic-resources-section">
+                  <ResourcesSection
+                    resources={topicResources}
+                    title="Overall Course Resources"
+                    type="topic"
+                    collapsible={true}
+                    expanded={false} // Default to collapsed
+                    compact={false}
+                  />
                 </Box>
               )}
           </Box>
 
-          {/* Main Content Area: Conditional Layout */}
-          {/* Pass actualPathData (core content) to children like ContentPanel, ModuleNavigationColumn */} 
           <Box sx={{ flexGrow: 1, overflow: 'hidden', position: 'relative' }}> 
             {isMobileLayout ? (
-               // --- Mobile Layout (Content Panel + Drawer for Nav + Bottom Nav) --- 
                <> 
-                  {/* Content Panel fills available space */} 
                   <Box sx={{ height: '100%' }}> 
                       <ContentPanel
                          ref={contentPanelRef}
                          sx={{ height: '100%' }}
+                         displayType={contentPanelDisplayType} // Pass new prop
                          module={currentModule}
                          moduleIndex={activeModuleIndex}
-                         submodule={currentSubmodule}
-                         submoduleIndex={activeSubmoduleIndex}
+                         submodule={currentSubmodule} // Will be null if displayType is 'module_resources'
+                         submoduleIndex={activeSubmoduleIndex} // Will be null if displayType is 'module_resources'
                          pathId={derivedPathId}
                          isTemporaryPath={isTemporaryPath}
-                         actualPathData={actualPathData} // Pass core path data
+                         actualPathData={actualPathData} 
                          onNavigate={handleNavigation}
                          totalModules={totalModules}
                          totalSubmodulesInModule={totalSubmodulesInModule}
@@ -858,38 +918,35 @@ const LearningPathView = ({ source }) => {
                          setActiveTab={setActiveTab}
                          progressMap={progressMap}
                          onToggleProgress={handleToggleProgress}
-                         isPublicView={isPublicView} // Pass public view status
+                         isPublicView={isPublicView} 
                       />
                   </Box>
 
-                  {/* Drawer for Module Navigation */}
                   <Drawer
                      anchor="left"
                      open={mobileNavOpen}
                      onClose={handleMobileNavClose}
-                     ModalProps={{
-                       keepMounted: true, // Better open performance on mobile.
-                     }}
-                     PaperProps={{ 
-                       sx: { width: DRAWER_WIDTH }
-                     }}
+                     ModalProps={{ keepMounted: true }}
+                     PaperProps={{ sx: { width: DRAWER_WIDTH } }}
                   >
                      <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
                          <Typography variant="h6">Modules</Typography>
                      </Box>
                      <ModuleNavigationColumn
-                         modules={actualPathData?.modules || []} // Get modules from core path data
+                         modules={actualPathData?.modules || []} 
                          activeModuleIndex={activeModuleIndex}
                          setActiveModuleIndex={setActiveModuleIndex}
                          activeSubmoduleIndex={activeSubmoduleIndex}
-                         setActiveSubmoduleIndex={setActiveSubmoduleIndex}
+                         selectSubmodule={selectSubmodule}
+                         onSelectModuleResources={handleSelectModuleResources}
+                         contentPanelDisplayType={contentPanelDisplayType}
                          progressMap={progressMap}
                          onToggleProgress={handleToggleProgress}
-                         isPublicView={isPublicView} // Pass public view status
+                         isPublicView={isPublicView}
+                         onSubmoduleSelect={handleSubmoduleSelectFromDrawer} 
                       />
                   </Drawer>
                   
-                  {/* Render Mobile Bottom Navigation */}
                   <MobileBottomNavigation 
                      onNavigate={handleNavigation}
                      activeModuleIndex={activeModuleIndex}
@@ -898,42 +955,43 @@ const LearningPathView = ({ source }) => {
                      totalSubmodulesInModule={totalSubmodulesInModule}
                      activeTab={activeTab}
                      setActiveTab={setActiveTab}
-                     availableTabs={availableTabs} // Use calculated tabs
+                     availableTabs={availableTabs} 
                      onOpenMobileNav={handleMobileNavToggle}
+                     // Pass display type to potentially adjust its behavior if needed (e.g. disable nav buttons)
+                     contentPanelDisplayType={contentPanelDisplayType}
                   />
                </>
             ) : (
-               // --- Desktop Layout (Two Columns Grid) ---
-               // Use theme spacing 
                <Grid container spacing={{ xs: 0, md: 2 }} sx={{ height: '100%', flexGrow: 1 }}> 
                   <Grid item xs={12} md={4} sx={{ 
-                     height: { xs: 'auto', md: '100%' }, // Allow natural height on mobile, full height on desktop
-                     pb: { xs: 2, md: 0 } // Add bottom padding on mobile
+                     height: { xs: 'auto', md: '100%' }, 
+                     pb: { xs: 2, md: 0 } 
                   }}> 
                      <ModuleNavigationColumn
-                        modules={actualPathData?.modules || []} // Get modules from core path data
+                        modules={actualPathData?.modules || []} 
                         activeModuleIndex={activeModuleIndex}
                         setActiveModuleIndex={setActiveModuleIndex}
                         activeSubmoduleIndex={activeSubmoduleIndex}
-                        setActiveSubmoduleIndex={setActiveSubmoduleIndex}
+                        selectSubmodule={selectSubmodule}
+                        onSelectModuleResources={handleSelectModuleResources}
+                        contentPanelDisplayType={contentPanelDisplayType}
                         progressMap={progressMap}
                         onToggleProgress={handleToggleProgress}
-                        isPublicView={isPublicView} // Pass public view status
+                        isPublicView={isPublicView}
                      />
                   </Grid>
-                  <Grid item xs={12} md={8} sx={{ 
-                     // No height/overflow needed here, ContentPanel handles it
-                   }}> 
+                  <Grid item xs={12} md={8} sx={{ /* No height/overflow needed here */ }}> 
                      <ContentPanel
                         ref={contentPanelRef}
                         sx={{ height: '100%' }}
+                        displayType={contentPanelDisplayType} // Pass new prop
                         module={currentModule}
                         moduleIndex={activeModuleIndex}
                         submodule={currentSubmodule}
                         submoduleIndex={activeSubmoduleIndex}
                         pathId={derivedPathId}
                         isTemporaryPath={isTemporaryPath}
-                        actualPathData={actualPathData} // Pass core path data
+                        actualPathData={actualPathData} 
                         onNavigate={handleNavigation}
                         totalModules={totalModules}
                         totalSubmodulesInModule={totalSubmodulesInModule}
@@ -942,29 +1000,15 @@ const LearningPathView = ({ source }) => {
                         setActiveTab={setActiveTab}
                         progressMap={progressMap}
                         onToggleProgress={handleToggleProgress}
-                        isPublicView={isPublicView} // Pass public view status
+                        isPublicView={isPublicView}
                      />
                   </Grid>
                </Grid>
             )}
           </Box>
-          
-          {/* Old Topic Resources Section (can be removed if handled above) */}
-          {/* Commented out as requested in previous step 
-          {actualPathData.topic_resources && actualPathData.topic_resources.length > 0 && (
-            <Box sx={{ mt: 4, flexShrink: 0 }}>
-              <ResourcesSection 
-                resources={actualPathData.topic_resources} 
-                title="Course Resources"
-                type="topic"
-              />
-            </Box>
-          )} 
-          */}
         </>
       )}
       
-      {/* Joyride Component */}
       <Joyride 
         steps={tutorialSteps}
         run={runTutorial}
@@ -974,7 +1018,6 @@ const LearningPathView = ({ source }) => {
         showProgress={true}
         showSkipButton={true}
         scrollToFirstStep={true}
-        // Styling to somewhat match MUI
         styles={{
           options: {
             arrowColor: theme.palette.background.paper,
@@ -982,7 +1025,7 @@ const LearningPathView = ({ source }) => {
             overlayColor: 'rgba(0, 0, 0, 0.6)',
             primaryColor: theme.palette.primary.main,
             textColor: theme.palette.text.primary,
-            zIndex: theme.zIndex.tooltip + 1, // Ensure it's above most elements
+            zIndex: theme.zIndex.tooltip + 1, 
           },
           buttonNext: {
             backgroundColor: theme.palette.primary.main,
@@ -1003,7 +1046,6 @@ const LearningPathView = ({ source }) => {
         }}
       />
 
-      {/* Save Dialog and Snackbar remain outside the main layout */} 
       {!isPublicView && (
         <SaveDialog
           open={saveDialogOpen}
@@ -1017,7 +1059,7 @@ const LearningPathView = ({ source }) => {
           onTagChange={setNewTag} 
           onTagKeyDown={handleTagKeyDown} 
           onFavoriteChange={setFavorite} 
-          isMobile={isMobile} // Keep for dialog responsiveness
+          isMobile={isMobile} 
         />
       )}
       {notification && notification.open && (
@@ -1030,21 +1072,15 @@ const LearningPathView = ({ source }) => {
               horizontal: isMobile ? 'center' : 'right' 
             }}
             sx={{
-              // Use theme spacing
-              bottom: { xs: theme.spacing(2), sm: theme.spacing(3) }, 
-              // Adjust width if needed
-              // width: { xs: `calc(100% - ${theme.spacing(4)})`, sm: 'auto' },
-              // left: { xs: theme.spacing(2), sm: 'auto' },
-              // right: { xs: theme.spacing(2), sm: theme.spacing(3) }
+              bottom: { xs: `calc(${theme.spacing(2)} + env(safe-area-inset-bottom, 0px))`, sm: theme.spacing(3) }, // Adjust for bottom nav on mobile
             }}
           >
-            {/* Alert uses theme styling */} 
             <Alert 
               onClose={handleNotificationClose} 
               severity={notification.severity}
-              elevation={6} // Add elevation for snackbar alert
-              variant="filled" // Use filled variant for snackbar
-              sx={{ width: '100%' }} // Ensure it takes full width in snackbar
+              elevation={6} 
+              variant="filled" 
+              sx={{ width: '100%' }} 
             >
               {notification.message}
             </Alert>

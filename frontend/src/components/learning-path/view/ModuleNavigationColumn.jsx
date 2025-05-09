@@ -4,13 +4,16 @@ import { Box, Typography, Paper, List, ListItem, ListItemButton, ListItemText, C
 import { motion, AnimatePresence } from 'framer-motion';
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
+import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
 
 const ModuleNavigationColumn = ({ 
   modules, 
   activeModuleIndex, 
   setActiveModuleIndex,
   activeSubmoduleIndex,
-  setActiveSubmoduleIndex,
+  selectSubmodule,
+  onSelectModuleResources,
+  contentPanelDisplayType,
   onSubmoduleSelect,
   progressMap,
   onToggleProgress
@@ -19,14 +22,10 @@ const ModuleNavigationColumn = ({
 
   const handleModuleClick = (index) => {
     setActiveModuleIndex(index === activeModuleIndex ? null : index);
-    if (index !== activeModuleIndex) {
-      setActiveSubmoduleIndex(0); 
-    }
   };
 
   const handleSubmoduleClick = (modIndex, subIndex) => {
-    setActiveModuleIndex(modIndex);
-    setActiveSubmoduleIndex(subIndex);
+    selectSubmodule(modIndex, subIndex);
     if (onSubmoduleSelect) {
       onSubmoduleSelect(modIndex, subIndex);
     }
@@ -120,10 +119,39 @@ const ModuleNavigationColumn = ({
                        </Box>
                      )}
 
-                     <Typography variant="subtitle2" sx={{ fontWeight: theme.typography.fontWeightBold, mb: 1 }}>Submodules:</Typography>
+                     {module.resources && module.resources.length > 0 && (
+                        <ListItemButton
+                            data-tut={`module-resources-item-${modIndex}`}
+                            selected={contentPanelDisplayType === 'module_resources' && isActiveModule}
+                            onClick={() => onSelectModuleResources(modIndex)}
+                            sx={{
+                                pl: 2, py: 0.75, mb: 1.5, 
+                                borderRadius: theme.shape.borderRadius,
+                                borderLeft: (contentPanelDisplayType === 'module_resources' && isActiveModule) ? `3px solid ${theme.palette.info.main}` : 'none',
+                                backgroundColor: (contentPanelDisplayType === 'module_resources' && isActiveModule) ? theme.palette.action.selected : 'transparent',
+                                '&:hover': {
+                                    backgroundColor: theme.palette.action.hover,
+                                },
+                            }}
+                        >
+                            <CollectionsBookmarkIcon sx={{ mr: 1.5, color: theme.palette.info.main }} fontSize="small"/>
+                            <ListItemText 
+                                primary={`${module.resources.length} Module Resource(s)`} 
+                                primaryTypographyProps={{
+                                    variant: 'body2',
+                                    fontWeight: (contentPanelDisplayType === 'module_resources' && isActiveModule) ? theme.typography.fontWeightBold : theme.typography.fontWeightMedium,
+                                    color: (contentPanelDisplayType === 'module_resources' && isActiveModule) ? theme.palette.info.dark : theme.palette.text.primary,
+                                }}
+                            />
+                        </ListItemButton>
+                     )}
+
+                     {(module.submodules && module.submodules.length > 0) && (
+                        <Typography variant="subtitle2" sx={{ fontWeight: theme.typography.fontWeightBold, mb: 1 }}>Submodules:</Typography>
+                     )}
                      <List component="div" disablePadding>
                       {(module.submodules || []).map((submodule, subIndex) => {
-                         const isActiveSubmodule = isActiveModule && subIndex === activeSubmoduleIndex;
+                         const isActiveSubmodule = isActiveModule && subIndex === activeSubmoduleIndex && contentPanelDisplayType === 'submodule';
                          const progressKey = `${modIndex}_${subIndex}`;
                          const isCompleted = progressMap[progressKey] || false;
 
@@ -190,13 +218,6 @@ const ModuleNavigationColumn = ({
                          );
                       })}
                      </List>
-                     
-                     {/* Optional: Add Module Resources Toggle/Link Here */}
-                     {module.resources && module.resources.length > 0 && (
-                        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                           {module.resources.length} module resource(s) available.
-                        </Typography>
-                     )}
                   </Box>
                 </Collapse>
               </Paper>
@@ -213,7 +234,9 @@ ModuleNavigationColumn.propTypes = {
   activeModuleIndex: PropTypes.number,
   setActiveModuleIndex: PropTypes.func.isRequired,
   activeSubmoduleIndex: PropTypes.number,
-  setActiveSubmoduleIndex: PropTypes.func.isRequired,
+  selectSubmodule: PropTypes.func.isRequired,
+  onSelectModuleResources: PropTypes.func.isRequired,
+  contentPanelDisplayType: PropTypes.string.isRequired,
   onSubmoduleSelect: PropTypes.func,
   progressMap: PropTypes.object.isRequired,
   onToggleProgress: PropTypes.func.isRequired,

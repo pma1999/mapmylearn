@@ -116,6 +116,7 @@ const audioStyleConfig = {
 
 // Wrap component definition with forwardRef
 const ContentPanel = forwardRef(({ 
+  displayType, // New prop: 'submodule' or 'module_resources'
   module, 
   moduleIndex, 
   submodule, 
@@ -170,10 +171,16 @@ const ContentPanel = forwardRef(({
 
   // Effect to update audioUrl and language when submodule changes
   useEffect(() => {
+    if (displayType === 'submodule' && submodule) {
       setAudioUrl(getAbsoluteAudioUrl(submodule?.audio_url));
       setSelectedLanguage(getInitialLanguage());
       setAudioError(null); // Reset error on submodule change
-  }, [submodule, getAbsoluteAudioUrl, getInitialLanguage]);
+    } else {
+      // Reset audio related state if not viewing a submodule or submodule is null
+      setAudioUrl(null);
+      setAudioError(null);
+    }
+  }, [submodule, displayType, getAbsoluteAudioUrl, getInitialLanguage]);
 
   // --- Audio Generation Logic ---
   const handleGenerateAudio = async () => {
@@ -182,9 +189,9 @@ const ContentPanel = forwardRef(({
           setNotification({ open: true, message: 'Audio generation is disabled for public views.', severity: 'info' });
           return;
       }
-      if (!submodule || !pathId || !selectedLanguage || !selectedAudioStyle) {
-          console.error('Missing required data for audio generation:', { submodule, pathId, selectedLanguage, selectedAudioStyle });
-          setNotification({ open: true, message: 'Cannot generate audio. Missing required data.', severity: 'error' });
+      if (displayType !== 'submodule' || !submodule || !pathId || !selectedLanguage || !selectedAudioStyle) {
+          console.error('Missing required data for audio generation:', { displayType, submodule, pathId, selectedLanguage, selectedAudioStyle });
+          setNotification({ open: true, message: 'Cannot generate audio. Missing required submodule data.', severity: 'error' });
           return;
       }
 
@@ -254,20 +261,63 @@ const ContentPanel = forwardRef(({
     setNotification({ ...notification, open: false });
   };
 
-  // --- Render Logic ---
-  if (!submodule) {
+  // --- Conditional Rendering based on displayType ---
+
+  // Case 1: Displaying Module Resources
+  if (displayType === 'module_resources' && module && module.resources && module.resources.length > 0) {
     return (
       <Paper 
-        ref={ref} // Attach ref here for placeholder case as well
+        ref={ref} 
+        variant="outlined"
+        data-tut="content-panel" // Keep for general tutorial reference if needed
+        sx={{ 
+          display: 'flex',
+          flexDirection: 'column',
+          borderColor: theme.palette.divider, 
+          height: '100%',
+          overflowY: 'auto',
+          ...sx 
+        }}
+      >
+        <Box sx={{ p: { xs: 2, sm: 2.5 }, borderBottom: `1px solid ${theme.palette.divider}`, bgcolor: 'transparent' }}>
+            <Typography variant="h6" component="h3" sx={{ fontWeight: theme.typography.fontWeightMedium }}>
+                Module Resources: {module.title} (Module {moduleIndex + 1})
+            </Typography>
+            {module.description && (
+              <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', mt: 0.5 }}>
+                  {module.description}
+              </Typography>
+            )}
+        </Box>
+        <Box sx={{ flexGrow: 1, overflowY: 'auto', p: { xs: 2, sm: 3 } }}>
+            <ResourcesSection 
+                resources={module.resources} 
+                title={`Resources for "${module.title}"`} // More specific title
+                type="module" 
+                collapsible={false} 
+                compact={false} // Or true based on desired density
+            />
+        </Box>
+         {/* No tabs, no submodule navigation, no progress checkbox for module resources */}
+      </Paper>
+    );
+  }
+
+  // Case 2: No submodule selected OR (module resources selected but module has no resources)
+  // displayType might be 'submodule' but submodule is null, or 'module_resources' but module.resources is empty
+  if (!submodule && displayType === 'submodule') { // Specifically show placeholder when expecting submodule but none is selected
+    return (
+      <Paper 
+        ref={ref} 
         elevation={2} 
         sx={{ 
           p: 3, 
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'center', 
-          height: '100%', // Use 100% height
+          height: '100%', 
           textAlign: 'center',
-          overflowY: 'auto', // Ensure placeholder is also scrollable if needed
+          overflowY: 'auto', 
            ...sx 
         }}
       >
@@ -276,326 +326,330 @@ const ContentPanel = forwardRef(({
            <Typography variant="h6" color="text.secondary">
               Select a submodule from the left to view its content.
            </Typography>
+           {displayType === 'module_resources' && module && (!module.resources || module.resources.length === 0) && (
+             <Typography variant="body1" color="text.secondary" sx={{mt: 1}}>
+                This module has no additional resources.
+             </Typography>
+           )}
         </Box>
       </Paper>
     );
   }
 
-  // Determine available tabs
-  const hasQuiz = submodule.quiz_questions && submodule.quiz_questions.length > 0;
-  const hasResources = submodule.resources && submodule.resources.length > 0;
-  
-  let tabIndexCounter = 0;
-  const tabsConfig = [
-      { index: tabIndexCounter++, label: 'Content', icon: <MenuBookIcon />, component: 'Content', tooltip: null },
-      ...(hasQuiz ? [{ index: tabIndexCounter++, label: 'Quiz', icon: <FitnessCenterIcon />, component: 'Quiz', tooltip: helpTexts.submoduleTabQuiz }] : []),
-      ...(hasResources ? [{ index: tabIndexCounter++, label: 'Resources', icon: <CollectionsBookmarkIcon />, component: 'Resources', tooltip: null }] : []),
-      { index: tabIndexCounter++, label: 'Chat', icon: <QuestionAnswerIcon />, component: 'Chat', tooltip: helpTexts.submoduleTabChat },
-      { index: tabIndexCounter++, label: 'Audio', icon: <GraphicEqIcon />, component: 'Audio', tooltip: helpTexts.submoduleTabAudio(AUDIO_CREDIT_COST) },
-  ];
-  
-  // Get current completion status for checkbox
-  const progressKey = `${moduleIndex}_${submoduleIndex}`;
-  const isCompleted = progressMap && progressMap[progressKey] || false;
+  // Case 3: Displaying Submodule Content (default and main case)
+  // This implies displayType === 'submodule' AND submodule is valid.
+  if (displayType === 'submodule' && submodule) {
+    const hasQuiz = submodule.quiz_questions && submodule.quiz_questions.length > 0;
+    const hasResources = submodule.resources && submodule.resources.length > 0;
+    
+    let tabIndexCounter = 0;
+    const tabsConfig = [
+        { index: tabIndexCounter++, label: 'Content', icon: <MenuBookIcon />, component: 'Content', tooltip: null, dataTut: 'content-panel-tab-content' },
+        ...(hasQuiz ? [{ index: tabIndexCounter++, label: 'Quiz', icon: <FitnessCenterIcon />, component: 'Quiz', tooltip: helpTexts.submoduleTabQuiz, dataTut: 'content-panel-tab-quiz' }] : []),
+        ...(hasResources ? [{ index: tabIndexCounter++, label: 'Resources', icon: <CollectionsBookmarkIcon />, component: 'Resources', tooltip: null, dataTut: 'content-panel-tab-resources' }] : []),
+        { index: tabIndexCounter++, label: 'Chat', icon: <QuestionAnswerIcon />, component: 'Chat', tooltip: helpTexts.submoduleTabChat, dataTut: 'content-panel-tab-chat' },
+        { index: tabIndexCounter++, label: 'Audio', icon: <GraphicEqIcon />, component: 'Audio', tooltip: helpTexts.submoduleTabAudio(AUDIO_CREDIT_COST), dataTut: 'content-panel-tab-audio' },
+    ];
+    
+    const progressKey = `${moduleIndex}_${submoduleIndex}`;
+    const isCompleted = progressMap && progressMap[progressKey] || false;
 
-  const handleCheckboxToggle = () => {
-      if (onToggleProgress) {
-          // Disable toggle if in public view (already handled in parent, but belt-and-suspenders)
-          if (!isPublicView) {
-             onToggleProgress(moduleIndex, submoduleIndex);
-          }
-      }
-  };
+    const handleCheckboxToggle = () => {
+        if (onToggleProgress && !isPublicView) {
+            onToggleProgress(moduleIndex, submoduleIndex);
+        }
+    };
 
-  return (
-    // Attach ref to the main Paper component
-    <Paper 
-      ref={ref} 
-      variant="outlined"
-      data-tut="content-panel"
-      sx={{ 
-        display: 'flex',
-        flexDirection: 'column',
-        borderColor: theme.palette.divider, 
-        height: '100%', // Ensure Paper takes full height of its container
-        overflowY: 'auto', // Make the Paper itself scrollable
-        ...sx // Apply parent styles
-      }}
-    >
-      {/* Submodule Header */}
-      <Box sx={{ p: { xs: 2, sm: 2.5 }, borderBottom: `1px solid ${theme.palette.divider}`, bgcolor: 'transparent' }}>
-          <Typography variant="h6" component="h3" sx={{ fontWeight: theme.typography.fontWeightMedium, mb: 0.5 }}>
-              {moduleIndex + 1}.{submoduleIndex + 1}: {submodule.title}
-          </Typography>
-          {submodule.description && (
-              <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                  {submodule.description}
-              </Typography>
-          )}
-      </Box>
-
-      {/* MOVED: Navigation Controls - Conditionally hide on mobile */}
-      {!isMobileLayout && (
-        <Box sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}`, bgcolor: 'transparent' }}>
-           <Grid container justifyContent="space-between" alignItems="center">
-              <Grid item data-tut="content-panel-prev-button">
-                 <Button 
-                    size="small"
-                    variant="text"
-                    startIcon={<NavigateBeforeIcon />} 
-                    onClick={() => onNavigate('prev')}
-                    disabled={moduleIndex === 0 && submoduleIndex === 0}
-                 >
-                    Previous
-                 </Button>
-              </Grid>
-              <Grid item>
-                   <Typography variant="caption" color="text.secondary">
-                      Module {moduleIndex + 1}/{totalModules} | Submodule {submoduleIndex + 1}/{totalSubmodulesInModule}
-                   </Typography>
-              </Grid>
-              <Grid item data-tut="content-panel-next-button">
-                 <Button 
-                    size="small"
-                    variant="text"
-                    endIcon={<NavigateNextIcon />} 
-                    onClick={() => onNavigate('next')}
-                    disabled={moduleIndex === totalModules - 1 && submoduleIndex === totalSubmodulesInModule - 1}
-                    sx={{ mr: 1 }}
-                 >
-                    Next
-                 </Button>
-                 <Button 
-                    data-tut="content-panel-next-module-button"
-                    size="small"
-                    variant="outlined"
-                    endIcon={<SkipNextIcon />} 
-                    onClick={() => onNavigate('nextModule')}
-                    disabled={moduleIndex === totalModules - 1} // Disable if last module
-                 >
-                    Next Module
-                 </Button>
-              </Grid>
-           </Grid>
-        </Box>
-      )}
-
-      {/* Tabs Navigation - Only show on Desktop */}
-      {!isMobileLayout && (
-        <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'transparent' }}>
-          <Tabs 
-            value={activeTab} 
-            onChange={(event, newValue) => setActiveTab(newValue)} 
-            aria-label="submodule content tabs"
-            variant="scrollable"
-            scrollButtons="auto"
-            allowScrollButtonsMobile
-          >
-            {tabsConfig.map((tab) => (
-              <Tab
-                key={tab.index}
-                icon={tab.icon}
-                iconPosition="start"
-                label={
-                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      {tab.label}
-                      {tab.tooltip &&
-                        <Tooltip title={tab.tooltip} arrow placement="top" TransitionComponent={Zoom} enterDelay={300}>
-                           <InfoOutlinedIcon sx={{ ml: 0.5, fontSize: 'small', verticalAlign: 'middle', color: 'text.secondary' }}/>
-                        </Tooltip>
-                      }
-                   </Box>
-                }
-                id={`submodule-tab-${tab.index}`}
-                aria-controls={`submodule-tabpanel-${tab.index}`}
-                sx={{ 
-                   py: 1.5 
-                }}
-              />
-            ))}
-          </Tabs>
-        </Box>
-      )}
-
-      {/* Tab Content Area */}
-      <Box sx={{ flexGrow: 1, overflowY: 'auto' }} > {/* Make content area scrollable */}
-         {tabsConfig.map((tab) => {
-             const tabContentSx = tab.component === 'Chat' ? { p: 0, height: '100%' } : {}; 
-             return (
-                <TabPanel key={tab.index} value={activeTab} index={tab.index} sx={tabContentSx} >
-                   {tab.component === 'Content' && (
-                       <Box data-tut="content-panel-tab-content">
-                           <MarkdownRenderer>{submodule.content || "No content available."}</MarkdownRenderer>
-                           {/* Add Progress Checkbox at the end of content */} 
-                           <Divider sx={{ my: 2 }} />
-                           <Box 
-                             sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }} 
-                             data-tut="content-panel-progress-checkbox-container"
-                           >
-                             <Tooltip title={isPublicView ? "Progress tracking disabled for public view" : (isCompleted ? "Mark as Incomplete" : "Mark as Complete")}>
-                               {/* Wrap Checkbox in span for Tooltip when disabled */}
-                               <span> 
-                                 <FormControlLabel
-                                   control={
-                                     <Checkbox
-                                       checked={isCompleted}
-                                       onChange={handleCheckboxToggle}
-                                       disabled={isPublicView} // Disable if public view
-                                       inputProps={{ 'aria-label': isCompleted ? 'Mark as incomplete' : 'Mark as complete' }}
-                                       size="small"
-                                     />
-                                   }
-                                   label={<Typography variant="body2" sx={{ fontSize: '0.8rem' }}>Complete</Typography>}
-                                   sx={{ ml: 0 }} // Adjust margin if needed
-                                   // Add data-tut attribute specific to checkbox if needed for tutorial
-                                   data-tut={`progress-checkbox-${moduleIndex}-${submoduleIndex}`}
-                                 />
-                               </span>
-                             </Tooltip>
-                           </Box>
-                       </Box>
-                   )}
-                   {tab.component === 'Quiz' && hasQuiz && (
-                       <QuizContainer 
-                         data-tut="content-panel-tab-quiz"
-                         quizQuestions={submodule.quiz_questions}
-                         submoduleId={`${moduleIndex}-${submoduleIndex}`} // Consistent ID
-                         pathId={pathId} 
-                         isTemporaryPath={isTemporaryPath}
-                         disabled={isPublicView} // Disable quiz interaction in public view
-                       />
-                   )}
-                   {tab.component === 'Resources' && hasResources && (
-                       <ResourcesSection 
-                           data-tut="content-panel-tab-resources"
-                           resources={submodule.resources} 
-                           title="Submodule Resources" 
-                           type="submodule" 
-                           collapsible={false}
-                       />
-                   )}
-                   {tab.component === 'Chat' && (
-                       <SubmoduleChat 
-                           data-tut="content-panel-tab-chat"
-                           pathId={pathId} 
-                           moduleIndex={moduleIndex} 
-                           submoduleIndex={submoduleIndex}
-                           isTemporaryPath={isTemporaryPath}
-                           actualPathData={actualPathData} 
-                           submoduleTitle={submodule.title}
-                           disabled={isPublicView} // Disable chat input in public view
-                       />
-                   )}
-                   {tab.component === 'Audio' && (
-                       <Box data-tut="content-panel-tab-audio" sx={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 2.5, p: { xs: 2, sm: 3 } }}>
-                           {/* Language Selector */}
-                           <FormControl fullWidth sx={{ maxWidth: '300px' }} disabled={isAudioLoading}>
-                               <InputLabel id={`language-select-label-panel`}>Script Language</InputLabel>
-                               <Select
-                                   labelId={`language-select-label-panel`}
-                                   value={selectedLanguage}
-                                   label="Script Language"
-                                   onChange={handleLanguageChange}
-                                   variant="outlined"
-                                   size="small"
-                               >
-                                   {supportedLanguages.map((lang) => (
-                                       <MenuItem key={lang.code} value={lang.code}>{lang.name}</MenuItem>
-                                   ))}
-                               </Select>
-                               <FormHelperText>Language used for the audio script and voice.</FormHelperText>
-                           </FormControl>
-
-                           {/* Audio Style Selector */}
-                           <FormControl fullWidth sx={{ maxWidth: '300px' }} disabled={isAudioLoading}>
-                               <InputLabel id="audio-style-select-label">Audio Style</InputLabel>
-                               <Select
-                                   labelId="audio-style-select-label"
-                                   value={selectedAudioStyle}
-                                   label="Audio Style"
-                                   onChange={handleAudioStyleChange}
-                                   variant="outlined"
-                                   size="small"
-                                   sx={{ '.MuiSelect-select': { display: 'flex', alignItems: 'center' } }} // Align icon and text
-                               >
-                                   {Object.entries(audioStyleConfig).map(([styleKey, config]) => (
-                                       <MenuItem key={styleKey} value={styleKey}>
-                                           {config.icon} {config.label}
-                                       </MenuItem>
-                                   ))}
-                                   {/* Explicitly add grumpy_genius if not dynamically added */}
-                                   { !audioStyleConfig.grumpy_genius && (
-                                       <MenuItem key="grumpy_genius" value="grumpy_genius">
-                                           <PsychologyAltIcon sx={{ mr: 1.5, verticalAlign: 'middle' }} fontSize="small" /> Grumpy Genius Mode
-                                       </MenuItem>
-                                   ) }
-                               </Select>
-                               <FormHelperText>{audioStyleConfig[selectedAudioStyle]?.description || 'Select an audio delivery style.'}</FormHelperText>
-                           </FormControl>
-
-                           {isAudioLoading && <CircularProgress sx={{ my: 2, alignSelf: 'center' }} />}
-                           {audioError && !isAudioLoading && <Alert severity="error" sx={{ width: '100%', mb: 1 }}>{audioError}</Alert>}
-                           
-                           {audioUrl && !isAudioLoading && (
-                               <audio controls src={audioUrl} style={{ width: '100%', maxWidth: '500px' }}>
-                                   Your browser does not support the audio element.
-                               </audio>
-                           )}
-
-                           <Button
-                               variant={audioUrl ? "outlined" : "contained"}
-                               onClick={handleGenerateAudio}
-                               disabled={isAudioLoading || !pathId || isPublicView} // Disable if no pathId or public view
-                               startIcon={<GraphicEqIcon />}
-                               sx={{ mt: 1 }}
-                           >
-                               {isAudioLoading ? 'Generating...' : 
-                                 (audioUrl ? 
-                                   `Re-generate in ${supportedLanguages.find(l => l.code === selectedLanguage)?.name || selectedLanguage} (${AUDIO_CREDIT_COST} ${AUDIO_CREDIT_COST === 1 ? 'credit' : 'credits'})` : 
-                                   `Generate Audio (${AUDIO_CREDIT_COST} ${AUDIO_CREDIT_COST === 1 ? 'credit' : 'credits'})`
-                                 )
-                               }
-                           </Button>
-                       </Box>
-                   )}
-                </TabPanel>
-             );
-         })}
-      </Box>
-      
-      {/* Snackbar for notifications (e.g., audio) */}
-      <Snackbar 
-        open={notification.open} 
-        autoHideDuration={6000} 
-        onClose={handleNotificationClose}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+    return (
+      <Paper 
+        ref={ref} 
+        variant="outlined"
+        data-tut="content-panel"
+        sx={{ 
+          display: 'flex',
+          flexDirection: 'column',
+          borderColor: theme.palette.divider, 
+          height: '100%', 
+          overflowY: 'auto', 
+          ...sx 
+        }}
       >
-        <Alert onClose={handleNotificationClose} severity={notification.severity} sx={{ width: '100%' }}>
-          {notification.message}
-        </Alert>
-      </Snackbar>
-    </Paper>
+        {/* Submodule Header - Stays for submodule view */}
+        <Box sx={{ p: { xs: 2, sm: 2.5 }, borderBottom: `1px solid ${theme.palette.divider}`, bgcolor: 'transparent' }}>
+            <Typography variant="h6" component="h3" sx={{ fontWeight: theme.typography.fontWeightMedium, mb: 0.5 }}>
+                {moduleIndex + 1}.{submoduleIndex + 1}: {submodule.title}
+            </Typography>
+            {submodule.description && (
+                <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                    {submodule.description}
+                </Typography>
+            )}
+        </Box>
+
+        {/* Navigation Controls - Only for submodule view on Desktop */}
+        {!isMobileLayout && (
+          <Box sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}`, bgcolor: 'transparent' }}>
+             <Grid container justifyContent="space-between" alignItems="center">
+                <Grid item data-tut="content-panel-prev-button">
+                   <Button 
+                      size="small"
+                      variant="text"
+                      startIcon={<NavigateBeforeIcon />} 
+                      onClick={() => onNavigate('prev')}
+                      disabled={moduleIndex === 0 && submoduleIndex === 0}
+                   >
+                      Previous
+                   </Button>
+                </Grid>
+                <Grid item>
+                     <Typography variant="caption" color="text.secondary">
+                        Module {moduleIndex + 1}/{totalModules} | Submodule {submoduleIndex + 1}/{totalSubmodulesInModule}
+                     </Typography>
+                </Grid>
+                <Grid item data-tut="content-panel-next-button">
+                   <Button 
+                      size="small"
+                      variant="text"
+                      endIcon={<NavigateNextIcon />} 
+                      onClick={() => onNavigate('next')}
+                      disabled={moduleIndex === totalModules - 1 && submoduleIndex === totalSubmodulesInModule - 1}
+                      sx={{ mr: 1 }}
+                   >
+                      Next
+                   </Button>
+                   <Button 
+                      data-tut="content-panel-next-module-button"
+                      size="small"
+                      variant="outlined"
+                      endIcon={<SkipNextIcon />} 
+                      onClick={() => onNavigate('nextModule')}
+                      disabled={moduleIndex === totalModules - 1} 
+                   >
+                      Next Module
+                   </Button>
+                </Grid>
+             </Grid>
+          </Box>
+        )}
+
+        {/* Tabs Navigation - Only for submodule view on Desktop */}
+        {!isMobileLayout && (
+          <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'transparent' }} data-tut="content-panel-tabs">
+            <Tabs 
+              value={activeTab} 
+              onChange={(event, newValue) => setActiveTab(newValue)} 
+              aria-label="submodule content tabs"
+              variant="scrollable"
+              scrollButtons="auto"
+              allowScrollButtonsMobile
+            >
+              {tabsConfig.map((tab) => (
+                <Tab
+                  key={tab.index}
+                  data-tut={tab.dataTut} // Add data-tut here
+                  icon={tab.icon}
+                  iconPosition="start"
+                  label={
+                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        {tab.label}
+                        {tab.tooltip &&
+                          <Tooltip title={tab.tooltip} arrow placement="top" TransitionComponent={Zoom} enterDelay={300}>
+                             <InfoOutlinedIcon sx={{ ml: 0.5, fontSize: 'small', verticalAlign: 'middle', color: 'text.secondary' }}/>
+                          </Tooltip>
+                        }
+                     </Box>
+                  }
+                  id={`submodule-tab-${tab.index}`}
+                  aria-controls={`submodule-tabpanel-${tab.index}`}
+                  sx={{ py: 1.5 }}
+                />
+              ))}
+            </Tabs>
+          </Box>
+        )}
+
+        {/* Tab Content Area - Only for submodule view */}
+        <Box sx={{ flexGrow: 1, overflowY: 'auto' }} >
+           {tabsConfig.map((tab) => {
+               const tabContentSx = tab.component === 'Chat' ? { p: 0, height: '100%' } : {}; 
+               return (
+                  <TabPanel key={tab.index} value={activeTab} index={tab.index} sx={tabContentSx} >
+                     {tab.component === 'Content' && (
+                         <Box data-tut="content-panel-tab-content">
+                             <MarkdownRenderer>{submodule.content || "No content available."}</MarkdownRenderer>
+                             <Divider sx={{ my: 2 }} />
+                             <Box 
+                               sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }} 
+                               data-tut="content-panel-progress-checkbox-container"
+                             >
+                               <Tooltip title={isPublicView ? "Progress tracking disabled for public view" : (isCompleted ? "Mark as Incomplete" : "Mark as Complete")}>
+                                 <span> 
+                                   <FormControlLabel
+                                     control={
+                                       <Checkbox
+                                         checked={isCompleted}
+                                         onChange={handleCheckboxToggle}
+                                         disabled={isPublicView} 
+                                         inputProps={{ 'aria-label': isCompleted ? 'Mark as incomplete' : 'Mark as complete' }}
+                                         size="small"
+                                       />
+                                     }
+                                     label={<Typography variant="body2" sx={{ fontSize: '0.8rem' }}>Complete</Typography>}
+                                     sx={{ ml: 0 }}
+                                     data-tut={`progress-checkbox-${moduleIndex}-${submoduleIndex}`}
+                                   />
+                                 </span>
+                               </Tooltip>
+                             </Box>
+                         </Box>
+                     )}
+                     {tab.component === 'Quiz' && hasQuiz && (
+                         <QuizContainer 
+                           data-tut="content-panel-tab-quiz"
+                           quizQuestions={submodule.quiz_questions}
+                           submoduleId={`${moduleIndex}-${submoduleIndex}`}
+                           pathId={pathId} 
+                           isTemporaryPath={isTemporaryPath}
+                           disabled={isPublicView} 
+                         />
+                     )}
+                     {tab.component === 'Resources' && hasResources && (
+                         <ResourcesSection 
+                             data-tut="content-panel-tab-resources"
+                             resources={submodule.resources} 
+                             title="Submodule Resources" 
+                             type="submodule" 
+                             collapsible={false}
+                         />
+                     )}
+                     {tab.component === 'Chat' && (
+                         <SubmoduleChat 
+                             data-tut="content-panel-tab-chat"
+                             pathId={pathId} 
+                             moduleIndex={moduleIndex} 
+                             submoduleIndex={submoduleIndex}
+                             isTemporaryPath={isTemporaryPath}
+                             actualPathData={actualPathData} 
+                             submoduleTitle={submodule.title}
+                             disabled={isPublicView} 
+                         />
+                     )}
+                     {tab.component === 'Audio' && (
+                         <Box data-tut="content-panel-tab-audio" sx={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 2.5, p: { xs: 2, sm: 3 } }}>
+                             <FormControl fullWidth sx={{ maxWidth: '300px' }} disabled={isAudioLoading}>
+                                 <InputLabel id={`language-select-label-panel`}>Script Language</InputLabel>
+                                 <Select
+                                     labelId={`language-select-label-panel`}
+                                     value={selectedLanguage}
+                                     label="Script Language"
+                                     onChange={handleLanguageChange}
+                                     variant="outlined"
+                                     size="small"
+                                 >
+                                     {supportedLanguages.map((lang) => (
+                                         <MenuItem key={lang.code} value={lang.code}>{lang.name}</MenuItem>
+                                     ))}
+                                 </Select>
+                                 <FormHelperText>Language used for the audio script and voice.</FormHelperText>
+                             </FormControl>
+
+                             <FormControl fullWidth sx={{ maxWidth: '300px' }} disabled={isAudioLoading}>
+                                 <InputLabel id="audio-style-select-label">Audio Style</InputLabel>
+                                 <Select
+                                     labelId="audio-style-select-label"
+                                     value={selectedAudioStyle}
+                                     label="Audio Style"
+                                     onChange={handleAudioStyleChange}
+                                     variant="outlined"
+                                     size="small"
+                                     sx={{ '.MuiSelect-select': { display: 'flex', alignItems: 'center' } }} 
+                                 >
+                                     {Object.entries(audioStyleConfig).map(([styleKey, config]) => (
+                                         <MenuItem key={styleKey} value={styleKey}>
+                                             {config.icon} {config.label}
+                                         </MenuItem>
+                                     ))}
+                                     { !audioStyleConfig.grumpy_genius && (
+                                         <MenuItem key="grumpy_genius" value="grumpy_genius">
+                                             <PsychologyAltIcon sx={{ mr: 1.5, verticalAlign: 'middle' }} fontSize="small" /> Grumpy Genius Mode
+                                         </MenuItem>
+                                     ) }
+                                 </Select>
+                                 <FormHelperText>{audioStyleConfig[selectedAudioStyle]?.description || 'Select an audio delivery style.'}</FormHelperText>
+                             </FormControl>
+
+                             {isAudioLoading && <CircularProgress sx={{ my: 2, alignSelf: 'center' }} />}
+                             {audioError && !isAudioLoading && <Alert severity="error" sx={{ width: '100%', mb: 1 }}>{audioError}</Alert>}
+                             
+                             {audioUrl && !isAudioLoading && (
+                                 <audio controls src={audioUrl} style={{ width: '100%', maxWidth: '500px' }}>
+                                     Your browser does not support the audio element.
+                                 </audio>
+                             )}
+
+                             <Button
+                                 variant={audioUrl ? "outlined" : "contained"}
+                                 onClick={handleGenerateAudio}
+                                 disabled={isAudioLoading || !pathId || isPublicView} 
+                                 startIcon={<GraphicEqIcon />}
+                                 sx={{ mt: 1 }}
+                             >
+                                 {isAudioLoading ? 'Generating...' : 
+                                   (audioUrl ? 
+                                     `Re-generate in ${supportedLanguages.find(l => l.code === selectedLanguage)?.name || selectedLanguage} (${AUDIO_CREDIT_COST} ${AUDIO_CREDIT_COST === 1 ? 'credit' : 'credits'})` : 
+                                     `Generate Audio (${AUDIO_CREDIT_COST} ${AUDIO_CREDIT_COST === 1 ? 'credit' : 'credits'})`
+                                   )
+                                 }
+                             </Button>
+                         </Box>
+                     )}
+                  </TabPanel>
+               );
+           })}
+        </Box>
+        
+        <Snackbar 
+          open={notification.open} 
+          autoHideDuration={6000} 
+          onClose={handleNotificationClose}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        >
+          <Alert onClose={handleNotificationClose} severity={notification.severity} sx={{ width: '100%' }}>
+            {notification.message}
+          </Alert>
+        </Snackbar>
+      </Paper>
+    );
+  }
+
+  // Fallback: If displayType is not recognized or data is inconsistent
+  // This should ideally not be reached if LearningPathView logic is correct.
+  return (
+      <Paper ref={ref} elevation={2} sx={{ p:3, display:'flex', alignItems:'center', justifyContent:'center', height:'100%', ...sx }}>
+          <Typography>Loading content or an unexpected view state has occurred.</Typography>
+      </Paper>
   );
 }); // <-- Close the forwardRef HOC
 
 ContentPanel.propTypes = {
-  module: PropTypes.object, // Can be null if no module selected
-  moduleIndex: PropTypes.number, // Index of the active module
-  submodule: PropTypes.object, // Can be null if no submodule selected
-  submoduleIndex: PropTypes.number, // Index of the active submodule within the module
+  displayType: PropTypes.string.isRequired, // Added prop type
+  module: PropTypes.object, 
+  moduleIndex: PropTypes.number, 
+  submodule: PropTypes.object, 
+  submoduleIndex: PropTypes.number, 
   pathId: PropTypes.string,
   isTemporaryPath: PropTypes.bool,
-  actualPathData: PropTypes.object, // Full path data needed for context (e.g., audio generation)
-  onNavigate: PropTypes.func.isRequired, // Navigation callback
+  actualPathData: PropTypes.object, 
+  onNavigate: PropTypes.func.isRequired, 
   totalModules: PropTypes.number.isRequired,
   totalSubmodulesInModule: PropTypes.number.isRequired,
-  isMobileLayout: PropTypes.bool, // Add new propType
+  isMobileLayout: PropTypes.bool, 
   activeTab: PropTypes.number.isRequired,
   setActiveTab: PropTypes.func.isRequired,
-  sx: PropTypes.object, // Add sx propType
-  progressMap: PropTypes.object, // Added prop type
-  onToggleProgress: PropTypes.func, // Added prop type (optional here? Maybe required)
-  isPublicView: PropTypes.bool, // Added prop type
+  sx: PropTypes.object, 
+  progressMap: PropTypes.object, 
+  onToggleProgress: PropTypes.func, 
+  isPublicView: PropTypes.bool, 
 };
 
 // Add display name for DevTools
