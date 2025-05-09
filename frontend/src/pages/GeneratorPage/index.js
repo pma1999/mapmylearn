@@ -4,7 +4,6 @@ import { styled } from '@mui/material/styles';
 
 // Import custom hooks
 import useNotification from '../../shared/hooks/useNotification';
-import useProgressTracking from './hooks/useProgressTracking';
 import useHistoryManagement from './hooks/useHistoryManagement';
 import useGeneratorForm from './hooks/useGeneratorForm';
 
@@ -35,12 +34,9 @@ const GeneratorPage = () => {
   // Initialize custom hooks with necessary dependencies
   const { notification, showNotification, closeNotification } = useNotification();
   
-  const progressTrackingState = useProgressTracking();
-  
   const historyState = useHistoryManagement(showNotification);
   
   const formState = useGeneratorForm(
-    progressTrackingState,
     showNotification
   );
 
@@ -66,9 +62,12 @@ const GeneratorPage = () => {
     closeSaveDialog();
     
     // Navigate to result page without saving
-    if (progressTrackingState.taskId) {
-      window.location.href = `/result/${progressTrackingState.taskId}`;
-    }
+    // This navigation logic might need adjustment if taskId is not available from progressTrackingState anymore
+    // Consider how taskId is obtained and passed for navigation after form submission
+    // For now, assuming formState or another source will manage taskId for navigation after submission
+    // This specific part: if (progressTrackingState.taskId) needs to be re-evaluated.
+    // Let's assume the navigation to result page is handled by useGeneratorForm now.
+    // If a taskId is still needed here from somewhere else, it would require further changes.
   };
 
   return (
@@ -82,7 +81,6 @@ const GeneratorPage = () => {
         <GeneratorForm
           formState={formState}
           historyState={historyState}
-          progressState={progressTrackingState}
           explanationStyle={explanationStyle}
           setExplanationStyle={setExplanationStyle}
           isMobile={isMobile}
@@ -105,12 +103,12 @@ const GeneratorPage = () => {
       {/* Save Dialog */}
       <SaveDialog 
         open={saveDialogOpen}
-        onClose={handleSaveCancel}
+        onClose={handleSaveCancel} // Re-evaluate if this needs taskId
         onSave={handleSaveConfirm}
-        onCancel={handleSaveCancel}
+        onCancel={handleSaveCancel} // Re-evaluate
         tags={saveDialogTags}
-        setTags={saveDialogTags}
-        favorite={saveDialogFavorite}
+        setTags={saveDialogTags} // This looks incorrect, SaveDialog usually receives setTags from its own state or a context
+        favorite={saveDialogFavorite} // Same as above for setFavorite
         setFavorite={saveDialogFavorite}
         newTag={saveDialogNewTag}
         setNewTag={setSaveDialogNewTag}

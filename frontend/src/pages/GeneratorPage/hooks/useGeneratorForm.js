@@ -15,12 +15,10 @@ const defaultStyles = {
 
 /**
  * Custom hook for managing generator form state and submission
- * @param {Object} progressTrackingState - Progress tracking state from useProgressTracking hook
  * @param {Function} showNotification - Function to display notifications
  * @returns {Object} Form state and management functions
  */
 const useGeneratorForm = (
-  { connectToProgressUpdates, resetProgress, setTaskId },
   showNotification
 ) => {
   const navigate = useNavigate();
@@ -29,6 +27,7 @@ const useGeneratorForm = (
   const [topic, setTopic] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
+  const [taskId, setTaskId] = useState(null);
   
   // Generator configuration
   const [parallelCount, setParallelCount] = useState(5);
@@ -57,19 +56,17 @@ const useGeneratorForm = (
   };
 
   /**
-   * Setup progress tracking for a task
-   * @param {string} taskId - Task ID to track
+   * Setup navigation after task creation
+   * @param {string} currentTaskId - Task ID to navigate to
    * @param {string} currentTopic - The topic being generated
    */
-  const setupProgressTracking = useCallback((taskId, currentTopic) => {
+  const setupNavigationToResultPage = useCallback((currentTaskId, currentTopic) => {
     // Save topic to session storage HERE
     sessionStorage.setItem('currentTopic', currentTopic);
-    // Connect to progress updates
-    connectToProgressUpdates(taskId);
     
     // Navigate to result page
-    navigate(`/result/${taskId}`);
-  }, [connectToProgressUpdates, navigate]);
+    navigate(`/result/${currentTaskId}`);
+  }, [navigate]);
 
   /**
    * Handle form submission
@@ -87,9 +84,6 @@ const useGeneratorForm = (
     setIsGenerating(true);
     
     try {
-      // Reset progress state
-      resetProgress();
-      
       const result = await apiService.generateLearningPath(topic, {
         parallelCount,
         searchParallelCount,
@@ -103,8 +97,8 @@ const useGeneratorForm = (
       // Store task ID and set generating state
       setTaskId(result.task_id);
       
-      // Set up polling/SSE for progress updates
-      setupProgressTracking(result.task_id, topic);
+      // Navigate to result page
+      setupNavigationToResultPage(result.task_id, topic);
       
     } catch (err) {
       console.error('Error starting generation:', err);
@@ -139,6 +133,7 @@ const useGeneratorForm = (
     setTopic,
     isGenerating,
     error,
+    taskId,
     
     // Generator configuration
     parallelCount,

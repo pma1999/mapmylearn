@@ -6,318 +6,106 @@ import {
   Typography, 
   Box, 
   LinearProgress,
-  CircularProgress,
-  Chip,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Collapse,
-  Button,
+  // CircularProgress,
+  // Chip,
+  // List,
+  // ListItem,
+  // ListItemIcon,
+  // ListItemText,
+  // Collapse,
+  // Button,
   useTheme
 } from '@mui/material';
-import { motion, AnimatePresence } from 'framer-motion';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import ModuleIcon from '@mui/icons-material/AccountTree';
-import SubdirectoryArrowRightIcon from '@mui/icons-material/SubdirectoryArrowRight';
+import { motion } from 'framer-motion';
+// import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+// import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+// import ModuleIcon from '@mui/icons-material/AccountTree';
+// import SubdirectoryArrowRightIcon from '@mui/icons-material/SubdirectoryArrowRight';
 
 /**
- * Component to display loading and progress updates for course generation.
- * Shows current phase, overall progress, latest message, and optional preview/history.
+ * Simplified component to display a loading state for course generation.
+ * Shows a generic loading message and an indeterminate progress bar.
  * 
  * @param {Object} props Component props
- * @param {Array} props.progressMessages Progress messages from SSE
- * @param {boolean} props.isReconnecting - Flag indicating if reconnecting
- * @param {number} props.retryAttempt - Current retry attempt number
- * @param {string|null} props.topic - The topic from the partially/fully loaded path data
- * @param {Object|null} props.accumulatedPreviewData - Persisted preview data from the hook
+ * @param {string|null} props.topic - The topic of the course being generated (optional)
  * @returns {JSX.Element} Loading state component
  */
-const LoadingState = ({ progressMessages = [], isReconnecting = false, retryAttempt = 0, topic = null, accumulatedPreviewData = null }) => {
+const LoadingState = ({ topic = null }) => {
   const theme = useTheme();
-  const [showHistory, setShowHistory] = React.useState(false);
   
-  // Determine the topic to display
   let displayTopic = topic;
-  // If topic prop is not yet available, try the generation fallback from sessionStorage
   if (!displayTopic) {
     const sessionTopic = sessionStorage.getItem('currentTopic');
     if (sessionTopic) {
       displayTopic = sessionTopic;
-      // Optionally clear storage once used, uncomment if needed
-      // sessionStorage.removeItem('currentTopic'); 
     }
   }
 
-  // Get the latest update object
-  const latestUpdate = progressMessages.length > 0 
-      ? progressMessages[progressMessages.length - 1] 
-      : null;
-
-  // Extract relevant data from the latest update
-  const overallProgress = latestUpdate?.overall_progress; // 0.0 to 1.0
-  const progressPercent = overallProgress !== null && !isNaN(overallProgress) ? overallProgress * 100 : null;
-  const currentPhase = latestUpdate?.phase || 'Initialization';
-  const latestMessage = latestUpdate?.message || 'Initializing generation...';
-  
-  // Ensure we handle the structure { modules: [...] } potentially with submodules inside
-  const previewModules = accumulatedPreviewData?.modules || [];
-  
-  // Determine progress bar variant and value
-  const progressBarVariant = progressPercent !== null ? "determinate" : "indeterminate";
-  const progressBarValue = progressPercent !== null ? progressPercent : undefined;
-
-  // Animation variants
   const containerVariants = {
     hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+    visible: { opacity: 1, transition: { duration: 0.5 } }
   };
   
   const itemVariants = {
     hidden: { opacity: 0, y: 15 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
-  };
-
-  // Animation variants for submodules list
-  const listVariants = {
-    hidden: { opacity: 0, height: 0 },
-    visible: {
-      opacity: 1,
-      height: 'auto',
-      transition: { staggerChildren: 0.05, delayChildren: 0.1 }
-    }
-  };
-
-  const subItemVariants = {
-    hidden: { opacity: 0, x: -10 },
-    visible: { opacity: 1, x: 0 }
-  };
-
-  const handleToggleHistory = () => {
-      setShowHistory(prev => !prev);
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4, delay: 0.1 } }
   };
 
   return (
-    <Container maxWidth="md" sx={{ py: { xs: 3, md: 4 } }}> 
+    <Container maxWidth="md" sx={{ py: { xs: 3, md: 4 }, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '70vh' }}> 
       <motion.div
         variants={containerVariants}
         initial="hidden"
         animate="visible"
-        layout
+        style={{ width: '100%' }} // Ensure motion div takes width for Paper centering
       >
-        {/* Main Loading Box */}
-        <motion.div variants={itemVariants} layout>
+        <motion.div variants={itemVariants}>
           <Paper
             elevation={3} 
             sx={{
-              p: { xs: 3, sm: 4 },
+              p: { xs: 3, sm: 4, md: 5 },
               borderRadius: 3,
               textAlign: 'center',
               mx: 'auto',
+              maxWidth: '500px',
             }}
           >
             <Typography variant="h5" component="h2" gutterBottom fontWeight="bold">
-              {displayTopic ? `Building Path: "${displayTopic}"` : 'Loading Course...'}
+              {displayTopic ? `Generating Your Course: "${displayTopic}"` : 'Loading Course...'}
             </Typography>
             
-            {/* Phase Indicator */}
-            <Box sx={{ my: 2 }}>
-                <Chip 
-                    label={`Phase: ${currentPhase.replace(/_/g, ' ').toUpperCase()}`}
-                    color="secondary"
-                    variant="outlined"
-                    size="small"
-                />
-            </Box>
-            
-            {/* Latest Message & Reconnection Status */}
-            <Typography variant="body1" color="text.secondary" paragraph sx={{ minHeight: '2.5em', mb: 3 }}> 
-                <AnimatePresence mode="wait">
-                    <motion.span
-                        key={latestMessage}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.3 }}
-                    >
-                        {latestMessage}
-                    </motion.span>
-                </AnimatePresence>
-              {isReconnecting && (
-                <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                >
-                    <Box sx={{ mt: 1, color: theme.palette.warning.dark, fontWeight: 'medium' }}>
-                        <Typography variant="body2" component="span">
-                            Connection issue. Reconnecting... (Attempt {retryAttempt}/{MAX_RETRIES})
-                        </Typography>
-                    </Box>
-                 </motion.div>
-              )}
+            <Typography variant="body1" color="text.secondary" paragraph sx={{ mb: 3 }}>
+              Please wait a moment while we prepare everything for you.
             </Typography>
             
-            {/* Progress Bar */}
-            <Box sx={{ width: '100%', my: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
-                {progressBarVariant === 'indeterminate' && !isReconnecting && (
-                     <CircularProgress size={20} thickness={4} color="primary" />
-                )}
+            <Box sx={{ width: '100%', my: 3 }}>
                 <LinearProgress 
-                    variant={progressBarVariant}
-                    value={progressBarValue}
+                    variant="indeterminate"
                     sx={{ 
-                        flexGrow: 1,
-                        height: 10, 
-                        borderRadius: 5,
+                        height: 8, 
+                        borderRadius: 4,
                         backgroundColor: theme.palette.grey[300],
                         '& .MuiLinearProgress-bar': {
-                            background: progressBarVariant === 'determinate' 
-                                ? theme.palette.primary.main 
-                                : `linear-gradient(90deg, ${theme.palette.primary.light}, ${theme.palette.primary.main})`, 
-                            borderRadius: 5,
-                            transition: progressBarVariant === 'determinate' ? 'transform .4s linear' : 'none',
+                            background: `linear-gradient(90deg, ${theme.palette.primary.light}, ${theme.palette.primary.main})`,
+                            borderRadius: 4,
                         }
                     }} 
                 />
-                {progressPercent !== null && (
-                     <Typography variant="body2" sx={{ fontWeight: 'medium', color: 'text.secondary', minWidth: '40px' }}>
-                       {Math.round(progressPercent)}%
-                     </Typography>
-                )}
-                {progressBarVariant === 'indeterminate' && isReconnecting && (
-                     <CircularProgress size={20} thickness={4} color="warning" />
-                )}
             </Box>
 
-            {/* Enhanced Preview Data Display */}
-            {previewModules && previewModules.length > 0 && (
-                <motion.div variants={itemVariants} layout>
-                     <Typography variant="caption" display="block" sx={{ mt: 2, mb: 1, color: 'text.secondary' }}>
-                         Drafting Modules & Submodules...
-                     </Typography>
-                    <List dense disablePadding sx={{ maxHeight: 250, overflowY: 'auto', textAlign: 'left', border: `1px solid ${theme.palette.divider}`, borderRadius: 1, p: 1 }}>
-                        <AnimatePresence>
-                            {previewModules.map((mod, index) => (
-                                <motion.div key={mod.id ?? index} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                                    <ListItem key={`mod-${mod.id ?? index}`} dense sx={{ pt: 0.5, pb: 0.5, display: 'flex', alignItems: 'center' }}>
-                                        <ListItemIcon sx={{ minWidth: 32}}><ModuleIcon fontSize="small" color="primary" /></ListItemIcon>
-                                        <ListItemText 
-                                            primary={mod.title || `Module ${index + 1}`}
-                                            primaryTypographyProps={{ variant: 'body1', fontWeight: 'medium', color: 'text.primary' }}
-                                        />
-                                    </ListItem>
-                                    
-                                    {mod.submodules && mod.submodules.length > 0 && (
-                                        <motion.div
-                                            style={{ width: '100%', overflow: 'hidden' }}
-                                            variants={listVariants}
-                                            initial="hidden"
-                                            animate="visible"
-                                            exit="hidden"
-                                        >
-                                            <List dense disablePadding sx={{ pl: 4, pt: 0, pb: 0.5 }}>
-                                                {mod.submodules.map((sub, subIndex) => (
-                                                    <ListItem 
-                                                        key={`sub-${mod.id ?? index}-${subIndex}`} 
-                                                        component={motion.li}
-                                                        variants={subItemVariants}
-                                                        dense 
-                                                        disableGutters 
-                                                        sx={{ pb: 0.25, listStyleType: 'none' }}
-                                                    >
-                                                        <ListItemIcon sx={{ minWidth: 28 }}>
-                                                            <SubdirectoryArrowRightIcon sx={{ fontSize: '1rem', color: theme.palette.text.secondary }}/>
-                                                        </ListItemIcon>
-                                                        <ListItemText 
-                                                            primary={sub.title}
-                                                            primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
-                                                        />
-                                                    </ListItem>
-                                                ))}
-                                            </List>
-                                        </motion.div>
-                                    )}
-                                </motion.div>
-                            ))}
-                        </AnimatePresence>
-                    </List>
-                 </motion.div>
-            )}
+            <Typography variant="caption" color="text.disabled">
+                This may take a few minutes depending on the topic complexity.
+            </Typography>
 
           </Paper>
         </motion.div>
-
-        {/* Detailed Progress History (Collapsible) */}
-        {progressMessages.length > 1 && (
-            <motion.div layout>
-                 <Box sx={{ mt: 3, textAlign: 'center' }}> 
-                     <Button 
-                         size="small"
-                         onClick={handleToggleHistory}
-                         endIcon={showHistory ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                     >
-                         {showHistory ? 'Hide Details' : 'Show Details'}
-                     </Button>
-                 </Box>
-                <Collapse in={showHistory} timeout="auto" unmountOnExit>
-                    <Box sx={{ mt: 1, maxWidth: 700, mx: 'auto' }}> 
-                        {progressMessages.slice(0, -1).reverse().map((msg, index) => (
-                            <motion.div 
-                                key={`${msg.timestamp || 'ts'}-${index}`}
-                                variants={itemVariants}
-                                initial="hidden"
-                                animate="visible"
-                                exit="hidden"
-                                transition={{ duration: 0.3, delay: index * 0.03 }} 
-                            >
-                                <Paper
-                                    elevation={0}
-                                    variant="outlined"
-                                    sx={{
-                                        p: 1.5, 
-                                        mb: 1,
-                                        borderRadius: 2,
-                                        opacity: 0.85, 
-                                        fontSize: '0.8rem',
-                                        color: 'text.secondary'
-                                    }}
-                                >
-                                     <Typography variant="caption" display="block" sx={{ float: 'right', color: 'text.disabled'}}>
-                                         {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : ''}
-                                     </Typography>
-                                    {msg.phase && <Chip label={msg.phase} size="small" variant="outlined" sx={{ mr: 1, height: 'auto', fontSize: '0.65rem' }} />} 
-                                    {msg.message}
-                                </Paper>
-                            </motion.div>
-                        ))}
-                    </Box>
-                 </Collapse>
-             </motion.div>
-        )}
-
       </motion.div>
     </Container>
   );
 };
 
-// Define MAX_RETRIES within the component or import if defined elsewhere
-const MAX_RETRIES = 5;
-
 LoadingState.propTypes = {
-  progressMessages: PropTypes.arrayOf(PropTypes.shape({
-    message: PropTypes.string.isRequired,
-    timestamp: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-    phase: PropTypes.string,
-    overall_progress: PropTypes.number,
-    preview_data: PropTypes.object, // Can now contain module_update or modules
-    action: PropTypes.string
-  })),
-  isReconnecting: PropTypes.bool, 
-  retryAttempt: PropTypes.number, 
-  topic: PropTypes.string, // Topic prop can be string or null
-  accumulatedPreviewData: PropTypes.object, // <-- Contains { modules: [{ id, title, submodules: [{title, description?}] }] }
+  topic: PropTypes.string, 
 };
 
 export default LoadingState; 

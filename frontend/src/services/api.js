@@ -201,93 +201,6 @@ export const checkAuthStatus = async () => {
 // Initialize auth token from storage on import
 initAuthFromStorage();
 
-// Get progress updates for a course using SSE (Server-Sent Events)
-export const getProgressUpdates = (taskId, onMessage, onError, onComplete) => {
-  // Create the correct URL using the same API_URL base
-  const url = new URL(`/api/progress/${taskId}`, API_URL);
-  let retryCount = 0;
-  const MAX_RETRIES = 3;
-  let eventSource = null;
-  
-  // Function to create and connect the EventSource
-  const connect = () => {
-    try {
-      console.log(`Connecting to SSE progress updates for task ${taskId}`);
-      eventSource = new EventSource(url.toString());
-      
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          
-          if (data.complete) {
-            console.log(`SSE connection completed for task ${taskId}`);
-            eventSource.close();
-            if (onComplete) onComplete();
-            return;
-          }
-          
-          // Check for error message format
-          if (data.message && data.message.startsWith("Error:")) {
-            // This is an error message from the server
-            if (onError) {
-              onError(new Error(data.message.replace("Error: ", "")));
-            }
-            return;
-          }
-          
-          // Reset retry count on successful messages
-          retryCount = 0;
-          
-          if (onMessage) onMessage(data);
-        } catch (err) {
-          console.error('Error parsing SSE message:', err);
-          if (onError) onError(err);
-        }
-      };
-      
-      eventSource.onerror = (error) => {
-        console.error('SSE Error:', error);
-        
-        // Close the current connection
-        eventSource.close();
-        
-        // Try to reconnect if we haven't exceeded max retries
-        if (retryCount < MAX_RETRIES) {
-          retryCount++;
-          console.log(`Retrying SSE connection (attempt ${retryCount}/${MAX_RETRIES})...`);
-          // Wait 1 second before reconnecting
-          setTimeout(connect, 1000);
-        } else {
-          console.error(`Failed to connect to SSE after ${MAX_RETRIES} attempts`);
-          if (onError) onError(new Error('Connection to progress updates was lost. Please check your network connection.'));
-        }
-      };
-      
-      // Add onopen handler to track successful connections
-      eventSource.onopen = () => {
-        console.log(`SSE connection opened successfully for task ${taskId}`);
-        // Reset retry count on successful connection
-        retryCount = 0;
-      };
-    } catch (initError) {
-      console.error('Error initializing SSE connection:', initError);
-      if (onError) onError(new Error('Failed to connect to progress updates. Please try refreshing the page.'));
-    }
-  };
-  
-  // Start the connection
-  connect();
-  
-  return {
-    close: () => {
-      if (eventSource) {
-        console.log(`Manually closing SSE connection for task ${taskId}`);
-        eventSource.close();
-      }
-    },
-  };
-};
-
 // Delete a course task
 export const deleteLearningPath = async (taskId) => {
   try {
@@ -1297,7 +1210,6 @@ export default {
   refreshAuthToken,
   logout,
   migrateLearningPaths,
-  getProgressUpdates,
   deleteLearningPath,
   checkAuthStatus,
   downloadLearningPathPDF,

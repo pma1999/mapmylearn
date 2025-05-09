@@ -80,16 +80,12 @@ const LearningPathView = ({ source }) => {
     initialDetailsWereSet,
     persistentPathId, 
     temporaryPathId,
-    progressMessages, 
-    isReconnecting, 
-    retryAttempt,   
     refreshData, 
     progressMap,
     setProgressMap,
     lastVisitedModuleIdx,
     lastVisitedSubmoduleIdx,
     isPublicView, // Get public view status from hook
-    accumulatedPreviewData, // <-- GET STATE FROM HOOK
   } = useLearningPathData(source); 
   
   // State for Focus Flow navigation
@@ -725,11 +721,7 @@ const LearningPathView = ({ source }) => {
   if (loading) {
     return (
       <LoadingState 
-        progressMessages={progressMessages} 
-        isReconnecting={isReconnecting}
-        retryAttempt={retryAttempt}
-        topic={learningPath?.topic} // Pass topic directly from learningPath object
-        accumulatedPreviewData={accumulatedPreviewData} // <-- PASS PROP
+        topic={learningPath?.topic || sessionStorage.getItem('currentTopic')} // Pass topic from learningPath or session fallback
       /> 
     );
   }

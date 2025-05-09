@@ -384,10 +384,6 @@ class ImportPathRequest(BaseModel):
 active_generations = {}
 active_generations_lock = asyncio.Lock()
 
-# Progress callback queue for each generation with lock for thread safety
-progress_queues = {}
-progress_queues_lock = asyncio.Lock()
-
 # Custom class for handling datetime object serialization
 class DateTimeEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -529,23 +525,9 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
         db.close() # Close the session obtained from get_db()
     # --- End Create GenerationTask record ---
 
-    # Create a queue for progress updates
-    progress_queue = asyncio.Queue()
-    async with progress_queues_lock:
-        progress_queues[task_id] = progress_queue
-
     # Initialize the task in active_generations dictionary
     async with active_generations_lock:
         active_generations[task_id] = {"status": "pending", "result": None, "user_id": user_id}
-
-    # Define a progress callback that puts messages into the queue
-    async def progress_callback(update: Union[str, ProgressUpdate]):
-        if isinstance(update, str):
-            # Legacy string format - convert to ProgressUpdate
-            timestamp = datetime.now().isoformat()
-            update = ProgressUpdate(message=update, timestamp=timestamp)
-
-        await progress_queue.put(update)
 
     # Create key providers with server API keys (prioritized)
     # but accept user tokens for backward compatibility
@@ -572,7 +554,6 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
         explanation_style=request.explanation_style,
         googleKeyProvider=google_provider,
         braveKeyProvider=brave_provider,
-        progressCallback=progress_callback,
         language=request.language,
         user_id=user_id
     )
@@ -593,7 +574,6 @@ async def generate_learning_path_task(
     parallelCount: int = 2,
     searchParallelCount: int = 3,
     submoduleParallelCount: int = 2,
-    progressCallback = None,
     googleKeyProvider = None,
     braveKeyProvider = None,
     desiredModuleCount: Optional[int] = None,
@@ -606,9 +586,7 @@ async def generate_learning_path_task(
     Execute the course generation task with comprehensive error handling.
     Handles credit charging and potential refunds atomically.
     Ensures all exceptions are caught, logged, and reported through progress updates.
-    Stores the latest progress update in Redis.
     """
-    redis_client = await get_redis_client() # Get Redis client for this task
     db = SessionLocal() # Create a dedicated session for this background task
     credit_service = CreditService(db=db) # Instantiate credit service with the task's session
     charge_successful = False
@@ -626,49 +604,26 @@ async def generate_learning_path_task(
                                          preview_data: Optional[Dict[str, Any]] = None,
                                          action: Optional[str] = None):
         """
-        Enhanced progress callback that supports structured progress updates and Redis storage.
+        Enhanced progress callback that logs structured progress updates.
         """
-        nonlocal redis_client # Allow modification of the outer scope variable
         timestamp = datetime.now().isoformat()
         
-        update = ProgressUpdate(
-            message=message,
-            timestamp=timestamp,
-            phase=phase,
-            phase_progress=phase_progress,
-            overall_progress=overall_progress,
-            preview_data=preview_data,
-            action=action
-        )
+        # Construct a log message. Preview_data can be verbose, so just indicate its presence.
+        log_message_parts = [
+            f"Task {task_id}: {message}",
+            f"Phase: {phase}" if phase else None,
+            f"PhaseProgress: {phase_progress:.2f}" if phase_progress is not None else None,
+            f"OverallProgress: {overall_progress:.2f}" if overall_progress is not None else None,
+            f"Action: {action}" if action else None,
+            "PreviewData: Present" if preview_data else None
+        ]
+        full_log_message = " | ".join(filter(None, log_message_parts))
+        logging.info(full_log_message)
         
-        logging.info(f"Progress update for task {task_id}: {message} (Phase: {phase}, Progress: {overall_progress})")
-        
-        # Store latest update in Redis
-        if redis_client:
-            try:
-                # Convert model to dict, then to JSON string
-                update_dict = update.dict(exclude_none=True) # Exclude None values for cleaner JSON
-                update_json = json.dumps(update_dict, cls=DateTimeEncoder)
-                await redis_client.set(f"progress:{task_id}", update_json, ex=86400) # 24-hour expiry
-                logger.debug(f"Stored progress snapshot for task {task_id} in Redis.")
-            except redis.RedisError as redis_err:
-                logger.error(f"Redis error storing progress snapshot for task {task_id}: {redis_err}. Disabling Redis for this task.")
-                if redis_client:
-                    try:
-                        await redis_client.aclose() # Close potentially broken connection
-                    except Exception: # Ignore errors during close
-                        pass 
-                    redis_client = None # Disable further Redis attempts for this task run
-            except Exception as e:
-                logger.error(f"Error serializing/storing progress snapshot for task {task_id}: {e}")
-                # Optionally disable Redis here too if serialization errors are frequent
-        
-        # Send update via asyncio queue
-        if progressCallback:
-            try:
-                await progressCallback(update)
-            except Exception as q_put_err:
-                 logger.error(f"Error putting progress update onto queue for task {task_id}: {q_put_err}")
+        # For debugging, optionally log the preview_data structure if needed, but be mindful of log size
+        # if preview_data:
+        #    logging.debug(f"Task {task_id} Preview Data: {json.dumps(preview_data, default=str)[:500]}...")
+
 
     try:
         # --- Mark Task as RUNNING --- 
@@ -692,7 +647,7 @@ async def generate_learning_path_task(
             logger.exception(f"DB error updating GenerationTask {task_id} to RUNNING: {db_err_update}")
             db.rollback()
             # If we can't even mark as running, fail early
-            raise LearningPathGenerationError("Failed to initialize generation task state in database.") # Use custom error
+            raise LearningPathGenerationError("Failed to initialize generation task state in database.")
 
         logging.info(f"Starting course generation for: {topic} in language: {language}")
         await enhanced_progress_callback(
@@ -719,25 +674,23 @@ async def generate_learning_path_task(
                     transaction_type=TransactionType.GENERATION_USE,
                     notes=notes
                 )
-            # `with db.begin()` commits automatically if no exception occurs within the block
-            charge_successful = True # Mark charge as successful only if commit succeeds
+            charge_successful = True 
             logger.info(f"Credit charge successful for user {user_id}, task {task_id}.")
             await enhanced_progress_callback(
                 "Credit charged successfully.",
                 phase="initialization",
-                phase_progress=0.5, # Example progress update
+                phase_progress=0.5, 
                 overall_progress=0.05,
                 action="processing"
             )
         except InsufficientCreditsError as ice:
             logger.warning(f"Credit charge failed for task {task_id}: Insufficient credits for user {user_id}. Detail: {ice.detail}")
-            charge_error = ice # Store the specific error
-            raise # Re-raise to be caught by the outer block
+            charge_error = ice 
+            raise 
         except Exception as charge_exc:
             logger.exception(f"Credit charge failed unexpectedly for task {task_id}, user {user_id}: {charge_exc}")
-            # db.rollback() is handled automatically by `with db.begin()` context manager on exception
-            charge_error = charge_exc # Store the error
-            raise # Re-raise
+            charge_error = charge_exc 
+            raise 
         # --- End Credit Charge --- 
 
         # --- Execute Core Generation Logic --- 
@@ -758,7 +711,7 @@ async def generate_learning_path_task(
             parallel_count=parallelCount,
             search_parallel_count=searchParallelCount,
             submodule_parallel_count=submoduleParallelCount,
-            progress_callback=enhanced_progress_callback,
+            progress_callback=enhanced_progress_callback, # Pass the simplified logger callback
             google_key_provider=googleKeyProvider,
             brave_key_provider=braveKeyProvider,
             desired_module_count=desiredModuleCount,
@@ -768,7 +721,6 @@ async def generate_learning_path_task(
         )
         # --- End Core Generation Logic --- 
 
-        # If we reach here, generation was successful (no exception raised)
         final_status = GenerationTaskStatus.COMPLETED
         await enhanced_progress_callback(
             "Learning path generation completed successfully!",
@@ -783,7 +735,6 @@ async def generate_learning_path_task(
             serializable_result = make_path_data_serializable(result)
             new_lp = LearningPath(
                 user_id=user_id,
-                # Use path_id from result if present, otherwise generate new (should always be present now)
                 path_id=serializable_result.get("path_id", str(uuid.uuid4())),
                 topic=serializable_result.get("topic", topic),
                 language=language,
@@ -791,55 +742,40 @@ async def generate_learning_path_task(
                 source="generated"
             )
             db.add(new_lp)
-            db.commit() # Commit the new LearningPath
+            db.commit() 
             db.refresh(new_lp)
-            history_entry_id_to_link = new_lp.id # Store ID to link task later
+            history_entry_id_to_link = new_lp.id 
             logger.info(f"Successfully saved generated course {history_entry_id_to_link} for task {task_id}.")
-            # Notify frontend of the persistent history path ID via SSE
-            if progressCallback:
-                await progressCallback({
-                    "message": "Course saved to history.",
-                    "persistentPathId": new_lp.path_id,
-                    "action": "history_saved",
-                    "timestamp": datetime.now().isoformat()
-                })
+            # No SSE notification about persistentPathId anymore
         except Exception as save_err:
             logger.error(f"Failed to save successful course for task {task_id}: {save_err}")
-            db.rollback() # Rollback the history save attempt
-            # Mark as failed even though generation worked, because history save failed
+            db.rollback() 
             final_status = GenerationTaskStatus.FAILED
             error_msg_to_save = json.dumps({"message": "Generation succeeded but failed to save result to history.", "type": "history_save_error"})
-            error_occurred_after_charge = True # Trigger refund below
-            # Update in-memory status for final update block
+            error_occurred_after_charge = True 
             async with active_generations_lock:
                 if task_id in active_generations:
                      active_generations[task_id]["status"] = "failed"
                      active_generations[task_id]["error"] = json.loads(error_msg_to_save)
-            # Re-raise the save error so it's caught by the main handler
             raise LearningPathGenerationError("Failed to save course result.") from save_err 
 
-    # --- Unified Error Handling Block --- 
     except Exception as task_exception:
         final_status = GenerationTaskStatus.FAILED
-        error_occurred_after_charge = charge_successful # If charge succeeded, any exception means refund needed
+        error_occurred_after_charge = charge_successful 
         
-        # Determine user-friendly error message
         if isinstance(task_exception, InsufficientCreditsError):
             user_error_msg = task_exception.detail
             error_type = "insufficient_credits"
             error_msg_to_save = json.dumps({"message": user_error_msg, "type": error_type})
             logger.warning(f"Task {task_id} failed due to insufficient credits: {user_error_msg}")
-            # Don't save a history stub for this, user was just informed.
         elif isinstance(task_exception, LearningPathGenerationError):
             user_error_msg = task_exception.message
             error_type = "learning_path_generation_error"
-            # Use details if present, fallback to basic message
             error_details = getattr(task_exception, 'details', None)
             error_content = {"message": user_error_msg, "type": error_type}
             if error_details: error_content["details"] = error_details
             error_msg_to_save = json.dumps(error_content) 
             logger.error(f"Task {task_id} failed with LearningPathGenerationError: {user_error_msg}")
-            # Save a history stub for generation errors
             try:
                 error_path_id = str(uuid.uuid4())
                 err_lp = LearningPath(
@@ -852,27 +788,19 @@ async def generate_learning_path_task(
                     tags=["[Failed Generation]"]
                 )
                 db.add(err_lp)
-                db.commit() # Commit the failed history entry
+                db.commit() 
                 db.refresh(err_lp)
-                history_entry_id_to_link = err_lp.id # Store ID for final task update
+                history_entry_id_to_link = err_lp.id 
                 logger.info(f"Saved failed course stub {history_entry_id_to_link} to history for task {task_id}.")
-                if progressCallback:
-                    await progressCallback({
-                        "message": "Failed course saved to history.",
-                        "persistentPathId": error_path_id,
-                        "action": "history_saved",
-                        "timestamp": datetime.now().isoformat()
-                    })
+                # No SSE notification
             except Exception as save_err2:
                 logger.error(f"Failed to save failed LearningPath stub for task {task_id}: {save_err2}")
-                db.rollback() # Rollback failed stub save
+                db.rollback() 
         else:
-            # Generic internal error
             user_error_msg = "An unexpected error occurred during course generation. Please try again later or contact support."
             error_type = "internal_server_error"
             error_msg_to_save = json.dumps({"message": user_error_msg, "type": error_type})
             logger.exception(f"Task {task_id} failed with unexpected error: {task_exception}")
-             # Save a history stub for unexpected errors as well
             try:
                 error_path_id = str(uuid.uuid4())
                 err_lp = LearningPath(
@@ -889,37 +817,26 @@ async def generate_learning_path_task(
                 db.refresh(err_lp)
                 history_entry_id_to_link = err_lp.id
                 logger.info(f"Saved failed course stub {history_entry_id_to_link} (unexpected error) for task {task_id}.")
-                if progressCallback:
-                    await progressCallback({
-                        "message": "Failed course saved to history.",
-                        "persistentPathId": error_path_id,
-                        "action": "history_saved",
-                        "timestamp": datetime.now().isoformat()
-                    })
+                # No SSE notification
             except Exception as save_err3:
                 logger.error(f"Failed to save failed LearningPath stub (unexpected error) for task {task_id}: {save_err3}")
                 db.rollback()
         
-        # Send error update to frontend
         await enhanced_progress_callback(
             f"Error: {user_error_msg}",
             phase="error",
             action="error"
         )
 
-        # Update in-memory status for final DB update
         async with active_generations_lock:
              if task_id in active_generations:
                  active_generations[task_id]["status"] = "failed"
                  active_generations[task_id]["error"] = json.loads(error_msg_to_save)
 
-    # --- Finalization Block --- 
     finally:
-        # --- Refund Credit if Necessary --- 
         if error_occurred_after_charge and user_id is not None:
             logger.warning(f"Task {task_id} failed after successful charge. Attempting refund for user {user_id}.")
             try:
-                # Use a separate transaction for the refund
                 with db.begin():
                     refund_notes = f"Refund for failed generation task {task_id} (topic: {topic}). Error: {error_msg_to_save[:150] if error_msg_to_save else 'N/A'}"
                     await credit_service.grant_credits(
@@ -928,79 +845,43 @@ async def generate_learning_path_task(
                         transaction_type=TransactionType.REFUND,
                         notes=refund_notes
                     )
-                # db.begin() commits automatically on success
                 logger.info(f"Successfully refunded 1 credit to user {user_id} for failed task {task_id}.")
             except Exception as refund_exc:
-                # CRITICAL: Log refund failure prominently
                 logger.error(f"CRITICAL FAILURE: Failed to refund credit to user {user_id} for failed task {task_id}: {refund_exc}")
-                # db.rollback() handled by db.begin() context manager
-                # Potentially add monitoring/alerting here
-        # --- End Refund --- 
         
-        # --- Update Final Task Status in DB --- 
         try:
             stmt = update(GenerationTask).where(GenerationTask.task_id == task_id).values(
                 status=final_status,
                 ended_at=datetime.utcnow(),
                 error_message=error_msg_to_save,
                 history_entry_id=history_entry_id_to_link
-            ).execution_options(synchronize_session=False) # Add synchronize_session=False
+            ).execution_options(synchronize_session=False) 
             db.execute(stmt)
             db.commit()
             logger.info(f"Updated GenerationTask {task_id} final status to {final_status} in DB.")
         except Exception as db_final_err:
             logger.exception(f"DB error updating final status for GenerationTask {task_id}: {db_final_err}")
             db.rollback()
-        # --- End Update Final Status --- 
         
-        # --- Update In-Memory State --- 
         async with active_generations_lock:
             if task_id in active_generations:
-                # Ensure final status reflects DB attempt
-                active_generations[task_id]["status"] = final_status.lower() # e.g., 'completed', 'failed'
+                active_generations[task_id]["status"] = final_status.lower() 
                 if final_status == GenerationTaskStatus.COMPLETED:
                      active_generations[task_id]["result"] = result
                 elif error_msg_to_save:
-                     # Ensure error is serializable
                      try:
                          active_generations[task_id]["error"] = json.loads(error_msg_to_save)
                      except (json.JSONDecodeError, TypeError):
-                          active_generations[task_id]["error"] = {"message": error_msg_to_save} # Fallback
+                          active_generations[task_id]["error"] = {"message": error_msg_to_save} 
             else:
                  logger.warning(f"Task {task_id} not found in active_generations during finalization.")
-        # --- End Update In-Memory State --- 
         
-        # --- Signal SSE Completion --- 
-        logging.debug(f"Task {task_id} entering final SSE signal block.")
-        async with progress_queues_lock:
-            queue = progress_queues.get(task_id)
-            if queue:
-                try:
-                    await queue.put(None)  # Signal completion
-                    logger.info(f"Signaled completion queue for task {task_id}")
-                    # Remove queue after signaling
-                    del progress_queues[task_id]
-                except Exception as q_err:
-                    logger.error(f"Error signaling completion queue for task {task_id}: {q_err}")
-                    # Still try to remove queue if signaling failed
-                    if task_id in progress_queues:
-                        del progress_queues[task_id]
-            else:
-                logging.warning(f"Progress queue for task {task_id} not found in finally block for cleanup.")
-
-        # --- Close DB session and Redis client ---
         if db:
             try:
                 db.close()
                 logger.debug(f"Database session closed for task {task_id}.")
             except Exception as db_close_err:
                  logger.error(f"Error closing database session for task {task_id}: {db_close_err}")
-        if redis_client:
-            try:
-                await redis_client.aclose()
-                logger.debug(f"Redis client closed for task {task_id}.")
-            except Exception as redis_close_err:
-                logger.error(f"Error closing Redis client for task {task_id}: {redis_close_err}")
 
 @app.post("/api/validate-api-keys")
 async def validate_api_keys(request: ApiKeyValidationRequest):
@@ -1037,224 +918,124 @@ async def validate_api_keys(request: ApiKeyValidationRequest):
 async def get_learning_path_status(task_id: str):
     """
     Get the status and result of a course generation task.
-    Now includes more detailed error info if available.
+    Relies on in-memory cache and database, no SSE progress snapshots.
     """
-    # First check Redis for potentially more up-to-date final status/error
-    redis_client = await get_redis_client()
     final_status_info = None
-    if redis_client:
-        try:
-            progress_json = await redis_client.get(f"progress:{task_id}")
-            if progress_json:
-                progress_data = json.loads(progress_json)
-                if progress_data.get("phase") == "error" or progress_data.get("action") == "error":
-                     final_status_info = {
-                         "status": "failed",
-                         "error": {
-                             "message": progress_data.get("message", "Unknown error"),
-                             "type": "task_error"
-                         }
-                     }
-                elif progress_data.get("phase") == "completion" and progress_data.get("action") == "completed":
-                     final_status_info = {"status": "completed"}
-        except Exception as redis_err:
-            logger.warning(f"Error checking Redis for final status of task {task_id}: {redis_err}")
-        finally:
-             if redis_client: await redis_client.aclose()
-
-    # Fallback to in-memory state if Redis didn't provide a definitive final state
-    if not final_status_info:
-        async with active_generations_lock:
-            task_data = active_generations.get(task_id)
-            if task_data:
-                final_status_info = {
-                    "status": task_data["status"],
-                    "result": task_data.get("result"),
-                    "error": task_data.get("error")
-                }
-
-    if final_status_info:
-         return {
-             "task_id": task_id,
-             "status": final_status_info["status"],
-             "result": final_status_info.get("result"),
-             "error": final_status_info.get("error")
-         }
-    else:
-         # If not found in memory or Redis, check the database as a last resort
-         db = SessionLocal()
-         try:
-             task_record = db.query(GenerationTask).filter(GenerationTask.task_id == task_id).first()
-             if task_record:
-                 status = task_record.status.lower()
-                 error_info = None
-                 if task_record.error_message:
-                     try:
-                         error_info = json.loads(task_record.error_message)
-                     except (json.JSONDecodeError, TypeError):
-                          error_info = {"message": task_record.error_message, "type": "db_error_string"}
-                 return {
-                     "task_id": task_id,
-                     "status": status,
-                     "result": None, # Cannot fetch result from DB easily here
-                     "error": error_info
-                 }
-             else:
-                 raise HTTPException(
-                     status_code=404,
-                     detail="Learning path task not found or already cleaned up."
-                 )
-         finally:
-              db.close()
-
-@app.get("/api/progress/{task_id}")
-async def get_progress(task_id: str):
-    # ... (SSE endpoint implementation remains largely the same) ...
-    redis_client = await get_redis_client() # Get Redis client for this request
-
-    # Verify task exists before starting SSE (check DB first)
     db = SessionLocal()
-    task_record = db.query(GenerationTask.task_id, GenerationTask.status).filter(GenerationTask.task_id == task_id).first()
-    db.close()
-    if not task_record:
-        raise HTTPException(status_code=404, detail="Task not found.")
-
-    # Check if task is already finished based on DB state
-    is_finished = task_record.status in [GenerationTaskStatus.COMPLETED, GenerationTaskStatus.FAILED]
 
     try:
-        async with progress_queues_lock:
-            # Queue might not exist if task finished quickly or if connection is late
-            queue = progress_queues.get(task_id)
+        # 1. Check in-memory active_generations
+        async with active_generations_lock:
+            task_data_memory = active_generations.get(task_id)
+            if task_data_memory:
+                final_status_info = {
+                    "status": task_data_memory["status"],
+                    "result": task_data_memory.get("result"),
+                    "error": task_data_memory.get("error")
+                }
+        
+        # 2. If task is marked completed in memory but result is missing, try to fetch from DB
+        if final_status_info and final_status_info["status"] == "completed" and not final_status_info.get("result"):
+            logger.info(f"Task {task_id} completed in memory, attempting to fetch result from DB.")
+            task_record_for_result = db.query(GenerationTask).filter(
+                GenerationTask.task_id == task_id, 
+                GenerationTask.status == GenerationTaskStatus.COMPLETED
+            ).first()
 
-        async def event_generator():
-            nonlocal redis_client # Allow modification if needed
-            connected = True
-            sent_completion = False
-            try:
-                # 1. Send latest snapshot from Redis first (if available)
-                snapshot_sent = False
-                if redis_client:
+            if task_record_for_result and task_record_for_result.history_entry_id:
+                learning_path_record = db.query(LearningPath).filter(LearningPath.id == task_record_for_result.history_entry_id).first()
+                if learning_path_record and learning_path_record.path_data:
+                    fetched_result = make_path_data_serializable(learning_path_record.path_data)
+                    final_status_info["result"] = fetched_result
+                    # Update in-memory cache with the fetched result
+                    async with active_generations_lock:
+                        if task_id in active_generations:
+                            active_generations[task_id]["result"] = fetched_result
+                    logger.info(f"Fetched result for completed task {task_id} from DB.")
+                else:
+                    logger.warning(f"Task {task_id} completed, but LearningPath or path_data not found for history_entry_id {task_record_for_result.history_entry_id}. Treating as error.")
+                    final_status_info["status"] = "failed"
+                    final_status_info["error"] = {"message": "Course data retrieval failed after completion.", "type": "data_retrieval_error"}
+                    async with active_generations_lock: # Update memory status
+                        if task_id in active_generations:
+                            active_generations[task_id]["status"] = "failed"
+                            active_generations[task_id]["error"] = final_status_info["error"]
+            else:
+                logger.warning(f"Task {task_id} marked completed in memory, but no corresponding DB record or history_entry_id found. Treating as error.")
+                final_status_info["status"] = "failed"
+                final_status_info["error"] = {"message": "Inconsistent completion state for course.", "type": "state_inconsistency_error"}
+                async with active_generations_lock: # Update memory status
+                    if task_id in active_generations:
+                        active_generations[task_id]["status"] = "failed"
+                        active_generations[task_id]["error"] = final_status_info["error"]
+
+
+        # 3. If task not found in memory, query the database
+        elif not final_status_info:
+            logger.info(f"Task {task_id} not in memory, querying DB.")
+            task_record_db = db.query(GenerationTask).filter(GenerationTask.task_id == task_id).first()
+            if task_record_db:
+                status_from_db = task_record_db.status.lower()
+                error_info_from_db = None
+                result_from_db = None
+
+                if task_record_db.error_message:
                     try:
-                        snapshot_json = await redis_client.get(f"progress:{task_id}")
-                        if snapshot_json:
-                            try:
-                                snapshot_data = json.loads(snapshot_json)
-                                # Validate if it looks like a ProgressUpdate (optional)
-                                if isinstance(snapshot_data, dict) and 'message' in snapshot_data and 'timestamp' in snapshot_data:
-                                     yield f"data: {json.dumps(snapshot_data)}\n\n"
-                                     logger.info(f"Sent progress snapshot from Redis for task {task_id}")
-                                     snapshot_sent = True
-                                     # Check if snapshot indicates completion
-                                     if snapshot_data.get("phase") == "completion" or snapshot_data.get("phase") == "error":
-                                          sent_completion = True # Assume snapshot is final state
-                                else:
-                                     logger.warning(f"Invalid snapshot data structure in Redis for task {task_id}")
-                            except json.JSONDecodeError:
-                                logger.error(f"Failed to parse progress snapshot JSON from Redis for task {task_id}")
-                            except Exception as parse_err:
-                                logger.error(f"Error processing snapshot data for task {task_id}: {parse_err}")
-                    except redis.RedisError as redis_err:
-                        logger.error(f"Redis error fetching snapshot for task {task_id}: {redis_err}. Will rely on queue.")
+                        error_info_from_db = json.loads(task_record_db.error_message)
+                    except (json.JSONDecodeError, TypeError):
+                        error_info_from_db = {"message": task_record_db.error_message, "type": "db_error_string"}
                 
-                # Send initial message only if no snapshot was sent
-                if not snapshot_sent:
-                     initial_message = "Connection established. Waiting for progress..."
-                     if is_finished:
-                          initial_message = "Task already completed. Final status may be available via GET /learning-path/{task_id}."
-                          sent_completion = True # Mark as complete if DB says so
-                     
-                     initial_update = ProgressUpdate(
-                         message=initial_message,
-                         timestamp=datetime.now().isoformat(),
-                         phase="connection", action="connected"
-                     )
-                     yield f"data: {json.dumps(initial_update.dict())}\n\n"
-
-                # 2. Listen for live updates from the queue (if queue exists and task not already complete)
-                if queue and not sent_completion:
-                    while connected:
-                        try:
-                            # Use asyncio.wait_for to handle client disconnects potentially faster
-                            update = await asyncio.wait_for(queue.get(), timeout=60.0) # Example timeout
-                            queue.task_done() # Mark task as done for the queue
-                        except asyncio.TimeoutError:
-                            # No message received in timeout period, send a keep-alive comment or check connection?
-                            # yield ": keep-alive\n\n" # Standard SSE keep-alive comment
-                            # Or check if client is still connected? For now, just continue.
-                            continue
-                        except asyncio.CancelledError:
-                             # If wait_for is cancelled, it means the outer generator was cancelled
-                             raise # Re-raise CancelledError
-                        except Exception as q_get_err:
-                             logger.error(f"Error getting from queue for task {task_id}: {q_get_err}")
-                             break # Exit loop on queue error
-
-                        if update is None:
-                            yield "data: {\"complete\": true}\n\n"
-                            sent_completion = True
-                            break # Exit loop on completion signal
-
-                        if hasattr(update, 'dict'):
-                            update_dict = update.dict(exclude_none=True)
+                if status_from_db == "completed":
+                    if task_record_db.history_entry_id:
+                        learning_path_record_db = db.query(LearningPath).filter(LearningPath.id == task_record_db.history_entry_id).first()
+                        if learning_path_record_db and learning_path_record_db.path_data:
+                            result_from_db = make_path_data_serializable(learning_path_record_db.path_data)
+                            logger.info(f"Fetched result for completed task {task_id} (from DB query).")
                         else:
-                            update_dict = update # Assume it's already a dict or basic type
+                            logger.warning(f"Task {task_id} (from DB) completed, but LearningPath/path_data not found for history_entry_id {task_record_db.history_entry_id}. Treating as error.")
+                            status_from_db = "failed"
+                            error_info_from_db = {"message": "Course data retrieval failed after completion (DB).", "type": "data_retrieval_error_db"}
+                    else:
+                        logger.warning(f"Task {task_id} (from DB) completed, but no history_entry_id. Treating as error.")
+                        status_from_db = "failed"
+                        error_info_from_db = {"message": "Completed task has no associated course data (DB).", "type": "missing_history_link_db"}
 
-                        yield f"data: {json.dumps(update_dict, cls=DateTimeEncoder)}\n\n"
-                elif not queue and not sent_completion:
-                    # If queue was missing initially, and DB/snapshot didn't indicate completion, log warning.
-                    logger.warning(f"Progress queue for task {task_id} not found, and task not marked as finished. Stream ending after snapshot/initial message.")
+
+                final_status_info = {
+                    "status": status_from_db,
+                    "result": result_from_db,
+                    "error": error_info_from_db
+                }
                 
-                # If loop finished because task completed (sent_completion=True), ensure final signal sent if needed
-                if sent_completion and not update is None: # Check if last message sent wasn't the completion signal
-                     yield "data: {\"complete\": true}\n\n"
+                # Update in-memory cache with DB findings
+                async with active_generations_lock:
+                    active_generations[task_id] = {
+                        "status": final_status_info["status"],
+                        "result": final_status_info.get("result"),
+                        "error": final_status_info.get("error"),
+                        "user_id": task_record_db.user_id 
+                    }
+                logger.info(f"Populated in-memory cache for task {task_id} from DB: Status {status_from_db}")
+            else:
+                # Task not in memory and not in DB
+                logger.warning(f"Task {task_id} not found in memory or DB.")
+                raise HTTPException(status_code=404, detail="Learning path task not found.")
 
-            except asyncio.CancelledError:
-                logger.info(f"SSE connection for task {task_id} cancelled by client.")
-                connected = False # Mark as disconnected
-            except Exception as e:
-                logger.error(f"Error in SSE stream for task {task_id}: {str(e)}\n{traceback.format_exc()}")
-                try:
-                    # Attempt to send an error message to the client
-                    error_data = {"error": "An internal error occurred in the progress stream.", "type": "stream_error"}
-                    yield f"data: {json.dumps(error_data)}\n\n"
-                except Exception:
-                    logger.error(f"Failed to send error message to SSE client for task {task_id}")
-            finally:
-                logger.info(f"SSE event_generator loop finished for task {task_id}. Connected: {connected}, Sent Completion: {sent_completion}")
-                # Close Redis client used by this generator
-                if redis_client:
-                    try:
-                        await redis_client.aclose()
-                        logger.debug(f"Redis client closed for SSE stream {task_id}.")
-                    except Exception as redis_close_err:
-                        logger.error(f"Error closing Redis client for SSE stream {task_id}: {redis_close_err}")
-
-        return StreamingResponse(
-            event_generator(),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no" # Useful for Nginx buffering issues
+        # 4. Final return
+        if final_status_info:
+            return {
+                "task_id": task_id,
+                "status": final_status_info["status"],
+                "result": final_status_info.get("result"),
+                "error": final_status_info.get("error")
             }
-        )
-    except HTTPException:
-        # Close Redis client if HTTP exception occurs *before* generator starts
-        if redis_client: 
-             try: await redis_client.aclose()
-             except: pass
-        raise
-    except Exception as e:
-        logger.exception(f"Error setting up progress stream for task {task_id}: {str(e)}")
-        # Close Redis client on setup error
-        if redis_client: 
-            try: await redis_client.aclose()
-            except: pass
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to set up progress updates stream. Please try again later."
-        )
+        else:
+            # This case should ideally be covered by the DB check leading to 404 if not found
+            logger.error(f"Logic error: final_status_info not populated for task {task_id} despite checks.")
+            raise HTTPException(status_code=500, detail="Could not determine task status.")
+            
+    finally:
+        db.close()
 
 @app.delete("/api/learning-path/{task_id}")
 async def delete_learning_path(task_id: str):
@@ -1267,13 +1048,6 @@ async def delete_learning_path(task_id: str):
         async with active_generations_lock:
             if task_id in active_generations:
                 del active_generations[task_id]
-                task_existed = True
-        
-        # Clean up the progress queue if it exists
-        async with progress_queues_lock:
-            if task_id in progress_queues:
-                await progress_queues[task_id].put(None)  # Signal completion
-                del progress_queues[task_id]
                 task_existed = True
         
         if not task_existed:
@@ -1309,7 +1083,6 @@ async def get_api_usage_stats(request: Request):
     """
     Get API usage statistics.
     This is an admin-only endpoint for monitoring API key usage.
-    In a production system, this would include authentication checks.
     """
     # In a real system, we would check authentication and authorization here
     # For now, just check if the request seems to be coming from an admin IP
