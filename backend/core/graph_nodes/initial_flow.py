@@ -114,7 +114,10 @@ Your response should be exactly 5 search queries, each targeting a different fac
         
         # Prepare preview data for frontend display
         preview_data = {
-            "search_queries": [query.keywords for query in search_queries]
+            "type": "search_queries_generated",
+            "data": {
+                "queries": [query.keywords for query in search_queries]
+            }
         }
         
         # Send progress update about completion with preview data
@@ -622,11 +625,16 @@ Structure your response as a complete curriculum outline with sequential, interc
             preview_modules.append({
                 "id": module_index,
                 "title": module.title,
-                "description": module.description[:150] + "..." if len(module.description) > 150 else module.description
+                "order": module_index,
+                "description_preview": module.description[:150] + "..." if len(module.description) > 150 else module.description,
+                "status": "defined"
             })
 
         preview_data = {
-            "modules": preview_modules
+            "type": "modules_defined",
+            "data": {
+                "modules": preview_modules
+            }
         }
 
         if progress_callback and 'modules' in final_learning_path:

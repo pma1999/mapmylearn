@@ -301,7 +301,7 @@ async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
             phase="submodule_planning",
             phase_progress=1.0,
             overall_progress=0.6,
-            preview_data={"modules": preview_modules},
+            preview_data={"type": "all_submodules_planned", "data": {"modules": preview_modules, "total_submodules_planned": total_submodules}}, # Enhanced preview_data
             action="completed"
         )
     
@@ -401,10 +401,13 @@ async def plan_module_submodules(state: LearningPathState, idx: int, module) -> 
         # Send progress update for completed module submodule planning
         if progress_callback:
             submodule_previews = []
-            for submodule in submodules:
+            for submodule_idx, submodule in enumerate(submodules): # Added submodule_idx
                 submodule_previews.append({
+                    "id": submodule_idx, # Added id for keying
                     "title": submodule.title,
-                    "description": submodule.description[:100] + "..." if len(submodule.description) > 100 else submodule.description
+                    "order": submodule_idx, # Added order
+                    "description_preview": submodule.description[:100] + "..." if len(submodule.description) > 100 else submodule.description,
+                    "status": "planned" # Initial status
                 })
                 
             # Calculate slightly more progress
@@ -417,13 +420,14 @@ async def plan_module_submodules(state: LearningPathState, idx: int, module) -> 
                 phase_progress=module_progress,
                 overall_progress=overall_progress,
                 preview_data={
-                    "current_module": {
-                        "title": module.title, 
-                        "index": idx,
+                    "type": "module_submodules_planned", # Specific type
+                    "data": { # Wrapped in data
+                        "module_id": idx, # Identify parent module
+                        "module_title": module.title, 
                         "submodules": submodule_previews
                     }
                 },
-                action="processing"
+                action="processing" # This is still part of an ongoing process
             )
         
         return enhanced_module
@@ -888,8 +892,17 @@ async def process_single_submodule(
             await progress_callback(
                 f"Processing: Module {module_id+1} > Submodule {sub_id+1}: {submodule.title}",
                 phase="submodule_research",
-                phase_progress=0.1,
-                overall_progress=0.6,
+                phase_progress=0.1, # Example progress
+                overall_progress=0.6 + ( (module_id * 0.1 + sub_id * 0.02) / state.get("total_submodules_estimate", 10) ), # Approximate overall progress
+                preview_data={
+                    "type": "submodule_processing_started",
+                    "data": {
+                        "module_id": module_id,
+                        "submodule_id": sub_id,
+                        "submodule_title": submodule.title,
+                        "status_detail": "research_started"
+                    }
+                },
                 action="processing"
             )
         
@@ -905,8 +918,17 @@ async def process_single_submodule(
             await progress_callback(
                 f"Generated search query for {module.title} > {submodule.title}",
                 phase="submodule_research",
-                phase_progress=0.3,
-                overall_progress=0.62,
+                phase_progress=0.3, # Example progress
+                overall_progress=0.61 + ( (module_id * 0.1 + sub_id * 0.02) / state.get("total_submodules_estimate", 10) ),
+                preview_data={
+                    "type": "submodule_status_update",
+                    "data": {
+                        "module_id": module_id,
+                        "submodule_id": sub_id,
+                        "status_detail": "query_generated",
+                        "queries": [q.keywords for q in submodule_search_queries] if submodule_search_queries else []
+                    }
+                },
                 action="processing"
             )
         
@@ -922,9 +944,18 @@ async def process_single_submodule(
             await progress_callback(
                 f"Completed research for {module.title} > {submodule.title}",
                 phase="submodule_research",
-                phase_progress=0.8,
-                overall_progress=0.65,
-                action="completed"
+                phase_progress=0.8, # Example progress
+                overall_progress=0.65 + ( (module_id * 0.1 + sub_id * 0.02) / state.get("total_submodules_estimate", 10) ),
+                preview_data={
+                    "type": "submodule_status_update",
+                    "data": {
+                        "module_id": module_id,
+                        "submodule_id": sub_id,
+                        "status_detail": "research_completed",
+                        "search_result_count": len(submodule_search_results) if submodule_search_results else 0
+                    }
+                },
+                action="completed" # This specific sub-phase is completed
             )
         
         # STEP 3: Develop submodule content based on search results
@@ -935,8 +966,16 @@ async def process_single_submodule(
             await progress_callback(
                 f"Developing content for {module.title} > {submodule.title}",
                 phase="content_development",
-                phase_progress=0.2,
-                overall_progress=0.67,
+                phase_progress=0.2, # Example progress
+                overall_progress=0.67 + ( (module_id * 0.1 + sub_id * 0.02) / state.get("total_submodules_estimate", 10) ),
+                preview_data={
+                    "type": "submodule_status_update",
+                    "data": {
+                        "module_id": module_id,
+                        "submodule_id": sub_id,
+                        "status_detail": "content_development_started"
+                    }
+                },
                 action="processing"
             )
             
@@ -953,8 +992,16 @@ async def process_single_submodule(
             await progress_callback(
                 f"Generating quiz questions for {module.title} > {submodule.title}",
                 phase="quiz_generation",
-                phase_progress=0.0,
-                overall_progress=0.75,
+                phase_progress=0.0, # Example progress
+                overall_progress=0.75 + ( (module_id * 0.1 + sub_id * 0.02) / state.get("total_submodules_estimate", 10) ),
+                preview_data={
+                    "type": "submodule_status_update",
+                    "data": {
+                        "module_id": module_id,
+                        "submodule_id": sub_id,
+                        "status_detail": "quiz_generation_started"
+                    }
+                },
                 action="started"
             )
         
@@ -973,7 +1020,15 @@ async def process_single_submodule(
                     f"Skipped quiz generation for {module.title} > {submodule.title} due to content generation failure",
                     phase="quiz_generation",
                     phase_progress=0.0,
-                    overall_progress=0.75,
+                    overall_progress=0.75 + ( (module_id * 0.1 + sub_id * 0.02) / state.get("total_submodules_estimate", 10) ),
+                    preview_data={
+                        "type": "submodule_status_update",
+                        "data": {
+                            "module_id": module_id,
+                            "submodule_id": sub_id,
+                            "status_detail": "quiz_generation_skipped"
+                        }
+                    },
                     action="skipped"
                 )
         
@@ -1035,7 +1090,17 @@ async def process_single_submodule(
                 f"Completed development for {module.title} > {submodule.title} in {total_time:.2f}s",
                 phase="content_development",
                 phase_progress=0.5,
-                overall_progress=0.7,
+                overall_progress=0.7 + ( (module_id * 0.1 + sub_id * 0.02) / state.get("total_submodules_estimate", 10) ),
+                preview_data={
+                    "type": "submodule_completed",
+                    "data": {
+                        "module_id": module_id,
+                        "submodule_id": sub_id,
+                        "status_detail": "fully_processed",
+                        "quiz_question_count": len(quiz_questions) if quiz_questions else 0,
+                        "resource_count": len(result.get("resources", [])) # Assuming result has resources by now
+                    }
+                },
                 action="completed"
             )
         
@@ -1048,7 +1113,15 @@ async def process_single_submodule(
                 f"Error in {module.title} > {submodule.title}: {str(e)}",
                 phase="content_development",
                 phase_progress=0.3,
-                overall_progress=0.65,
+                overall_progress=0.65 + ( (module_id * 0.1 + sub_id * 0.02) / state.get("total_submodules_estimate", 10) ),
+                preview_data={
+                    "type": "submodule_error",
+                    "data": {
+                        "module_id": module_id,
+                        "submodule_id": sub_id,
+                        "error_message": str(e)
+                    }
+                },
                 action="error"
             )
         
@@ -2328,7 +2401,7 @@ async def plan_submodules(state: LearningPathState) -> Dict[str, Any]:
             phase="submodule_planning",
             phase_progress=1.0,
             overall_progress=0.6, # Keep estimate
-            preview_data={"modules": preview_modules},
+            preview_data={"type": "all_submodules_planned", "data": {"modules": preview_modules, "total_submodules_planned": total_submodules}}, # Enhanced preview_data
             action="completed"
         )
 
@@ -2450,36 +2523,33 @@ async def plan_module_submodules(
         # Send progress update for completed module submodule planning
         if progress_callback:
             submodule_previews = []
-            for submodule in submodules:
+            for submodule_idx, submodule in enumerate(submodules): # Added submodule_idx
                 submodule_previews.append({
+                    "id": submodule_idx, # Added id for keying
                     "title": submodule.title,
-                    # Truncate description for preview
-                    "description": submodule.description[:75] + "..." if len(submodule.description) > 75 else submodule.description 
+                    "order": submodule_idx, # Added order
+                    "description_preview": submodule.description[:100] + "..." if len(submodule.description) > 100 else submodule.description,
+                    "status": "planned" # Initial status
                 })
                 
-            # Calculate progress more accurately
-            module_progress_complete = (idx + 1) / max(1, total_modules)
-            overall_progress = 0.55 + (module_progress_complete * 0.15)
-
-            # ---> NEW: Construct structured preview data for this module update <---
-            module_preview_update = {
-                "module_update": {
-                    "module_id": idx,
-                    "title": enhanced_module.title, # Use title from the created/updated enhanced_module
-                    "submodules": submodule_previews
-                }
-            }
-            # ---> END NEW <---
+            # Calculate slightly more progress
+            module_progress = (idx + 1) / max(1, total_modules)
+            overall_progress = 0.55 + (module_progress * 0.05)
             
             await progress_callback(
                 f"Planned {len(submodules)} submodules for module {idx+1}: {module.title}",
-                phase="submodule_planning",
-                phase_progress=module_progress_complete,
+                phase="submodule_planning", 
+                phase_progress=module_progress,
                 overall_progress=overall_progress,
-                # ---> MODIFIED: Pass the structured preview data <---
-                preview_data=module_preview_update,
-                # ---> END MODIFIED <---
-                action="completed" # Mark this module's planning as completed
+                preview_data={
+                    "type": "module_submodules_planned", # Specific type
+                    "data": { # Wrapped in data
+                        "module_id": idx, # Identify parent module
+                        "module_title": module.title, 
+                        "submodules": submodule_previews
+                    }
+                },
+                action="processing" # This is still part of an ongoing process
             )
         
         return enhanced_module

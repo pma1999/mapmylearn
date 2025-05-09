@@ -31,7 +31,7 @@ from backend.routes.admin import router as admin_router
 from backend.routes.chatbot import router as chatbot_router
 from backend.routes.payments import router as payments_router
 from backend.models.auth_models import User, CreditTransaction, TransactionType, GenerationTask, GenerationTaskStatus, LearningPath
-from backend.models.models import Resource
+from backend.models.models import Resource, EnhancedModule, Submodule, QuizQuestion
 from backend.utils.auth import decode_access_token
 
 # Import rate limiter and backend
@@ -78,19 +78,31 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def make_path_data_serializable(data: Any) -> Any:
-    """Recursively converts Pydantic Resource models within data to dictionaries."""
-    if isinstance(data, dict):
-        return {k: make_path_data_serializable(v) for k, v in data.items()}
-    elif isinstance(data, list):
+    """Recursively converts Pydantic models within data to dictionaries."""
+    if isinstance(data, list):
         return [make_path_data_serializable(item) for item in data]
-    elif isinstance(data, Resource):
-        # Use model_dump() for Pydantic v2, fallback to dict() for v1
+    elif isinstance(data, dict):
+        return {k: make_path_data_serializable(v) for k, v in data.items()}
+    # Add explicit checks for your known Pydantic models
+    elif isinstance(data, (Resource, EnhancedModule, Submodule, QuizQuestion, LearningPathState, ProgressUpdate, SearchQuery, SearchServiceResult, ScrapedResult, CreditTransaction, User, GenerationTask, LearningPath)):
+        # Check for LearningPathState, ProgressUpdate, SearchQuery, SearchServiceResult, ScrapedResult as well, if they can be part of 'result'
+        # Also added CreditTransaction, User, GenerationTask, LearningPath for completeness if they ever get nested unexpectedly
+        if hasattr(data, 'model_dump'):
+            return data.model_dump() # Pydantic v2
+        else:
+            return data.dict() # Pydantic v1 (fallback)
+    elif isinstance(data, datetime):
+        return data.isoformat()
+    # Add other specific types if necessary, e.g., UUIDs if not handled by default json encoder
+    elif isinstance(data, uuid.UUID):
+        return str(data)
+    # Fallback for any other Pydantic models not explicitly listed (though less safe)
+    elif hasattr(data, '__pydantic_model__') or hasattr(data, 'model_fields'): # Heuristic for Pydantic models
         if hasattr(data, 'model_dump'):
             return data.model_dump()
-        else:
+        elif hasattr(data, 'dict'):
             return data.dict()
-    else:
-        return data
+    return data # Return data as is if not a list, dict, or known Pydantic model or datetime
 
 # Initialize the API Key Manager singleton
 key_manager = ApiKeyManager()
@@ -381,7 +393,7 @@ class ImportPathRequest(BaseModel):
     json_data: str
 
 # Store for active generation tasks with lock for thread safety
-active_generations = {}
+active_generations: Dict[str, Dict[str, Any]] = {} # Added type hint for clarity
 active_generations_lock = asyncio.Lock()
 
 # Custom class for handling datetime object serialization
@@ -527,7 +539,13 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
 
     # Initialize the task in active_generations dictionary
     async with active_generations_lock:
-        active_generations[task_id] = {"status": "pending", "result": None, "user_id": user_id}
+        active_generations[task_id] = {
+            "status": "pending", 
+            "result": None, 
+            "user_id": user_id,
+            "progress_stream": [], # Initialize progress_stream list
+            "error": None # Initialize error field
+        }
 
     # Create key providers with server API keys (prioritized)
     # but accept user tokens for backward compatibility
@@ -595,6 +613,7 @@ async def generate_learning_path_task(
     error_msg_to_save = None
     history_entry_id_to_link = None
     result = None
+    current_overall_progress = 0.0 # Track current overall progress
 
     # Define a wrapper progress callback to ensure messages are logged and structured
     async def enhanced_progress_callback(message: str,
@@ -603,9 +622,7 @@ async def generate_learning_path_task(
                                          overall_progress: Optional[float] = None,
                                          preview_data: Optional[Dict[str, Any]] = None,
                                          action: Optional[str] = None):
-        """
-        Enhanced progress callback that logs structured progress updates.
-        """
+        nonlocal current_overall_progress # Allow modification of the outer scope variable
         timestamp = datetime.now().isoformat()
         
         # Construct a log message. Preview_data can be verbose, so just indicate its presence.
@@ -624,15 +641,43 @@ async def generate_learning_path_task(
         # if preview_data:
         #    logging.debug(f"Task {task_id} Preview Data: {json.dumps(preview_data, default=str)[:500]}...")
 
+        # Update current_overall_progress if a new value is provided
+        if overall_progress is not None:
+            current_overall_progress = overall_progress
+        
+        progress_update_obj = ProgressUpdate(
+            message=message,
+            timestamp=timestamp,
+            phase=phase,
+            phase_progress=phase_progress,
+            overall_progress=current_overall_progress, # Use the tracked overall_progress
+            preview_data=preview_data,
+            action=action
+        )
+
+        async with active_generations_lock:
+            if task_id in active_generations:
+                # Ensure progress_stream exists, defensively
+                if "progress_stream" not in active_generations[task_id]:
+                    active_generations[task_id]["progress_stream"] = []
+                active_generations[task_id]["progress_stream"].append(progress_update_obj.model_dump()) # Store as dict
+                # Keep only the last N updates if necessary to save memory, e.g., last 50
+                active_generations[task_id]["progress_stream"] = active_generations[task_id]["progress_stream"][-50:]
+            else:
+                logger.warning(f"Task {task_id} not found in active_generations when trying to append progress.")
+
 
     try:
         # --- Mark Task as RUNNING --- 
         async with active_generations_lock:
             if task_id in active_generations:
                 active_generations[task_id]["status"] = "running"
+                # Initialize progress_stream if it wasn't (should be done at creation)
+                if "progress_stream" not in active_generations[task_id]:
+                    active_generations[task_id]["progress_stream"] = [] 
             else:
                 # Should not happen if endpoint logic is correct, but handle defensively
-                active_generations[task_id] = {"status": "running", "result": None, "user_id": user_id}
+                active_generations[task_id] = {"status": "running", "result": None, "user_id": user_id, "progress_stream": [], "error": None}
         
         try:
             # Use db from this task's scope
@@ -655,6 +700,7 @@ async def generate_learning_path_task(
             phase="initialization",
             phase_progress=0.0,
             overall_progress=0.0,
+            preview_data={"type": "GENERATION_STARTED", "data": {"topic": topic, "language": language}},
             action="started"
         )
 
@@ -757,6 +803,14 @@ async def generate_learning_path_task(
                 if task_id in active_generations:
                      active_generations[task_id]["status"] = "failed"
                      active_generations[task_id]["error"] = json.loads(error_msg_to_save)
+                     active_generations[task_id]["progress_stream"].append(ProgressUpdate(
+                        message=f"Error: {error_msg_to_save}",
+                        timestamp=datetime.now().isoformat(),
+                        phase="error",
+                        overall_progress=current_overall_progress,
+                        action="error",
+                        preview_data={"type": "TASK_FAILED_EVENT", "data": json.loads(error_msg_to_save)}
+                     ).model_dump())
             raise LearningPathGenerationError("Failed to save course result.") from save_err 
 
     except Exception as task_exception:
@@ -829,9 +883,39 @@ async def generate_learning_path_task(
         )
 
         async with active_generations_lock:
-             if task_id in active_generations:
-                 active_generations[task_id]["status"] = "failed"
-                 active_generations[task_id]["error"] = json.loads(error_msg_to_save)
+            if task_id in active_generations:
+                active_generations[task_id]["status"] = "failed"
+                error_data_for_state = {}
+                try:
+                    error_data_for_state = json.loads(error_msg_to_save)
+                except (json.JSONDecodeError, TypeError):
+                    error_data_for_state = {"message": error_msg_to_save, "type": "unknown_error_format"}
+                
+                active_generations[task_id]["error"] = error_data_for_state
+                
+                # Ensure progress_stream exists
+                if "progress_stream" not in active_generations[task_id]:
+                    active_generations[task_id]["progress_stream"] = []
+                
+                active_generations[task_id]["progress_stream"].append(ProgressUpdate(
+                    message=user_error_msg, # Use the user-facing error message
+                    timestamp=datetime.now().isoformat(),
+                    phase="error",
+                    overall_progress=current_overall_progress, # Use last known progress
+                    action="error",
+                    preview_data={"type": "TASK_FAILED_EVENT", "data": error_data_for_state}
+                ).model_dump())
+            else: # This else is aligned with the 'if task_id in active_generations'
+                logger.warning(f"Task {task_id} not found in active_generations when handling exception.")
+        
+        # This block is for closing the DB session obtained at the start of generate_learning_path_task
+        # specifically within the exception handling path, before reaching the main finally.
+        if db: 
+            try:
+                db.close()
+                logger.debug(f"Database session closed for task {task_id} after exception.")
+            except Exception as db_close_err:
+                logger.error(f"Error closing database session for task {task_id} after exception: {db_close_err}")
 
     finally:
         if error_occurred_after_charge and user_id is not None:
@@ -867,12 +951,39 @@ async def generate_learning_path_task(
             if task_id in active_generations:
                 active_generations[task_id]["status"] = final_status.lower() 
                 if final_status == GenerationTaskStatus.COMPLETED:
-                     active_generations[task_id]["result"] = result
+                     # Ensure the result stored in memory is already serializable
+                     active_generations[task_id]["result"] = make_path_data_serializable(result) 
+                     active_generations[task_id]["progress_stream"].append(ProgressUpdate(
+                        message="Course generated successfully!",
+                        timestamp=datetime.now().isoformat(),
+                        phase="completion",
+                        overall_progress=1.0,
+                        action="completed",
+                        # Optionally include final preview data if available from result
+                        preview_data={"type": "COURSE_COMPLETED", "data": {"module_count": len(result.get("modules",[])) if result else 0}}
+                     ).model_dump())
                 elif error_msg_to_save:
                      try:
-                         active_generations[task_id]["error"] = json.loads(error_msg_to_save)
+                         error_data = json.loads(error_msg_to_save)
+                         active_generations[task_id]["error"] = error_data
+                         active_generations[task_id]["progress_stream"].append(ProgressUpdate(
+                            message=error_data.get("message", "Task failed."),
+                            timestamp=datetime.now().isoformat(),
+                            phase="error",
+                            overall_progress=current_overall_progress, # Use last known progress
+                            action="error",
+                            preview_data={"type": "TASK_FAILED_EVENT", "data": error_data}
+                         ).model_dump())
                      except (json.JSONDecodeError, TypeError):
-                          active_generations[task_id]["error"] = {"message": error_msg_to_save} 
+                          active_generations[task_id]["error"] = {"message": error_msg_to_save}
+                          active_generations[task_id]["progress_stream"].append(ProgressUpdate(
+                            message=error_msg_to_save,
+                            timestamp=datetime.now().isoformat(),
+                            phase="error",
+                            overall_progress=current_overall_progress,
+                            action="error",
+                            preview_data={"type": "TASK_FAILED_EVENT", "data": {"message": error_msg_to_save}}
+                         ).model_dump())
             else:
                  logger.warning(f"Task {task_id} not found in active_generations during finalization.")
         
@@ -928,10 +1039,16 @@ async def get_learning_path_status(task_id: str):
         async with active_generations_lock:
             task_data_memory = active_generations.get(task_id)
             if task_data_memory:
+                # Make a deep copy to avoid issues if the caller modifies the result
+                # Ensure that the data from memory is passed through make_path_data_serializable 
+                # before json.dumps, although it should ideally be serializable already if stored correctly.
+                result_from_memory = task_data_memory.get("result")
                 final_status_info = {
                     "status": task_data_memory["status"],
-                    "result": task_data_memory.get("result"),
-                    "error": task_data_memory.get("error")
+                    "result": make_path_data_serializable(result_from_memory) if result_from_memory else None, 
+                    "error": task_data_memory.get("error"),
+                    # progress_stream is not directly returned by this status endpoint
+                    # it's used by the dedicated SSE progress stream endpoint
                 }
         
         # 2. If task is marked completed in memory but result is missing, try to fetch from DB
@@ -945,12 +1062,13 @@ async def get_learning_path_status(task_id: str):
             if task_record_for_result and task_record_for_result.history_entry_id:
                 learning_path_record = db.query(LearningPath).filter(LearningPath.id == task_record_for_result.history_entry_id).first()
                 if learning_path_record and learning_path_record.path_data:
-                    fetched_result = make_path_data_serializable(learning_path_record.path_data)
+                    # path_data from DB should already be serializable if saved correctly by make_path_data_serializable
+                    fetched_result = make_path_data_serializable(learning_path_record.path_data) 
                     final_status_info["result"] = fetched_result
                     # Update in-memory cache with the fetched result
                     async with active_generations_lock:
                         if task_id in active_generations:
-                            active_generations[task_id]["result"] = fetched_result
+                            active_generations[task_id]["result"] = fetched_result # Store the serializable version
                     logger.info(f"Fetched result for completed task {task_id} from DB.")
                 else:
                     logger.warning(f"Task {task_id} completed, but LearningPath or path_data not found for history_entry_id {task_record_for_result.history_entry_id}. Treating as error.")
@@ -989,6 +1107,7 @@ async def get_learning_path_status(task_id: str):
                     if task_record_db.history_entry_id:
                         learning_path_record_db = db.query(LearningPath).filter(LearningPath.id == task_record_db.history_entry_id).first()
                         if learning_path_record_db and learning_path_record_db.path_data:
+                            # path_data from DB should be serializable
                             result_from_db = make_path_data_serializable(learning_path_record_db.path_data)
                             logger.info(f"Fetched result for completed task {task_id} (from DB query).")
                         else:
@@ -1026,7 +1145,8 @@ async def get_learning_path_status(task_id: str):
             return {
                 "task_id": task_id,
                 "status": final_status_info["status"],
-                "result": final_status_info.get("result"),
+                # No need for json.loads(json.dumps(...)) here anymore if final_status_info["result"] is already a serializable dict
+                "result": final_status_info.get("result"), 
                 "error": final_status_info.get("error")
             }
         else:
@@ -1123,6 +1243,70 @@ async def get_api_usage_stats(request: Request):
             status_code=500,
             detail="Failed to retrieve API usage statistics"
         )
+
+@app.get("/api/learning-path/{task_id}/progress-stream")
+async def learning_path_progress_stream(task_id: str, request: Request):
+    """
+    Server-Sent Events endpoint to stream progress updates for a learning path generation task.
+    """
+    async def event_generator():
+        last_sent_index = 0
+        try:
+            while True:
+                # Check for client disconnect
+                if await request.is_disconnected():
+                    logger.info(f"Client disconnected from SSE stream for task {task_id}.")
+                    break
+
+                async with active_generations_lock:
+                    task_info = active_generations.get(task_id)
+                    if not task_info:
+                        # Task not found or already cleaned up
+                        logger.warning(f"SSE stream request for unknown or completed task {task_id}.")
+                        yield f"data: {json.dumps({'error': 'Task not found or completed.', 'status': 'unknown'})}" + "\n\n"
+                        break
+                    
+                    progress_items = task_info.get("progress_stream", [])
+                    current_status = task_info.get("status", "pending")
+                
+                # Send new messages
+                if len(progress_items) > last_sent_index:
+                    for i in range(last_sent_index, len(progress_items)):
+                        message_to_send = progress_items[i]
+                        # Ensure message_to_send is a dict (it should be from model_dump())
+                        if isinstance(message_to_send, dict):
+                            yield f"data: {json.dumps(message_to_send, cls=DateTimeEncoder)}" + "\n\n"
+                        else:
+                            logger.warning(f"Skipping non-dict progress item for task {task_id}: {type(message_to_send)}")
+                    last_sent_index = len(progress_items)
+
+                # Check if task is completed or failed to close stream
+                if current_status in ["completed", "failed"]:
+                    logger.info(f"Task {task_id} reached terminal state ({current_status}). Closing SSE stream.")
+                    final_message = {
+                        "message": f"Task {current_status}. Closing stream.",
+                        "timestamp": datetime.now().isoformat(),
+                        "phase": "finalization",
+                        "action": "stream_close",
+                        "status": current_status
+                    }
+                    yield f"data: {json.dumps(final_message)}" + "\n\n"
+                    break
+                
+                await asyncio.sleep(0.5)  # Poll for new messages periodically
+        except asyncio.CancelledError:
+            logger.info(f"SSE stream for task {task_id} was cancelled (client likely disconnected).")
+        except Exception as e:
+            logger.exception(f"Error in SSE stream for task {task_id}: {e}")
+            try:
+                error_payload = {"error": "Stream error", "detail": str(e), "status": "error"}
+                yield f"data: {json.dumps(error_payload)}" + "\n\n"
+            except Exception: # Guard against errors during error reporting itself
+                pass # Avoid further exceptions in the error handling path
+        finally:
+            logger.info(f"SSE event_generator for task {task_id} finished.")
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)

@@ -59,6 +59,7 @@ async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
             phase="topic_resources",
             phase_progress=0.0,
             overall_progress=0.45, # Keep overall progress estimate
+            preview_data={"type": "topic_resources_started", "data": {"topic": state['user_topic']}}, # Added preview_data
             action="started"
         )
 
@@ -217,8 +218,11 @@ async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
         # Update progress with completion message
         if progress_callback:
             preview_data = {
-                "resource_count": len(topic_resources),
-                "resource_types": [resource.type for resource in topic_resources]
+                "type": "topic_resources_update", # Type for update
+                "data": { # Wrapped in data
+                    "resource_count": len(topic_resources),
+                    "resources_preview": [{ "title": r.title, "type": r.type, "url": r.url[:50] } for r in topic_resources[:3]] # Preview of first 3
+                }
             }
             await progress_callback(
                 f"Generated {len(topic_resources)} high-quality resources for {escaped_topic}",
@@ -269,7 +273,8 @@ async def generate_module_resources(state: LearningPathState, module_id: int, mo
             phase="module_resources",
             phase_progress=(module_id + 0.1) / max(1, len(state.get("enhanced_modules", []))), # Adjusted progress slightly
             overall_progress=0.65, # Keep estimate
-            action="processing"
+            preview_data={"type": "module_resources_started", "data": {"module_id": module_id, "module_title": module.title}}, # Added preview_data
+            action="started" # Changed from processing
         )
 
     resource_query: Optional[ResourceQuery] = None
@@ -426,9 +431,13 @@ async def generate_module_resources(state: LearningPathState, module_id: int, mo
 
         if progress_callback:
             preview_data = {
-                "module": {"id": module_id, "title": module_title},
-                "resource_count": len(module_resources),
-                "resource_types": [resource.type for resource in module_resources]
+                "type": "module_resources_update", # Type for update
+                "data": { # Wrapped in data
+                    "module_id": module_id,
+                    "module_title": module_title,
+                    "resource_count": len(module_resources),
+                    "resources_preview": [{ "title": r.title, "type": r.type, "url": r.url[:50] } for r in module_resources[:2]] # Preview of first 2
+                }
             }
             await progress_callback(
                 f"Generated {len(module_resources)} resources for module: {module_title}",
@@ -497,6 +506,7 @@ async def generate_submodule_resources(
             phase="submodule_resources",
             phase_progress=(current_submodule_index + 0.1) / max(1, total_submodules),
             overall_progress=0.75, # Keep estimate
+            preview_data={"type": "submodule_resources_started", "data": {"module_id": module_id, "submodule_id": sub_id, "submodule_title": submodule.title}}, # Added preview_data
             action="started" # Changed from processing
         )
 
@@ -689,10 +699,14 @@ async def generate_submodule_resources(
         # Update progress
         if progress_callback:
             preview_data = {
-                 "module": {"id": module_id, "title": module_title},
-                 "submodule": {"id": sub_id, "title": submodule_title},
-                 "resource_count": len(submodule_resources),
-                 "resource_types": [resource.type for resource in submodule_resources]
+                 "type": "submodule_resources_update", # Type for update
+                 "data": { # Wrapped in data
+                    "module_id": module_id, 
+                    "submodule_id": sub_id,
+                    "submodule_title": submodule_title,
+                    "resource_count": len(submodule_resources),
+                    "resources_preview": [{ "title": r.title, "type": r.type, "url": r.url[:50] } for r in submodule_resources[:2]] # Preview of first 2
+                 }
              }
             await progress_callback(
                  f"Generated {len(submodule_resources)} resources for {submodule.title}",
@@ -862,6 +876,7 @@ async def integrate_resources_with_submodule_processing(
 
     submodule_key = f"{module_id}_{sub_id}"
     submodule_resources_in_process = state.get("submodule_resources_in_process", {})
+    progress_callback = state.get("progress_callback") # Get progress_callback from state
 
     if state.get("resource_generation_enabled") is False:
         logger.debug(f"Resource generation disabled, skipping integration for {submodule_key}")
@@ -869,6 +884,21 @@ async def integrate_resources_with_submodule_processing(
         original_result["resources"] = [] # Ensure resources list is empty
         original_result["resource_query"] = None
         original_result["resource_search_results"] = None
+        # Send a progress update if callback is available
+        if progress_callback:
+            await progress_callback(
+                f"Resource generation already processed/skipped for {submodule.title}",
+                phase="submodule_resources",
+                preview_data={
+                    "type": "submodule_resource_status_update",
+                    "data": {
+                        "module_id": module_id,
+                        "submodule_id": sub_id,
+                        "status_detail": submodule_resources_in_process.get(submodule_key, {}).get("status", "unknown")
+                    }
+                },
+                action="skipped" # or retrieved
+            )
         return {**original_result, "submodule_resources_in_process": submodule_resources_in_process}
 
 
@@ -881,9 +911,41 @@ async def integrate_resources_with_submodule_processing(
         # We might not have stored query/results in state, so set to None
         original_result["resource_query"] = None
         original_result["resource_search_results"] = None
+        # Send a progress update if callback is available
+        if progress_callback:
+            await progress_callback(
+                f"Resource generation already processed/skipped for {submodule.title}",
+                phase="submodule_resources",
+                preview_data={
+                    "type": "submodule_resource_status_update",
+                    "data": {
+                        "module_id": module_id,
+                        "submodule_id": sub_id,
+                        "status_detail": submodule_resources_in_process.get(submodule_key, {}).get("status", "unknown")
+                    }
+                },
+                action="skipped" # or retrieved
+            )
         return {**original_result, "submodule_resources_in_process": submodule_resources_in_process}
 
     # Generate resources for this submodule
+    # Send progress update before calling generate_submodule_resources
+    if progress_callback:
+        await progress_callback(
+            f"Initiating resource generation for {submodule.title}",
+            phase="submodule_resources",
+            preview_data={
+                "type": "submodule_resource_status_update",
+                "data": {
+                    "module_id": module_id,
+                    "submodule_id": sub_id,
+                    "submodule_title": submodule.title,
+                    "status_detail": "generation_started"
+                }
+            },
+            action="processing"
+        )
+
     resource_result = await generate_submodule_resources(
         state, module_id, sub_id, module, submodule, submodule_content
     )
@@ -901,6 +963,25 @@ async def integrate_resources_with_submodule_processing(
     original_result["resources"] = resource_result.get("resources", [])
     original_result["resource_query"] = resource_result.get("resource_query")
     original_result["resource_search_results"] = resource_result.get("search_results") # Store the SearchServiceResult dict
+
+    # Send progress update after resource generation attempt for this submodule
+    if progress_callback:
+        await progress_callback(
+            f"Resource generation attempt for {submodule.title} finished with status: {resource_result.get('status')}",
+            phase="submodule_resources",
+            preview_data={
+                "type": "submodule_resource_status_update",
+                "data": {
+                    "module_id": module_id,
+                    "submodule_id": sub_id,
+                    "submodule_title": submodule.title,
+                    "status_detail": f"generation_{resource_result.get('status', 'error')}",
+                    "resource_count": len(resource_result.get("resources", [])),
+                    "error": resource_result.get('error')
+                }
+            },
+            action="completed" if resource_result.get('status') == "completed" else "error"
+        )
 
     logger.debug(f"Finished integrating resources for submodule {module_id+1}.{sub_id+1}. Status: {resource_result.get('status')}")
 

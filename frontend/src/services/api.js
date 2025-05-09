@@ -1192,6 +1192,68 @@ export const copyPublicPath = async (shareId) => {
   }
 };
 
+// --- NEW: Function to stream progress updates via SSE --- 
+export const streamProgressUpdates = (taskId, onMessage, onError, onClose) => {
+  if (!taskId) {
+    if (onError) onError(new Error("Task ID is required for progress updates."));
+    return null; // Or throw error, depending on desired strictness
+  }
+
+  // Construct the SSE URL, ensuring it includes the API base and the auth token if needed
+  // The EventSource API handles URL construction and doesn't use axios interceptors for auth by default.
+  // If your SSE endpoint requires an Authorization header, you might need to pass the token in the URL
+  // or use a library that allows setting headers for EventSource, or adjust backend to accept token via query param.
+  // For now, assuming the SSE endpoint is either public or auth is handled via cookies/session for SSE.
+  
+  // If authToken is available, and your SSE endpoint supports token via query param (e.g., ?token=AUTH_TOKEN):
+  // const url = authToken 
+  //   ? `${API_URL}/api/learning-path/${taskId}/progress-stream?token=${authToken}` 
+  //   : `${API_URL}/api/learning-path/${taskId}/progress-stream`;
+  // Simpler approach for now, assuming cookie-based auth or public endpoint for SSE if no token passed in query
+  const sseUrl = `${API_URL}/api/learning-path/${taskId}/progress-stream`;
+
+  console.log(`Connecting to SSE: ${sseUrl}`);
+  const eventSource = new EventSource(sseUrl, { withCredentials: true }); // Added withCredentials for cookie-based auth
+
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (onMessage) onMessage(data);
+
+      // If the event signals the stream is closing from the server side
+      if (data.action === 'stream_close' && (data.status === 'completed' || data.status === 'failed')) {
+        console.log("SSE stream close event received from server.");
+        if (eventSource) eventSource.close(); // Ensure client also closes
+        if (onClose) onClose();
+      }
+    } catch (error) {
+      console.error('Error parsing SSE message data:', error, 'Raw data:', event.data);
+      if (onError) onError(new Error('Failed to parse progress update.'));
+    }
+  };
+
+  eventSource.onerror = (error) => {
+    console.error('EventSource failed:', error);
+    if (onError) onError(error); // Pass the original EventSource error object
+    // Don't call onClose here, as EventSource might attempt to reconnect depending on the error.
+    // The caller (useProgressTracking) should decide if polling needs to start based on this error.
+    // It might be a temporary network issue.
+    // Critical errors that permanently close the connection might need specific handling.
+    if (eventSource.readyState === EventSource.CLOSED) {
+        console.warn("SSE connection closed due to error.");
+        if (onClose) onClose(); // Call onClose if definitely closed
+    }
+  };
+  
+  // Note: `onopen` is also an event you can listen to.
+  eventSource.onopen = () => {
+    console.log(`SSE connection opened for task ${taskId}`);
+  };
+
+  return eventSource; // Return the EventSource instance so it can be closed by the caller
+};
+// --- END NEW Function ---
+
 export default {
   generateLearningPath,
   getLearningPath,
@@ -1238,6 +1300,7 @@ export default {
   updateLearningPathPublicity,
   getPublicLearningPath,
   copyPublicPath,
+  streamProgressUpdates,
 };
 
     

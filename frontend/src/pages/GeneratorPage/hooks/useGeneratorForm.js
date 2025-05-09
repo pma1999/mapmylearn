@@ -65,7 +65,7 @@ const useGeneratorForm = (
     sessionStorage.setItem('currentTopic', currentTopic);
     
     // Navigate to result page
-    navigate(`/result/${currentTaskId}`);
+    navigate(`/generating/${currentTaskId}`);
   }, [navigate]);
 
   /**
