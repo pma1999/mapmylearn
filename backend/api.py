@@ -84,7 +84,7 @@ def make_path_data_serializable(data: Any) -> Any:
     elif isinstance(data, dict):
         return {k: make_path_data_serializable(v) for k, v in data.items()}
     # Add explicit checks for your known Pydantic models
-    elif isinstance(data, (Resource, EnhancedModule, Submodule, QuizQuestion, LearningPathState, ProgressUpdate, SearchQuery, SearchServiceResult, ScrapedResult, CreditTransaction, User, GenerationTask, LearningPath)):
+    elif isinstance(data, (Resource, EnhancedModule, Submodule, QuizQuestion, ProgressUpdate, SearchQuery, SearchServiceResult, ScrapedResult, CreditTransaction, User, GenerationTask, LearningPath)):
         # Check for LearningPathState, ProgressUpdate, SearchQuery, SearchServiceResult, ScrapedResult as well, if they can be part of 'result'
         # Also added CreditTransaction, User, GenerationTask, LearningPath for completeness if they ever get nested unexpectedly
         if hasattr(data, 'model_dump'):
