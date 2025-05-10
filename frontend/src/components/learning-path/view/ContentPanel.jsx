@@ -9,8 +9,7 @@ import {
   CircularProgress, 
   Alert, 
   Snackbar, 
-  Button, 
-  IconButton,
+  Button,
   Select,
   MenuItem,
   FormControl,
@@ -50,7 +49,7 @@ import { useAuth } from '../../../services/authContext';
 import { api, API_URL } from '../../../services/api';
 import { helpTexts } from '../../../constants/helpTexts';
 
-// TabPanel component (can be kept internal or moved to shared utils)
+// TabPanel component
 const TabPanel = (props) => {
   const { children, value, index, sx, ...other } = props;
   return (
@@ -73,7 +72,6 @@ TabPanel.propTypes = {
   sx: PropTypes.object,
 };
 
-// Define supported languages (should match backend)
 const supportedLanguages = [
   { code: 'en', name: 'English' },
   { code: 'es', name: 'Español' },
@@ -83,9 +81,8 @@ const supportedLanguages = [
   { code: 'pt', name: 'Português' },
 ];
 const defaultLanguageCode = 'en';
-const AUDIO_CREDIT_COST = 1; // Define or import this
+const AUDIO_CREDIT_COST = 1;
 
-// Define audio style configurations
 const audioStyleConfig = {
   standard: {
     label: 'Standard Tutor',
@@ -114,9 +111,8 @@ const audioStyleConfig = {
   },
 };
 
-// Wrap component definition with forwardRef
 const ContentPanel = forwardRef(({ 
-  displayType, // New prop: 'submodule' or 'module_resources'
+  displayType, 
   module, 
   moduleIndex, 
   submodule, 
@@ -124,21 +120,20 @@ const ContentPanel = forwardRef(({
   pathId, 
   isTemporaryPath, 
   actualPathData,
-  onNavigate, // Callback: (direction: 'prev' | 'next' | 'nextModule') => void
+  onNavigate, 
   totalModules,
   totalSubmodulesInModule,
-  isMobileLayout, // <-- Accept new prop
+  isMobileLayout, 
   activeTab,      
   setActiveTab,
-  sx, // Accept sx prop to allow styling from parent (e.g., height)
-  progressMap, // New prop
-  onToggleProgress, // New prop
-  isPublicView = false // Add prop with default
-}, ref) => { // <-- Accept ref as second argument
+  sx, 
+  progressMap, 
+  onToggleProgress, 
+  isPublicView = false
+}, ref) => {
   const theme = useTheme();
-  const { user, fetchUserCredits } = useAuth();
+  const { fetchUserCredits } = useAuth();
 
-  // --- Audio state logic extracted from SubmoduleCard ---
   const getAbsoluteAudioUrl = useCallback((relativeUrl) => {
       if (!relativeUrl) return null;
       if (relativeUrl.startsWith('http')) return relativeUrl;
@@ -154,11 +149,8 @@ const ContentPanel = forwardRef(({
   const [isAudioLoading, setIsAudioLoading] = useState(false);
   const [audioError, setAudioError] = useState(null);
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'info' });
-
-  // Audio Style State
   const [selectedAudioStyle, setSelectedAudioStyle] = useState('standard');
 
-  // --- Language State ---
   const getInitialLanguage = useCallback(() => {
     const pathLang = actualPathData?.language;
     if (pathLang && supportedLanguages.some(l => l.code === pathLang)) {
@@ -169,22 +161,18 @@ const ContentPanel = forwardRef(({
 
   const [selectedLanguage, setSelectedLanguage] = useState(getInitialLanguage);
 
-  // Effect to update audioUrl and language when submodule changes
   useEffect(() => {
     if (displayType === 'submodule' && submodule) {
       setAudioUrl(getAbsoluteAudioUrl(submodule?.audio_url));
       setSelectedLanguage(getInitialLanguage());
-      setAudioError(null); // Reset error on submodule change
+      setAudioError(null); 
     } else {
-      // Reset audio related state if not viewing a submodule or submodule is null
       setAudioUrl(null);
       setAudioError(null);
     }
   }, [submodule, displayType, getAbsoluteAudioUrl, getInitialLanguage]);
 
-  // --- Audio Generation Logic ---
   const handleGenerateAudio = async () => {
-      // --- Disable for public view ---
       if (isPublicView) {
           setNotification({ open: true, message: 'Audio generation is disabled for public views.', severity: 'info' });
           return;
@@ -199,13 +187,12 @@ const ContentPanel = forwardRef(({
       setAudioError(null);
       setNotification({ open: false, message: '', severity: 'info' });
 
-      const isRegeneration = !!audioUrl; // Check if we are regenerating
-
+      const isRegeneration = !!audioUrl;
       const requestBody = {
           path_data: isTemporaryPath ? actualPathData : undefined,
           language: selectedLanguage,
-          audio_style: selectedAudioStyle, // Include selected audio style
-          force_regenerate: isRegeneration // Add the flag
+          audio_style: selectedAudioStyle, 
+          force_regenerate: isRegeneration 
       };
 
       try {
@@ -223,10 +210,6 @@ const ContentPanel = forwardRef(({
                        fetchUserCredits();
                        console.log('Fetched updated credits after audio generation.');
                    }
-                   // Update the submodule data in the main state if possible? Or rely on refresh?
-                   // This part is tricky without a direct way to update actualPathData here.
-                   // For now, the URL is updated locally. A full refresh might be needed elsewhere
-                   // to persist this audio_url if the user navigates away and comes back.
               } else {
                   throw new Error("Failed to construct absolute audio URL");
               }
@@ -236,7 +219,7 @@ const ContentPanel = forwardRef(({
       } catch (err) {
           console.error("Audio generation failed:", err);
           let errorMsg = err.response?.data?.error?.message || err.message || 'Failed to generate audio.';
-          let errorSeverity = err.response?.status === 403 ? 'warning' : 'error'; // Handle insufficient credits specifically
+          let errorSeverity = err.response?.status === 403 ? 'warning' : 'error'; 
           setAudioError(errorMsg);
           setNotification({ open: true, message: errorMsg, severity: errorSeverity });
       } finally {
@@ -246,14 +229,12 @@ const ContentPanel = forwardRef(({
   
   const handleLanguageChange = (event) => {
     setSelectedLanguage(event.target.value);
-    // Reset audio URL when language changes to force re-generation if desired
-    // setAudioUrl(null); 
     setAudioError(null); 
   };
 
   const handleAudioStyleChange = (event) => {
     setSelectedAudioStyle(event.target.value);
-    setAudioError(null); // Reset error if style changes
+    setAudioError(null); 
   };
 
   const handleNotificationClose = (event, reason) => {
@@ -261,15 +242,12 @@ const ContentPanel = forwardRef(({
     setNotification({ ...notification, open: false });
   };
 
-  // --- Conditional Rendering based on displayType ---
-
-  // Case 1: Displaying Module Resources
   if (displayType === 'module_resources' && module && module.resources && module.resources.length > 0) {
     return (
       <Paper 
         ref={ref} 
         variant="outlined"
-        data-tut="content-panel" // Keep for general tutorial reference if needed
+        data-tut="content-panel" 
         sx={{ 
           display: 'flex',
           flexDirection: 'column',
@@ -279,7 +257,7 @@ const ContentPanel = forwardRef(({
           ...sx 
         }}
       >
-        <Box sx={{ p: { xs: 2, sm: 2.5 }, borderBottom: `1px solid ${theme.palette.divider}`, bgcolor: 'transparent' }}>
+        <Box sx={{ p: { xs: 2, sm: 2.5 }, borderBottom: `1px solid ${theme.palette.divider}`, bgcolor: 'transparent', flexShrink: 0 }}>
             <Typography variant="h6" component="h3" sx={{ fontWeight: theme.typography.fontWeightMedium }}>
                 Module Resources: {module.title} (Module {moduleIndex + 1})
             </Typography>
@@ -289,23 +267,21 @@ const ContentPanel = forwardRef(({
               </Typography>
             )}
         </Box>
-        <Box sx={{ flexGrow: 1, overflowY: 'auto', p: { xs: 2, sm: 3 } }}>
+        {/* Content area for module resources - allow natural height, Paper handles scroll */}
+        <Box sx={{ overflowY: 'auto', p: { xs: 2, sm: 3 } }}> 
             <ResourcesSection 
                 resources={module.resources} 
-                title={`Resources for "${module.title}"`} // More specific title
+                title={`Resources for "${module.title}"`} 
                 type="module" 
                 collapsible={false} 
-                compact={false} // Or true based on desired density
+                compact={false} 
             />
         </Box>
-         {/* No tabs, no submodule navigation, no progress checkbox for module resources */}
       </Paper>
     );
   }
 
-  // Case 2: No submodule selected OR (module resources selected but module has no resources)
-  // displayType might be 'submodule' but submodule is null, or 'module_resources' but module.resources is empty
-  if (!submodule && displayType === 'submodule') { // Specifically show placeholder when expecting submodule but none is selected
+  if (!submodule && displayType === 'submodule') { 
     return (
       <Paper 
         ref={ref} 
@@ -326,18 +302,11 @@ const ContentPanel = forwardRef(({
            <Typography variant="h6" color="text.secondary">
               Select a submodule from the left to view its content.
            </Typography>
-           {displayType === 'module_resources' && module && (!module.resources || module.resources.length === 0) && (
-             <Typography variant="body1" color="text.secondary" sx={{mt: 1}}>
-                This module has no additional resources.
-             </Typography>
-           )}
         </Box>
       </Paper>
     );
   }
 
-  // Case 3: Displaying Submodule Content (default and main case)
-  // This implies displayType === 'submodule' AND submodule is valid.
   if (displayType === 'submodule' && submodule) {
     const hasQuiz = submodule.quiz_questions && submodule.quiz_questions.length > 0;
     const hasResources = submodule.resources && submodule.resources.length > 0;
@@ -352,7 +321,7 @@ const ContentPanel = forwardRef(({
     ];
     
     const progressKey = `${moduleIndex}_${submoduleIndex}`;
-    const isCompleted = progressMap && progressMap[progressKey] || false;
+    const isCompleted = (progressMap && progressMap[progressKey]) || false;
 
     const handleCheckboxToggle = () => {
         if (onToggleProgress && !isPublicView) {
@@ -374,8 +343,7 @@ const ContentPanel = forwardRef(({
           ...sx 
         }}
       >
-        {/* Submodule Header - Stays for submodule view */}
-        <Box sx={{ p: { xs: 2, sm: 2.5 }, borderBottom: `1px solid ${theme.palette.divider}`, bgcolor: 'transparent' }}>
+        <Box sx={{ p: { xs: 2, sm: 2.5 }, borderBottom: `1px solid ${theme.palette.divider}`, bgcolor: 'transparent', flexShrink: 0 }}>
             <Typography variant="h6" component="h3" sx={{ fontWeight: theme.typography.fontWeightMedium, mb: 0.5 }}>
                 {moduleIndex + 1}.{submoduleIndex + 1}: {submodule.title}
             </Typography>
@@ -386,9 +354,8 @@ const ContentPanel = forwardRef(({
             )}
         </Box>
 
-        {/* Navigation Controls - Only for submodule view on Desktop */}
         {!isMobileLayout && (
-          <Box sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}`, bgcolor: 'transparent' }}>
+          <Box sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}`, bgcolor: 'transparent', flexShrink: 0 }}>
              <Grid container justifyContent="space-between" alignItems="center">
                 <Grid item data-tut="content-panel-prev-button">
                    <Button 
@@ -432,9 +399,8 @@ const ContentPanel = forwardRef(({
           </Box>
         )}
 
-        {/* Tabs Navigation - Only for submodule view on Desktop */}
         {!isMobileLayout && (
-          <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'transparent' }} data-tut="content-panel-tabs">
+          <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'transparent', flexShrink: 0 }} data-tut="content-panel-tabs">
             <Tabs 
               value={activeTab} 
               onChange={(event, newValue) => setActiveTab(newValue)} 
@@ -446,7 +412,7 @@ const ContentPanel = forwardRef(({
               {tabsConfig.map((tab) => (
                 <Tab
                   key={tab.index}
-                  data-tut={tab.dataTut} // Add data-tut here
+                  data-tut={tab.dataTut} 
                   icon={tab.icon}
                   iconPosition="start"
                   label={
@@ -468,7 +434,6 @@ const ContentPanel = forwardRef(({
           </Box>
         )}
 
-        {/* Tab Content Area - Only for submodule view */}
         <Box sx={{ flexGrow: 1, overflowY: 'auto' }} >
            {tabsConfig.map((tab) => {
                const tabContentSx = tab.component === 'Chat' ? { p: 0, height: '100%' } : {}; 
@@ -622,17 +587,15 @@ const ContentPanel = forwardRef(({
     );
   }
 
-  // Fallback: If displayType is not recognized or data is inconsistent
-  // This should ideally not be reached if LearningPathView logic is correct.
   return (
       <Paper ref={ref} elevation={2} sx={{ p:3, display:'flex', alignItems:'center', justifyContent:'center', height:'100%', ...sx }}>
           <Typography>Loading content or an unexpected view state has occurred.</Typography>
       </Paper>
   );
-}); // <-- Close the forwardRef HOC
+}); 
 
 ContentPanel.propTypes = {
-  displayType: PropTypes.string.isRequired, // Added prop type
+  displayType: PropTypes.string.isRequired, 
   module: PropTypes.object, 
   moduleIndex: PropTypes.number, 
   submodule: PropTypes.object, 
@@ -652,7 +615,6 @@ ContentPanel.propTypes = {
   isPublicView: PropTypes.bool, 
 };
 
-// Add display name for DevTools
 ContentPanel.displayName = 'ContentPanel';
 
 export default ContentPanel; 
