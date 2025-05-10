@@ -31,7 +31,7 @@ from backend.routes.admin import router as admin_router
 from backend.routes.chatbot import router as chatbot_router
 from backend.routes.payments import router as payments_router
 from backend.models.auth_models import User, CreditTransaction, TransactionType, GenerationTask, GenerationTaskStatus, LearningPath
-from backend.models.models import Resource, EnhancedModule, Submodule, QuizQuestion
+from backend.models.models import Resource, EnhancedModule, Submodule, QuizQuestion, LearningPathState, SearchQuery, SearchServiceResult, ScrapedResult
 from backend.utils.auth import decode_access_token
 
 # Import rate limiter and backend
