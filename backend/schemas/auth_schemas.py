@@ -103,6 +103,7 @@ class LearningPathResponse(LearningPathBase):
     last_visited_submodule_idx: Optional[int] = Field(None, description="Index of the last submodule visited by the user for this path")
     is_public: bool = False
     share_id: Optional[str] = None
+    modules_count: Optional[int] = Field(None, description="Number of modules in the learning path")
 
     @field_serializer('creation_date', 'last_modified_date')
     def serialize_dates(self, dt: Optional[datetime]) -> Optional[str]:
