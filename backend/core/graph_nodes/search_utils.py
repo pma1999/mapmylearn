@@ -70,8 +70,11 @@ async def execute_search_with_llm_retry(
     current_query = initial_query
     result: Optional[SearchServiceResult] = None
     
+    # Patterns to detect error conditions that should trigger query regeneration
     # Pattern to detect "No search results found" in error messages
     no_results_pattern = re.compile(r"no search results found", re.IGNORECASE)
+    # Pattern to detect HTTP 422 errors (unprocessable entity, likely due to overly complex/long query)
+    query_unprocessable_pattern = re.compile(r"HTTP error 422", re.IGNORECASE)
 
     for attempt_number in range(MAX_SEARCH_ATTEMPTS):
         # Safely get the query string based on object type
@@ -121,11 +124,17 @@ async def execute_search_with_llm_retry(
             return result # Return the final error result
         
         # --- Decide Action Before Next Attempt --- 
-        should_regenerate = no_results_pattern.search(search_error)
+        should_trigger_for_no_results = no_results_pattern.search(search_error)
+        should_trigger_for_unprocessable_query = query_unprocessable_pattern.search(search_error)
+        
+        should_regenerate = should_trigger_for_no_results or should_trigger_for_unprocessable_query
         regenerated = False
         
         if should_regenerate:
-            logger.info(f"Attempting query regeneration after 'no results' on attempt {attempt_number + 1}.")
+            if should_trigger_for_unprocessable_query:
+                logger.info(f"Attempting query regeneration after 'HTTP error 422' (query unprocessable) on attempt {attempt_number + 1}.")
+            elif should_trigger_for_no_results:
+                logger.info(f"Attempting query regeneration after 'no results' on attempt {attempt_number + 1}.")
             try:
                 new_query_obj = await regenerate_query_func(state, current_query, **regenerate_args)
                 

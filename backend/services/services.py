@@ -427,7 +427,7 @@ async def perform_search_and_scrape(
         except Exception as invoke_err:
              logger.error(f"Error during brave_search.ainvoke for '{query}': {invoke_err}", exc_info=True)
              # Add error to result and return, or raise depending on desired behavior
-             service_result.search_provider_error = f"Invoke Error: {type(invoke_err).__name__}"
+             service_result.search_provider_error = f"Invoke Error: {str(invoke_err)}"
              return service_result # Example: return error result
              # raise # Alternatively, re-raise the exception
         # --- End Rate Limiting Logic & Call ---
