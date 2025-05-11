@@ -70,7 +70,7 @@ const TagsInput = memo(({ tags = [], onAddTag, onDeleteTag, maxDisplayTags = nul
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.5, mb: 1 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
         {displayTags.map((tag) => (
           <StyledChip
             key={tag}
@@ -78,6 +78,7 @@ const TagsInput = memo(({ tags = [], onAddTag, onDeleteTag, maxDisplayTags = nul
             onDelete={() => onDeleteTag(tag)}
             size="small"
             icon={<LabelIcon fontSize="small" />}
+            sx={{ height: '22px', '& .MuiChip-label': { px: 1 }, '& .MuiChip-icon': { ml: 0.5 } }}
           />
         ))}
         
@@ -96,7 +97,7 @@ const TagsInput = memo(({ tags = [], onAddTag, onDeleteTag, maxDisplayTags = nul
               icon={<MoreHorizIcon fontSize="small" />}
               label={`+${hiddenTagsCount}`}
               size="small"
-              sx={{ cursor: 'help' }}
+              sx={{ cursor: 'help', height: '22px', '& .MuiChip-label': { px: 1 } }}
             />
           </Tooltip>
         )}
@@ -113,7 +114,7 @@ const TagsInput = memo(({ tags = [], onAddTag, onDeleteTag, maxDisplayTags = nul
             onBlur={() => { if (!newTag) setShowInput(false); }}
             sx={{ 
               maxWidth: '150px',
-              '& .MuiInputBase-root': { height: '28px' }
+              '& .MuiInputBase-root': { height: '24px' }
             }}
             InputProps={{
               endAdornment: (

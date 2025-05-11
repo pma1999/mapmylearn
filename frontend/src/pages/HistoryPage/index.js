@@ -117,7 +117,7 @@ const HistoryPage = () => {
   const isLargeScreen = useMediaQuery(theme.breakpoints.up('lg'));
   
   const [page, setPage] = useState(1);
-  const ITEMS_PER_PAGE = 12;
+  const ITEMS_PER_PAGE = 16;
 
   // Initialize notification hook
   const { showNotification } = useNotification();
@@ -289,7 +289,7 @@ const HistoryPage = () => {
   // Use ITEMS_PER_PAGE for skeletons when loading, actual entries length when not loading
   const displayItemCount = loading ? ITEMS_PER_PAGE : entries.length;
   const rowCount = Math.ceil(displayItemCount / columnCount);
-  const cardHeight = 380;
+  const cardHeight = 250; // Reduced from 380
 
   // Memoize itemData for react-window, include loading state and skeleton count
   const itemData = useMemo(() => ({
@@ -334,7 +334,7 @@ const HistoryPage = () => {
     
     // Render the grid: shows skeletons when loading, entries when loaded
     return (
-        <Box sx={{ height: 'calc(100vh - 250px)', width: '100%' }}> {/* Adjust height */}
+        <Box sx={{ height: 'calc(100vh - 230px)', width: '100%' }}> {/* Slightly increased height */}
             <AutoSizer>
             {({
                 height,

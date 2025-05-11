@@ -22,16 +22,16 @@ const HistoryEntrySkeletonInternal = memo(({ index }) => {
   // Mimic the structure of HistoryEntryCard
   return (
     <Card variant="outlined" sx={{ height: '100%' }}>
-      <CardContent sx={{ p: { xs: 1.5, sm: 2 }, display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <CardContent sx={{ p: { xs: 1, sm: 1.5 }, display: 'flex', flexDirection: 'column', height: '100%' }}>
         {/* Top Section */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-          {/* Title Skeleton */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+          {/* Title Skeleton - now for 2 lines */}
           <Skeleton 
             variant="text" 
             width="70%" 
-            height={24} // Match Typography h6 size approx
+            height={40} // Adjust height for two-line title
             animation="wave"
-            sx={{ animationDelay: getAnimationDelay(index), mb: 0.5 }} // Add margin bottom like Typography
+            sx={{ animationDelay: getAnimationDelay(index), mb: 0.5 }} // Reduced margin bottom
           />
           {/* Icons Skeleton */}
           <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
@@ -41,22 +41,22 @@ const HistoryEntrySkeletonInternal = memo(({ index }) => {
         </Box>
 
         {/* Info Section: Dates */}
-        <Stack direction="row" spacing={1.5} sx={{ mb: 1.5, flexWrap: 'wrap' }} alignItems="center">
+        <Stack direction="row" spacing={1} sx={{ mb: 1, flexWrap: 'wrap' }} alignItems="center">
           <Skeleton variant="text" width="80px" height={16} animation="wave" sx={{ animationDelay: getAnimationDelay(index) }} />
           <Skeleton variant="text" width="80px" height={16} animation="wave" sx={{ animationDelay: getAnimationDelay(index) }} />
         </Stack>
         
         {/* Info Section: Chips */}
-        <Stack direction="row" spacing={1} sx={{ mb: 1.5, flexWrap: 'wrap' }} alignItems="center">
+        <Stack direction="row" spacing={0.5} sx={{ mb: 1, flexWrap: 'wrap' }} alignItems="center">
            <Skeleton variant="rounded" width={100} height={22} sx={{ borderRadius: '16px', animationDelay: getAnimationDelay(index) }} animation="wave" />
            <Skeleton variant="rounded" width={90} height={22} sx={{ borderRadius: '16px', animationDelay: getAnimationDelay(index) }} animation="wave" />
         </Stack>
 
-        {/* Tags Section Skeleton */}
+        {/* Tags Section Skeleton - reduced display */}
         <Box sx={{ mb: 1 }}>
             <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
                 <Skeleton variant="rounded" width={70} height={22} sx={{ borderRadius: '16px', animationDelay: getAnimationDelay(index) }} animation="wave" />
-                <Skeleton variant="rounded" width={80} height={22} sx={{ borderRadius: '16px', animationDelay: getAnimationDelay(index) }} animation="wave" />
+                <Skeleton variant="rounded" width={60} height={22} sx={{ borderRadius: '16px', animationDelay: getAnimationDelay(index) }} animation="wave" />
             </Stack>
             {/* Skeleton for the Add Tag button area */}
             <Skeleton variant="text" width={60} height={20} sx={{ mt: 0.5, animationDelay: getAnimationDelay(index) }} animation="wave"/> 
@@ -66,7 +66,7 @@ const HistoryEntrySkeletonInternal = memo(({ index }) => {
         <Box sx={{ flexGrow: 1 }} />
 
         {/* Bottom Action Skeleton */}
-        <Divider sx={{ my: 1.5 }} />
+        <Divider sx={{ my: 1 }} />
         <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
            <Skeleton variant="rounded" width={80} height={28} sx={{ borderRadius: 1, animationDelay: getAnimationDelay(index) }} animation="wave" />
         </Box>

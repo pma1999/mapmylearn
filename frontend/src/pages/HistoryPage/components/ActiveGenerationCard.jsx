@@ -85,7 +85,7 @@ const ActiveGenerationCard = ({ entry, virtualized = false }) => {
 
   // Virtualized rendering doesn't need Grid wrapper
   const CardWrapper = virtualized ? Box : Grid;
-  const wrapperProps = virtualized ? { sx: { height: '100%' } } : { item: true, xs: 12, sm: 6, md: 4 };
+  const wrapperProps = virtualized ? { sx: { height: '100%' } } : { item: true, xs: 12, sm: 6, md: 4, lg: 3, xl: 2 }; // Added xl breakpoint
 
   return (
     <CardWrapper {...wrapperProps}>
@@ -98,29 +98,33 @@ const ActiveGenerationCard = ({ entry, virtualized = false }) => {
         }}
         onClick={handleViewProgress} // Make the whole card clickable
       >
-        <CardContent sx={{ flexGrow: 1, p: { xs: 2, md: 2 }, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        <CardContent sx={{ flexGrow: 1, p: { xs: 1, sm: 1.5 }, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
           <Box>
             <Typography variant="h6" sx={{ 
               fontWeight: 'bold', // Increased weight
-              fontSize: { xs: '1.05rem', sm: '1.15rem' }, // Slightly larger
+              fontSize: { xs: '1rem', sm: '1.1rem' }, // Slightly larger -> Adjusted to match HistoryEntryCard
               overflow: 'hidden', 
               textOverflow: 'ellipsis', 
-              whiteSpace: 'nowrap',
-              mb: 1
+              // whiteSpace: 'nowrap', // Allow wrapping
+              display: '-webkit-box',
+              WebkitLineClamp: 2, // Limit to 2 lines
+              WebkitBoxOrient: 'vertical',
+              lineHeight: 1.3, // Adjust line height for 2 lines
+              mb: 0.5 // Reduced margin
             }}>
               {entry.request_topic || 'Processing Request...'}
             </Typography>
             
-            <Typography variant="body2" color="text.secondary" gutterBottom fontSize={{ xs: '0.75rem', sm: '0.8rem' }}>
+            <Typography variant="body2" color="text.secondary" gutterBottom fontSize={{ xs: '0.75rem', sm: '0.8rem' }} sx={{ mb: 1 }}>
               Started: {formatDateDistance(entry.created_at)}
             </Typography>
 
-            <Box sx={{ mt: 1.5, mb: 2 }}>
+            <Box sx={{ mt: 1, mb: 1.5 }}> {/* Adjusted margins */}
               {getStatusChip()}
             </Box>
           </Box>
 
-          <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+          <Box sx={{ mt: 1.5, display: 'flex', justifyContent: 'flex-end' }}> {/* Adjusted margin */}
             <Button // Make button more prominent
                 startIcon={<VisibilityIcon />}
                 onClick={handleViewProgress}

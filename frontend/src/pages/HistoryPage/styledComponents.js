@@ -21,6 +21,17 @@ export const StyledCard = styled(Card)(({ theme }) => ({
  */
 export const StyledChip = styled(Chip)(({ theme }) => ({
   margin: theme.spacing(0.5),
+  height: '22px',
+  '& .MuiChip-label': {
+    padding: '0 8px',
+    fontSize: '0.75rem',
+  },
+  '& .MuiChip-icon': {
+    marginLeft: 4,
+  },
+  '& .MuiChip-deleteIcon': {
+    margin: '0 4px 0 -4px',
+  }
 }));
 
 /**

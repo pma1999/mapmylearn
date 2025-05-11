@@ -180,17 +180,20 @@ const HistoryEntryCard = memo(({
       }}
       onClick={handleViewDetails}
     >
-      <CardContent sx={{ flexGrow: 1, p: { xs: 1.5, sm: 2 }, display: 'flex', flexDirection: 'column' }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+      <CardContent sx={{ flexGrow: 1, p: { xs: 1, sm: 1.5 }, display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
           <Tooltip title={entry.topic} arrow placement="top-start">
             <Typography variant="h6" sx={{
               fontWeight: 'bold',
-              fontSize: { xs: '1.05rem', sm: '1.15rem' },
+              fontSize: { xs: '1rem', sm: '1.1rem' },
               overflow: 'hidden',
               textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
               mr: 1,
               flexGrow: 1,
+              lineHeight: 1.3
             }}>
               {entry.topic}
             </Typography>
@@ -224,7 +227,7 @@ const HistoryEntryCard = memo(({
           </Box>
         </Box>
 
-        <Stack direction="row" spacing={1.5} sx={{ mb: 1.5, flexWrap: 'wrap' }} alignItems="center">
+        <Stack direction="row" spacing={1} sx={{ mb: 1, flexWrap: 'wrap' }} alignItems="center">
            <Tooltip title={`Created: ${formatDate(entry.creation_date)}`} arrow>
              <Stack direction="row" alignItems="center" spacing={0.5} sx={{ color: 'text.secondary' }}>
                <CalendarTodayIcon sx={{ fontSize: '0.875rem' }} />
@@ -245,7 +248,7 @@ const HistoryEntryCard = memo(({
            )}
         </Stack>
 
-        <Stack direction="row" spacing={1} sx={{ mb: 1.5, flexWrap: 'wrap' }} alignItems="center">
+        <Stack direction="row" spacing={0.5} sx={{ mb: 1, flexWrap: 'wrap' }} alignItems="center">
           <StyledChip
             icon={<NotesIcon fontSize="small" />}
             label={`${modulesCount} modules`}
@@ -265,12 +268,12 @@ const HistoryEntryCard = memo(({
           tags={entry.tags || []}
           onAddTag={handleAddTag}
           onDeleteTag={handleDeleteTag}
-          maxDisplayTags={isMobile ? 2 : 3}
+          maxDisplayTags={isMobile ? 1 : 2}
         />
 
         <Box sx={{ flexGrow: 1 }} />
 
-        <Divider sx={{ my: 1.5 }} />
+        <Divider sx={{ my: 1 }} />
         <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
           <Tooltip title={entry.is_public ? "Manage Sharing" : "Share"} arrow>
             <span>
@@ -388,7 +391,7 @@ const HistoryEntryCard = memo(({
     virtualized ? (
        <Box sx={{ height: '100%' }}>{cardContent}</Box>
     ) : (
-      <Grid item xs={12} sm={6} md={4} lg={3}>
+      <Grid item xs={12} sm={6} md={4} lg={3} xl={2}>
          {cardContent}
       </Grid>
     )
