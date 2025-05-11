@@ -182,7 +182,7 @@ async def login(response: Response, request: Request, user_credentials: UserLogi
                 value=session.refresh_token,
                 httponly=True,
                 secure=is_production,  # Only secure in production
-                samesite="strict" if is_production else "lax",  # Strict in production, lax in development
+                samesite="None" if is_production else "lax",  # Strict in production, lax in development
                 max_age=refresh_days * 24 * 3600,  # 30 days in seconds
                 path="/",
             )
