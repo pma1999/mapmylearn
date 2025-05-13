@@ -453,7 +453,7 @@ async def generate_submodule_audio(
 
     # --- Update Database (Only if persisted) ---
     if is_persisted:
-        logger.info(f"Updating database for persisted path {learning_path.path_id}...")
+        logger.info(f"Preparing database update for persisted path {learning_path.path_id} within existing transaction...")
         try:
             if not isinstance(learning_path.path_data, dict):
                  logger.error("path_data is not a dict during update attempt!")
@@ -468,17 +468,15 @@ async def generate_submodule_audio(
             learning_path.last_modified_date = datetime.utcnow()
 
             db.add(learning_path) # Add is safe even if object is already tracked
-            db.commit()
-            db.refresh(learning_path)
-            logger.info(f"Database updated successfully for path_id {learning_path.path_id}")
+            logger.info(f"Database changes prepared for path_id {learning_path.path_id}. Commit will be handled by caller.")
         except Exception as e:
-            db.rollback()
-            logger.exception("Error updating database with audio URL")
+            logger.exception("Error preparing database update with audio URL. Propagating to caller for transaction rollback.")
             # Attempt to delete the orphaned audio file (the final concatenated one)
+            # This cleanup is still relevant as the file exists on disk even if DB transaction fails.
             try:
                 if permanent_audio_path and os.path.exists(permanent_audio_path):
                     os.remove(permanent_audio_path)
-                    logger.info(f"Cleaned up orphaned final audio file due to DB error: {permanent_audio_path}")
+                    logger.info(f"Cleaned up orphaned final audio file due to DB preparation error: {permanent_audio_path}")
             except Exception as cleanup_err:
                 logger.error(f"Failed to cleanup orphaned final audio file {permanent_audio_path}: {cleanup_err}")
 
