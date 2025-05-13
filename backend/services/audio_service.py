@@ -467,7 +467,7 @@ async def generate_submodule_audio(
 
             learning_path.last_modified_date = datetime.utcnow()
 
-            db.add(learning_path) # Add is safe even if object is already tracked
+            await asyncio.to_thread(db.add, learning_path) # Wrap db.add
             logger.info(f"Database changes prepared for path_id {learning_path.path_id}. Commit will be handled by caller.")
         except Exception as e:
             logger.exception("Error preparing database update with audio URL. Propagating to caller for transaction rollback.")

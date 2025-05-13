@@ -70,7 +70,7 @@ class CreditService:
         try:
             # Lock the user row for the duration of the transaction block and get current state
             # Use .one() to ensure the user exists, raises NoResultFound otherwise
-            user = self.db.query(User).filter(User.id == user_id).with_for_update().one()
+            user = await asyncio.to_thread(self.db.query(User).filter(User.id == user_id).with_for_update().one)
 
             # Check balance
             if user.credits < amount:
@@ -92,7 +92,7 @@ class CreditService:
                 notes=notes,
                 balance_after=balance_after_deduction
             )
-            self.db.add(deduction_transaction)
+            await asyncio.to_thread(self.db.add, deduction_transaction)
             
             # Flush to ensure transaction is in buffer, but DO NOT COMMIT here.
             # The caller is responsible for committing the transaction.
@@ -159,7 +159,7 @@ class CreditService:
         logger.debug(f"Attempting to grant {amount} credits to user {user_id} (type: {transaction_type}) within transaction.")
         try:
             # Lock the user row
-            user = self.db.query(User).filter(User.id == user_id).with_for_update().one()
+            user = await asyncio.to_thread(self.db.query(User).filter(User.id == user_id).with_for_update().one)
 
             # Grant credits
             user.credits += amount
@@ -179,7 +179,7 @@ class CreditService:
                 stripe_payment_intent_id=stripe_payment_intent_id,
                 purchase_metadata=purchase_metadata
             )
-            self.db.add(grant_transaction)
+            await asyncio.to_thread(self.db.add, grant_transaction)
 
             # Flush optional, DO NOT COMMIT here.
 
