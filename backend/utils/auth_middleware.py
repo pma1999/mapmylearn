@@ -3,6 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from typing import Optional
 import logging
+import asyncio
 
 from backend.config.database import get_db
 from backend.utils.auth import decode_access_token, TokenData
@@ -35,7 +36,7 @@ async def get_current_user(
         )
     
     # Verify user exists in database
-    user = db.query(User).filter(User.id == token_data.user_id).first()
+    user = await asyncio.to_thread(db.query(User).filter(User.id == token_data.user_id).first)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -89,7 +90,7 @@ async def get_optional_user(
         return None
     
     # Verify user exists in database
-    user = db.query(User).filter(User.id == token_data.user_id).first()
+    user = await asyncio.to_thread(db.query(User).filter(User.id == token_data.user_id).first)
     if user is None or not user.is_active:
         return None
     
