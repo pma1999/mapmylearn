@@ -10,6 +10,7 @@ import logging
 from sqlalchemy import update, select, insert, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert # For UPSERT
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert # For UPSERT
+import asyncio # Add this import
 
 from backend.config.database import get_db
 from backend.models.auth_models import User, LearningPath, LearningPathProgress, TransactionType, GenerationTask, GenerationTaskStatus
@@ -585,10 +586,13 @@ async def generate_or_get_submodule_audio(
         )
 
     # 1. Try fetching from Database (for persisted paths)
-    learning_path = db.query(LearningPath).filter(
-        LearningPath.path_id == path_id,
-        LearningPath.user_id == user.id
-    ).first()
+    # Wrap the synchronous DB call in asyncio.to_thread
+    learning_path = await asyncio.to_thread(
+        db.query(LearningPath).filter(
+            LearningPath.path_id == path_id,
+            LearningPath.user_id == user.id
+        ).first
+    )
 
     is_persisted = learning_path is not None
     temp_path_data = request_data.path_data if not is_persisted else None
