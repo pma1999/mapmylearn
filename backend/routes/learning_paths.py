@@ -640,47 +640,67 @@ async def generate_or_get_submodule_audio(
         db_session_for_generation = db # Use the actual DB session for persisted paths
 
     try:
-        # Use a single transaction for charge and audio generation/DB update
-        with db.begin(): # This starts a transaction or savepoint
-            # Charge credits first using the new method
-            await credit_service.charge_credits(
-                user_id=user.id,
-                amount=1,
-                transaction_type=TransactionType.AUDIO_GENERATION_USE,
-                notes=notes
-            )
-            logger.info(f"Credit charged successfully for audio generation (user: {user.id}, path: {path_id})")
-            
-            # Now call the audio generation service
-            # It might modify learning_path.path_data if persisted
-            generated_url = await generate_submodule_audio(
-                db=db_session_for_generation, # Pass appropriate session
-                learning_path=path_object_for_generation,
-                module_index=module_index,
-                submodule_index=submodule_index,
-                language=requested_language,
-                audio_style=request_data.audio_style,
-                force_regenerate=request_data.force_regenerate # Pass flag (service handles cache logic)
-            )
-            # If generate_submodule_audio modified learning_path.path_data,
-            # the changes are part of this transaction and will be committed.
-            
-        # If the `with db.begin()` block finishes without exceptions, 
-        # the transaction (charge + potential path_data update) is committed.
-        logger.info(f"Successfully generated audio and committed transaction for path {path_id}")
+        generated_url = None # Initialize generated_url
+
+        if db.in_transaction():
+            logger.debug(f"Existing transaction detected. Using SAVEPOINT for audio generation for path {path_id}.")
+            with db.begin_nested():  # Creates a SAVEPOINT
+                # Charge credits first
+                await credit_service.charge_credits(
+                    user_id=user.id,
+                    amount=1,
+                    transaction_type=TransactionType.AUDIO_GENERATION_USE,
+                    notes=notes
+                )
+                logger.info(f"Credit charged (within SAVEPOINT) for audio generation (user: {user.id}, path: {path_id})")
+                
+                # Now call the audio generation service
+                generated_url = await generate_submodule_audio(
+                    db=db_session_for_generation,
+                    learning_path=path_object_for_generation,
+                    module_index=module_index,
+                    submodule_index=submodule_index,
+                    language=requested_language,
+                    audio_style=request_data.audio_style,
+                    force_regenerate=request_data.force_regenerate
+                )
+        else:
+            # This case is less likely in the current flow due to get_current_user,
+            # but included for logical completeness.
+            logger.debug(f"No existing transaction. Starting new transaction for audio generation for path {path_id}.")
+            with db.begin(): # Starts a new top-level transaction
+                await credit_service.charge_credits(
+                    user_id=user.id,
+                    amount=1,
+                    transaction_type=TransactionType.AUDIO_GENERATION_USE,
+                    notes=notes
+                )
+                logger.info(f"Credit charged (within new transaction) for audio generation (user: {user.id}, path: {path_id})")
+
+                generated_url = await generate_submodule_audio(
+                    db=db_session_for_generation,
+                    learning_path=path_object_for_generation,
+                    module_index=module_index,
+                    submodule_index=submodule_index,
+                    language=requested_language,
+                    audio_style=request_data.audio_style,
+                    force_regenerate=request_data.force_regenerate
+                )
+        
+        logger.info(f"Successfully processed audio generation and committed local transaction segment for path {path_id}. URL: {generated_url}")
         return GenerateAudioResponse(audio_url=generated_url)
 
     except InsufficientCreditsError as ice:
-        # Rollback is handled automatically by db.begin() context manager
+        # The 'with db.begin_nested()' or 'with db.begin()' context manager automatically
+        # handles rollback of its respective scope (savepoint or transaction) upon exiting due to an exception.
         logger.warning(f"Insufficient credits for audio generation (user: {user.id}, path: {path_id}): {ice.detail}")
-        # Re-raise the specific 403 error
-        raise ice 
+        raise ice # Re-raise to be handled by FastAPI's exception handlers
     except HTTPException as http_exc:
-        # Rollback handled automatically. Re-raise other HTTP exceptions from audio service.
+        # As above, rollback of the local scope is automatic.
         logger.warning(f"HTTP exception during audio generation for path {path_id}: {http_exc.detail}")
         raise http_exc
     except Exception as e:
-        # Rollback handled automatically. Log and raise standard 500 for unexpected errors.
+        # As above, rollback of the local scope is automatic.
         logger.exception(f"Unexpected error during credit charge or audio generation for path {path_id}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Audio generation failed unexpectedly: {str(e)}")
 
