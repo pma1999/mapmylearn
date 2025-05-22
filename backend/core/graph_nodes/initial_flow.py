@@ -634,18 +634,18 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
         if explanation_style_description:
             style_instruction_part = f"\n\n**Style Requirement:** Write all module titles and descriptions using the following style: **{explanation_style_description}**"
 
-        # Improved prompt text with better JSON formatting instructions
-        prompt_text = f"""# EXPERT CURRICULUM ARCHITECT INSTRUCTIONS
+        # Improved prompt text with proper template variables and escaping
+        prompt_text = """# EXPERT CURRICULUM ARCHITECT INSTRUCTIONS
 
-You are a world-class curriculum architect with expertise in educational design. Transform the following search results into a cohesive, comprehensive course on {escaped_topic}.
+You are a world-class curriculum architect with expertise in educational design. Transform the following search results into a cohesive, comprehensive course on {topic}.
 
 ## SEARCH CONTEXT
-{results_text}
+{search_results}
 
 ## CURRICULUM REQUIREMENTS
 - Language: {language_instruction}
 - Module Count: {module_count_instruction}
-- {style_instruction_part}
+{style_instruction_part}
 
 ## DESIGN PRINCIPLES
 1. **Evidence-Based Structure**: Analyze the search results to identify key concepts, standard approaches, and natural divisions within this subject.
@@ -663,16 +663,16 @@ For each module, provide:
 
 ## RESPONSE FORMAT
 Your response must be valid JSON with this exact structure:
-{{
+{{{{
   "modules": [
-    {{
+    {{{{
       "title": "Module title here",
       "description": "Comprehensive overview here",
       "learning_objective": "After completing this module, learners will be able to...",
       "strategic_relevance": "Explanation of importance and connections"
-    }}
+    }}}}
   ]
-}}
+}}}}
 
 Do not wrap your response in markdown code blocks. Return only the JSON object."""
 
@@ -682,7 +682,13 @@ Do not wrap your response in markdown code blocks. Return only the JSON object."
             prompt,
             lambda: get_llm(key_provider=google_key_provider),
             enhanced_modules_parser,
-            {},  # Empty params since everything is in the template
+            {
+                "topic": escaped_topic,
+                "search_results": results_text,
+                "language_instruction": language_instruction,
+                "module_count_instruction": module_count_instruction,
+                "style_instruction_part": style_instruction_part,
+            },
             max_retries=3,
             retry_parsing_errors=True,
             max_parsing_retries=3
