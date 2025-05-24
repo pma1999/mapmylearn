@@ -161,18 +161,17 @@ const MermaidVisualization = ({
   // Render Mermaid diagram when syntax changes
   useEffect(() => {
     if (!mermaidSyntax) {
-      setRenderedSvgString(''); // Clear SVG if syntax is gone
+      setRenderedSvgString(''); 
       return;
     }
 
     setIsRendering(true);
     setRenderError(null);
-    setRenderedSvgString(''); // Clear previous SVG
+    setRenderedSvgString('');
 
     const renderDiagram = async () => {
       try {
         const newDiagramId = `mermaid-diagram-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        setDiagramId(newDiagramId); // Though diagramId is not strictly needed if we don't re-render to a ref
 
         const themedMermaidSyntax = `%%{init: {"theme": "neutral"}}%%
 ${mermaidSyntax}`;
@@ -196,7 +195,7 @@ ${mermaidSyntax}`;
           console.warn('⚠️ Rendered SVG is empty despite parsing success.');
           throw new Error('Rendered SVG is empty. The diagram content might be unsupported for rendering.');
         }
-        setRenderedSvgString(svg);
+        setRenderedSvgString(svg); 
         
       } catch (error) {
         console.error('❌ Error in renderDiagram process:', error);
@@ -207,7 +206,7 @@ ${mermaidSyntax}`;
     };
 
     renderDiagram();
-  }, [mermaidSyntax]); // Removed clearContainer from deps as it's stable
+  }, [mermaidSyntax]);
 
   // Cleanup on unmount - not strictly necessary with current approach but good practice
   useEffect(() => {
@@ -262,36 +261,33 @@ ${mermaidSyntax}`;
         <Paper 
           variant="outlined" 
           sx={{ 
-            p: { xs: 1, sm: 2 }, bgcolor: 'background.paper', textAlign: 'center',
-            minHeight: '300px', maxHeight: '50vh', 
+            bgcolor: 'background.paper', 
+            width: '100%',      
             overflow: 'hidden', 
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            position: 'relative' 
+            display: 'flex',    
+            alignItems: 'center',
+            justifyContent: 'center',
+            p: 0, 
+            aspectRatio: '16/9' // Force an aspect ratio for the container, e.g., 16:9 or similar
           }}
         >
           <TransformWrapper
-            initialScale={1}
-            minScale={0.1} // Allow significant zoom out
-            maxScale={20}  // Increased maxScale for deeper zoom
-            centerOnInit
-            limitToBounds={false} // Allow panning beyond initial bounds for better exploration
+            initialScale={1} 
+            minScale={0.1} 
+            maxScale={10}  
+            centerOnInit={true} 
+            limitToBounds={true} 
             doubleClick={{ disabled: true }}
-            wheel={{ step: 0.2 }} // Slightly more sensitive wheel zoom
-            pinch={{ step: 5 }} // Pinch sensitivity
+            wheel={{ step: 0.2 }} 
+            pinch={{ step: 5 }} 
           >
             <TransformComponent 
               wrapperStyle={{ width: "100%", height: "100%" }} 
-              contentStyle={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}
+              contentStyle={{ display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "100%" }}
             >
               <div 
                 dangerouslySetInnerHTML={{ __html: renderedSvgString }} 
-                style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  width: '100%', // Ensure this div tries to fill its parent
-                  height: '100%' // Ensure this div tries to fill its parent
-                }} 
+                style={{ display: 'inline-block', maxWidth: '100%', maxHeight: '100%' }} // Ensure SVG inside also tries to respect bounds
               />
             </TransformComponent>
           </TransformWrapper>
@@ -348,8 +344,8 @@ ${mermaidSyntax}`;
                           display: 'flex', 
                           alignItems: 'center', 
                           justifyContent: 'center', 
-                          width: '100%', // Ensure this div tries to fill its parent
-                          height: '100%' // Ensure this div tries to fill its parent
+                          width: '100%', 
+                          height: '100%' 
                         }} 
                       />
                     </TransformComponent>
