@@ -46,25 +46,32 @@ Your task is to analyze the following submodule content and generate Mermaid.js 
    - Avoid overly complex styling that might cause parsing issues
    - Ensure all syntax elements are complete and properly closed
 
-4. **Syntax Requirements:**
-   - Generate valid and complete Mermaid.js syntax
-   - Use descriptive and concise labels for all nodes and edges
-   - **Node Labels**: Keep labels short (2-4 words max) to prevent text overflow
-   - **Link/Edge Text**: Use format `A --"Text"--> B` or `A ---|Text| B`
-   - Ensure proper syntax formatting and indentation
-   - **Class Definitions**: If using styling, ensure ALL class definitions are complete with both nodeId AND className
+4. **Node and Label Guidelines:**
+   - **Node IDs**: Use simple alphanumeric IDs (A, B, C1, START, etc.)
+   - **Node Labels**: Keep labels short (2-4 words max)
+   - **Avoid Special Characters**: Do NOT use parentheses (), brackets [], or other special characters in node labels
+   - **Use Simple Text**: Replace special characters with simple alternatives:
+     * Instead of "Agustín (Maduro)" use "Agustín Maduro" or "Agustín Adulto"
+     * Instead of "Contra Academicos" use "Contra Academicos" (avoid italics/formatting)
+   - **Label Format**: Use quotes for multi-word labels: `A["Simple Label"]`
 
-5. **Styling Guidelines:**
+5. **Edge and Connection Guidelines:**
+   - **Simple Connections**: Use `A --> B` for basic connections
+   - **Edge Text**: Use `A --"Text"--> B` format with quotes around edge text
+   - **Avoid Complex Combinations**: Don't mix complex node labels with edge text
+   - **Test Readability**: Ensure all connections are clear and unambiguous
+
+6. **Styling Guidelines:**
    - Use simple, consistent styling with classDef
    - Limit to 3-5 different node classes maximum
    - Always ensure class assignments are complete: `class nodeId className`
    - Test that all referenced classes are properly defined
 
-6. **Content Suitability Check:**
+7. **Content Suitability Check:**
    If the content is primarily abstract text without clear relationships, processes, or structures that would benefit from diagrammatic representation, respond with ONLY this JSON:
    {{"message": "This content is not optimally suited for a Mermaid diagram representation. The material would be better understood through text-based learning."}}
 
-7. **Output Format:**
+8. **Output Format:**
    If a diagram is feasible, respond with ONLY the Mermaid syntax itself, starting directly with the diagram type declaration. Do NOT include:
    - Explanatory text before or after
    - Markdown code blocks like ```mermaid
@@ -113,7 +120,29 @@ graph TD
     class E,F,G,H application
 ```
 
-**CRITICAL**: Ensure every class definition line includes both the node ID and the class name. Never leave a class assignment incomplete.
+**For Historical/Temporal Content:**
+```
+graph TD
+    A["Early Period"] --"Influenced by"--> B["Key Figure"]
+    B --"Developed"--> C["Major Work"]
+    C --"Led to"--> D["New Theory"]
+    D --> E["Modern Impact"]
+    
+    classDef period fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef person fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef work fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    
+    class A,E period
+    class B person
+    class C,D work
+```
 
-Generate a diagram that is impactful and perfect in conveying insights about the submodule content while maintaining syntactic correctness.
+**CRITICAL RULES:**
+1. Never use parentheses () or brackets [] inside node labels
+2. Keep all labels simple and short
+3. Ensure every class definition line includes both the node ID and the class name
+4. Test that all node IDs are referenced correctly in edges
+5. Avoid complex formatting or special characters
+
+Generate a diagram that is impactful and perfect in conveying insights about the submodule content while maintaining strict syntactic correctness.
 """ 
