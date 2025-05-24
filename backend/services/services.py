@@ -11,9 +11,35 @@ import time # Added for thread-safe rate limiting
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.tools import BraveSearch # Replaced TavilySearch
+from langchain_core.messages import AIMessage
 from typing import Optional, Union, Tuple, Any
 from bs4 import BeautifulSoup
 import trafilatura # Added for HTML extraction
+
+# Import official Google GenAI SDK for Grounding with Google Search
+try:
+    from google import genai
+    from google.genai.types import Tool, GenerateContentConfig, GoogleSearch
+    GOOGLE_GENAI_AVAILABLE = True
+except ImportError:
+    GOOGLE_GENAI_AVAILABLE = False
+    genai = None
+    Tool = None
+    GenerateContentConfig = None
+    GoogleSearch = None
+    logging.warning("google-genai SDK not available, Google Search grounding will be disabled")
+
+# Import LangSmith for tracing
+try:
+    from langsmith import traceable, Client as LangSmithClient
+    from langsmith.run_trees import RunTree
+    LANGSMITH_AVAILABLE = True
+except ImportError:
+    LANGSMITH_AVAILABLE = False
+    traceable = None
+    LangSmithClient = None
+    RunTree = None
+    logging.warning("LangSmith not available, tracing will be disabled for grounded LLM")
 
 # Import models directly for runtime use
 from backend.models.models import SearchServiceResult, ScrapedResult
@@ -23,7 +49,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from backend.services.key_provider import KeyProvider, GoogleKeyProvider, BraveKeyProvider # Renamed TavilyKeyProvider
     # Keep models here for type checking if needed, but they are already imported above
-    # from backend.models.models import SearchServiceResult, ScrapedResult 
+    # from backend.models.models import SearchServiceResult, ScrapedResult
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -225,6 +251,475 @@ def _get_model_for_user(user):
     # Default model for all other users
     logger.debug(f"Using default model gemini-2.0-flash for user {getattr(user, 'email', 'unknown')} (ID: {getattr(user, 'id', 'unknown')})")
     return "gemini-2.0-flash"
+
+def _is_premium_search_user(user):
+    """
+    Check if user is eligible for online search functionality.
+    
+    Args:
+        user: User object containing id and email fields
+        
+    Returns:
+        bool: True if user is eligible for online search, False otherwise
+    """
+    if user and (
+        (hasattr(user, 'email') and user.email in ["pablomiguelargudo@gmail.com", "oscarvlc98@gmail.com"]) or
+        (hasattr(user, 'id') and user.id in [1, 13])
+    ):
+        return True
+    return False
+
+async def _get_google_api_key(key_provider):
+    """
+    Extract Google API key from various sources.
+    
+    Args:
+        key_provider: KeyProvider object, direct API key string, or None
+        
+    Returns:
+        str: Google API key
+        
+    Raises:
+        ValueError: If no valid API key is found
+    """
+    google_api_key = None
+    
+    # Handle different input types
+    if hasattr(key_provider, 'get_key') and callable(key_provider.get_key):
+        # It's a KeyProvider
+        try:
+            google_api_key = await key_provider.get_key()
+            logger.debug("Retrieved Google API key from provider")
+        except Exception as e:
+            logger.error(f"Error retrieving Google API key from provider: {str(e)}")
+            raise
+    elif isinstance(key_provider, str):
+        # Direct API key
+        google_api_key = key_provider
+        logger.debug("Using provided Google API key directly")
+    else:
+        # Fallback to environment
+        google_api_key = os.environ.get("GOOGLE_API_KEY")
+        if not google_api_key:
+            logger.warning("GOOGLE_API_KEY not set in environment")
+        else:
+            logger.debug("Using Google API key from environment")
+    
+    if not google_api_key:
+        raise ValueError("No Google API key available from any source")
+    
+    return google_api_key
+
+async def get_llm_with_search(key_provider=None, user=None):
+    """
+    Initialize Google Gemini with official Grounding with Google Search for premium users.
+    Returns a wrapper that provides LangChain-compatible interface while using official Google GenAI SDK.
+    Automatically falls back to regular LLM if search unavailable or user not premium.
+    
+    Args:
+        key_provider: KeyProvider object for Google API key (or direct API key as string)
+        user: User object for premium user validation and model selection
+        
+    Returns:
+        Either a GroundedGeminiWrapper (for premium users) or regular ChatGoogleGenerativeAI instance
+    """
+    # Check if user is eligible for search functionality
+    if not _is_premium_search_user(user):
+        logger.debug(f"User {getattr(user, 'email', 'unknown')} not eligible for search, using regular LLM")
+        return await get_llm(key_provider=key_provider, user=user)
+    
+    # Check if Google GenAI SDK is available
+    if not GOOGLE_GENAI_AVAILABLE or genai is None:
+        logger.warning("Google GenAI SDK not available, falling back to regular LLM")
+        return await get_llm(key_provider=key_provider, user=user)
+    
+    try:
+        # Get API key using helper function
+        google_api_key = await _get_google_api_key(key_provider)
+        
+        # Determine model based on user
+        model = _get_model_for_user(user)
+        
+        # Create Google GenAI client with grounding
+        client = genai.Client(api_key=google_api_key)
+        google_search_tool = Tool(google_search=GoogleSearch())
+        
+        logger.info(f"Initializing grounded LLM for premium user {getattr(user, 'email', 'unknown')} with model {model}")
+        
+        # Return wrapper that provides LangChain-compatible interface
+        return GroundedGeminiWrapper(
+            client=client,
+            model=model,
+            search_tool=google_search_tool,
+            user=user
+        )
+        
+    except Exception as e:
+        logger.warning(f"Failed to initialize grounded LLM for user {getattr(user, 'email', 'unknown')}: {str(e)}. Falling back to regular LLM")
+        # Fallback to regular LLM on any error
+        return await get_llm(key_provider=key_provider, user=user)
+
+
+class GroundedGeminiWrapper:
+    """
+    Wrapper class that provides LangChain-compatible interface for Google GenAI SDK with grounding.
+    Includes full LangSmith tracing for observability.
+    This allows seamless integration with existing LangChain-based code while using official grounding.
+    """
+    
+    def __init__(self, client: 'genai.Client', model: str, search_tool: 'Tool', user=None):
+        self.client = client
+        self.model = model
+        self.search_tool = search_tool
+        self.user = user
+        self.logger = logging.getLogger("GroundedGeminiWrapper")
+        
+        # Initialize LangSmith client for tracing
+        self.langsmith_client = None
+        if LANGSMITH_AVAILABLE and LangSmithClient:
+            try:
+                self.langsmith_client = LangSmithClient()
+                self.logger.debug("LangSmith client initialized for grounded LLM tracing")
+            except Exception as e:
+                self.logger.warning(f"Failed to initialize LangSmith client: {e}")
+                self.langsmith_client = None
+    
+    async def ainvoke(self, messages, **kwargs):
+        """
+        LangChain-compatible async invoke method with full LangSmith tracing.
+        Converts LangChain format to Google GenAI format and back.
+        """
+        # Extract langsmith_extra from kwargs if present
+        langsmith_extra = kwargs.pop('langsmith_extra', {})
+        
+        # Create run tree for tracing if LangSmith is available
+        run_tree = None
+        if self.langsmith_client and LANGSMITH_AVAILABLE and RunTree:
+            try:
+                # Convert LangChain messages to input format for tracing
+                if hasattr(messages, 'messages'):
+                    trace_inputs = {"messages": [msg.dict() if hasattr(msg, 'dict') else str(msg) for msg in messages.messages]}
+                elif isinstance(messages, list):
+                    trace_inputs = {"messages": [msg.dict() if hasattr(msg, 'dict') else str(msg) for msg in messages]}
+                else:
+                    trace_inputs = {"messages": str(messages)}
+                
+                # Add user context to metadata
+                metadata = langsmith_extra.get('metadata', {})
+                metadata.update({
+                    'user_email': getattr(self.user, 'email', 'unknown'),
+                    'user_id': getattr(self.user, 'id', 'unknown'),
+                    'model': self.model,
+                    'grounding_enabled': True,
+                    'search_tool': 'google_search'
+                })
+                
+                run_tree = RunTree(
+                    name=langsmith_extra.get('name', 'GroundedGeminiLLM'),
+                    run_type='llm',
+                    inputs=trace_inputs,
+                    metadata=metadata,
+                    tags=langsmith_extra.get('tags', ['grounded', 'premium_user', 'google_search']),
+                    project_name=langsmith_extra.get('project_name', os.environ.get('LANGSMITH_PROJECT', 'default'))
+                )
+                
+                # Post the run to start tracing
+                await asyncio.get_event_loop().run_in_executor(None, run_tree.post)
+                self.logger.debug(f"Started LangSmith trace for grounded generation: {run_tree.id}")
+                
+            except Exception as e:
+                self.logger.warning(f"Failed to create LangSmith trace: {e}")
+                run_tree = None
+        
+        try:
+            # Convert LangChain messages to Google GenAI format
+            content = self._convert_langchain_to_genai_content(messages)
+            
+            self.logger.debug(f"Converted content for grounded generation: {content[:200]}...")
+            
+            # Generate content with grounding and tracing
+            response = await self._generate_with_grounding(content, run_tree)
+            
+            # Convert response back to LangChain format
+            langchain_response = self._convert_genai_to_langchain_response(response)
+            
+            # Complete the trace if available
+            if run_tree:
+                try:
+                    # Extract grounding metadata for trace
+                    grounding_metadata = {}
+                    search_queries_used = []
+                    grounding_sources_count = 0
+                    
+                    if hasattr(response, 'candidates') and response.candidates:
+                        candidate = response.candidates[0]
+                        if hasattr(candidate, 'grounding_metadata') and candidate.grounding_metadata:
+                            metadata = candidate.grounding_metadata
+                            if hasattr(metadata, 'web_search_queries') and metadata.web_search_queries:
+                                search_queries_used = metadata.web_search_queries
+                                grounding_metadata['search_queries'] = search_queries_used
+                                grounding_metadata['search_queries_count'] = len(search_queries_used)
+                            if hasattr(metadata, 'grounding_chunks') and metadata.grounding_chunks:
+                                grounding_sources_count = len(metadata.grounding_chunks)
+                                grounding_metadata['grounding_sources'] = grounding_sources_count
+                                grounding_metadata['grounding_chunks'] = [
+                                    {
+                                        'uri': chunk.web.uri if hasattr(chunk, 'web') and hasattr(chunk.web, 'uri') else 'unknown',
+                                        'title': chunk.web.title if hasattr(chunk, 'web') and hasattr(chunk.web, 'title') else 'unknown'
+                                    }
+                                    for chunk in metadata.grounding_chunks[:5]  # Limit to first 5 for trace size
+                                ]
+                            if hasattr(metadata, 'search_entry_point') and metadata.search_entry_point:
+                                if hasattr(metadata.search_entry_point, 'rendered_content'):
+                                    grounding_metadata['search_suggestions'] = metadata.search_entry_point.rendered_content[:500]  # Limit length
+                    
+                    # Prepare outputs for trace
+                    trace_outputs = {
+                        'content': langchain_response.content,
+                        'grounding_metadata': grounding_metadata,
+                        'model_used': self.model
+                    }
+                    
+                    # Add additional metadata from AIMessage if available
+                    if hasattr(langchain_response, 'additional_kwargs') and langchain_response.additional_kwargs:
+                        if 'grounding_metadata' in langchain_response.additional_kwargs:
+                            trace_outputs['grounding_metadata'].update(langchain_response.additional_kwargs['grounding_metadata'])
+                    
+                    # Add usage data if available
+                    if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                        usage = response.usage_metadata
+                        trace_outputs['usage'] = {
+                            'prompt_tokens': getattr(usage, 'prompt_token_count', 0),
+                            'completion_tokens': getattr(usage, 'candidates_token_count', 0),
+                            'total_tokens': getattr(usage, 'total_token_count', 0)
+                        }
+                    
+                    run_tree.end(outputs=trace_outputs)
+                    await asyncio.get_event_loop().run_in_executor(None, run_tree.patch)
+                    self.logger.info(f"Completed LangSmith trace for grounded generation: {run_tree.id}")
+                    
+                except Exception as e:
+                    self.logger.warning(f"Failed to complete LangSmith trace: {e}")
+                    if run_tree:
+                        try:
+                            run_tree.end(outputs={'error': str(e)})
+                            await asyncio.get_event_loop().run_in_executor(None, run_tree.patch)
+                        except:
+                            pass
+            
+            return langchain_response
+            
+        except Exception as e:
+            self.logger.error(f"Error in grounded generation: {str(e)}")
+            
+            # Mark trace as failed if available
+            if run_tree:
+                try:
+                    run_tree.end(outputs={'error': str(e)})
+                    await asyncio.get_event_loop().run_in_executor(None, run_tree.patch)
+                except:
+                    pass
+            
+            # Log the grounding attempt but don't fail the entire request
+            self.logger.warning("Grounding failed, this may affect response quality")
+            raise
+    
+    def _convert_langchain_to_genai_content(self, messages):
+        """Convert LangChain messages to Google GenAI content format."""
+        if not messages:
+            return ""
+        
+        # Extract text content from LangChain messages
+        content_parts = []
+        for message in messages:
+            if hasattr(message, 'content'):
+                content_parts.append(str(message.content))
+            else:
+                content_parts.append(str(message))
+        
+        return "\n".join(content_parts)
+    
+    async def _generate_with_grounding(self, content: str, run_tree=None):
+        """Generate content using official Google GenAI SDK with grounding."""
+        try:
+            # Create child run for the actual LLM call if tracing
+            llm_run = None
+            if run_tree and LANGSMITH_AVAILABLE:
+                try:
+                    llm_run = run_tree.create_child(
+                        name="GoogleGenAI_Grounded_Call",
+                        run_type="llm",
+                        inputs={"content": content, "model": self.model}
+                    )
+                    await asyncio.get_event_loop().run_in_executor(None, llm_run.post)
+                except Exception as e:
+                    self.logger.warning(f"Failed to create child run for LLM call: {e}")
+                    llm_run = None
+            
+            # Use asyncio to run the synchronous client method
+            loop = asyncio.get_event_loop()
+            
+            def _sync_generate():
+                return self.client.models.generate_content(
+                    model=self.model,
+                    contents=content,
+                    config=GenerateContentConfig(
+                        tools=[self.search_tool],
+                        response_modalities=["TEXT"],
+                    )
+                )
+            
+            # Run in thread executor to avoid blocking
+            response = await loop.run_in_executor(None, _sync_generate)
+            
+            # Complete child run if available
+            if llm_run:
+                try:
+                    # Extract actual response content for the child run
+                    actual_content = ""
+                    if hasattr(response, 'candidates') and response.candidates:
+                        candidate = response.candidates[0]
+                        if hasattr(candidate, 'content') and candidate.content:
+                            if hasattr(candidate.content, 'parts') and candidate.content.parts:
+                                text_parts = []
+                                for part in candidate.content.parts:
+                                    if hasattr(part, 'text'):
+                                        text_parts.append(part.text)
+                                actual_content = "".join(text_parts)
+                    
+                    llm_outputs = {
+                        "response": actual_content if actual_content else "No content generated",
+                        "grounded": True
+                    }
+                    
+                    if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                        usage = response.usage_metadata
+                        llm_outputs['usage'] = {
+                            'prompt_tokens': getattr(usage, 'prompt_token_count', 0),
+                            'completion_tokens': getattr(usage, 'candidates_token_count', 0),
+                            'total_tokens': getattr(usage, 'total_token_count', 0)
+                        }
+                    
+                    llm_run.end(outputs=llm_outputs)
+                    await asyncio.get_event_loop().run_in_executor(None, llm_run.patch)
+                except Exception as e:
+                    self.logger.warning(f"Failed to complete child run: {e}")
+            
+            self.logger.info(f"Grounded generation completed for user {getattr(self.user, 'email', 'unknown')}")
+            
+            # Log grounding metadata if available
+            if hasattr(response, 'candidates') and response.candidates:
+                candidate = response.candidates[0]
+                if hasattr(candidate, 'grounding_metadata') and candidate.grounding_metadata:
+                    metadata = candidate.grounding_metadata
+                    search_queries_count = 0
+                    sources_count = 0
+                    
+                    if hasattr(metadata, 'web_search_queries') and metadata.web_search_queries:
+                        search_queries_count = len(metadata.web_search_queries)
+                        self.logger.info(f"Grounding used {search_queries_count} search queries: {metadata.web_search_queries}")
+                    if hasattr(metadata, 'grounding_chunks') and metadata.grounding_chunks:
+                        sources_count = len(metadata.grounding_chunks)
+                        self.logger.info(f"Grounding found {sources_count} sources")
+                    
+                    if search_queries_count > 0 or sources_count > 0:
+                        self.logger.info(f"Grounding summary: {search_queries_count} queries, {sources_count} sources")
+                else:
+                    self.logger.info("Grounding was enabled but no search metadata found")
+            
+            return response
+            
+        except Exception as e:
+            # Complete child run with error if available
+            if llm_run:
+                try:
+                    llm_run.end(outputs={'error': str(e)})
+                    await asyncio.get_event_loop().run_in_executor(None, llm_run.patch)
+                except:
+                    pass
+            
+            self.logger.error(f"Error in grounded generation: {str(e)}")
+            raise
+    
+    def _convert_genai_to_langchain_response(self, response):
+        """Convert Google GenAI response to LangChain AIMessage format."""
+        try:
+            # Extract text content from response
+            combined_text = ""
+            grounding_metadata = {}
+            
+            if hasattr(response, 'candidates') and response.candidates:
+                candidate = response.candidates[0]
+                if hasattr(candidate, 'content') and candidate.content:
+                    if hasattr(candidate.content, 'parts') and candidate.content.parts:
+                        # Combine all text parts
+                        text_parts = []
+                        for part in candidate.content.parts:
+                            if hasattr(part, 'text'):
+                                text_parts.append(part.text)
+                        
+                        combined_text = "".join(text_parts)
+                
+                # Extract grounding metadata with detailed source information
+                if hasattr(candidate, 'grounding_metadata') and candidate.grounding_metadata:
+                    metadata = candidate.grounding_metadata
+                    
+                    # Extract search queries
+                    if hasattr(metadata, 'web_search_queries') and metadata.web_search_queries:
+                        grounding_metadata['search_queries'] = metadata.web_search_queries
+                        self.logger.debug(f"Extracted search queries: {metadata.web_search_queries}")
+                    
+                    # Extract grounding chunks with detailed source information
+                    if hasattr(metadata, 'grounding_chunks') and metadata.grounding_chunks:
+                        grounding_chunks = []
+                        for chunk in metadata.grounding_chunks:
+                            chunk_data = {}
+                            
+                            # Extract web source information
+                            if hasattr(chunk, 'web') and chunk.web:
+                                web_source = chunk.web
+                                if hasattr(web_source, 'uri'):
+                                    chunk_data['uri'] = web_source.uri
+                                if hasattr(web_source, 'title'):
+                                    chunk_data['title'] = web_source.title
+                                
+                                # Log each extracted source
+                                self.logger.debug(f"Extracted source: {chunk_data.get('title', 'No title')} -> {chunk_data.get('uri', 'No URI')}")
+                            
+                            # Add chunk if we have at least a URI
+                            if chunk_data.get('uri'):
+                                grounding_chunks.append(chunk_data)
+                        
+                        grounding_metadata['grounding_chunks'] = grounding_chunks
+                        grounding_metadata['grounding_sources'] = len(grounding_chunks)
+                        
+                        self.logger.info(f"Extracted {len(grounding_chunks)} sources from grounding metadata")
+                    else:
+                        grounding_metadata['grounding_sources'] = 0
+                        self.logger.debug("No grounding chunks found in metadata")
+            
+            # Fallback if no content extracted
+            if not combined_text:
+                combined_text = str(response)
+            
+            # Return proper LangChain AIMessage with additional metadata
+            additional_kwargs = {}
+            if grounding_metadata:
+                additional_kwargs['grounding_metadata'] = grounding_metadata
+                self.logger.debug(f"Added grounding metadata to response: {grounding_metadata.keys()}")
+            
+            return AIMessage(
+                content=combined_text,
+                additional_kwargs=additional_kwargs
+            )
+            
+        except Exception as e:
+            self.logger.error(f"Error converting grounded response: {str(e)}", exc_info=True)
+            # Return a basic AIMessage to avoid complete failure
+            return AIMessage(
+                content="Error processing grounded response",
+                additional_kwargs={'error': str(e)}
+            )
 
 # --- Start of Modified _scrape_single_url ---
 async def _scrape_single_url(session: aiohttp.ClientSession, url: str, timeout: int) -> Tuple[Optional[str], Optional[str]]:

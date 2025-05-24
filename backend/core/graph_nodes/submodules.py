@@ -24,7 +24,7 @@ from backend.models.models import (
     QuizQuestionList
 )
 from backend.parsers.parsers import submodule_parser, module_queries_parser, quiz_questions_parser, search_queries_parser # Added search_queries_parser
-from backend.services.services import get_llm, perform_search_and_scrape
+from backend.services.services import get_llm, perform_search_and_scrape, get_llm_with_search
 from backend.core.graph_nodes.helpers import run_chain, escape_curly_braces, batch_items, MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT # Import constant
 from backend.core.graph_nodes.search_utils import execute_search_with_llm_retry
 
@@ -1590,8 +1590,8 @@ Depth Level: {escape_curly_braces(submodule.depth_level)}
 
     prompt = ChatPromptTemplate.from_template(prompt_text)
 
-    # Use the standard LLM (e.g., Gemini) for content generation
-    llm = await get_llm(key_provider=state.get("google_key_provider"), user=state.get('user'))
+    # Use the search-enabled LLM (e.g., Gemini with search) for content generation
+    llm = await get_llm_with_search(key_provider=state.get("google_key_provider"), user=state.get('user'))
 
     # Simple chain for content generation
     chain = prompt | llm | StrOutputParser()
@@ -2487,7 +2487,7 @@ async def plan_module_submodules(
     prompt = ChatPromptTemplate.from_template(base_prompt)
 
     try:
-        result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider"), user=state.get('user')), submodule_parser, prompt_params)
+        result = await run_chain(prompt, lambda: get_llm_with_search(key_provider=state.get("google_key_provider"), user=state.get('user')), submodule_parser, prompt_params)
         submodules = result.submodules
         
         # Validate and adjust submodule count if necessary

@@ -7,7 +7,7 @@ import os
 
 from backend.models.models import SearchQuery, LearningPathState, SearchServiceResult, ScrapedResult
 from backend.parsers.parsers import search_queries_parser, enhanced_modules_parser
-from backend.services.services import get_llm, perform_search_and_scrape
+from backend.services.services import get_llm, perform_search_and_scrape, get_llm_with_search
 from langchain_core.prompts import ChatPromptTemplate
 
 from backend.core.graph_nodes.helpers import run_chain, batch_items, format_search_results, escape_curly_braces, MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT, extract_json_from_markdown
@@ -680,7 +680,7 @@ Do not wrap your response in markdown code blocks. Return only the JSON object."
 
         result = await run_chain(
             prompt,
-            lambda: get_llm(key_provider=google_key_provider, user=state.get('user')),
+            lambda: get_llm_with_search(key_provider=google_key_provider, user=state.get('user')),
             enhanced_modules_parser,
             {
                 "topic": escaped_topic,

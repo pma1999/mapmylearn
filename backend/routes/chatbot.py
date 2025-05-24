@@ -19,10 +19,10 @@ from fastapi_limiter import FastAPILimiter # Import FastAPILimiter
 # Local imports
 from backend.config.database import get_db
 from backend.models.auth_models import User, LearningPath, TransactionType # Import TransactionType
-from backend.schemas.chatbot_schemas import ChatRequest, ChatResponse, ClearChatRequest
+from backend.schemas.chatbot_schemas import ChatRequest, ChatResponse, ClearChatRequest, GroundingMetadata, GroundingSource
 from backend.utils.auth_middleware import get_current_user
-from backend.services.services import get_llm # Assuming user API key is available via user model or context
-from backend.prompts.learning_path_prompts import CHATBOT_SYSTEM_PROMPT
+from backend.services.services import get_llm, get_llm_with_search, GroundedGeminiWrapper # Import GroundedGeminiWrapper for type checking
+from backend.prompts.learning_path_prompts import CHATBOT_SYSTEM_PROMPT, CHATBOT_SYSTEM_PROMPT_PREMIUM
 from backend.services.credit_service import CreditService # Import CreditService
 
 router = APIRouter(prefix="/chatbot", tags=["chatbot"])
@@ -362,8 +362,21 @@ async def handle_chat(
         # Retrieve raw research context for this submodule (if present) from normalized content
         submodule_research = submodule.get('research_context', '')
 
+        # 3.4. Initialize LLM first to determine prompt type
+        llm = await get_llm_with_search(key_provider=None, user=user)
+        
+        # 3.5. Select appropriate prompt based on LLM type
+        if isinstance(llm, GroundedGeminiWrapper):
+            # Use premium prompt for grounded users
+            selected_prompt_template = CHATBOT_SYSTEM_PROMPT_PREMIUM
+            logger.info(f"Using premium prompt with search capabilities for user {user.email}")
+        else:
+            # Use standard prompt for regular users
+            selected_prompt_template = CHATBOT_SYSTEM_PROMPT
+            logger.info(f"Using standard prompt for user {user.email}")
+
         # System prompt uses values derived from actual_learning_content
-        system_prompt_string = CHATBOT_SYSTEM_PROMPT.format(
+        system_prompt_string = selected_prompt_template.format(
             submodule_title=submodule_title,
             user_topic=user_topic,
             module_title=module_title,
@@ -378,14 +391,13 @@ async def handle_chat(
             language=language_name
         )
 
-        # 3.4. Initialize LLM and Prompt Template for this request
-        llm = await get_llm(key_provider=None, user=user)
+        # 3.6. Create Prompt Template for this request
         prompt = ChatPromptTemplate.from_messages([
             SystemMessage(content=system_prompt_string),
             MessagesPlaceholder(variable_name="messages"),
         ])
 
-        # 3.5. Define and Compile LangGraph App for this request
+        # 3.7. Define and Compile LangGraph App for this request
         workflow = StateGraph(MessagesState)
         
         # Use functools.partial to bind llm and prompt to call_model
@@ -396,16 +408,16 @@ async def handle_chat(
         workflow.add_edge(START, "model")
         app = workflow.compile(checkpointer=memory)
 
-        # 3.6. Prepare Input and Config
+        # 3.8. Prepare Input and Config
         input_data = {"messages": [HumanMessage(content=request.user_message)]}
         config = {"configurable": {"thread_id": request.thread_id}}
 
-        # 3.7. Invoke Graph
+        # 3.9. Invoke Graph
         logger.debug(f"Invoking graph for thread_id: {request.thread_id} with input: {input_data}")
         output = await app.ainvoke(input_data, config)
         logger.debug(f"Graph invocation completed. Output: {output}")
 
-        # 3.8. Extract Response
+        # 3.10. Extract Response
         if not output or "messages" not in output or not output["messages"]:
             logger.error(f"Invalid output from graph: {output}")
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Chatbot failed to generate a response.")
@@ -414,8 +426,112 @@ async def handle_chat(
         ai_response_message = output["messages"][-1]
         ai_response = ai_response_message.content
 
-        # 3.9. Return Response
-        return ChatResponse(ai_response=ai_response, thread_id=request.thread_id)
+        # 3.11. Extract Grounding Metadata for Premium Users
+        grounding_metadata = None
+        if isinstance(llm, GroundedGeminiWrapper):
+            try:
+                # Log the full AI response message for debugging
+                logger.debug(f"AI response message type: {type(ai_response_message)}")
+                logger.debug(f"AI response message attributes: {dir(ai_response_message)}")
+                
+                # Extract grounding information from the AI message additional_kwargs
+                if hasattr(ai_response_message, 'additional_kwargs') and ai_response_message.additional_kwargs:
+                    additional_data = ai_response_message.additional_kwargs
+                    logger.debug(f"Additional kwargs keys: {list(additional_data.keys())}")
+                    logger.debug(f"Additional kwargs content: {additional_data}")
+                    
+                    # Check if grounding metadata exists in additional_kwargs
+                    if 'grounding_metadata' in additional_data:
+                        grounding_data = additional_data['grounding_metadata']
+                        logger.debug(f"Found grounding_metadata: {grounding_data}")
+                        
+                        # Extract sources information with more flexible parsing
+                        sources = []
+                        search_queries = grounding_data.get('search_queries', [])
+                        
+                        # Try multiple possible keys for grounding sources
+                        source_keys = ['grounding_chunks', 'grounding_sources', 'sources', 'chunks']
+                        for key in source_keys:
+                            if key in grounding_data and isinstance(grounding_data[key], list):
+                                logger.debug(f"Found sources under key '{key}': {grounding_data[key]}")
+                                for chunk in grounding_data[key]:
+                                    if isinstance(chunk, dict):
+                                        # Try different possible field names
+                                        title = chunk.get('title') or chunk.get('name') or chunk.get('text', '')[:50] + '...'
+                                        uri = chunk.get('uri') or chunk.get('url') or chunk.get('link')
+                                        
+                                        if uri:  # Only add if we have a URI
+                                            sources.append(GroundingSource(
+                                                title=title or 'Fuente sin título',
+                                                uri=uri
+                                            ))
+                                            logger.debug(f"Added source: {title} -> {uri}")
+                                break
+                        
+                        # Create grounding metadata object
+                        grounding_metadata = GroundingMetadata(
+                            is_grounded=True,
+                            search_queries=search_queries,
+                            sources_count=grounding_data.get('grounding_sources_count', len(sources)),
+                            sources=sources[:8],  # Limit to first 8 sources for UI performance
+                            model_used=getattr(llm, 'model', 'gemini-2.5-flash-preview-05-20')
+                        )
+                        
+                        logger.info(f"Extracted grounding metadata for user {user.email}: {len(sources)} sources, {len(search_queries)} queries")
+                    else:
+                        logger.warning(f"No 'grounding_metadata' key found in additional_kwargs. Available keys: {list(additional_data.keys())}")
+                
+                # Fallback: if no grounding metadata in additional_kwargs but we know it's grounded
+                if not grounding_metadata:
+                    # Try to extract from the LLM wrapper directly
+                    if hasattr(llm, 'last_grounding_metadata'):
+                        wrapper_metadata = llm.last_grounding_metadata
+                        logger.debug(f"Found grounding metadata in LLM wrapper: {wrapper_metadata}")
+                        
+                        sources = []
+                        if wrapper_metadata and isinstance(wrapper_metadata, dict):
+                            search_queries = wrapper_metadata.get('search_queries', [])
+                            
+                            # Extract sources from wrapper metadata
+                            source_data = wrapper_metadata.get('grounding_chunks', [])
+                            for chunk in source_data:
+                                if isinstance(chunk, dict) and chunk.get('uri'):
+                                    sources.append(GroundingSource(
+                                        title=chunk.get('title', 'Fuente sin título'),
+                                        uri=chunk['uri']
+                                    ))
+                            
+                            grounding_metadata = GroundingMetadata(
+                                is_grounded=True,
+                                search_queries=search_queries,
+                                sources_count=len(sources),
+                                sources=sources[:8],
+                                model_used=getattr(llm, 'model', 'gemini-2.5-flash-preview-05-20')
+                            )
+                            logger.info(f"Extracted grounding metadata from LLM wrapper for user {user.email}: {len(sources)} sources")
+                    
+                    # Final fallback
+                    if not grounding_metadata:
+                        grounding_metadata = GroundingMetadata(
+                            is_grounded=True,
+                            search_queries=[],
+                            sources_count=0,
+                            sources=[],
+                            model_used=getattr(llm, 'model', 'gemini-2.5-flash-preview-05-20')
+                        )
+                        logger.info(f"Created fallback grounding metadata for premium user {user.email}")
+                    
+            except Exception as e:
+                logger.error(f"Error extracting grounding metadata for user {user.email}: {e}", exc_info=True)
+                # Don't fail the entire request, just continue without metadata
+                grounding_metadata = None
+
+        # 3.12. Return Response with Grounding Metadata
+        return ChatResponse(
+            ai_response=ai_response, 
+            thread_id=request.thread_id,
+            grounding_metadata=grounding_metadata
+        )
 
     except HTTPException as http_exc:
         # Re-raise HTTPExceptions to be handled by FastAPI's default handler

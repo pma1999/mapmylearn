@@ -14,7 +14,13 @@ import {
   Divider,
   Link,
   ListItemIcon,
-  Snackbar
+  Snackbar,
+  Chip,
+  Tooltip,
+  Collapse,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
@@ -22,6 +28,10 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import SearchIcon from '@mui/icons-material/Search';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import LaunchIcon from '@mui/icons-material/Launch';
 import ReactMarkdown from 'react-markdown';
 
 // Correct the import path for the API service again
@@ -91,6 +101,114 @@ const markdownComponents = {
   // table elements omitted as per spec
 };
 
+// GroundingIndicator Component for Premium Users
+const GroundingIndicator = ({ metadata }) => {
+  const [expanded, setExpanded] = useState(false);
+
+  if (!metadata || !metadata.is_grounded) {
+    return null;
+  }
+
+  const handleExpandClick = () => {
+    setExpanded(!expanded);
+  };
+
+  return (
+    <Box sx={{ mt: 1, mb: 1 }}>
+      {/* Premium Badge */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+        <Tooltip title="Esta respuesta fue enriquecida con búsquedas en tiempo real de Google">
+          <Chip
+            icon={<AutoAwesomeIcon />}
+            label="Premium"
+            color="primary"
+            size="small"
+            sx={{ 
+              fontWeight: 'bold',
+              '& .MuiChip-icon': { fontSize: '16px' }
+            }}
+          />
+        </Tooltip>
+        
+        {metadata.search_queries && metadata.search_queries.length > 0 && (
+          <Tooltip title={`Queries realizadas: ${metadata.search_queries.join(', ')}`}>
+            <Chip
+              icon={<SearchIcon />}
+              label={`${metadata.search_queries.length} búsquedas`}
+              variant="outlined"
+              size="small"
+              color="primary"
+            />
+          </Tooltip>
+        )}
+
+        {metadata.sources_count > 0 && (
+          <Chip
+            label={`${metadata.sources_count} fuentes`}
+            variant="outlined"
+            size="small"
+            color="success"
+          />
+        )}
+      </Box>
+
+      {/* Sources Accordion */}
+      {metadata.sources && metadata.sources.length > 0 && (
+        <Accordion expanded={expanded} onChange={handleExpandClick} sx={{ boxShadow: 1 }}>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+              🔍 Ver fuentes consultadas ({metadata.sources.length})
+            </Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <List dense>
+              {metadata.sources.map((source, index) => (
+                <ListItem key={index} sx={{ py: 0.5 }}>
+                  <ListItemIcon sx={{ minWidth: 32 }}>
+                    <LaunchIcon fontSize="small" color="action" />
+                  </ListItemIcon>
+                  <Link
+                    href={source.uri}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    sx={{ 
+                      textDecoration: 'none',
+                      '&:hover': { textDecoration: 'underline' },
+                      fontSize: '0.875rem'
+                    }}
+                  >
+                    {source.title || 'Fuente sin título'}
+                  </Link>
+                </ListItem>
+              ))}
+            </List>
+          </AccordionDetails>
+        </Accordion>
+      )}
+
+      {/* Search Queries Details (if no sources but has queries) */}
+      {metadata.search_queries && metadata.search_queries.length > 0 && (!metadata.sources || metadata.sources.length === 0) && (
+        <Box sx={{ mt: 1, p: 1, bgcolor: 'grey.50', borderRadius: 1, border: '1px solid', borderColor: 'grey.200' }}>
+          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 'medium' }}>
+            Búsquedas realizadas:
+          </Typography>
+          <Box sx={{ mt: 0.5 }}>
+            {metadata.search_queries.map((query, index) => (
+              <Chip
+                key={index}
+                label={query}
+                size="small"
+                variant="outlined"
+                sx={{ mr: 0.5, mb: 0.5, fontSize: '0.75rem' }}
+              />
+            ))}
+          </Box>
+        </Box>
+      )}
+    </Box>
+  );
+};
+
 const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleContent, isTemporaryPath, pathData }) => {
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
@@ -154,7 +272,12 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
       }
 
       const response = await sendMessage(payload);
-      const aiMessage = { sender: 'ai', text: response.ai_response, timestamp: new Date() };
+      const aiMessage = { 
+        sender: 'ai', 
+        text: response.ai_response, 
+        timestamp: new Date(),
+        grounding_metadata: response.grounding_metadata || null // Store grounding metadata
+      };
       setMessages((prev) => [...prev, aiMessage]);
 
     } catch (err) {
@@ -260,9 +383,15 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
                 }}
               >
                 {msg.sender === 'ai' ? (
-                  <ReactMarkdown components={markdownComponents}>
-                    {msg.text}
-                  </ReactMarkdown>
+                  <>
+                    <ReactMarkdown components={markdownComponents}>
+                      {msg.text}
+                    </ReactMarkdown>
+                    {/* Show grounding indicator for premium responses */}
+                    {msg.grounding_metadata && (
+                      <GroundingIndicator metadata={msg.grounding_metadata} />
+                    )}
+                  </>
                 ) : (
                   <ListItemText
                     primary={msg.text}
@@ -289,8 +418,11 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
       </Box>
 
       {isLoading && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', p: 1 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 1 }}>
           <CircularProgress size={24} />
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+            Generando respuesta con búsquedas online...
+          </Typography>
         </Box>
       )}
 
