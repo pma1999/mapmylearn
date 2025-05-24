@@ -29,6 +29,10 @@ except ImportError:
     GoogleSearch = None
     logging.warning("google-genai SDK not available, Google Search grounding will be disabled")
 
+# Import LangChain core components for Runnable interface
+from langchain_core.runnables import Runnable
+from langchain_core.messages import BaseMessage
+
 # Import LangSmith for tracing
 try:
     from langsmith import traceable, Client as LangSmithClient
@@ -50,6 +54,8 @@ if TYPE_CHECKING:
     from backend.services.key_provider import KeyProvider, GoogleKeyProvider, BraveKeyProvider # Renamed TavilyKeyProvider
     # Keep models here for type checking if needed, but they are already imported above
     # from backend.models.models import SearchServiceResult, ScrapedResult
+    from google.genai import Client as GenAIClient
+    from google.genai.types import Tool as GenAITool
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -310,7 +316,7 @@ async def _get_google_api_key(key_provider):
     
     return google_api_key
 
-async def get_llm_with_search(key_provider=None, user=None):
+async def get_llm_with_search(key_provider=None, user=None) -> Union['GroundedGeminiWrapper', ChatGoogleGenerativeAI]:
     """
     Initialize Google Gemini with official Grounding with Google Search for premium users.
     Returns a wrapper that provides LangChain-compatible interface while using official Google GenAI SDK.
@@ -360,14 +366,16 @@ async def get_llm_with_search(key_provider=None, user=None):
         return await get_llm(key_provider=key_provider, user=user)
 
 
-class GroundedGeminiWrapper:
+class GroundedGeminiWrapper(Runnable[Any, AIMessage]):
     """
     Wrapper class that provides LangChain-compatible interface for Google GenAI SDK with grounding.
     Includes full LangSmith tracing for observability.
     This allows seamless integration with existing LangChain-based code while using official grounding.
+    Inherits from Runnable to support LangChain chain composition with | operator.
     """
     
-    def __init__(self, client: 'genai.Client', model: str, search_tool: 'Tool', user=None):
+    def __init__(self, client: Optional['GenAIClient'], model: str, search_tool: Optional['GenAITool'], user=None):
+        super().__init__()
         self.client = client
         self.model = model
         self.search_tool = search_tool
@@ -384,7 +392,24 @@ class GroundedGeminiWrapper:
                 self.logger.warning(f"Failed to initialize LangSmith client: {e}")
                 self.langsmith_client = None
     
-    async def ainvoke(self, messages, **kwargs):
+    def invoke(self, input: Any, config=None, **kwargs) -> AIMessage:
+        """
+        Synchronous invoke method for LangChain compatibility.
+        Delegates to ainvoke using asyncio.
+        """
+        import asyncio
+        
+        # Get or create event loop
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        # Run the async method
+        return loop.run_until_complete(self.ainvoke(input, config, **kwargs))
+    
+    async def ainvoke(self, input: Any, config=None, **kwargs) -> AIMessage:
         """
         LangChain-compatible async invoke method with full LangSmith tracing.
         Converts LangChain format to Google GenAI format and back.
@@ -397,12 +422,12 @@ class GroundedGeminiWrapper:
         if self.langsmith_client and LANGSMITH_AVAILABLE and RunTree:
             try:
                 # Convert LangChain messages to input format for tracing
-                if hasattr(messages, 'messages'):
-                    trace_inputs = {"messages": [msg.dict() if hasattr(msg, 'dict') else str(msg) for msg in messages.messages]}
-                elif isinstance(messages, list):
-                    trace_inputs = {"messages": [msg.dict() if hasattr(msg, 'dict') else str(msg) for msg in messages]}
+                if hasattr(input, 'messages'):
+                    trace_inputs = {"messages": [msg.dict() if hasattr(msg, 'dict') else str(msg) for msg in input.messages]}
+                elif isinstance(input, list):
+                    trace_inputs = {"messages": [msg.dict() if hasattr(msg, 'dict') else str(msg) for msg in input]}
                 else:
-                    trace_inputs = {"messages": str(messages)}
+                    trace_inputs = {"messages": str(input)}
                 
                 # Add user context to metadata
                 metadata = langsmith_extra.get('metadata', {})
@@ -433,7 +458,7 @@ class GroundedGeminiWrapper:
         
         try:
             # Convert LangChain messages to Google GenAI format
-            content = self._convert_langchain_to_genai_content(messages)
+            content = self._convert_langchain_to_genai_content(input)
             
             self.logger.debug(f"Converted content for grounded generation: {content[:200]}...")
             
@@ -524,18 +549,59 @@ class GroundedGeminiWrapper:
             self.logger.warning("Grounding failed, this may affect response quality")
             raise
     
-    def _convert_langchain_to_genai_content(self, messages):
-        """Convert LangChain messages to Google GenAI content format."""
-        if not messages:
+    def _convert_langchain_to_genai_content(self, input: Any) -> str:
+        """Convert LangChain input to Google GenAI content format."""
+        if not input:
             return ""
         
-        # Extract text content from LangChain messages
+        # Handle different input types that LangChain might pass
         content_parts = []
-        for message in messages:
-            if hasattr(message, 'content'):
-                content_parts.append(str(message.content))
+        
+        # Case 1: Input has a 'messages' attribute (like PromptValue)
+        if hasattr(input, 'messages'):
+            messages = input.messages
+            for message in messages:
+                if hasattr(message, 'content'):
+                    content_parts.append(str(message.content))
+                else:
+                    content_parts.append(str(message))
+        
+        # Case 2: Input is a list of messages
+        elif isinstance(input, list):
+            for message in input:
+                if hasattr(message, 'content'):
+                    content_parts.append(str(message.content))
+                else:
+                    content_parts.append(str(message))
+        
+        # Case 3: Input is a dictionary (common in LangChain chains)
+        elif isinstance(input, dict):
+            # Look for common keys that contain messages
+            if 'messages' in input:
+                messages = input['messages']
+                if isinstance(messages, list):
+                    for message in messages:
+                        if hasattr(message, 'content'):
+                            content_parts.append(str(message.content))
+                        else:
+                            content_parts.append(str(message))
+                else:
+                    content_parts.append(str(messages))
+            
+            # Look for other common keys like 'input', 'text', 'query', etc.
+            elif 'input' in input:
+                content_parts.append(str(input['input']))
+            elif 'text' in input:
+                content_parts.append(str(input['text']))
+            elif 'query' in input:
+                content_parts.append(str(input['query']))
             else:
-                content_parts.append(str(message))
+                # If it's a dict but no recognized keys, convert the whole thing
+                content_parts.append(str(input))
+        
+        # Case 4: Input is a string or can be converted to string
+        else:
+            content_parts.append(str(input))
         
         return "\n".join(content_parts)
     
