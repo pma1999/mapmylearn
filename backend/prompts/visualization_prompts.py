@@ -40,29 +40,36 @@ Your task is to analyze the following submodule content and generate Mermaid.js 
    - `gitgraph` - For branching processes or parallel developments
    - `pie` - For proportional data or category distributions
 
-3. **Syntax Requirements:**
+3. **Complexity Guidelines:**
+   - Keep diagrams focused and concise (maximum 15-20 nodes)
+   - Use clear, short labels that fit comfortably in nodes
+   - Avoid overly complex styling that might cause parsing issues
+   - Ensure all syntax elements are complete and properly closed
+
+4. **Syntax Requirements:**
    - Generate valid and complete Mermaid.js syntax
-   - Use descriptive and concise labels for all nodes and edges. **Labels should be short enough to fit comfortably within typical node shapes without truncation. If a concept is too long for a single node, consider breaking it into multiple linked nodes or using abbreviations where clear.**
-   - **Link/Edge Text**: If adding text to a link/edge, use the format `A --"Text"--> B` or `A ---|Text| B`. Avoid spaces directly after `A --` if text is intended for the link.
+   - Use descriptive and concise labels for all nodes and edges
+   - **Node Labels**: Keep labels short (2-4 words max) to prevent text overflow
+   - **Link/Edge Text**: Use format `A --"Text"--> B` or `A ---|Text| B`
    - Ensure proper syntax formatting and indentation
-   - Include styling where appropriate to enhance visual appeal
-   - Use meaningful node IDs and connection syntax
+   - **Class Definitions**: If using styling, ensure ALL class definitions are complete with both nodeId AND className
 
-4. **Visual Enhancement:**
-   - Apply consistent styling using classDef when beneficial
-   - Use appropriate node shapes (rectangles, circles, diamonds, etc.)
-   - Consider color coding for different types of concepts
-   - Ensure the diagram is well-organized and easy to follow
+5. **Styling Guidelines:**
+   - Use simple, consistent styling with classDef
+   - Limit to 3-5 different node classes maximum
+   - Always ensure class assignments are complete: `class nodeId className`
+   - Test that all referenced classes are properly defined
 
-5. **Content Suitability Check:**
+6. **Content Suitability Check:**
    If the content is primarily abstract text without clear relationships, processes, or structures that would benefit from diagrammatic representation, respond with ONLY this JSON:
    {{"message": "This content is not optimally suited for a Mermaid diagram representation. The material would be better understood through text-based learning."}}
 
-6. **Output Format:**
+7. **Output Format:**
    If a diagram is feasible, respond with ONLY the Mermaid syntax itself, starting directly with the diagram type declaration. Do NOT include:
    - Explanatory text before or after
    - Markdown code blocks like ```mermaid
    - Additional commentary or descriptions
+   - Incomplete syntax elements
 
 ## Example Output Formats:
 
@@ -74,7 +81,7 @@ flowchart TD
     B --> D["Research Alternatives"]
     C --> E["Implementation"]
     D --> E
-    E --> F["Testing & Validation"]
+    E --> F["Testing"]
     F --> G["Deployment"]
     
     classDef startEnd fill:#e1f5fe,stroke:#01579b,stroke-width:2px
@@ -89,13 +96,13 @@ flowchart TD
 **For Concept Relationships:**
 ```
 graph TD
-    A["Central Concept"] --> B["Key Principle 1"]
-    A --> C["Key Principle 2"]
-    A --> D["Key Principle 3"]
-    B --> E["Application 1"]
-    B --> F["Application 2"]
-    C --> G["Real-world Example"]
-    D --> H["Related Theory"]
+    A["Central Concept"] --> B["Principle 1"]
+    A --> C["Principle 2"]
+    A --> D["Principle 3"]
+    B --> E["Application A"]
+    B --> F["Application B"]
+    C --> G["Example"]
+    D --> H["Theory"]
     
     classDef central fill:#ffeb3b,stroke:#f57f17,stroke-width:3px
     classDef principle fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
@@ -106,5 +113,7 @@ graph TD
     class E,F,G,H application
 ```
 
-Generate a diagram that is "impactante" (impactful) and "perfecta" (perfect) in conveying insights about the submodule content.
+**CRITICAL**: Ensure every class definition line includes both the node ID and the class name. Never leave a class assignment incomplete.
+
+Generate a diagram that is impactful and perfect in conveying insights about the submodule content while maintaining syntactic correctness.
 """ 
