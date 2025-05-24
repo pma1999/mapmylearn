@@ -1084,6 +1084,15 @@ async def generate_submodule_visualization_endpoint(
     """
     logger.info(f"Visualization request for path {path_id}, M{module_index}, S{submodule_index} by user {user.id}")
 
+    # --- TEMP DEBUG: Print TransactionType attributes ---
+    import inspect
+    logger.info("DEBUG: Available TransactionType attributes:")
+    for name, value in inspect.getmembers(TransactionType):
+        if not name.startswith('__'): # Exclude dunder methods
+            logger.info(f"  {name} = {value}")
+    logger.info("--- END DEBUG ---")
+    # --- END TEMP DEBUG ---
+
     submodule_title = "N/A"
     submodule_description = "N/A"
     submodule_content = ""

@@ -12,7 +12,8 @@ class TransactionType:
     ADMIN_ADD = "admin_add"
     SYSTEM_ADD = "system_add"
     GENERATION_USE = "generation_use"
-    AUDIO_GENERATION_USE = "audio_generation_use" # New type
+    AUDIO_GENERATION_USE = "audio_generation_use"
+    VISUALIZATION_GENERATION_USE = "visualization_generation_use" # Ensure this is present
     REFUND = "refund"
     PURCHASE = "purchase"
     CHAT_ALLOWANCE_PURCHASE = "chat_allowance_purchase" # Added for chat limits
