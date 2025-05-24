@@ -10,12 +10,13 @@ from backend.parsers.parsers import search_queries_parser, enhanced_modules_pars
 from backend.services.services import get_llm, perform_search_and_scrape
 from langchain_core.prompts import ChatPromptTemplate
 
-from backend.core.graph_nodes.helpers import run_chain, batch_items, format_search_results, escape_curly_braces, MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT
+from backend.core.graph_nodes.helpers import run_chain, batch_items, format_search_results, escape_curly_braces, MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT, extract_json_from_markdown
 from backend.core.graph_nodes.search_utils import execute_search_with_llm_retry
 
 async def generate_search_queries(state: LearningPathState) -> Dict[str, Any]:
     """
     Generates optimal search queries for the user topic using an LLM chain.
+    Enhanced with better error handling and JSON extraction.
     
     Args:
         state: The current LearningPathState with 'user_topic'.
@@ -41,10 +42,10 @@ async def generate_search_queries(state: LearningPathState) -> Dict[str, Any]:
     output_language = state.get('language', 'en')
     search_language = state.get('search_language', 'en')
     
-    prompt_text = """
-# EXPERT LEARNING PATH ARCHITECT & CURRICULUM DESIGNER INSTRUCTIONS
+    # Improved prompt template with better structure and formatting
+    prompt_text = """# EXPERT LEARNING PATH ARCHITECT & CURRICULUM DESIGNER
 
-Your task is to generate 5 diverse search queries that will gather the necessary information to DESIGN an optimal and comprehensive course for the topic: "{user_topic}".
+Your task is to generate 5 diverse search queries that will gather the necessary information to DESIGN an optimal and comprehensive course for the topic: {user_topic}.
 
 ## INFORMATION GATHERING FOR DESIGN
 
@@ -52,13 +53,13 @@ These searches are NOT just for finding pre-existing course structures, but for 
 
 ## TARGET INFORMATION CATEGORIES
 
-Analyze the topic "{user_topic}" and design queries to gather information relevant to these aspects:
+Analyze the topic and design queries to gather information relevant to these aspects:
 
-1.  **Fundamental Concepts & Prerequisites:** What are the absolute foundational ideas? What knowledge is assumed before starting?
-2.  **Core Sub-domains & Key Topics:** What are the major distinct areas within this topic? What specific subjects must be covered?
-3.  **Logical Sequencing & Dependencies:** How do concepts typically build upon each other? What's a natural progression for learning? Are there critical paths or dependencies?
-4.  **Practical Applications & Skills:** What can learners *do* with this knowledge? What are the key practical skills to develop at different stages?
-5.  **Common Challenges & Advanced Concepts:** Where do learners often get stuck? What are typical difficulties? What constitutes advanced knowledge or specialization in this area?
+1. **Fundamental Concepts & Prerequisites:** What are the absolute foundational ideas? What knowledge is assumed before starting?
+2. **Core Sub-domains & Key Topics:** What are the major distinct areas within this topic? What specific subjects must be covered?
+3. **Logical Sequencing & Dependencies:** How do concepts typically build upon each other? What's a natural progression for learning? Are there critical paths or dependencies?
+4. **Practical Applications & Skills:** What can learners *do* with this knowledge? What are the key practical skills to develop at different stages?
+5. **Common Challenges & Advanced Concepts:** Where do learners often get stuck? What are typical difficulties? What constitutes advanced knowledge or specialization in this area?
 
 ## LANGUAGE INSTRUCTIONS
 - Generate all of your analysis and responses in {output_language}.
@@ -70,21 +71,25 @@ Design EXACTLY 5 distinct search queries. Each query should ideally target a DIF
 
 For each search query:
 - Frame it to retrieve information that INFORMS the design process. Focus on gathering the raw materials for curriculum design, rather than just finding finished examples.
-- Combine the core concepts of "{user_topic}" with terms related to the TARGET INFORMATION CATEGORIES listed above (e.g., for "Fundamental Concepts & Prerequisites", you might use terms like "foundational concepts", "prerequisites", "core principles"; for "Logical Sequencing & Dependencies", terms like "learning progression", "concept map", "dependency structure", etc.).
+- Combine the core concepts with terms related to the TARGET INFORMATION CATEGORIES listed above.
 - Target educational resources, expert discussions, syllabi, textbooks, or technical documentation that reveal how knowledge in this domain is structured, taught, and applied.
 - CRITICAL: Ensure each query balances specificity (finding relevant design information) with breadth (getting actual results).
-- QUOTE USAGE RULE: NEVER use more than ONE quoted phrase per query. Quotes are ONLY for essential multi-word concepts that MUST be searched together (e.g., "machine learning" if the topic is broad, or a specific framework name). DO NOT put quotes around every keyword. Combine specific structural/category terms without quotes.
-    - BAD Example (Too many quotes): `"fundamental concepts" "machine learning" "prerequisites"`
-    - GOOD Example (One quote): `"machine learning" prerequisites foundational concepts`
-    - GOOD Example (No quotes): `machine learning subtopics logical sequence examples`
+- QUOTE USAGE RULE: NEVER use more than ONE quoted phrase per query. Quotes are ONLY for essential multi-word concepts that MUST be searched together.
 - Getting *some* relevant information across *different* categories is ALWAYS better than getting *zero* results or redundant results.
-- Explain precisely how the information retrieved by this specific query will contribute to DESIGNING the optimal course structure (e.g., "This query helps identify the starting point by finding prerequisites," or "This query explores potential advanced modules by looking at specializations").
+- Explain precisely how the information retrieved by this specific query will contribute to DESIGNING the optimal course structure.
 
-Your response should be exactly 5 search queries, each targeting a different facet of curriculum design information, and each with a detailed rationale explaining its contribution to the design process.
+Your response must be valid JSON with this exact format:
+{{
+  "queries": [
+    {{
+      "keywords": "search query text here",
+      "rationale": "explanation of why this query helps with curriculum design"
+    }}
+  ]
+}}
 
-{format_instructions}
-"""
-    prompt = ChatPromptTemplate.from_template(prompt_text)
+Do not wrap your response in markdown code blocks. Return only the JSON object."""
+
     try:
         # Get Google key provider from state
         google_key_provider = state.get("google_key_provider")
@@ -102,13 +107,28 @@ Your response should be exactly 5 search queries, each targeting a different fac
                 overall_progress=0.22,
                 action="processing"
             )
-            
-        result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), search_queries_parser, {
-            "user_topic": state["user_topic"],
-            "output_language": output_language,
-            "search_language": search_language,
-            "format_instructions": search_queries_parser.get_format_instructions()
-        })
+        
+        # Create the prompt
+        prompt = ChatPromptTemplate.from_template(prompt_text)
+        
+        # Prepare parameters - carefully escape any user input
+        escaped_user_topic = escape_curly_braces(state["user_topic"])
+        
+        # Use the enhanced run_chain with better error handling
+        result = await run_chain(
+            prompt, 
+            lambda: get_llm(key_provider=google_key_provider), 
+            search_queries_parser, 
+            {
+                "user_topic": escaped_user_topic,
+                "output_language": output_language,
+                "search_language": search_language,
+            },
+            max_retries=3,
+            retry_parsing_errors=True,
+            max_parsing_retries=3
+        )
+        
         search_queries = result.queries
         logging.info(f"Generated {len(search_queries)} search queries")
         
@@ -135,20 +155,77 @@ Your response should be exactly 5 search queries, each targeting a different fac
             "search_queries": search_queries,
             "steps": [f"Generated {len(search_queries)} search queries for topic: {state['user_topic']}"]
         }
+        
     except Exception as e:
         logging.error(f"Error generating search queries: {str(e)}")
         
-        # Send error progress update
-        if progress_callback:
-            await progress_callback(
-                f"Error generating search queries: {str(e)}",
-                phase="search_queries",
-                phase_progress=0.5,
-                overall_progress=0.2,
-                action="error"
-            )
+        # Try fallback approach with simpler queries
+        try:
+            logging.info("Attempting fallback search query generation")
+            fallback_queries = await generate_fallback_queries(state)
             
-        return {"search_queries": [], "steps": [f"Error: {str(e)}"]}
+            if progress_callback:
+                await progress_callback(
+                    f"Generated {len(fallback_queries)} fallback search queries",
+                    phase="search_queries",
+                    phase_progress=1.0,
+                    overall_progress=0.25,
+                    action="completed"
+                )
+            
+            return {
+                "search_queries": fallback_queries,
+                "steps": [f"Generated {len(fallback_queries)} fallback search queries due to error: {str(e)}"]
+            }
+            
+        except Exception as fallback_error:
+            logging.error(f"Fallback query generation also failed: {str(fallback_error)}")
+            
+            # Send error progress update
+            if progress_callback:
+                await progress_callback(
+                    f"Error generating search queries: {str(e)}",
+                    phase="search_queries",
+                    phase_progress=0.5,
+                    overall_progress=0.2,
+                    action="error"
+                )
+                
+            return {"search_queries": [], "steps": [f"Error: {str(e)}"]}
+
+async def generate_fallback_queries(state: LearningPathState) -> List[SearchQuery]:
+    """
+    Generate simple fallback search queries when the main generation fails.
+    """
+    user_topic = state.get("user_topic", "")
+    search_language = state.get("search_language", "en")
+    
+    # Create basic queries that are likely to work
+    fallback_queries = [
+        SearchQuery(
+            keywords=f"{user_topic} introduction tutorial basics",
+            rationale="Find introductory materials and basic concepts"
+        ),
+        SearchQuery(
+            keywords=f"{user_topic} course curriculum syllabus outline",
+            rationale="Find existing course structures and curricula"
+        ),
+        SearchQuery(
+            keywords=f"{user_topic} learning path guide",
+            rationale="Find structured learning approaches"
+        ),
+        SearchQuery(
+            keywords=f"{user_topic} concepts fundamentals",
+            rationale="Find core concepts and fundamentals"
+        ),
+        SearchQuery(
+            keywords=f"{user_topic} advanced topics applications",
+            rationale="Find advanced topics and practical applications"
+        )
+    ]
+    
+    logging.info(f"Generated {len(fallback_queries)} fallback queries")
+    return fallback_queries
 
 async def regenerate_initial_structure_query(
     state: LearningPathState, 
@@ -156,18 +233,7 @@ async def regenerate_initial_structure_query(
 ) -> SearchQuery:
     """
     Regenerates a search query for course structure after a "no results found" error.
-    
-    This function uses an LLM to create an alternative search query when the original
-    structure-focused query returns no results. It provides the failed query as context
-    and instructs the LLM to broaden or rephrase the search while maintaining focus on
-    finding structural/organizational information.
-    
-    Args:
-        state: The current LearningPathState with user_topic.
-        failed_query: The SearchQuery object that failed to return results.
-        
-    Returns:
-        A new SearchQuery object with an alternative query.
+    Enhanced with better error handling.
     """
     logging.info(f"Regenerating structure query after no results for: {failed_query.keywords}")
     
@@ -179,23 +245,20 @@ async def regenerate_initial_structure_query(
     google_key_provider = state.get("google_key_provider")
     if not google_key_provider:
         logging.warning("Google key provider not found in state for query regeneration")
+        # Return a simple regenerated query
+        return SearchQuery(
+            keywords=f"{state['user_topic']} curriculum structure",
+            rationale="Simplified query for course structure information"
+        )
     
-    prompt_text = """
-# SEARCH QUERY RETRY SPECIALIST INSTRUCTIONS
+    prompt_text = """# SEARCH QUERY RETRY SPECIALIST
 
-The following search query returned NO RESULTS when searching for information about how to structure a course on "{user_topic}":
+The following search query returned NO RESULTS when searching for information about how to structure a course:
 
 FAILED QUERY: {failed_query}
+TOPIC: {user_topic}
 
 I need you to generate a DIFFERENT search query that is more likely to find results but still focused on retrieving STRUCTURAL and ORGANIZATIONAL information about learning this topic.
-
-## ANALYSIS OF FAILED QUERY
-
-Analyze why the previous query might have failed:
-- Was it too specific with too many quoted terms?
-- Did it use uncommon terminology or jargon?
-- Was it too long or complex?
-- Did it combine too many concepts that rarely appear together?
 
 ## NEW QUERY REQUIREMENTS
 
@@ -204,44 +267,57 @@ Create ONE alternative search query that:
 2. Maintains focus on curriculum design, course structure, and module organization
 3. Uses fewer quoted phrases (one at most)
 4. Is more likely to match existing educational content
-5. Balances specificity (finding curriculum structure info) with generality (getting actual results)
+5. Balances specificity with generality
 
 ## LANGUAGE INSTRUCTIONS
-- Generate your analysis and response in {output_language}.
-- For the search query, use {search_language} to maximize retrieving high-quality curriculum design information.
+- Generate your response in {output_language}.
+- For the search query, use {search_language} to maximize retrieving high-quality information.
 
-## QUERY FORMAT RULES
-- CRITICAL: Ensure your new query is DIFFERENT from the failed one
-- Fewer keywords is better than too many
-- QUOTE USAGE RULE: NEVER use more than ONE quoted phrase. Quotes are ONLY for essential multi-word concepts
-- Getting some relevant results is BETTER than getting zero results
-- The query should still target STRUCTURAL information (how to organize learning), NOT just content about the topic
+Your response must be valid JSON with this exact format:
+{{
+  "keywords": "new search query here",
+  "rationale": "brief explanation why this query might work better"
+}}
 
-Your response should include just ONE search query and a brief rationale for why this query might work better.
+Do not wrap your response in markdown code blocks. Return only the JSON object."""
 
-{format_instructions}
-"""
-    prompt = ChatPromptTemplate.from_template(prompt_text)
     try:
-        result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), search_queries_parser, {
-            "user_topic": state["user_topic"],
+        prompt = ChatPromptTemplate.from_template(prompt_text)
+        
+        # Use a simpler approach that directly gets the LLM response
+        llm = get_llm(key_provider=google_key_provider)
+        chain = prompt | llm
+        
+        response = await chain.ainvoke({
             "failed_query": failed_query.keywords,
+            "user_topic": state["user_topic"],
             "output_language": output_language,
             "search_language": search_language,
-            "format_instructions": search_queries_parser.get_format_instructions()
         })
         
-        # Return just the first query from the result
-        if result.queries and len(result.queries) > 0:
-            logging.info(f"Successfully regenerated structure query: {result.queries[0].keywords}")
-            return result.queries[0]
+        # Extract JSON from response
+        response_text = response.content if hasattr(response, 'content') else str(response)
+        json_data = extract_json_from_markdown(response_text)
+        
+        if json_data and "keywords" in json_data:
+            regenerated_query = SearchQuery(
+                keywords=json_data["keywords"],
+                rationale=json_data.get("rationale", "Regenerated query")
+            )
+            logging.info(f"Successfully regenerated structure query: {regenerated_query.keywords}")
+            return regenerated_query
         else:
-            logging.error("Query regeneration returned empty result")
-            return None
+            raise Exception("Could not extract valid JSON from regeneration response")
+            
     except Exception as e:
         logging.error(f"Error regenerating structure query: {str(e)}")
-        return None
+        # Return a simple fallback
+        return SearchQuery(
+            keywords=f"{state['user_topic']} learning guide tutorial",
+            rationale="Fallback query due to regeneration error"
+        )
 
+# Rest of the functions remain the same as in the original file...
 async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
     """
     Execute web searches using Brave and scrape results for each search query in parallel.
@@ -433,6 +509,7 @@ async def execute_web_searches(state: LearningPathState) -> Dict[str, Any]:
 async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
     """
     Create a structured course from the scraped search results.
+    Enhanced with better error handling.
     """
     # Type hint for clarity
     search_service_results: Optional[List[SearchServiceResult]] = state.get("search_results")
@@ -557,19 +634,18 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
         if explanation_style_description:
             style_instruction_part = f"\n\n**Style Requirement:** Write all module titles and descriptions using the following style: **{explanation_style_description}**"
 
-        # Update prompt to mention scraped content and include style instruction
-        prompt_text = f'''
-# EXPERT CURRICULUM ARCHITECT INSTRUCTIONS
+        # Improved prompt text with proper template variables and escaping
+        prompt_text = """# EXPERT CURRICULUM ARCHITECT INSTRUCTIONS
 
-You are a world-class curriculum architect with expertise in educational design. Transform the following search results into a cohesive, comprehensive course on {escaped_topic}.
+You are a world-class curriculum architect with expertise in educational design. Transform the following search results into a cohesive, comprehensive course on {topic}.
 
 ## SEARCH CONTEXT
-{results_text}
+{search_results}
 
 ## CURRICULUM REQUIREMENTS
 - Language: {language_instruction}
 - Module Count: {module_count_instruction}
-- {style_instruction_part}
+{style_instruction_part}
 
 ## DESIGN PRINCIPLES
 1. **Evidence-Based Structure**: Analyze the search results to identify key concepts, standard approaches, and natural divisions within this subject.
@@ -586,10 +662,20 @@ For each module, provide:
 4. **Strategic Relevance**: Explain this module's importance in the overall learning journey and how it connects to other modules (2-3 sentences)
 
 ## RESPONSE FORMAT
-Structure your response as a complete curriculum outline with sequential, interconnected modules. Number each module clearly and ensure all content follows the specified language and style requirements.
+Your response must be valid JSON with this exact structure:
+{{{{
+  "modules": [
+    {{{{
+      "title": "Module title here",
+      "description": "Comprehensive overview here",
+      "learning_objective": "After completing this module, learners will be able to...",
+      "strategic_relevance": "Explanation of importance and connections"
+    }}}}
+  ]
+}}}}
 
-{{format_instructions}}
-'''
+Do not wrap your response in markdown code blocks. Return only the JSON object."""
+
         prompt = ChatPromptTemplate.from_template(prompt_text)
 
         result = await run_chain(
@@ -597,9 +683,15 @@ Structure your response as a complete curriculum outline with sequential, interc
             lambda: get_llm(key_provider=google_key_provider),
             enhanced_modules_parser,
             {
-                "format_instructions": enhanced_modules_parser.get_format_instructions(),
-                "explanation_style_description": explanation_style_description # Pass style description (might be empty)
-            }
+                "topic": escaped_topic,
+                "search_results": results_text,
+                "language_instruction": language_instruction,
+                "module_count_instruction": module_count_instruction,
+                "style_instruction_part": style_instruction_part,
+            },
+            max_retries=3,
+            retry_parsing_errors=True,
+            max_parsing_retries=3
         )
         modules = result.modules
 
