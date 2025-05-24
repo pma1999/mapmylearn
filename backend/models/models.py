@@ -139,6 +139,7 @@ class SearchServiceResult(BaseModel):
 # Global State for the Graph (TypedDict)
 class LearningPathState(TypedDict):
     user_topic: str
+    user: Optional[Any]  # User object for model selection
     topic_analysis: Optional[TopicAnalysis]
     module_planning: Optional[ModulePlanning]
     search_queries: Optional[List[SearchQuery]]

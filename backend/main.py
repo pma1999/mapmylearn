@@ -123,7 +123,8 @@ async def generate_learning_path(
     desired_module_count: Optional[int] = None,
     desired_submodule_count: Optional[int] = None,
     language: str = "en",
-    explanation_style: str = "standard"
+    explanation_style: str = "standard",
+    user: Optional[Any] = None  # Add user parameter for model selection
 ) -> Dict[str, Any]:
     """
     Asynchronous interface for course generation.
@@ -140,6 +141,7 @@ async def generate_learning_path(
         desired_submodule_count: Desired number of submodules per module
         language: ISO language code for content generation (e.g., 'en', 'es')
         explanation_style: Style for content explanations (e.g., 'standard', 'simple')
+        user: Optional user parameter for model selection
         
     Returns:
         Dictionary with the course data
@@ -173,27 +175,23 @@ async def generate_learning_path(
         search_language = "es"
         logger.info(f"Detected topic may have more resources in Spanish. Setting search language to Spanish.")
     
-    initial_state: LearningPathState = {
+    # Initialize the state with the user topic and configuration
+    initial_state = {
         "user_topic": topic,
+        "user": user,  # Add user for model selection
+        "steps": [],
+        "parallel_count": parallel_count,
+        "search_parallel_count": search_parallel_count,
+        "submodule_parallel_count": submodule_parallel_count,
+        "progress_callback": progress_callback,
         "google_key_provider": google_key_provider,
         "brave_key_provider": brave_key_provider,
-        "search_parallel_count": search_parallel_count,
-        "parallel_count": parallel_count,
-        "submodule_parallel_count": submodule_parallel_count,
-        "steps": [],
-        "progress_callback": progress_callback,
+        "desired_module_count": desired_module_count,
+        "desired_submodule_count": desired_submodule_count,
         "language": language,
         "search_language": search_language,
-        "explanation_style": explanation_style
+        "explanation_style": explanation_style,
     }
-    
-    # Add desired module count if specified
-    if desired_module_count:
-        initial_state["desired_module_count"] = desired_module_count
-        
-    # Add desired submodule count if specified
-    if desired_submodule_count:
-        initial_state["desired_submodule_count"] = desired_submodule_count
     
     # Configure and run the graph
     return await run_graph(initial_state)

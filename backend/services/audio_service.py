@@ -138,7 +138,8 @@ async def generate_submodule_audio(
     submodule_index: int,
     language: str, # Expecting ISO code 'en', 'es', etc.
     audio_style: str = "standard", # Add audio style parameter
-    force_regenerate: bool = False # Add parameter
+    force_regenerate: bool = False, # Add parameter
+    user = None # Add user parameter for model selection
 ) -> str:
     """
     Generates audio for a specific submodule using OpenAI TTS, saves it, and returns the URL.
@@ -269,7 +270,7 @@ async def generate_submodule_audio(
     logger.info(f"Generating audio script with LLM using prompt for language '{language}'...")
     try:
         selected_prompt_template = AUDIO_SCRIPT_PROMPTS_BY_LANG[language]
-        llm = await get_llm()
+        llm = await get_llm(user=user)
         prompt = ChatPromptTemplate.from_template(selected_prompt_template)
         chain = prompt | llm | StrOutputParser()
         audio_script = await chain.ainvoke({

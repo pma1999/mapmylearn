@@ -668,7 +668,8 @@ async def generate_or_get_submodule_audio(
                     submodule_index=submodule_index,
                     language=requested_language,
                     audio_style=request_data.audio_style,
-                    force_regenerate=request_data.force_regenerate
+                    force_regenerate=request_data.force_regenerate,
+                    user=user
                 )
         else:
             # This case is less likely in the current flow due to get_current_user,
@@ -690,7 +691,8 @@ async def generate_or_get_submodule_audio(
                     submodule_index=submodule_index,
                     language=requested_language,
                     audio_style=request_data.audio_style,
-                    force_regenerate=request_data.force_regenerate
+                    force_regenerate=request_data.force_regenerate,
+                    user=user
                 )
         
         logger.info(f"Successfully processed audio generation and committed local transaction segment for path {path_id}. URL: {generated_url}")
@@ -1191,7 +1193,8 @@ async def generate_submodule_visualization_endpoint(
             submodule_title=submodule_title,
             submodule_description=submodule_description,
             submodule_content=submodule_content,
-            google_key_provider=google_key_provider 
+            google_key_provider=google_key_provider,
+            user=user
         )
 
         if viz_result.get("mermaid_syntax"):

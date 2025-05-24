@@ -379,7 +379,7 @@ async def handle_chat(
         )
 
         # 3.4. Initialize LLM and Prompt Template for this request
-        llm = await get_llm(key_provider=None)
+        llm = await get_llm(key_provider=None, user=user)
         prompt = ChatPromptTemplate.from_messages([
             SystemMessage(content=system_prompt_string),
             MessagesPlaceholder(variable_name="messages"),

@@ -100,7 +100,7 @@ async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
         if progress_callback:
             await progress_callback("Analyzing topic to find optimal resource search query...", phase="topic_resources", phase_progress=0.2, overall_progress=0.46, action="processing")
 
-        query_result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider")), resource_query_parser, {
+        query_result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider"), user=state.get('user')), resource_query_parser, {
             "user_topic": escaped_topic,
             "learning_path_context": learning_path_context,
             "language": output_language,
@@ -196,7 +196,7 @@ async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
 
         extraction_result = await run_chain(
             resource_extractor_prompt,
-            lambda: get_llm(key_provider=state.get("google_key_provider")),
+            lambda: get_llm(key_provider=state.get("google_key_provider"), user=state.get('user')),
             resource_list_parser,
             {
                 "search_query": resource_query.query,
@@ -311,7 +311,7 @@ async def generate_module_resources(state: LearningPathState, module_id: int, mo
         module_title = escape_curly_braces(module.title if hasattr(module, 'title') else module.get("title", f"Module {module_id+1}"))
         module_description = escape_curly_braces(module.description if hasattr(module, 'description') else module.get("description", "No description"))
 
-        query_result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider")), resource_query_parser, {
+        query_result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider"), user=state.get('user')), resource_query_parser, {
             "user_topic": escaped_topic,
             "module_title": module_title,
             "module_description": module_description,
@@ -408,7 +408,7 @@ async def generate_module_resources(state: LearningPathState, module_id: int, mo
 
         extraction_result = await run_chain(
             resource_extractor_prompt,
-            lambda: get_llm(key_provider=state.get("google_key_provider")),
+            lambda: get_llm(key_provider=state.get("google_key_provider"), user=state.get('user')),
             resource_list_parser,
             {
                 "search_query": resource_query.query,
@@ -557,7 +557,7 @@ async def generate_submodule_resources(
         submodule_title = escape_curly_braces(submodule.title)
         submodule_description = escape_curly_braces(submodule.description)
 
-        query_result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider")), resource_query_parser, {
+        query_result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider"), user=state.get('user')), resource_query_parser, {
             "user_topic": escaped_topic,
             "module_title": module_title,
             "submodule_title": submodule_title,
@@ -676,7 +676,7 @@ async def generate_submodule_resources(
 
         extraction_result = await run_chain(
             resource_extractor_prompt,
-            lambda: get_llm(key_provider=state.get("google_key_provider")),
+            lambda: get_llm(key_provider=state.get("google_key_provider"), user=state.get('user')),
             resource_list_parser,
             {
                 "search_query": resource_query.query,
@@ -1155,7 +1155,7 @@ Your response should include just ONE search query and a brief rationale for why
 """
     prompt = ChatPromptTemplate.from_template(prompt_text)
     try:
-        result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), resource_query_parser, {
+        result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider, user=state.get('user')), resource_query_parser, {
             "user_topic": state["user_topic"],
             "failed_query": failed_query.query,
             "resource_level_context": resource_level_context,

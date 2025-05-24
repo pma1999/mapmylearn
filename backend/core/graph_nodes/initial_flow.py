@@ -117,7 +117,7 @@ Do not wrap your response in markdown code blocks. Return only the JSON object."
         # Use the enhanced run_chain with better error handling
         result = await run_chain(
             prompt, 
-            lambda: get_llm(key_provider=google_key_provider), 
+            lambda: get_llm(key_provider=google_key_provider, user=state.get('user')), 
             search_queries_parser, 
             {
                 "user_topic": escaped_user_topic,
@@ -285,7 +285,7 @@ Do not wrap your response in markdown code blocks. Return only the JSON object."
         prompt = ChatPromptTemplate.from_template(prompt_text)
         
         # Use a simpler approach that directly gets the LLM response
-        llm = get_llm(key_provider=google_key_provider)
+        llm = await get_llm(key_provider=google_key_provider, user=state.get('user'))
         chain = prompt | llm
         
         response = await chain.ainvoke({
@@ -680,7 +680,7 @@ Do not wrap your response in markdown code blocks. Return only the JSON object."
 
         result = await run_chain(
             prompt,
-            lambda: get_llm(key_provider=google_key_provider),
+            lambda: get_llm(key_provider=google_key_provider, user=state.get('user')),
             enhanced_modules_parser,
             {
                 "topic": escaped_topic,

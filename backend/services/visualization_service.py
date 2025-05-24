@@ -14,7 +14,8 @@ async def generate_mermaid_visualization(
     submodule_title: str,
     submodule_description: str,
     submodule_content: str,
-    google_key_provider: Optional[Any] = None
+    google_key_provider: Optional[Any] = None,
+    user: Optional[Any] = None  # Add user parameter for model selection
 ) -> Dict[str, Optional[str]]:
     """
     Generates Mermaid.js syntax for a submodule using an LLM.
@@ -24,6 +25,7 @@ async def generate_mermaid_visualization(
         submodule_description: The description of the submodule  
         submodule_content: The main content of the submodule
         google_key_provider: Optional key provider for Google API
+        user: Optional user parameter for model selection
         
     Returns:
         Dictionary containing either:
@@ -32,7 +34,7 @@ async def generate_mermaid_visualization(
     """
     try:
         # Get LLM instance
-        llm = await get_llm(google_key_provider)
+        llm = await get_llm(google_key_provider, user=user)
         
         # Create prompt template
         prompt = ChatPromptTemplate.from_template(MERMAID_VISUALIZATION_PROMPT)

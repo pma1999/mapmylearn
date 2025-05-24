@@ -151,7 +151,7 @@ Your response MUST be a JSON object containing only the 'keywords' (the new sear
         prompt = ChatPromptTemplate.from_template(prompt_text)
         
         # Call run_chain with the correct parser and format instructions
-        result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), parser, {
+        result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider, user=state.get('user')), parser, {
             "failed_query": failed_query.keywords,
             "submodule_context": submodule_context,
             "output_language": output_language,
@@ -363,7 +363,7 @@ async def plan_module_submodules(state: LearningPathState, idx: int, module) -> 
     # Using the extracted prompt template
     prompt = ChatPromptTemplate.from_template(base_prompt)
     try:
-        result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider")), submodule_parser, {
+        result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider"), user=state.get('user')), submodule_parser, {
             "user_topic": state["user_topic"],
             "module_title": module.title,
             "module_description": module.description,
@@ -1302,7 +1302,7 @@ Provide:
     single_query_parser = PydanticOutputParser(pydantic_object=SingleSearchQueryOutput)
     
     try:
-        result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), single_query_parser, {
+        result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider, user=state.get('user')), single_query_parser, {
             "user_topic": user_topic,
             "module_title": module_title,
             "module_description": module_description,
@@ -1591,7 +1591,7 @@ Depth Level: {escape_curly_braces(submodule.depth_level)}
     prompt = ChatPromptTemplate.from_template(prompt_text)
 
     # Use the standard LLM (e.g., Gemini) for content generation
-    llm = await get_llm(key_provider=state.get("google_key_provider"))
+    llm = await get_llm(key_provider=state.get("google_key_provider"), user=state.get('user'))
 
     # Simple chain for content generation
     chain = prompt | llm | StrOutputParser()
@@ -1676,12 +1676,12 @@ async def generate_submodule_quiz(
         prompt = ChatPromptTemplate.from_template(modified_quiz_prompt)
         
         # Get Google LLM for quiz generation
-        llm = await get_llm(key_provider=state.get("google_key_provider"))
+        llm = await get_llm(key_provider=state.get("google_key_provider"), user=state.get('user'))
         
         # Try using the standard parser first, but have fallback mechanisms
         try:
             # Invoke the LLM chain with the quiz generation prompt
-            result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider")), quiz_questions_parser, {
+            result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider"), user=state.get('user')), quiz_questions_parser, {
                 "user_topic": user_topic,
                 "module_title": module_title,
                 "submodule_title": submodule_title,
@@ -1701,7 +1701,7 @@ async def generate_submodule_quiz(
             # Use run_chain with StrOutputParser instead of direct chain invocation
             raw_response = await run_chain(
                 prompt,
-                lambda: get_llm(key_provider=state.get("google_key_provider")),
+                lambda: get_llm(key_provider=state.get("google_key_provider"), user=state.get('user')),
                 StrOutputParser(),
                 {
                     "user_topic": user_topic,
@@ -2072,7 +2072,7 @@ async def generate_module_specific_planning_queries(state: LearningPathState, mo
     prompt = ChatPromptTemplate.from_template(MODULE_SUBMODULE_PLANNING_QUERY_GENERATION_PROMPT)
 
     try:
-        result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider), search_queries_parser, {
+        result = await run_chain(prompt, lambda: get_llm(key_provider=google_key_provider, user=state.get('user')), search_queries_parser, {
             "module_title": module_title,
             "module_description": module_description,
             "module_order": module_id + 1,
@@ -2175,7 +2175,7 @@ Your response MUST be a JSON object containing only the 'keywords' (the new sear
 
     prompt = ChatPromptTemplate.from_template(prompt_text)
     # Get the LLM instance via the provider
-    llm = get_llm(key_provider=google_key_provider) # Assuming get_llm returns a compatible LLM instance
+    llm = await get_llm(key_provider=google_key_provider, user=state.get('user')) # Assuming get_llm returns a compatible LLM instance
 
     # Construct the chain
     chain = prompt | llm | parser
@@ -2487,7 +2487,7 @@ async def plan_module_submodules(
     prompt = ChatPromptTemplate.from_template(base_prompt)
 
     try:
-        result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider")), submodule_parser, prompt_params)
+        result = await run_chain(prompt, lambda: get_llm(key_provider=state.get("google_key_provider"), user=state.get('user')), submodule_parser, prompt_params)
         submodules = result.submodules
         
         # Validate and adjust submodule count if necessary

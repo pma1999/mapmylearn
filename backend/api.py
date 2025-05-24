@@ -708,11 +708,23 @@ async def generate_learning_path_task(
         if user_id is None:
              # Should be caught by endpoint, but double-check
              raise LearningPathGenerationError("User authentication is required.")
+        
+        # Fetch user information for model selection
+        user_for_model = None
+        try:
+            user_for_model = db.query(User).filter(User.id == user_id).first()
+            if not user_for_model:
+                raise LearningPathGenerationError(f"User with ID {user_id} not found.")
+            logger.info(f"Retrieved user information for model selection: {user_for_model.email} (ID: {user_for_model.id})")
+        except Exception as user_fetch_err:
+            logger.error(f"Failed to fetch user information for task {task_id}: {user_fetch_err}")
+            raise LearningPathGenerationError("Failed to fetch user information for model selection.")
              
         charge_error = None
         try:
-            # Use a transaction block for the charge
-            with db.begin(): 
+            # Check if db session is already in a transaction
+            if db.in_transaction():
+                logger.debug(f"Database session already in transaction for charge, using existing transaction")
                 notes = f"Generate course for topic: {topic}"
                 await credit_service.charge_credits(
                     user_id=user_id,
@@ -720,6 +732,18 @@ async def generate_learning_path_task(
                     transaction_type=TransactionType.GENERATION_USE,
                     notes=notes
                 )
+                # Commit the charge in the existing transaction
+                db.commit()
+            else:
+                # Start new transaction for charge
+                with db.begin(): 
+                    notes = f"Generate course for topic: {topic}"
+                    await credit_service.charge_credits(
+                        user_id=user_id,
+                        amount=1,
+                        transaction_type=TransactionType.GENERATION_USE,
+                        notes=notes
+                    )
             charge_successful = True 
             logger.info(f"Credit charge successful for user {user_id}, task {task_id}.")
             await enhanced_progress_callback(
@@ -737,7 +761,7 @@ async def generate_learning_path_task(
             logger.exception(f"Credit charge failed unexpectedly for task {task_id}, user {user_id}: {charge_exc}")
             charge_error = charge_exc 
             raise 
-        # --- End Credit Charge --- 
+        # --- End Credit Charge ---
 
         # --- Execute Core Generation Logic --- 
         if not googleKeyProvider: googleKeyProvider = GoogleKeyProvider()
@@ -763,7 +787,8 @@ async def generate_learning_path_task(
             desired_module_count=desiredModuleCount,
             desired_submodule_count=desiredSubmoduleCount,
             explanation_style=explanation_style,
-            language=language
+            language=language,
+            user=user_for_model
         )
         # --- End Core Generation Logic --- 
 
@@ -921,7 +946,9 @@ async def generate_learning_path_task(
         if error_occurred_after_charge and user_id is not None:
             logger.warning(f"Task {task_id} failed after successful charge. Attempting refund for user {user_id}.")
             try:
-                with db.begin():
+                # Check if db session is already in a transaction
+                if db.in_transaction():
+                    logger.debug(f"Database session already in transaction for refund, using existing transaction")
                     refund_notes = f"Refund for failed generation task {task_id} (topic: {topic}). Error: {error_msg_to_save[:150] if error_msg_to_save else 'N/A'}"
                     await credit_service.grant_credits(
                         user_id=user_id,
@@ -929,6 +956,18 @@ async def generate_learning_path_task(
                         transaction_type=TransactionType.REFUND,
                         notes=refund_notes
                     )
+                    # Commit the refund in the existing transaction
+                    db.commit()
+                else:
+                    # Start new transaction for refund
+                    with db.begin():
+                        refund_notes = f"Refund for failed generation task {task_id} (topic: {topic}). Error: {error_msg_to_save[:150] if error_msg_to_save else 'N/A'}"
+                        await credit_service.grant_credits(
+                            user_id=user_id,
+                            amount=1,
+                            transaction_type=TransactionType.REFUND,
+                            notes=refund_notes
+                        )
                 logger.info(f"Successfully refunded 1 credit to user {user_id} for failed task {task_id}.")
             except Exception as refund_exc:
                 logger.error(f"CRITICAL FAILURE: Failed to refund credit to user {user_id} for failed task {task_id}: {refund_exc}")

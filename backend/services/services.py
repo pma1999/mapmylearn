@@ -153,12 +153,13 @@ def _extract_pdf_text_sync(pdf_bytes: bytes, source_url: str) -> str:
 # --- End of Modified PDF Helper Function ---
 
 
-async def get_llm(key_provider=None):
+async def get_llm(key_provider=None, user=None):
     """
-    Initialize the Google Gemini LLM with a key from the provider or directly.
+    Initialize the Google Gemini LLM with user-specific model selection.
     
     Args:
         key_provider: KeyProvider object for Google API key (or direct API key as string)
+        user: User object for model selection (optional for backward compatibility)
         
     Returns:
         Initialized ChatGoogleGenerativeAI instance
@@ -189,9 +190,12 @@ async def get_llm(key_provider=None):
     if not google_api_key:
         raise ValueError("No Google API key available from any source")
     
+    # Determine model based on user
+    model = _get_model_for_user(user)
+    
     try:
         return ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
+            model=model,
             temperature=0.2,
             google_api_key=google_api_key,
             max_output_tokens=8192,
@@ -199,6 +203,28 @@ async def get_llm(key_provider=None):
     except Exception as e:
         logger.error(f"Error initializing ChatGoogleGenerativeAI: {str(e)}")
         raise
+
+def _get_model_for_user(user):
+    """
+    Determine the appropriate Gemini model based on user.
+    
+    Args:
+        user: User object containing id and email fields
+        
+    Returns:
+        str: Model name to use
+    """
+    # Check if user is one of the special users who should get the preview model
+    if user and (
+        (hasattr(user, 'email') and user.email in ["pablomiguelargudo@gmail.com", "oscarvlc98@gmail.com"]) or
+        (hasattr(user, 'id') and user.id in [1, 13])
+    ):
+        logger.info(f"Using special model gemini-2.5-flash-preview-05-20 for user {getattr(user, 'email', 'unknown')} (ID: {getattr(user, 'id', 'unknown')})")
+        return "gemini-2.5-flash-preview-05-20"
+    
+    # Default model for all other users
+    logger.debug(f"Using default model gemini-2.0-flash for user {getattr(user, 'email', 'unknown')} (ID: {getattr(user, 'id', 'unknown')})")
+    return "gemini-2.0-flash"
 
 # --- Start of Modified _scrape_single_url ---
 async def _scrape_single_url(session: aiohttp.ClientSession, url: str, timeout: int) -> Tuple[Optional[str], Optional[str]]:

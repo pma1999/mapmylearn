@@ -61,3 +61,4 @@ learni.db
 *.mp3
 *.log.*
 mapmylearn.db
+backend/learni.db
