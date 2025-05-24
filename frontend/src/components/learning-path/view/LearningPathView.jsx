@@ -16,6 +16,7 @@ import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
 import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
 import QuestionAnswerIcon from '@mui/icons-material/QuestionAnswer';
 import GraphicEqIcon from '@mui/icons-material/GraphicEq';
+import VisibilityIcon from '@mui/icons-material/Visibility'; // For visualization tab
 import LoginIcon from '@mui/icons-material/Login';
 import BookmarkAddIcon from '@mui/icons-material/BookmarkAdd'; // Import needed for header prop pass potentially
 
@@ -41,6 +42,7 @@ import MobileBottomNavigation from './MobileBottomNavigation.jsx';
 
 const DRAWER_WIDTH = 300; // Define a width for the mobile drawer
 const AUDIO_CREDIT_COST = 1; // Define or import this
+const VISUALIZATION_CREDIT_COST = 1; // Define credit cost for visualization
 const TUTORIAL_STORAGE_KEY = 'learniTutorialCompleted'; // Key for localStorage
 
 /**
@@ -496,6 +498,7 @@ const LearningPathView = ({ source }) => {
         ...(hasResources ? [{ index: tabIndexCounter++, label: 'Resources', icon: <CollectionsBookmarkIcon />, tooltip: "View submodule resources", dataTut: 'content-panel-tab-resources' }] : []),
         { index: tabIndexCounter++, label: 'Chat', icon: <QuestionAnswerIcon />, tooltip: helpTexts.submoduleTabChat, dataTut: 'content-panel-tab-chat' },
         { index: tabIndexCounter++, label: 'Audio', icon: <GraphicEqIcon />, tooltip: helpTexts.submoduleTabAudio(AUDIO_CREDIT_COST), dataTut: 'content-panel-tab-audio' },
+        { index: tabIndexCounter++, label: 'Visualization', icon: <VisibilityIcon />, tooltip: helpTexts.submoduleTabVisualization(VISUALIZATION_CREDIT_COST), dataTut: 'content-panel-tab-visualization' },
     ];
     return tabs;
   }, [currentSubmodule]); // Depends only on currentSubmodule
@@ -647,6 +650,14 @@ const LearningPathView = ({ source }) => {
         disableBeacon: true,
         condition: () => contentPanelDisplayType === 'submodule',
         callback: () => setActiveTab(findTabIndex('content-panel-tab-audio'))
+      },
+      {
+        target: '[data-tut="content-panel-tab-visualization"]',
+        content: 'Generate an interactive diagram visualization of the submodule content (costs credits!).',
+        placement: 'top',
+        disableBeacon: true,
+        condition: () => contentPanelDisplayType === 'submodule',
+        callback: () => setActiveTab(findTabIndex('content-panel-tab-visualization'))
       },
       {
         target: '[data-tut="content-panel-progress-checkbox-container"]',

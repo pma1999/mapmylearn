@@ -28,6 +28,7 @@ import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
 import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
 import QuestionAnswerIcon from '@mui/icons-material/QuestionAnswer';
 import GraphicEqIcon from '@mui/icons-material/GraphicEq';
+import VisibilityIcon from '@mui/icons-material/Visibility'; // For visualization tab
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
@@ -44,9 +45,13 @@ import ResourcesSection from '../../shared/ResourcesSection';
 import SubmoduleChat from '../../chat/SubmoduleChat';
 import { QuizContainer } from '../../quiz';
 
+// Visualization component for interactive diagrams
+import MermaidVisualization from '../../visualization/MermaidVisualization';
+
 // Hooks & API
 import { useAuth } from '../../../services/authContext';
 import { api, API_URL } from '../../../services/api';
+import { generateSubmoduleVisualization } from '../../../services/api';
 import { helpTexts } from '../../../constants/helpTexts';
 
 // TabPanel component
@@ -82,6 +87,7 @@ const supportedLanguages = [
 ];
 const defaultLanguageCode = 'en';
 const AUDIO_CREDIT_COST = 1;
+const VISUALIZATION_CREDIT_COST = 1;
 
 const audioStyleConfig = {
   standard: {
@@ -132,7 +138,7 @@ const ContentPanel = forwardRef(({
   isPublicView = false
 }, ref) => {
   const theme = useTheme();
-  const { fetchUserCredits } = useAuth();
+  const { fetchUserCredits, user } = useAuth();
 
   const getAbsoluteAudioUrl = useCallback((relativeUrl) => {
       if (!relativeUrl) return null;
@@ -151,6 +157,12 @@ const ContentPanel = forwardRef(({
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'info' });
   const [selectedAudioStyle, setSelectedAudioStyle] = useState('standard');
 
+  // Visualization state
+  const [isVisualizationLoading, setIsVisualizationLoading] = useState(false);
+  const [visualizationError, setVisualizationError] = useState(null);
+  const [mermaidSyntax, setMermaidSyntax] = useState(null);
+  const [visualizationMessage, setVisualizationMessage] = useState(null);
+
   const getInitialLanguage = useCallback(() => {
     const pathLang = actualPathData?.language;
     if (pathLang && supportedLanguages.some(l => l.code === pathLang)) {
@@ -166,9 +178,19 @@ const ContentPanel = forwardRef(({
       setAudioUrl(getAbsoluteAudioUrl(submodule?.audio_url));
       setSelectedLanguage(getInitialLanguage());
       setAudioError(null); 
+      // Clear visualization state
+      setMermaidSyntax(null);
+      setVisualizationError(null);
+      setVisualizationMessage(null);
+      setIsVisualizationLoading(false);
     } else {
       setAudioUrl(null);
       setAudioError(null);
+      // Clear visualization state
+      setMermaidSyntax(null);
+      setVisualizationError(null);
+      setVisualizationMessage(null);
+      setIsVisualizationLoading(false);
     }
   }, [submodule, displayType, getAbsoluteAudioUrl, getInitialLanguage]);
 
@@ -235,6 +257,61 @@ const ContentPanel = forwardRef(({
   const handleAudioStyleChange = (event) => {
     setSelectedAudioStyle(event.target.value);
     setAudioError(null); 
+  };
+
+  // Visualization generation function
+  const handleGenerateVisualization = async () => {
+    if (!submodule || isVisualizationLoading || isPublicView) return;
+
+    // Check credits
+    if (user?.credits < VISUALIZATION_CREDIT_COST) {
+      setNotification({ open: true, message: 'Insufficient credits for visualization generation', severity: 'error' });
+      return;
+    }
+
+    setIsVisualizationLoading(true);
+    setVisualizationError(null);
+    setVisualizationMessage(null);
+    setMermaidSyntax(null);
+
+    try {
+      console.log('Generating visualization for submodule:', submodule.title);
+
+      // Determine request data based on path type (temporary vs persisted)
+      const requestData = isTemporaryPath && actualPathData ? { path_data: actualPathData } : {};
+
+      const response = await generateSubmoduleVisualization(
+        pathId,
+        moduleIndex,
+        submoduleIndex,
+        requestData
+      );
+
+      if (response.mermaid_syntax) {
+        setMermaidSyntax(response.mermaid_syntax);
+        setNotification({ open: true, message: 'Visualization generated successfully!', severity: 'success' });
+        console.log('Visualization generated:', response.mermaid_syntax);
+        if (fetchUserCredits) {
+          fetchUserCredits();
+          console.log('Fetched updated credits after visualization generation.');
+        }
+      } else if (response.message) {
+        setVisualizationMessage(response.message);
+        setNotification({ open: true, message: response.message, severity: 'info' });
+      } else {
+        setVisualizationError('Failed to generate visualization');
+        setNotification({ open: true, message: 'Failed to generate visualization', severity: 'error' });
+      }
+
+    } catch (error) {
+      console.error('Error generating visualization:', error);
+      let errorMsg = error.response?.data?.error?.message || error.message || 'Failed to generate visualization.';
+      let errorSeverity = error.response?.status === 403 ? 'warning' : 'error';
+      setVisualizationError(errorMsg);
+      setNotification({ open: true, message: 'Failed to generate visualization: ' + errorMsg, severity: errorSeverity });
+    } finally {
+      setIsVisualizationLoading(false);
+    }
   };
 
   const handleNotificationClose = (event, reason) => {
@@ -318,6 +395,7 @@ const ContentPanel = forwardRef(({
         ...(hasResources ? [{ index: tabIndexCounter++, label: 'Resources', icon: <CollectionsBookmarkIcon />, component: 'Resources', tooltip: null, dataTut: 'content-panel-tab-resources' }] : []),
         { index: tabIndexCounter++, label: 'Chat', icon: <QuestionAnswerIcon />, component: 'Chat', tooltip: helpTexts.submoduleTabChat, dataTut: 'content-panel-tab-chat' },
         { index: tabIndexCounter++, label: 'Audio', icon: <GraphicEqIcon />, component: 'Audio', tooltip: helpTexts.submoduleTabAudio(AUDIO_CREDIT_COST), dataTut: 'content-panel-tab-audio' },
+        { index: tabIndexCounter++, label: 'Visualization', icon: <VisibilityIcon />, component: 'Visualization', tooltip: helpTexts.submoduleTabVisualization(VISUALIZATION_CREDIT_COST), dataTut: 'content-panel-tab-visualization' },
     ];
     
     const progressKey = `${moduleIndex}_${submoduleIndex}`;
@@ -563,6 +641,36 @@ const ContentPanel = forwardRef(({
                                    (audioUrl ? 
                                      `Re-generate in ${supportedLanguages.find(l => l.code === selectedLanguage)?.name || selectedLanguage} (${AUDIO_CREDIT_COST} ${AUDIO_CREDIT_COST === 1 ? 'credit' : 'credits'})` : 
                                      `Generate Audio (${AUDIO_CREDIT_COST} ${AUDIO_CREDIT_COST === 1 ? 'credit' : 'credits'})`
+                                   )
+                                 }
+                             </Button>
+                         </Box>
+                     )}
+                     {tab.component === 'Visualization' && (
+                         <Box data-tut="content-panel-tab-visualization" sx={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 2.5, p: { xs: 2, sm: 3 } }}>
+                             {isVisualizationLoading && <CircularProgress sx={{ my: 2, alignSelf: 'center' }} />}
+                             {visualizationError && !isVisualizationLoading && <Alert severity="error" sx={{ width: '100%', mb: 1 }}>{visualizationError}</Alert>}
+                             {visualizationMessage && !isVisualizationLoading && <Alert severity="info" sx={{ width: '100%', mb: 1 }}>{visualizationMessage}</Alert>}
+                             
+                             {mermaidSyntax && !isVisualizationLoading && (
+                                 <MermaidVisualization 
+                                     mermaidSyntax={mermaidSyntax}
+                                     title="Interactive Visualization"
+                                     sx={{ mb: 2 }}
+                                 />
+                             )}
+
+                             <Button
+                                 variant={mermaidSyntax ? "outlined" : "contained"}
+                                 onClick={handleGenerateVisualization}
+                                 disabled={isVisualizationLoading || !pathId || isPublicView} 
+                                 startIcon={<VisibilityIcon />}
+                                 sx={{ mt: 1 }}
+                             >
+                                 {isVisualizationLoading ? 'Generating...' : 
+                                   (mermaidSyntax ? 
+                                     `Re-generate Visualization (${VISUALIZATION_CREDIT_COST} ${VISUALIZATION_CREDIT_COST === 1 ? 'credit' : 'credits'})` : 
+                                     `Generate Visualization (${VISUALIZATION_CREDIT_COST} ${VISUALIZATION_CREDIT_COST === 1 ? 'credit' : 'credits'})`
                                    )
                                  }
                              </Button>

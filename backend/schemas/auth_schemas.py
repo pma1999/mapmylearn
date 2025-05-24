@@ -271,4 +271,15 @@ class GenerateAudioRequest(BaseModel):
 
 class GenerateAudioResponse(BaseModel):
     """Response body for audio generation."""
-    audio_url: str = Field(..., description="URL to the generated audio file") 
+    audio_url: str = Field(..., description="URL to the generated audio file")
+
+
+class GenerateVisualizationRequest(BaseModel):
+    """Request body for generating interactive visualizations."""
+    path_data: Optional[Dict[str, Any]] = Field(None, description="Full path_data if the course is temporary and not yet saved to history")
+
+
+class GenerateVisualizationResponse(BaseModel):
+    """Response body for visualization generation."""
+    mermaid_syntax: Optional[str] = Field(None, description="The generated Mermaid.js syntax for the visualization")
+    message: Optional[str] = Field(None, description="A message, e.g., if content is unsuitable or an error occurred") 

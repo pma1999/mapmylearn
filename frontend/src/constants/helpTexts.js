@@ -33,6 +33,7 @@ export const helpTexts = {
   submoduleTabQuiz: "Test your knowledge on this topic.",
   submoduleTabChat: "Ask the AI specific questions about this submodule's content.",
   submoduleTabAudio: (cost) => `Generate a spoken audio summary of this content (costs ${cost} credit).`,
+  submoduleTabVisualization: (cost) => `Generate an interactive diagram of this submodule's content (costs ${cost} credit).`,
 
   // Tooltip Defaults
   defaultInfoAlt: "More information",

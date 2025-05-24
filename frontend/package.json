@@ -29,6 +29,7 @@
     "date-fns": "^2.29.3",
     "dompurify": "^3.2.4",
     "framer-motion": "^12.6.3",
+    "mermaid": "^11.6.0",
     "prismjs": "1.30.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -39,14 +40,15 @@
     "react-syntax-highlighter": "^15.5.0",
     "react-virtualized-auto-sizer": "^1.0.26",
     "react-window": "^1.8.11",
+    "react-zoom-pan-pinch": "^3.7.0",
     "remark-gfm": "^4.0.1",
     "yocto-queue": "^1.2.0"
   },
   "devDependencies": {
     "eslint-plugin-react-hooks": "^5.2.0",
     "http-proxy-middleware": "^3.0.5",
-    "react-scripts": "^5.0.1",
-    "react-router-sitemap": "^1.2.0"
+    "react-router-sitemap": "^1.2.0",
+    "react-scripts": "^5.0.1"
   },
   "browserslist": {
     "production": [

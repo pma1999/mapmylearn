@@ -17,17 +17,23 @@ from backend.models.auth_models import User, LearningPath, LearningPathProgress,
 from backend.schemas.auth_schemas import (
     LearningPathCreate, LearningPathUpdate, LearningPathResponse, 
     LearningPathList, MigrationRequest, MigrationResponse,
-    GenerateAudioRequest, GenerateAudioResponse, LearningPathPublicityUpdate # Import new schema
+    GenerateAudioRequest, GenerateAudioResponse, LearningPathPublicityUpdate, # Import new schema
+    GenerateVisualizationRequest, GenerateVisualizationResponse # Add new visualization schemas
 )
 from backend.utils.auth_middleware import get_current_user, get_optional_user
 from backend.utils.pdf_generator import generate_pdf, create_filename
 # Import the new audio generation service
 from backend.services.audio_service import generate_submodule_audio 
+# Import the new visualization generation service
+from backend.services.visualization_service import generate_mermaid_visualization
 from backend.services.credit_service import CreditService, InsufficientCreditsError # Import CreditService and specific errors
 from pydantic import BaseModel, ConfigDict
 
 # Import sharing utility
 from backend.utils.sharing import generate_unique_share_id
+
+# Import key provider for visualization service
+from backend.services.key_provider import GoogleKeyProvider
 
 # Define a response model for active generations
 class ActiveGenerationResponse(BaseModel):
@@ -1055,3 +1061,144 @@ async def copy_public_learning_path(
 # Example (in main.py or wherever app = FastAPI() is):
 # from backend.routes.learning_paths import public_router as public_learning_paths_router
 # app.include_router(public_learning_paths_router) 
+
+# --- New Visualization Generation Endpoint ---
+@router.post(
+    "/{path_id}/modules/{module_index}/submodules/{submodule_index}/visualization",
+    response_model=GenerateVisualizationResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Generate an interactive Mermaid.js visualization for a submodule"
+)
+async def generate_submodule_visualization_endpoint(
+    request_data: GenerateVisualizationRequest,
+    path_id: str = Path(..., description="ID of the course (can be temporary task ID or persistent UUID)"),
+    module_index: int = Path(..., ge=0, description="Zero-based index of the module"),
+    submodule_index: int = Path(..., ge=0, description="Zero-based index of the submodule"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    credit_service: CreditService = Depends()
+):
+    """
+    Generates an interactive visualization (Mermaid.js syntax) for a specific submodule.
+    Costs 1 credit for successful generation attempt.
+    """
+    logger.info(f"Visualization request for path {path_id}, M{module_index}, S{submodule_index} by user {user.id}")
+
+    submodule_title = "N/A"
+    submodule_description = "N/A"
+    submodule_content = ""
+    is_temporary = False
+
+    # Extract submodule data from either temporary path_data or persisted database entry
+    if request_data.path_data:  # Temporary path
+        is_temporary = True
+        try:
+            temp_path_data_dict = request_data.path_data
+            current_module = temp_path_data_dict['modules'][module_index]
+            current_submodule = current_module['submodules'][submodule_index]
+            submodule_title = current_submodule.get('title', 'Untitled Submodule')
+            submodule_description = current_submodule.get('description', '')
+            submodule_content = current_submodule.get('content', '')
+        except (KeyError, IndexError, TypeError) as e:
+            logger.error(f"Could not extract submodule from temporary path_data: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="Invalid temporary path_data structure or indices."
+            )
+    else:  # Persisted path
+        learning_path_obj = await asyncio.to_thread(
+            db.query(LearningPath).filter(
+                LearningPath.path_id == path_id,
+                LearningPath.user_id == user.id
+            ).first
+        )
+
+        if not learning_path_obj:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, 
+                detail="Learning path not found."
+            )
+        
+        try:
+            path_data_dict = learning_path_obj.path_data
+            current_module = path_data_dict['modules'][module_index]
+            current_submodule = current_module['submodules'][submodule_index]
+            submodule_title = current_submodule.get('title', 'Untitled Submodule')
+            submodule_description = current_submodule.get('description', '')
+            submodule_content = current_submodule.get('content', '')
+        except (KeyError, IndexError, TypeError) as e:
+            logger.error(f"Could not extract submodule from persisted path {path_id}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+                detail="Error accessing submodule data."
+            )
+    
+    # Validate that submodule has content
+    if not submodule_content.strip():
+        logger.warning(f"Submodule {submodule_title} has no content. Cannot generate visualization.")
+        return GenerateVisualizationResponse(
+            mermaid_syntax=None,
+            message="Submodule has no content to visualize."
+        )
+
+    # Charge credit for visualization generation
+    try:
+        if db.in_transaction():
+            logger.debug(f"Existing transaction detected. Using SAVEPOINT for visualization generation for path {path_id}.")
+            with db.begin_nested():  # Creates a SAVEPOINT
+                await credit_service.charge_credits(
+                    user_id=user.id,
+                    amount=1,
+                    transaction_type=TransactionType.VISUALIZATION_GENERATION_USE,
+                    notes=f"Visualization for submodule: {submodule_title[:100]}"
+                )
+                logger.info(f"Credit charged (within SAVEPOINT) for visualization generation (user: {user.id}, path: {path_id})")
+        else:
+            logger.debug(f"No existing transaction. Starting new transaction for visualization generation for path {path_id}.")
+            with db.begin():  # Starts a new top-level transaction
+                await credit_service.charge_credits(
+                    user_id=user.id,
+                    amount=1,
+                    transaction_type=TransactionType.VISUALIZATION_GENERATION_USE,
+                    notes=f"Visualization for submodule: {submodule_title[:100]}"
+                )
+                logger.info(f"Credit charged (within new transaction) for visualization generation (user: {user.id}, path: {path_id})")
+
+    except InsufficientCreditsError as ice:
+        logger.warning(f"Insufficient credits for user {user.id} for visualization: {ice.detail}")
+        raise ice  # FastAPI will convert this to a 403 response
+    except Exception as charge_exc:
+        logger.exception(f"Credit charge failed unexpectedly for visualization, user {user.id}: {charge_exc}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail="Credit charging failed."
+        )
+
+    # Generate visualization using the service
+    try:
+        google_key_provider = GoogleKeyProvider()  # Use default key provider
+        
+        viz_result = await generate_mermaid_visualization(
+            submodule_title=submodule_title,
+            submodule_description=submodule_description,
+            submodule_content=submodule_content,
+            google_key_provider=google_key_provider 
+        )
+
+        if viz_result.get("mermaid_syntax"):
+            logger.info(f"Successfully generated visualization for submodule: {submodule_title}")
+            return GenerateVisualizationResponse(mermaid_syntax=viz_result["mermaid_syntax"])
+        else:
+            # Generation failed or content not suitable
+            logger.info(f"Visualization generation completed with message for {submodule_title}: {viz_result.get('message')}")
+            return GenerateVisualizationResponse(
+                mermaid_syntax=None,
+                message=viz_result.get("message", "Failed to generate visualization.")
+            )
+            
+    except Exception as viz_exc:
+        logger.exception(f"Unexpected error during visualization generation for path {path_id}: {viz_exc}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Visualization generation failed unexpectedly: {str(viz_exc)}"
+        ) 

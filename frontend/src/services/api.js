@@ -1109,6 +1109,36 @@ export const purchaseChatAllowance = async () => {
   }
 };
 
+/**
+ * Generates an interactive visualization (Mermaid.js syntax) for a specific submodule.
+ * @param {string} pathId - The ID of the course (can be temporary task ID or persistent UUID)
+ * @param {number} moduleIndex - Zero-based index of the module
+ * @param {number} submoduleIndex - Zero-based index of the submodule
+ * @param {object} requestData - The request data including optional path_data for temporary paths
+ * @returns {Promise<object>} The API response containing mermaid_syntax or error message
+ */
+export const generateSubmoduleVisualization = async (pathId, moduleIndex, submoduleIndex, requestData) => {
+  try {
+    // Ensure auth token is set
+    if (!authToken) {
+      if (!initAuthFromStorage()) {
+        console.error('generateSubmoduleVisualization Error: No auth token available.');
+        throw new Error('Authentication required. Please log in.');
+      }
+    }
+    const response = await api.post(
+      `/v1/learning-paths/${pathId}/modules/${moduleIndex}/submodules/${submoduleIndex}/visualization`,
+      requestData
+    );
+    console.log('Visualization generation response:', response.data);
+    return response.data; // Should contain { mermaid_syntax?: string, message?: string }
+  } catch (error) {
+    console.error('Error generating submodule visualization:', error);
+    // The interceptor should have already formatted the error
+    throw error;
+  }
+};
+
 // Create a Stripe Checkout session
 export const createCheckoutSession = async (quantity) => {
   try {
@@ -1302,6 +1332,7 @@ export default {
   getPublicLearningPath,
   copyPublicPath,
   streamProgressUpdates,
+  generateSubmoduleVisualization,
 };
 
     
