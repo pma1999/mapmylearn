@@ -43,6 +43,7 @@ Your task is to analyze the following submodule content and generate Mermaid.js 
 3. **Syntax Requirements:**
    - Generate valid and complete Mermaid.js syntax
    - Use descriptive and concise labels for all nodes and edges. **Labels should be short enough to fit comfortably within typical node shapes without truncation. If a concept is too long for a single node, consider breaking it into multiple linked nodes or using abbreviations where clear.**
+   - **Link/Edge Text**: If adding text to a link/edge, use the format `A --"Text"--> B` or `A ---|Text| B`. Avoid spaces directly after `A --` if text is intended for the link.
    - Ensure proper syntax formatting and indentation
    - Include styling where appropriate to enhance visual appeal
    - Use meaningful node IDs and connection syntax
