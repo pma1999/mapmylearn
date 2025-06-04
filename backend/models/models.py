@@ -192,5 +192,10 @@ class LearningPathState(TypedDict):
     submodule_resources_in_process: Optional[Dict[str, Dict[str, Any]]]  # Tracking submodule resource generation
     
 # Enable forward references for EnhancedModule.submodules
-EnhancedModule.model_rebuild()
-SubmoduleList.model_rebuild()
+# Pydantic <2 uses `update_forward_refs` while >=2 uses `model_rebuild`
+if hasattr(EnhancedModule, "model_rebuild"):
+    EnhancedModule.model_rebuild()
+    SubmoduleList.model_rebuild()
+else:  # pragma: no cover - compatibility for older Pydantic versions
+    EnhancedModule.update_forward_refs()
+    SubmoduleList.update_forward_refs()
