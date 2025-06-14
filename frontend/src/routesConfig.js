@@ -15,6 +15,8 @@ import LearningPathView from './components/learning-path/view/LearningPathView';
 import TermsPage from './pages/TermsPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import PurchaseResultPage from './pages/PurchaseResultPage';
+import OfflinePage from './pages/OfflinePage';
+import OfflinePathPage from './pages/OfflinePathPage';
 
 /**
  * Centralized route configuration for the application.
@@ -36,6 +38,8 @@ const componentMap = {
   '/admin': AdminPage,
   '/result/:taskId': ResultPage,
   '/history/:entryId': LearningPathView,
+  '/offline': OfflinePage,
+  '/offline/:offlineId': OfflinePathPage,
   '/terms': TermsPage,
   '/privacy': PrivacyPolicyPage,
   '/public/:shareId': LearningPathView,

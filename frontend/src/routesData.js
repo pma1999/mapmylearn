@@ -67,6 +67,16 @@ const routesData = [
     requiresAuth: true,
     isPublic: false,
   },
+  {
+    path: '/offline',
+    requiresAuth: false,
+    isPublic: false,
+  },
+  {
+    path: '/offline/:offlineId',
+    requiresAuth: false,
+    isPublic: false,
+  },
   //{
   //  path: '/purchase/success',
   //  requiresAuth: true,

@@ -249,6 +249,7 @@ const LearningPathView = ({ source }) => {
     handleSaveToHistory,
     handleSaveDialogClose,
     handleSaveConfirm,
+    handleSaveOffline,
     handleAddTag,
     handleDeleteTag,
     handleTagKeyDown,
@@ -874,8 +875,9 @@ const LearningPathView = ({ source }) => {
                isPdfReady={isPdfReady} 
                onDownload={handleDownloadJSONAdjusted} 
                onDownloadPDF={handleDownloadPDFWithUpdate}
-               onSaveToHistory={handleSaveToHistory} 
-               onNewLearningPath={handleNewLearningPathClick}
+              onSaveToHistory={handleSaveToHistory}
+              onSaveOffline={handleSaveOffline}
+              onNewLearningPath={handleNewLearningPathClick}
                onOpenMobileNav={handleMobileNavToggle} 
                showMobileNavButton={isMobileLayout} 
                progressMap={progressMap}
