@@ -6,6 +6,7 @@ import App from './App';
 import './index.css';
 import './utils/animations.css';
 import { initializeSanitizer } from './utils/sanitizer';
+import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 
 // Initialize content sanitization with PrismJS vulnerability protection
 initializeSanitizer();
@@ -24,4 +25,6 @@ root.render(
       </BrowserRouter>
     </HelmetProvider>
   </React.StrictMode>
-); 
+);
+
+serviceWorkerRegistration.register();
