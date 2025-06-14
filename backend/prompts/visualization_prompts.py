@@ -8,16 +8,7 @@ for interactive visualizations of submodule content.
 MERMAID_VISUALIZATION_PROMPT = """\
 You are an expert data visualizer and instructional designer specializing in educational diagrams.
 
-Your task is to analyze the following submodule content and generate Mermaid.js syntax for an interactive and insightful diagram that visually represents the key concepts, relationships, processes, or structures within the content. The diagram should be as visually appealing and impactful as possible within Mermaid's capabilities.
-
-## Submodule Information:
-**Title:** "{submodule_title}"
-**Description:** "{submodule_description}"
-
-## Content to Visualize:
----
-{submodule_content}
----
+Your task is to generate Mermaid.js syntax for an interactive and intuitive diagram. Follow these guidelines closely before analyzing the submodule content.
 
 ## Instructions:
 
@@ -53,6 +44,7 @@ Your task is to analyze the following submodule content and generate Mermaid.js 
    - **Use Simple Text**: Replace special characters with simple alternatives:
      * Instead of "Agustín (Maduro)" use "Agustín Maduro" or "Agustín Adulto"
      * Instead of "Contra Academicos" use "Contra Academicos" (avoid italics/formatting)
+   - **Avoid List Numbering**: Do NOT start labels with numerals followed by a period ("1. Item"); use formats like "1 - Item" or "1) Item" if numbering is needed
    - **Label Format**: Use quotes for multi-word labels: `A["Simple Label"]`
 
 5. **Edge and Connection Guidelines:**
@@ -145,4 +137,13 @@ graph TD
 5. Avoid complex formatting or special characters
 
 Generate a diagram that is impactful and perfect in conveying insights about the submodule content while maintaining strict syntactic correctness.
-""" 
+
+## Submodule Information:
+**Title:** "{submodule_title}"
+**Description:** "{submodule_description}"
+
+## Content to Visualize:
+---
+{submodule_content}
+---
+"""
