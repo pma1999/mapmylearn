@@ -1,5 +1,16 @@
 const OFFLINE_PATHS_KEY = 'offlineLearningPaths';
 
+export const generateUUID = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
 export const getOfflinePaths = () => {
   try {
     const data = localStorage.getItem(OFFLINE_PATHS_KEY);
@@ -14,7 +25,7 @@ export const saveOfflinePath = (path) => {
   if (!path) return;
   try {
     const offline = getOfflinePaths();
-    const id = path.path_id || crypto.randomUUID();
+    const id = path.path_id || generateUUID();
     offline[id] = { ...path, offline_id: id, saved_at: Date.now() };
     localStorage.setItem(OFFLINE_PATHS_KEY, JSON.stringify(offline));
     return id;
