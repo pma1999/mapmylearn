@@ -1,11 +1,12 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router';
-import { 
-  saveToHistory, 
-  updateHistoryEntry, 
+import {
+  saveToHistory,
+  updateHistoryEntry,
   downloadLearningPathPDF,
-  getHistoryEntry
+  getHistoryEntry,
 } from '../../../services/api';
+import { saveOfflinePath } from '../../../services/offlineService';
 
 /**
  * Custom hook for managing actions related to a course
@@ -248,6 +249,19 @@ const useLearningPathActions = (
       return null;
     }
   };
+
+  const handleSaveOffline = () => {
+    if (!learningPath) {
+      showNotification('Learning path data is not available.', 'error');
+      return;
+    }
+    const id = saveOfflinePath(learningPath);
+    if (id) {
+      showNotification('Saved for offline use', 'success');
+    } else {
+      showNotification('Failed to save offline', 'error');
+    }
+  };
   
   // Tag management functions
   const handleAddTag = () => {
@@ -288,6 +302,7 @@ const useLearningPathActions = (
     handleSaveToHistory,
     handleSaveDialogClose,
     handleSaveConfirm,
+    handleSaveOffline,
     handleAddTag,
     handleDeleteTag,
     handleTagKeyDown,

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useLocation } from 'react-router';
 import { getLearningPath, getHistoryEntry, getPublicLearningPath } from '../../../services/api';
+import { getOfflinePath } from '../../../services/offlineService';
 
 const POLLING_INTERVAL = 5000; // 5 seconds
 const MAX_POLLING_ATTEMPTS = 360; // 30 minutes (360 attempts * 5 seconds)
@@ -13,7 +14,7 @@ const MAX_POLLING_ATTEMPTS = 360; // 30 minutes (360 attempts * 5 seconds)
  * @returns {Object} { learningPath, loading, error, isFromHistory, initialDetailsWereSet, persistentPathId, temporaryPathId, refreshData, progressMap, setProgressMap, lastVisitedModuleIdx, lastVisitedSubmoduleIdx, isPublicView }
  */
 const useLearningPathData = (source = null) => {
-  const { taskId, entryId, shareId } = useParams();
+  const { taskId, entryId, shareId, offlineId } = useParams();
   const location = useLocation();
   
   const [data, setData] = useState(null);
@@ -34,10 +35,12 @@ const useLearningPathData = (source = null) => {
   const pollingTimeoutRef = useRef(null);
   const pollingAttemptsRef = useRef(0);
 
-  const shouldLoadFromHistory = 
-    source === 'history' || 
-    location.pathname.startsWith('/history/') || 
+  const shouldLoadFromHistory =
+    source === 'history' ||
+    location.pathname.startsWith('/history/') ||
     !!entryId;
+
+  const shouldLoadOffline = source === 'offline' || location.pathname.startsWith('/offline/') || !!offlineId;
     
   const shouldLoadPublic = source === 'public' || !!shareId;
 
@@ -58,7 +61,7 @@ const useLearningPathData = (source = null) => {
     cleanup(); // Clear any existing polling on new load trigger
 
     const loadData = async () => {
-      console.log('useLearningPathData: Starting load...', { taskId, entryId, shareId, shouldLoadFromHistory, shouldLoadPublic, source });
+      console.log('useLearningPathData: Starting load...', { taskId, entryId, shareId, offlineId, shouldLoadFromHistory, shouldLoadPublic, shouldLoadOffline, source });
       setLoading(true);
       setError(null);
       setData(null); 
@@ -73,7 +76,21 @@ const useLearningPathData = (source = null) => {
       pollingAttemptsRef.current = 0;
       
       try {
-        if (shouldLoadFromHistory) {
+        if (shouldLoadOffline) {
+          console.log('useLearningPathData: Loading offline path...', offlineId);
+          const offlineData = getOfflinePath(offlineId);
+          if (!offlineData) {
+            throw new Error('Offline learning path not found.');
+          }
+          setData(offlineData);
+          setIsFromHistory(false);
+          setPersistentPathId(offlineId);
+          setInitialDetailsWereSet(true);
+          setProgressMap(offlineData.progress_map || {});
+          setLastVisitedModuleIdx(offlineData.last_visited_module_idx);
+          setLastVisitedSubmoduleIdx(offlineData.last_visited_submodule_idx);
+          setLoading(false);
+        } else if (shouldLoadFromHistory) {
           console.log('useLearningPathData: Loading from history...', entryId);
           const historyResponse = await getHistoryEntry(entryId); 
           
@@ -116,7 +133,7 @@ const useLearningPathData = (source = null) => {
           pollingAttemptsRef.current = 0;
           pollForTaskStatus(taskId);
         } else {
-           console.error("useLearningPathData: Missing taskId/entryId/shareId for loading.");
+           console.error("useLearningPathData: Missing identifiers for loading.");
            setError("ID is missing, cannot load course.");
            setLoading(false);
         }
@@ -185,7 +202,7 @@ const useLearningPathData = (source = null) => {
 
     return cleanup; // Cleanup function for useEffect
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskId, entryId, shareId, source, refreshTrigger]); 
+  }, [taskId, entryId, shareId, offlineId, source, refreshTrigger]);
 
   return {
     learningPath: data,

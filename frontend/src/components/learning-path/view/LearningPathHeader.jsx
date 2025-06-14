@@ -18,6 +18,7 @@ import {
   Grid
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
+import DownloadForOfflineIcon from '@mui/icons-material/DownloadForOffline';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
 import SaveIcon from '@mui/icons-material/Save';
 import SchoolIcon from '@mui/icons-material/School';
@@ -43,6 +44,7 @@ import { helpTexts } from '../../../constants/helpTexts';
  * @param {Function} props.onDownload Handler for JSON download
  * @param {Function} props.onDownloadPDF Handler for PDF download
  * @param {Function} props.onSaveToHistory Handler for opening save details dialog
+ * @param {Function} props.onSaveOffline Handler for saving course to offline storage
  * @param {Function} props.onNewLearningPath Handler for creating a new course
  * @param {Function} [props.onOpenMobileNav] Optional handler to open mobile navigation
  * @param {boolean} [props.showMobileNavButton] Optional flag to show the mobile nav button
@@ -64,9 +66,10 @@ const LearningPathHeader = ({
   topic, 
   detailsHaveBeenSet,
   isPdfReady,
-  onDownload, 
+  onDownload,
   onDownloadPDF,
-  onSaveToHistory, 
+  onSaveToHistory,
+  onSaveOffline,
   onNewLearningPath,
   onOpenMobileNav,
   showMobileNavButton,
@@ -311,6 +314,20 @@ const LearningPathHeader = ({
                       </Button>
                     </Tooltip>
                   </motion.div>
+
+                  <motion.div variants={buttonVariants} sx={{ flex: 1 }}>
+                    <Tooltip title="Save for offline use">
+                      <Button
+                        variant="outlined"
+                        fullWidth
+                        startIcon={<DownloadForOfflineIcon />}
+                        onClick={onSaveOffline}
+                        size={isMobile ? "small" : "medium"}
+                      >
+                        Offline
+                      </Button>
+                    </Tooltip>
+                  </motion.div>
                   
                   <motion.div variants={buttonVariants} sx={{ flex: 1 }}>
                     <Tooltip title={!isPdfReady ? "PDF download available after generation completes" : "Download as PDF"}>
@@ -398,6 +415,18 @@ const LearningPathHeader = ({
                     </Button>
                   </Tooltip>
                 </motion.div>
+
+                <motion.div variants={buttonVariants}>
+                  <Tooltip title="Save for offline use">
+                    <Button
+                      variant="outlined"
+                      startIcon={<DownloadForOfflineIcon />}
+                      onClick={onSaveOffline}
+                    >
+                      Offline
+                    </Button>
+                  </Tooltip>
+                </motion.div>
                 
                 <motion.div variants={buttonVariants}>
                   <Tooltip title={!isPdfReady ? "PDF download available after generation completes" : "Download as PDF"}>
@@ -479,6 +508,7 @@ LearningPathHeader.propTypes = {
   onDownload: PropTypes.func.isRequired,
   onDownloadPDF: PropTypes.func.isRequired,
   onSaveToHistory: PropTypes.func.isRequired,
+  onSaveOffline: PropTypes.func.isRequired,
   onNewLearningPath: PropTypes.func.isRequired,
   onOpenMobileNav: PropTypes.func,
   showMobileNavButton: PropTypes.bool,
