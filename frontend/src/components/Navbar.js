@@ -116,7 +116,7 @@ function Navbar() {
     const items = [
       { text: 'Home', path: '/', ariaLabel: 'Go to homepage' },
     ];
-    
+
     // Only show these items when authenticated
     if (isAuthenticated) {
       items.push(
@@ -124,7 +124,10 @@ function Navbar() {
         { text: 'History', path: '/history', ariaLabel: 'View your history' }
       );
     }
-    
+
+    // Offline page is available publicly
+    items.push({ text: 'Offline', path: '/offline', ariaLabel: 'View offline courses' });
+
     return items;
   }, [isAuthenticated]);
   
