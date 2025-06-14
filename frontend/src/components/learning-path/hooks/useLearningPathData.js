@@ -61,7 +61,7 @@ const useLearningPathData = (source = null) => {
       console.log('useLearningPathData: Starting load...', { taskId, entryId, shareId, shouldLoadFromHistory, shouldLoadPublic, source });
       setLoading(true);
       setError(null);
-      setData(null); 
+      setData(null);
       setTemporaryPathId(null);
       setPersistentPathId(null); // Reset persistentPathId on new load
       setIsFromHistory(false); // Reset isFromHistory
@@ -71,6 +71,23 @@ const useLearningPathData = (source = null) => {
       setLastVisitedSubmoduleIdx(null);
       setIsPublicView(source === 'public' || !!shareId);
       pollingAttemptsRef.current = 0;
+
+      const offlineId = entryId || shareId;
+      if (!navigator.onLine && offlineId) {
+        try {
+          const offlineJson = localStorage.getItem(`offline_learning_path_${offlineId}`);
+          if (offlineJson) {
+            const offlineData = JSON.parse(offlineJson);
+            setData(offlineData);
+            setPersistentPathId(offlineId);
+            setLoading(false);
+            setError(null);
+            return;
+          }
+        } catch (e) {
+          console.error('Error loading offline data:', e);
+        }
+      }
       
       try {
         if (shouldLoadFromHistory) {
@@ -122,6 +139,22 @@ const useLearningPathData = (source = null) => {
         }
       } catch (err) {
         console.error('Error in loadData setup:', err);
+        const offlineId = entryId || shareId;
+        if (offlineId) {
+          try {
+            const offlineJson = localStorage.getItem(`offline_learning_path_${offlineId}`);
+            if (offlineJson) {
+              const offlineData = JSON.parse(offlineJson);
+              setData(offlineData);
+              setPersistentPathId(offlineId);
+              setError(null);
+              setLoading(false);
+              return;
+            }
+          } catch (e) {
+            console.error('Error loading offline data:', e);
+          }
+        }
         setError(err.message || 'Error loading course.');
         setLoading(false);
         cleanup();

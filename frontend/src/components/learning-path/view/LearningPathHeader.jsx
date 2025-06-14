@@ -28,6 +28,8 @@ import LinkIcon from '@mui/icons-material/Link';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import LockIcon from '@mui/icons-material/Lock';
 import BookmarkAddIcon from '@mui/icons-material/BookmarkAdd';
+import DownloadForOfflineIcon from '@mui/icons-material/DownloadForOffline';
+import DeleteIcon from '@mui/icons-material/Delete';
 import CircularProgress from '@mui/material/CircularProgress';
 import { motion } from 'framer-motion';
 import InfoTooltip from '../../shared/InfoTooltip';
@@ -81,7 +83,10 @@ const LearningPathHeader = ({
   entryId = null,
   isLoggedIn = false,
   onCopyToHistory,
-  isCopying = false
+  isCopying = false,
+  onSaveOffline,
+  onRemoveOffline,
+  isOfflineAvailable = false
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -311,7 +316,7 @@ const LearningPathHeader = ({
                       </Button>
                     </Tooltip>
                   </motion.div>
-                  
+
                   <motion.div variants={buttonVariants} sx={{ flex: 1 }}>
                     <Tooltip title={!isPdfReady ? "PDF download available after generation completes" : "Download as PDF"}>
                       <span>
@@ -329,6 +334,22 @@ const LearningPathHeader = ({
                       </span>
                     </Tooltip>
                   </motion.div>
+
+                  {entryId && (
+                    <motion.div variants={buttonVariants} sx={{ flex: 1 }}>
+                      <Tooltip title={isOfflineAvailable ? "Remove offline copy" : "Save for offline"}>
+                        <Button
+                          variant="outlined"
+                          fullWidth
+                          startIcon={isOfflineAvailable ? <DeleteIcon /> : <DownloadForOfflineIcon />}
+                          onClick={isOfflineAvailable ? onRemoveOffline : onSaveOffline}
+                          size={isMobile ? "small" : "medium"}
+                        >
+                          Offline
+                        </Button>
+                      </Tooltip>
+                    </motion.div>
+                  )}
                 </Box>
                 
                 {!isPublicView && (
@@ -414,6 +435,20 @@ const LearningPathHeader = ({
                     </span>
                   </Tooltip>
                 </motion.div>
+
+                {entryId && (
+                  <motion.div variants={buttonVariants}>
+                    <Tooltip title={isOfflineAvailable ? "Remove offline copy" : "Save for offline"}>
+                      <Button
+                        variant="outlined"
+                        startIcon={isOfflineAvailable ? <DeleteIcon /> : <DownloadForOfflineIcon />}
+                        onClick={isOfflineAvailable ? onRemoveOffline : onSaveOffline}
+                      >
+                        Offline
+                      </Button>
+                    </Tooltip>
+                  </motion.div>
+                )}
                 
                 {!isPublicView && (
                   <motion.div variants={buttonVariants}>
@@ -494,6 +529,9 @@ LearningPathHeader.propTypes = {
   isLoggedIn: PropTypes.bool,
   onCopyToHistory: PropTypes.func,
   isCopying: PropTypes.bool,
+  onSaveOffline: PropTypes.func,
+  onRemoveOffline: PropTypes.func,
+  isOfflineAvailable: PropTypes.bool,
 };
 
 export default LearningPathHeader; 

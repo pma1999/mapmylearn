@@ -253,7 +253,10 @@ const LearningPathView = ({ source }) => {
     handleDeleteTag,
     handleTagKeyDown,
     handleNotificationClose,
-    showNotification
+    showNotification,
+    handleSaveOffline,
+    handleRemoveOffline,
+    isOfflineAvailable
   } = useLearningPathActions(
     actualPathData, 
     isFromHistory,
@@ -887,10 +890,13 @@ const LearningPathView = ({ source }) => {
                entryId={currentEntryId} 
                isLoggedIn={isAuthenticated} 
                onTogglePublic={() => handleTogglePublic(currentEntryId, !isPublic)} 
-               onCopyShareLink={handleCopyShareLink} 
-               onCopyToHistory={handleCopyToHistory} 
-               isCopying={isCopying} 
-             />
+              onCopyShareLink={handleCopyShareLink}
+              onCopyToHistory={handleCopyToHistory}
+              isCopying={isCopying}
+              onSaveOffline={handleSaveOffline}
+              onRemoveOffline={handleRemoveOffline}
+              isOfflineAvailable={isOfflineAvailable}
+            />
              {/* --- NEW: Topic Resources Section --- */}
               {topicResources && topicResources.length > 0 && (
                 <Box sx={{ mt: 2 }} data-tut="topic-resources-section">

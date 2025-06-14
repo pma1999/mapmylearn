@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { 
   saveToHistory, 
@@ -35,11 +35,21 @@ const useLearningPathActions = (
   const [tags, setTags] = useState([]);
   const [newTag, setNewTag] = useState('');
   const [favorite, setFavorite] = useState(false);
-  const [notification, setNotification] = useState({ 
-    open: false, 
-    message: '', 
-    severity: 'info' 
+  const [notification, setNotification] = useState({
+    open: false,
+    message: '',
+    severity: 'info'
   });
+
+  // Offline availability state
+  const offlineKey = entryId ? `offline_learning_path_${entryId}` : null;
+  const [isOfflineAvailable, setIsOfflineAvailable] = useState(false);
+
+  useEffect(() => {
+    if (offlineKey) {
+      setIsOfflineAvailable(!!localStorage.getItem(offlineKey));
+    }
+  }, [offlineKey]);
 
   /**
    * Shows a notification message
@@ -149,6 +159,31 @@ const useLearningPathActions = (
    */
   const handleNewLearningPathClick = () => {
     navigate('/generator');
+  };
+
+  /**
+   * Saves the current course for offline access
+   */
+  const handleSaveOffline = () => {
+    if (!learningPath || !offlineKey) return;
+    try {
+      localStorage.setItem(offlineKey, JSON.stringify(learningPath));
+      showNotification('Saved for offline use', 'success');
+      setIsOfflineAvailable(true);
+    } catch (err) {
+      console.error('Error saving offline:', err);
+      showNotification('Failed to save offline', 'error');
+    }
+  };
+
+  /**
+   * Removes the offline copy of the course
+   */
+  const handleRemoveOffline = () => {
+    if (!offlineKey) return;
+    localStorage.removeItem(offlineKey);
+    showNotification('Offline copy removed', 'info');
+    setIsOfflineAvailable(false);
   };
   
   /**
@@ -279,10 +314,13 @@ const useLearningPathActions = (
     favorite,
     setFavorite,
     notification,
-    
+    isOfflineAvailable,
+
     // Actions
     handleDownloadJSON,
     handleDownloadPDF,
+    handleSaveOffline,
+    handleRemoveOffline,
     handleHomeClick,
     handleNewLearningPathClick,
     handleSaveToHistory,
