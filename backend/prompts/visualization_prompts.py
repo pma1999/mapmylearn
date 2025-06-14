@@ -53,6 +53,7 @@ Your task is to analyze the following submodule content and generate Mermaid.js 
    - **Use Simple Text**: Replace special characters with simple alternatives:
      * Instead of "Agustín (Maduro)" use "Agustín Maduro" or "Agustín Adulto"
      * Instead of "Contra Academicos" use "Contra Academicos" (avoid italics/formatting)
+   - **Avoid List Numbering**: Do NOT start labels with numerals followed by a period ("1. Item"); use formats like "1 - Item" or "1) Item" if numbering is needed
    - **Label Format**: Use quotes for multi-word labels: `A["Simple Label"]`
 
 5. **Edge and Connection Guidelines:**
