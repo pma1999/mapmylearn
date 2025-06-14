@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Typography, List, ListItemButton, ListItemText, Divider } from '@mui/material';
+import { Box, Typography, List, ListItem, ListItemButton, ListItemText, Divider, IconButton } from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { Link as RouterLink } from 'react-router';
-import { getOfflinePaths } from '../../services/offlineService';
+import { getOfflinePaths, removeOfflinePath } from '../../services/offlineService';
 
 const OfflinePage = () => {
   const [paths, setPaths] = useState([]);
@@ -10,6 +11,12 @@ const OfflinePage = () => {
     const data = getOfflinePaths();
     setPaths(Object.values(data));
   }, []);
+
+  const handleDelete = (id) => {
+    removeOfflinePath(id);
+    const updated = getOfflinePaths();
+    setPaths(Object.values(updated));
+  };
 
   return (
     <Box sx={{ p: 3 }}>
@@ -22,9 +29,18 @@ const OfflinePage = () => {
         <List>
           {paths.map((p) => (
             <React.Fragment key={p.offline_id}>
-              <ListItemButton component={RouterLink} to={`/offline/${p.offline_id}`}> 
-                <ListItemText primary={p.topic || 'Untitled'} />
-              </ListItemButton>
+              <ListItem
+                secondaryAction={
+                  <IconButton edge="end" aria-label="delete" onClick={() => handleDelete(p.offline_id)}>
+                    <DeleteIcon />
+                  </IconButton>
+                }
+                disablePadding
+              >
+                <ListItemButton component={RouterLink} to={`/offline/${p.offline_id}`}>
+                  <ListItemText primary={p.topic || 'Untitled'} />
+                </ListItemButton>
+              </ListItem>
               <Divider />
             </React.Fragment>
           ))}
