@@ -232,14 +232,14 @@ const PwaIntroModal = ({ open, onClose }) => {
     
     return (
       <Box className="pwa-step-enter">
-        <Typography variant="h5" gutterBottom align="center" sx={{ mb: 2 }}>
+        <Typography variant={isMobile ? "h6" : "h5"} gutterBottom align="center" sx={{ mb: 1.5 }}>
           {step1.title}
         </Typography>
-        <Typography variant="body1" align="center" color="text.secondary" sx={{ mb: 3 }}>
+        <Typography variant="body2" align="center" color="text.secondary" sx={{ mb: 2 }}>
           {step1.subtitle}
         </Typography>
         
-        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr' }}>
+        <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: '1fr' }}>
           {step1.benefits.map((benefit, index) => (
             <Card 
               key={benefit.title}
@@ -248,28 +248,35 @@ const PwaIntroModal = ({ open, onClose }) => {
                 border: `1px solid ${theme.palette.divider}`,
                 '&:hover': { 
                   borderColor: theme.palette.primary.main,
-                  transform: 'translateY(-2px)',
-                  boxShadow: theme.shadows[4]
+                  transform: 'translateY(-1px)',
+                  boxShadow: theme.shadows[2]
                 }
               }}
             >
-              <CardContent sx={{ textAlign: 'center', p: 2 }}>
-                <Typography variant="h3" sx={{ mb: 1 }}>
+              <CardContent sx={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                p: 1.5,
+                '&:last-child': { pb: 1.5 }
+              }}>
+                <Typography variant="h5" sx={{ mr: 1.5, flexShrink: 0 }}>
                   {benefit.icon}
                 </Typography>
-                <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                  {benefit.title}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {benefit.description}
-                </Typography>
+                <Box>
+                  <Typography variant="subtitle2" fontWeight="bold" gutterBottom sx={{ mb: 0.5 }}>
+                    {benefit.title}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {benefit.description}
+                  </Typography>
+                </Box>
               </CardContent>
             </Card>
           ))}
         </Box>
         
-        <Box sx={{ textAlign: 'center', mt: 3 }}>
-          <Typography variant="body1" color="primary" fontWeight="medium">
+        <Box sx={{ textAlign: 'center', mt: 2 }}>
+          <Typography variant="body2" color="primary" fontWeight="medium">
             {step1.callToAction}
           </Typography>
         </Box>
@@ -287,45 +294,44 @@ const PwaIntroModal = ({ open, onClose }) => {
     
     return (
       <Box className="pwa-step-enter">
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
-          <DeviceIcon sx={{ mr: 1, color: 'primary.main' }} />
-          <Typography variant="h5" align="center">
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1.5 }}>
+          <DeviceIcon sx={{ mr: 1, color: 'primary.main', fontSize: '1.2rem' }} />
+          <Typography variant={isMobile ? "h6" : "h5"} align="center">
             {methodInstructions.title}
           </Typography>
         </Box>
         
         {pwaCapabilities.isInstalled ? (
           <Alert severity="success" sx={{ mb: 2 }}>
-            <Typography variant="body1">
+            <Typography variant="body2">
               {helpTexts.pwaIntro.step4.verification.alreadyInstalled.title}
             </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="caption" color="text.secondary">
               {helpTexts.pwaIntro.step4.verification.alreadyInstalled.description}
             </Typography>
           </Alert>
         ) : (
           <>
-            <List sx={{ mb: 2 }}>
+            <List dense sx={{ mb: 1 }}>
               {methodInstructions.steps.map((step, index) => {
                 const IconComponent = INSTRUCTION_ICONS[step.icon] || InfoIcon;
                 
                 return (
-                  <ListItem key={index} className="pwa-install-step" sx={{ px: 0 }}>
-                    <ListItemIcon>
+                  <ListItem key={index} className="pwa-install-step" sx={{ px: 0, py: 0.5 }}>
+                    <ListItemIcon sx={{ minWidth: 36 }}>
                       <Box
                         sx={{
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          width: 40,
-                          height: 40,
+                          width: 28,
+                          height: 28,
                           borderRadius: '50%',
                           backgroundColor: 'primary.main',
-                          color: 'white',
-                          mr: 1
+                          color: 'white'
                         }}
                       >
-                        <Typography variant="body2" fontWeight="bold">
+                        <Typography variant="caption" fontWeight="bold">
                           {index + 1}
                         </Typography>
                       </Box>
@@ -333,13 +339,17 @@ const PwaIntroModal = ({ open, onClose }) => {
                     <ListItemText
                       primary={
                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <IconComponent sx={{ mr: 1, color: 'primary.main' }} />
-                          <Typography variant="body1" fontWeight="medium">
+                          <IconComponent sx={{ mr: 1, color: 'primary.main', fontSize: '1rem' }} />
+                          <Typography variant="body2" fontWeight="medium">
                             {step.instruction}
                           </Typography>
                         </Box>
                       }
-                      secondary={step.detail}
+                      secondary={
+                        <Typography variant="caption" color="text.secondary">
+                          {step.detail}
+                        </Typography>
+                      }
                     />
                   </ListItem>
                 );
@@ -347,9 +357,9 @@ const PwaIntroModal = ({ open, onClose }) => {
             </List>
             
             {methodInstructions.troubleshooting && (
-              <Alert severity="info" sx={{ mt: 2 }}>
-                <Typography variant="body2">
-                  <strong>Troubleshooting:</strong> {methodInstructions.troubleshooting}
+              <Alert severity="info" sx={{ mt: 1 }}>
+                <Typography variant="caption">
+                  <strong>Tip:</strong> {methodInstructions.troubleshooting}
                 </Typography>
               </Alert>
             )}
@@ -365,33 +375,33 @@ const PwaIntroModal = ({ open, onClose }) => {
     
     return (
       <Box className="pwa-step-enter">
-        <Typography variant="h5" gutterBottom align="center">
+        <Typography variant={isMobile ? "h6" : "h5"} gutterBottom align="center">
           {step3.title}
         </Typography>
-        <Typography variant="body1" align="center" color="text.secondary" sx={{ mb: 3 }}>
+        <Typography variant="body2" align="center" color="text.secondary" sx={{ mb: 2 }}>
           {step3.subtitle}
         </Typography>
         
-        <Paper sx={{ p: 2, mb: 3, backgroundColor: 'grey.50' }}>
-          <Typography variant="h6" gutterBottom color="primary">
+        <Paper sx={{ p: 1.5, mb: 2, backgroundColor: 'grey.50' }}>
+          <Typography variant="subtitle2" gutterBottom color="primary">
             {step3.demonstration.title}
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: 'block' }}>
             {step3.demonstration.description}
           </Typography>
           
-          <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr' }}>
+          <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: '1fr' }}>
             {step3.demonstration.features.map((feature, index) => (
               <Box 
                 key={feature.title}
                 className="pwa-feature-demo"
-                sx={{ display: 'flex', alignItems: 'center', p: 1 }}
+                sx={{ display: 'flex', alignItems: 'center', py: 0.5 }}
               >
-                <Typography variant="h6" sx={{ mr: 1.5 }}>
+                <Typography variant="body1" sx={{ mr: 1, flexShrink: 0 }}>
                   {feature.icon}
                 </Typography>
                 <Box>
-                  <Typography variant="subtitle2" fontWeight="bold">
+                  <Typography variant="caption" fontWeight="bold" display="block">
                     {feature.title}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
@@ -404,21 +414,21 @@ const PwaIntroModal = ({ open, onClose }) => {
         </Paper>
         
         <Card sx={{ border: `1px solid ${theme.palette.primary.main}` }}>
-          <CardContent>
-            <Typography variant="h6" color="primary" gutterBottom>
+          <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+            <Typography variant="subtitle2" color="primary" gutterBottom>
               {step3.howItWorks.title}
             </Typography>
             <List dense>
               {step3.howItWorks.steps.map((step, index) => (
-                <ListItem key={index} sx={{ px: 0, py: 0.5 }}>
-                  <ListItemIcon sx={{ minWidth: 32 }}>
-                    <Typography variant="body2" color="primary" fontWeight="bold">
+                <ListItem key={index} sx={{ px: 0, py: 0.25 }}>
+                  <ListItemIcon sx={{ minWidth: 24 }}>
+                    <Typography variant="caption" color="primary" fontWeight="bold">
                       {index + 1}.
                     </Typography>
                   </ListItemIcon>
                   <ListItemText 
                     primary={
-                      <Typography variant="body2">
+                      <Typography variant="caption">
                         {step}
                       </Typography>
                     }
@@ -429,8 +439,8 @@ const PwaIntroModal = ({ open, onClose }) => {
           </CardContent>
         </Card>
         
-        <Box sx={{ textAlign: 'center', mt: 2 }}>
-          <Typography variant="body1" color="primary" fontWeight="medium">
+        <Box sx={{ textAlign: 'center', mt: 1.5 }}>
+          <Typography variant="body2" color="primary" fontWeight="medium">
             {step3.callToAction}
           </Typography>
         </Box>
@@ -444,33 +454,33 @@ const PwaIntroModal = ({ open, onClose }) => {
     
     return (
       <Box className="pwa-step-enter">
-        <Box sx={{ textAlign: 'center', mb: 3 }}>
+        <Box sx={{ textAlign: 'center', mb: 2 }}>
           {showCelebration && (
             <Box className="pwa-confetti">
-              <CelebrationIcon sx={{ fontSize: 48, color: 'primary.main', mb: 1 }} />
+              <CelebrationIcon sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
             </Box>
           )}
-          <Typography variant="h4" gutterBottom>
+          <Typography variant={isMobile ? "h5" : "h4"} gutterBottom>
             {step4.title}
           </Typography>
-          <Typography variant="body1" color="text.secondary">
+          <Typography variant="body2" color="text.secondary">
             {step4.subtitle}
           </Typography>
         </Box>
         
         {isCheckingInstallation ? (
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', my: 3 }}>
-            <CircularProgress size={24} sx={{ mr: 1 }} />
-            <Typography variant="body2" color="text.secondary">
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', my: 2 }}>
+            <CircularProgress size={20} sx={{ mr: 1 }} />
+            <Typography variant="caption" color="text.secondary">
               {helpTexts.pwaIntro.status.checkingInstallation}
             </Typography>
           </Box>
         ) : (
           <Alert 
             severity={installationVerified ? "success" : "info"}
-            sx={{ mb: 3 }}
+            sx={{ mb: 2 }}
           >
-            <Typography variant="body1">
+            <Typography variant="body2">
               {installationVerified 
                 ? helpTexts.pwaIntro.status.installationDetected
                 : helpTexts.pwaIntro.status.installationNotDetected
@@ -479,37 +489,37 @@ const PwaIntroModal = ({ open, onClose }) => {
           </Alert>
         )}
         
-        <Paper sx={{ p: 2, mb: 3 }}>
-          <Typography variant="h6" gutterBottom color="primary">
+        <Paper sx={{ p: 1.5, mb: 2 }}>
+          <Typography variant="subtitle2" gutterBottom color="primary">
             {step4.success.title}
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: 'block' }}>
             {step4.success.description}
           </Typography>
           
-          <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: '1fr' }}>
-            {step4.success.nextSteps.map((step, index) => (
+          <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: '1fr' }}>
+            {step4.success.nextSteps.slice(0, 3).map((step, index) => (
               <Box 
                 key={step.title}
                 className="pwa-content-reveal"
                 sx={{ 
                   display: 'flex', 
                   alignItems: 'flex-start', 
-                  p: 1.5,
+                  py: 0.75,
+                  px: 1,
                   backgroundColor: 'grey.50',
-                  borderRadius: 1,
-                  border: `1px solid ${theme.palette.divider}`
+                  borderRadius: 0.5
                 }}
                 style={{ animationDelay: `${index * 0.1}s` }}
               >
-                <Typography variant="h6" sx={{ mr: 1.5, mt: 0.5 }}>
+                <Typography variant="body2" sx={{ mr: 1, flexShrink: 0 }}>
                   {step.icon}
                 </Typography>
                 <Box>
-                  <Typography variant="subtitle2" fontWeight="bold">
+                  <Typography variant="caption" fontWeight="bold" display="block">
                     {step.title}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="caption" color="text.secondary">
                     {step.description}
                   </Typography>
                 </Box>
@@ -519,28 +529,17 @@ const PwaIntroModal = ({ open, onClose }) => {
         </Paper>
         
         <Card sx={{ backgroundColor: 'primary.main', color: 'white' }}>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              {step4.tips.title}
+          <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+            <Typography variant="subtitle2" gutterBottom>
+              💡 Quick Tips:
             </Typography>
-            <List dense>
-              {step4.tips.items.map((tip, index) => (
-                <ListItem key={index} sx={{ px: 0, py: 0.5 }}>
-                  <ListItemIcon sx={{ minWidth: 24 }}>
-                    <Typography variant="body2" sx={{ color: 'inherit' }}>
-                      💡
-                    </Typography>
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary={
-                      <Typography variant="body2" sx={{ color: 'inherit' }}>
-                        {tip}
-                      </Typography>
-                    }
-                  />
-                </ListItem>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+              {step4.tips.items.slice(0, 2).map((tip, index) => (
+                <Typography key={index} variant="caption" sx={{ color: 'inherit' }}>
+                  • {tip}
+                </Typography>
               ))}
-            </List>
+            </Box>
           </CardContent>
         </Card>
       </Box>
@@ -575,7 +574,7 @@ const PwaIntroModal = ({ open, onClose }) => {
           handleClose();
         }
       }}
-      maxWidth="md"
+      maxWidth="sm"
       fullWidth
       fullScreen={isMobile}
       TransitionProps={{ 
@@ -589,8 +588,11 @@ const PwaIntroModal = ({ open, onClose }) => {
         className: 'pwa-modal-enter',
         sx: {
           backdropFilter: 'blur(8px)',
-          maxHeight: isMobile ? '100vh' : '90vh',
-          height: isMobile ? '100vh' : 'auto'
+          height: isMobile ? '100vh' : 'auto',
+          maxHeight: isMobile ? '100vh' : '85vh',
+          margin: isMobile ? 0 : 2,
+          display: 'flex',
+          flexDirection: 'column'
         }
       }}
       BackdropProps={{
@@ -600,15 +602,15 @@ const PwaIntroModal = ({ open, onClose }) => {
       {/* Header with progress */}
       <DialogTitle sx={{ 
         textAlign: 'center', 
-        pt: isMobile ? 2 : 3,
+        pt: isMobile ? 1.5 : 2,
         pb: 1,
-        position: 'relative'
+        flexShrink: 0
       }}>
-        <Box sx={{ mb: 2 }}>
-          <Typography variant={isMobile ? 'h5' : 'h4'} component="h1" gutterBottom>
+        <Box sx={{ mb: 1.5 }}>
+          <Typography variant={isMobile ? 'h6' : 'h5'} component="h1" gutterBottom>
             {helpTexts.pwaIntro.title}
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="caption" color="text.secondary">
             {helpTexts.pwaIntro.subtitle}
           </Typography>
         </Box>
@@ -618,11 +620,11 @@ const PwaIntroModal = ({ open, onClose }) => {
           value={progressPercentage}
           className="pwa-progress-fill"
           sx={{ 
-            height: 4, 
-            borderRadius: 2,
+            height: 3, 
+            borderRadius: 1.5,
             backgroundColor: 'grey.200',
             '& .MuiLinearProgress-bar': {
-              borderRadius: 2,
+              borderRadius: 1.5,
               backgroundColor: 'primary.main'
             }
           }}
@@ -633,32 +635,32 @@ const PwaIntroModal = ({ open, onClose }) => {
           display: 'flex', 
           justifyContent: 'space-between', 
           alignItems: 'center',
-          mt: 2 
+          mt: 1.5 
         }}>
           <Chip 
-            label={`Step ${activeStep + 1} of ${PWA_TUTORIAL_STEPS.length}`}
+            label={`${activeStep + 1} / ${PWA_TUTORIAL_STEPS.length}`}
             size="small"
             color="primary"
+            sx={{ fontSize: '0.7rem', height: 24 }}
           />
           <Button 
             size="small" 
             onClick={handleSkip}
-            sx={{ minWidth: 'auto' }}
+            sx={{ minWidth: 'auto', fontSize: '0.75rem', py: 0.5, px: 1 }}
           >
             {helpTexts.pwaIntro.skipButton}
           </Button>
         </Box>
       </DialogTitle>
 
-      {/* Main content */}
+      {/* Main content with scroll */}
       <DialogContent sx={{ 
-        textAlign: 'center', 
-        minHeight: isMobile ? '60vh' : '400px',
+        flex: 1,
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'center',
         px: isMobile ? 2 : 3,
-        py: 2
+        py: 1,
+        overflow: 'auto'
       }}>
         <Fade in={true} key={activeStep} timeout={300}>
           <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
@@ -669,23 +671,24 @@ const PwaIntroModal = ({ open, onClose }) => {
 
       {/* Navigation footer */}
       <DialogActions sx={{ 
-        p: isMobile ? 2 : 3, 
+        p: isMobile ? 1.5 : 2, 
         flexDirection: 'column',
-        alignItems: 'stretch'
+        alignItems: 'stretch',
+        flexShrink: 0
       }}>
         {/* Step indicator */}
         <Box sx={{ 
           display: 'flex', 
           justifyContent: 'center',
-          mb: 2,
-          gap: 1
+          mb: 1.5,
+          gap: 0.75
         }}>
           {PWA_TUTORIAL_STEPS.map((step, index) => (
             <Box
               key={step.id}
               sx={{
-                width: 32,
-                height: 32,
+                width: 24,
+                height: 24,
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
@@ -693,7 +696,7 @@ const PwaIntroModal = ({ open, onClose }) => {
                 backgroundColor: index <= activeStep ? 'primary.main' : 'grey.300',
                 color: index <= activeStep ? 'white' : 'text.secondary',
                 transition: 'all 0.3s ease',
-                fontSize: '1rem'
+                fontSize: '0.75rem'
               }}
               className={index === activeStep ? 'pwa-stepper-active' : ''}
             >
@@ -707,15 +710,16 @@ const PwaIntroModal = ({ open, onClose }) => {
           display: 'flex', 
           justifyContent: 'space-between', 
           width: '100%',
-          gap: 2
+          gap: 1.5
         }}>
           <Button 
             onClick={handleBack} 
             disabled={activeStep === 0}
-            startIcon={<NavigateBeforeIcon />}
+            startIcon={<NavigateBeforeIcon sx={{ fontSize: '1rem' }} />}
             variant="outlined"
+            size="small"
             className="pwa-btn-hover"
-            sx={{ flex: 1 }}
+            sx={{ flex: 1, fontSize: '0.8rem' }}
           >
             {helpTexts.pwaIntro.backButton}
           </Button>
@@ -724,9 +728,10 @@ const PwaIntroModal = ({ open, onClose }) => {
             <Button 
               variant="contained" 
               onClick={handleFinish}
-              endIcon={<CheckCircleIcon />}
+              endIcon={<CheckCircleIcon sx={{ fontSize: '1rem' }} />}
+              size="small"
               className="pwa-btn-hover pwa-glow"
-              sx={{ flex: 2 }}
+              sx={{ flex: 2, fontSize: '0.8rem' }}
             >
               {helpTexts.pwaIntro.finishButton}
             </Button>
@@ -734,9 +739,10 @@ const PwaIntroModal = ({ open, onClose }) => {
             <Button 
               variant="contained" 
               onClick={handleNext}
-              endIcon={<NavigateNextIcon />}
+              endIcon={<NavigateNextIcon sx={{ fontSize: '1rem' }} />}
+              size="small"
               className="pwa-btn-hover"
-              sx={{ flex: 2 }}
+              sx={{ flex: 2, fontSize: '0.8rem' }}
             >
               {helpTexts.pwaIntro.nextButton}
             </Button>
