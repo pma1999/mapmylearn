@@ -28,7 +28,10 @@ self.addEventListener('fetch', event => {
     event.respondWith(
       fetch(req)
         .then(res => {
-          caches.open(CACHE_NAME).then(cache => cache.put('/index.html', res.clone()));
+          if (res && res.status === 200) {
+            const responseClone = res.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put('/index.html', responseClone));
+          }
           return res;
         })
         .catch(() => caches.match('/index.html'))
