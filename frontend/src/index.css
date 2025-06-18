@@ -1,3 +1,6 @@
+/* Import enhanced PWA tutorial animations */
+@import './utils/animations.css';
+
 * {
   box-sizing: border-box;
   /* Removed margin and padding, handled by CssBaseline */

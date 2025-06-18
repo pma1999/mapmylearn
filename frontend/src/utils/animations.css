@@ -148,4 +148,339 @@
 
 .action-button:hover::after {
   height: 100%;
+}
+
+/* ======= ENHANCED PWA TUTORIAL ANIMATIONS ======= */
+
+/* Smooth modal entrance with scale and fade */
+@keyframes pwaModalEnter {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.pwa-modal-enter {
+  animation: pwaModalEnter 0.4s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/* Step content slide transitions */
+@keyframes pwaStepSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pwaStepSlideOut {
+  0% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+}
+
+.pwa-step-enter {
+  animation: pwaStepSlideIn 0.3s ease-out;
+}
+
+.pwa-step-exit {
+  animation: pwaStepSlideOut 0.3s ease-in;
+}
+
+/* Benefit cards staggered entrance */
+@keyframes pwaBenefitCardEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.pwa-benefit-card {
+  animation: pwaBenefitCardEnter 0.4s ease-out;
+  animation-fill-mode: both;
+}
+
+.pwa-benefit-card:nth-child(1) { animation-delay: 0.1s; }
+.pwa-benefit-card:nth-child(2) { animation-delay: 0.2s; }
+.pwa-benefit-card:nth-child(3) { animation-delay: 0.3s; }
+.pwa-benefit-card:nth-child(4) { animation-delay: 0.4s; }
+
+/* Installation step animations */
+@keyframes pwaInstallStepReveal {
+  0% {
+    opacity: 0;
+    transform: translateX(-15px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.pwa-install-step {
+  animation: pwaInstallStepReveal 0.3s ease-out;
+  animation-fill-mode: both;
+}
+
+.pwa-install-step:nth-child(1) { animation-delay: 0.1s; }
+.pwa-install-step:nth-child(2) { animation-delay: 0.2s; }
+.pwa-install-step:nth-child(3) { animation-delay: 0.3s; }
+
+/* Icon pulse attention animation */
+@keyframes pwaIconPulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.pwa-icon-pulse {
+  animation: pwaIconPulse 2s ease-in-out infinite;
+}
+
+/* Success checkmark animation */
+@keyframes pwaCheckmarkDraw {
+  0% {
+    stroke-dasharray: 0 24;
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dasharray: 24 24;
+    opacity: 1;
+  }
+}
+
+.pwa-checkmark {
+  animation: pwaCheckmarkDraw 0.6s ease-out;
+}
+
+/* Celebration confetti-like animation */
+@keyframes pwaConfetti {
+  0% {
+    transform: rotate(0deg) translateY(0px);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(720deg) translateY(-100px);
+    opacity: 0;
+  }
+}
+
+.pwa-confetti {
+  animation: pwaConfetti 1s ease-out;
+}
+
+/* Progress indicator smooth transition */
+@keyframes pwaProgressFill {
+  0% {
+    width: 0%;
+  }
+  100% {
+    width: var(--progress-width, 25%);
+  }
+}
+
+.pwa-progress-fill {
+  animation: pwaProgressFill 0.5s ease-out;
+}
+
+/* Button hover micro-interactions */
+@keyframes pwaBtnHover {
+  0% {
+    transform: translateY(0) scale(1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  100% {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+  }
+}
+
+.pwa-btn-hover:hover {
+  animation: pwaBtnHover 0.2s ease-out forwards;
+}
+
+/* Feature demonstration animation */
+@keyframes pwaFeatureDemo {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.pwa-feature-demo {
+  animation: pwaFeatureDemo 0.6s ease-out;
+}
+
+/* Stepper indicator active state */
+@keyframes pwaStepperActive {
+  0% {
+    transform: scale(1);
+    background-color: var(--step-inactive-color, #e0e0e0);
+  }
+  100% {
+    transform: scale(1.1);
+    background-color: var(--step-active-color, #007aff);
+  }
+}
+
+.pwa-stepper-active {
+  animation: pwaStepperActive 0.3s ease-out forwards;
+}
+
+/* Loading dots animation for status checks */
+@keyframes pwaLoadingDots {
+  0%, 20% {
+    opacity: 0;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+  80%, 100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+.pwa-loading-dots span {
+  animation: pwaLoadingDots 1.4s infinite ease-in-out;
+}
+
+.pwa-loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+.pwa-loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+.pwa-loading-dots span:nth-child(3) { animation-delay: 0s; }
+
+/* Modal backdrop subtle animation */
+@keyframes pwaBackdropFade {
+  0% {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    backdrop-filter: blur(4px);
+  }
+}
+
+.pwa-backdrop {
+  animation: pwaBackdropFade 0.3s ease-out;
+}
+
+/* Content reveal with slight bounce */
+@keyframes pwaContentReveal {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.pwa-content-reveal {
+  animation: pwaContentReveal 0.4s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/* Gentle glow effect for important elements */
+@keyframes pwaGlow {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(0, 122, 255, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(0, 122, 255, 0.6);
+  }
+}
+
+.pwa-glow {
+  animation: pwaGlow 2s ease-in-out infinite;
+}
+
+/* Smooth step transition utilities */
+.pwa-transition-smooth {
+  transition: all 0.3s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.pwa-transition-bounce {
+  transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+/* Responsive animation performance optimizations */
+@media (prefers-reduced-motion: reduce) {
+  .pwa-modal-enter,
+  .pwa-step-enter,
+  .pwa-step-exit,
+  .pwa-benefit-card,
+  .pwa-install-step,
+  .pwa-icon-pulse,
+  .pwa-checkmark,
+  .pwa-confetti,
+  .pwa-progress-fill,
+  .pwaBtnHover:hover,
+  .pwa-feature-demo,
+  .pwa-stepper-active,
+  .pwa-loading-dots span,
+  .pwa-backdrop,
+  .pwa-content-reveal,
+  .pwa-glow {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Mobile-specific animation adjustments */
+@media (max-width: 768px) {
+  .pwa-modal-enter {
+    animation-duration: 0.3s;
+  }
+  
+  .pwa-step-enter,
+  .pwa-step-exit {
+    animation-duration: 0.25s;
+  }
+  
+  .pwa-benefit-card {
+    animation-duration: 0.3s;
+  }
 } 

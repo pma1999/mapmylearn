@@ -24,6 +24,9 @@ import WelcomeModal from './components/shared/WelcomeModal';
 import PwaIntroModal from './components/shared/PwaIntroModal';
 import PwaIntroContext from './contexts/PwaIntroContext';
 
+// Import PWA detection utilities
+import { detectPWACapabilities, createTutorialTracker } from './utils/pwaDetection';
+
 // Import the theme
 import theme from './theme/theme';
 
@@ -31,30 +34,81 @@ import theme from './theme/theme';
 import GeneratingPage from './pages/GeneratingPage'; 
 // --- End import ---
 
-// New component to render routes and modal
-const PWA_FLAG_KEY = 'mapmylearn_pwa_intro_shown';
+// Enhanced PWA tutorial version management
+const TUTORIAL_VERSION = 'v2.0';
+const LEGACY_PWA_FLAG_KEY = 'mapmylearn_pwa_intro_shown'; // Old key for cleanup
 
+// New component to render routes and modal
 const AppContent = () => {
   const { showWelcomeModal, markWelcomeModalShown } = useAuth();
   const theme = useTheme();
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const [showPwaIntro, setShowPwaIntro] = useState(false);
+  const [pwaCapabilities, setPwaCapabilities] = useState(null);
+  const [tutorialTracker] = useState(() => createTutorialTracker(TUTORIAL_VERSION));
 
+  // Enhanced PWA tutorial trigger logic
   useEffect(() => {
-    if (isSmallScreen && !localStorage.getItem(PWA_FLAG_KEY)) {
-      setShowPwaIntro(true);
+    const shouldShowTutorial = () => {
+      // Only show on mobile/tablet devices
+      if (!isSmallScreen) return false;
+      
+      // Don't show if user has completed the current tutorial version
+      if (tutorialTracker.hasCompleted()) return false;
+      
+      // Detect PWA capabilities
+      const capabilities = detectPWACapabilities();
+      setPwaCapabilities(capabilities);
+      
+      // Clean up legacy flag to force re-display for existing users
+      if (localStorage.getItem(LEGACY_PWA_FLAG_KEY)) {
+        localStorage.removeItem(LEGACY_PWA_FLAG_KEY);
+      }
+      
+      // Show tutorial for new or returning users with enhanced version
+      return true;
+    };
+
+    if (shouldShowTutorial()) {
+      // Small delay to ensure smooth app initialization
+      const timer = setTimeout(() => {
+        setShowPwaIntro(true);
+      }, 1000);
+      
+      return () => clearTimeout(timer);
     }
-  }, [isSmallScreen]);
+  }, [isSmallScreen, tutorialTracker]);
 
   const handleClosePwaIntro = () => {
-    localStorage.setItem(PWA_FLAG_KEY, 'true');
+    tutorialTracker.markCompleted();
     setShowPwaIntro(false);
   };
 
-  const openPwaIntro = () => setShowPwaIntro(true);
+  const openPwaIntro = () => {
+    setShowPwaIntro(true);
+  };
+
+  // Debug function for development (can be removed in production)
+  const resetPwaTutorial = () => {
+    tutorialTracker.reset();
+    localStorage.removeItem(LEGACY_PWA_FLAG_KEY);
+    console.log('PWA tutorial reset - will show on next mobile visit');
+  };
+
+  // Expose reset function globally for development/testing
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      window.resetPwaTutorial = resetPwaTutorial;
+      console.log('Development mode: Use window.resetPwaTutorial() to reset PWA tutorial');
+    }
+  }, []);
 
   return (
-    <PwaIntroContext.Provider value={{ openPwaIntro }}>
+    <PwaIntroContext.Provider value={{ 
+      openPwaIntro, 
+      pwaCapabilities,
+      tutorialTracker
+    }}>
       <Box sx={{ flexGrow: 1 }}>
         <Routes>
           {routesConfig.map((route, index) => {
