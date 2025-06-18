@@ -24,7 +24,7 @@ from backend.models.models import (
     QuizQuestionList
 )
 from backend.parsers.parsers import submodule_parser, module_queries_parser, quiz_questions_parser, search_queries_parser # Added search_queries_parser
-from backend.services.services import get_llm, perform_search_and_scrape, get_llm_with_search
+from backend.services.services import get_llm, perform_search_and_scrape, get_llm_with_search, get_llm_for_evaluation
 from backend.core.graph_nodes.helpers import run_chain, escape_curly_braces, batch_items, MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT # Import constant
 from backend.core.graph_nodes.search_utils import execute_search_with_llm_retry
 
@@ -979,8 +979,9 @@ async def process_single_submodule(
                 action="processing"
             )
             
-        submodule_content = await develop_submodule_specific_content(
-            state, module_id, sub_id, module, submodule, submodule_search_queries, submodule_search_results
+        # STEP 3: Content development with refinement loop (following Google pattern)
+        submodule_content = await develop_submodule_content_with_refinement_loop(
+            state, module_id, sub_id, module, submodule, submodule_search_queries, submodule_search_results, progress_callback
         )
         content_time = time.time() - step_start
         
@@ -2623,3 +2624,632 @@ async def plan_and_research_module_submodules(state: LearningPathState, module_i
     enhanced_module = await plan_module_submodules(state, module_id, module, planning_search_context)
     
     return enhanced_module
+
+# =========================================================================
+# Content Refinement Loop Functions (Following Google Pattern)
+# =========================================================================
+
+async def develop_submodule_content_with_refinement_loop(
+    state: LearningPathState,
+    module_id: int,
+    sub_id: int,
+    module: EnhancedModule,
+    submodule: Submodule,
+    sub_queries: List[SearchQuery],
+    sub_search_results: List[SearchServiceResult],
+    progress_callback = None
+) -> str:
+    """
+    Develops submodule content with refinement loop following Google pattern.
+    
+    Flow: develop_content → evaluate_content → check_adequacy → {finalize | generate_refinement_queries → execute_refinement_searches → enhance_content → loop}
+    """
+    logger = logging.getLogger("learning_path.content_refinement")
+    logger.info(f"Starting content development with refinement loop for submodule {module_id+1}.{sub_id+1}: {submodule.title}")
+    
+    try:
+        # Initialize content loop control in state
+        await initialize_content_loop_control(state)
+        
+        # Initialize content search accumulation
+        if "content_search_queries" not in state:
+            state["content_search_queries"] = []
+        if "content_search_results" not in state:
+            state["content_search_results"] = []
+        
+        # Add initial queries and results to accumulative state
+        state["content_search_queries"].extend(sub_queries)
+        state["content_search_results"].extend(sub_search_results)
+        
+        # STEP 1: Initial content development
+        submodule_content = await develop_submodule_specific_content(
+            state, module_id, sub_id, module, submodule, sub_queries, sub_search_results
+        )
+        
+        # Content refinement loop following Google pattern
+        while state.get("content_loop_count", 0) < state.get("max_content_loops", 2):
+            current_loop = state.get("content_loop_count", 0) + 1
+            state["content_loop_count"] = current_loop
+            
+            logger.info(f"Content refinement loop {current_loop}/{state.get('max_content_loops', 2)} for submodule {module_id+1}.{sub_id+1}")
+            
+            if progress_callback:
+                await progress_callback(
+                    f"Evaluating content quality for {module.title} > {submodule.title} (Loop {current_loop})",
+                    phase="content_evaluation",
+                    phase_progress=0.1,
+                    overall_progress=0.65 + ((module_id * 0.1 + sub_id * 0.02) / state.get("total_submodules_estimate", 10)),
+                    preview_data={
+                        "type": "submodule_status_update",
+                        "data": {
+                            "module_id": module_id,
+                            "submodule_id": sub_id,
+                            "status_detail": f"content_evaluation_loop_{current_loop}"
+                        }
+                    },
+                    action="processing"
+                )
+            
+            # STEP 2: Evaluate content sufficiency
+            content_evaluation = await evaluate_content_sufficiency(
+                state, module_id, sub_id, module, submodule, submodule_content
+            )
+            
+            # STEP 3: Check if content is sufficient
+            if await check_content_adequacy(state, content_evaluation):
+                logger.info(f"Content deemed sufficient for submodule {module_id+1}.{sub_id+1} after {current_loop} loops")
+                break
+            
+            # STEP 4: Generate refinement queries for content improvement
+            if progress_callback:
+                await progress_callback(
+                    f"Generating content enhancement queries for {module.title} > {submodule.title}",
+                    phase="content_refinement",
+                    phase_progress=0.3,
+                    overall_progress=0.66 + ((module_id * 0.1 + sub_id * 0.02) / state.get("total_submodules_estimate", 10)),
+                    action="processing"
+                )
+            
+            content_refinement_queries = await generate_content_refinement_queries(
+                state, module_id, sub_id, module, submodule, content_evaluation, submodule_content
+            )
+            
+            # STEP 5: Execute refinement searches with accumulation
+            if progress_callback:
+                await progress_callback(
+                    f"Searching for content enhancement information for {module.title} > {submodule.title}",
+                    phase="content_refinement",
+                    phase_progress=0.5,
+                    overall_progress=0.67 + ((module_id * 0.1 + sub_id * 0.02) / state.get("total_submodules_estimate", 10)),
+                    action="processing"
+                )
+            
+            refinement_search_results = await execute_content_refinement_searches(
+                state, module_id, sub_id, module, submodule, content_refinement_queries
+            )
+            
+            # STEP 6: Enhance content with new information
+            if progress_callback:
+                await progress_callback(
+                    f"Enhancing content for {module.title} > {submodule.title}",
+                    phase="content_enhancement",
+                    phase_progress=0.7,
+                    overall_progress=0.68 + ((module_id * 0.1 + sub_id * 0.02) / state.get("total_submodules_estimate", 10)),
+                    action="processing"
+                )
+            
+            submodule_content = await develop_enhanced_content(
+                state, module_id, sub_id, module, submodule, submodule_content, refinement_search_results
+            )
+        
+        logger.info(f"Content development completed for submodule {module_id+1}.{sub_id+1} after {state.get('content_loop_count', 1)} loops")
+        return submodule_content
+        
+    except Exception as e:
+        logger.exception(f"Error in content refinement loop for submodule {module_id+1}.{sub_id+1}: {str(e)}")
+        # Fallback to original content development
+        logger.info(f"Falling back to original content development for submodule {module_id+1}.{sub_id+1}")
+        return await develop_submodule_specific_content(
+            state, module_id, sub_id, module, submodule, sub_queries, sub_search_results
+        )
+
+async def initialize_content_loop_control(state: LearningPathState) -> None:
+    """Initialize content loop control fields in state following Google pattern."""
+    if "content_loop_count" not in state:
+        state["content_loop_count"] = 0
+    if "max_content_loops" not in state:
+        state["max_content_loops"] = 2  # Allow up to 2 refinement iterations
+    if "is_content_sufficient" not in state:
+        state["is_content_sufficient"] = False
+    if "content_gaps" not in state:
+        state["content_gaps"] = []
+    if "content_confidence_score" not in state:
+        state["content_confidence_score"] = 0.0
+    if "content_refinement_queries" not in state:
+        state["content_refinement_queries"] = []
+
+async def evaluate_content_sufficiency(
+    state: LearningPathState,
+    module_id: int,
+    sub_id: int,
+    module: EnhancedModule,
+    submodule: Submodule,
+    submodule_content: str
+) -> Any:  # Returns ContentEvaluation
+    """
+    Evaluates content quality across multiple dimensions following Google pattern.
+    """
+    logger = logging.getLogger("learning_path.content_evaluator")
+    logger.info(f"Evaluating content sufficiency for submodule {module_id+1}.{sub_id+1}: {submodule.title}")
+    
+    # Get key providers and language settings
+    google_key_provider = state.get("google_key_provider")
+    output_language = state.get('language', 'en')
+    explanation_style = state.get('explanation_style', 'standard')
+    
+    # Import necessary components
+    from backend.prompts.learning_path_prompts import CONTENT_EVALUATION_PROMPT
+    from backend.parsers.parsers import content_evaluation_parser
+    from backend.core.graph_nodes.helpers import escape_curly_braces, run_chain, get_llm
+    from langchain.prompts import ChatPromptTemplate
+    
+    # Prepare context with escaped content
+    user_topic = escape_curly_braces(state["user_topic"])
+    module_title = escape_curly_braces(module.title)
+    submodule_title = escape_curly_braces(submodule.title)
+    submodule_description = escape_curly_braces(submodule.description)
+    depth_level = escape_curly_braces(submodule.depth_level)
+    content_to_evaluate = escape_curly_braces(submodule_content)
+    
+    prompt = ChatPromptTemplate.from_template(CONTENT_EVALUATION_PROMPT)
+    
+    try:
+        evaluation_result = await run_chain(prompt, lambda: get_llm_for_evaluation(key_provider=google_key_provider, user=state.get('user')), content_evaluation_parser, {
+            "user_topic": user_topic,
+            "module_title": module_title,
+            "submodule_title": submodule_title,
+            "submodule_description": submodule_description,
+            "depth_level": depth_level,
+            "explanation_style": explanation_style,
+            "submodule_content": content_to_evaluate,
+            "format_instructions": content_evaluation_parser.get_format_instructions()
+        })
+        
+        # Update state with evaluation results
+        state["is_content_sufficient"] = evaluation_result.is_sufficient
+        state["content_gaps"] = evaluation_result.content_gaps
+        state["content_confidence_score"] = evaluation_result.confidence_score
+        
+        logger.info(f"Content evaluation completed for submodule {module_id+1}.{sub_id+1}: sufficient={evaluation_result.is_sufficient}, confidence={evaluation_result.confidence_score:.2f}")
+        
+        return evaluation_result
+        
+    except Exception as e:
+        logger.exception(f"Error evaluating content for submodule {module_id+1}.{sub_id+1}: {str(e)}")
+        # Return default insufficient evaluation to trigger refinement
+        from backend.models.models import ContentEvaluation
+        fallback_evaluation = ContentEvaluation(
+            is_sufficient=False,
+            content_gaps=["Content evaluation failed - requires refinement"],
+            confidence_score=0.1,
+            improvement_areas=["Overall content enhancement needed"],
+            depth_assessment="Unable to assess depth due to evaluation error",
+            clarity_assessment="Unable to assess clarity due to evaluation error",
+            rationale=f"Content evaluation failed with error: {str(e)}"
+        )
+        return fallback_evaluation
+
+async def check_content_adequacy(state: LearningPathState, content_evaluation: Any) -> bool:
+    """
+    Determines whether content refinement should continue or finalize, following Google pattern.
+    """
+    logger = logging.getLogger("learning_path.content_adequacy")
+    
+    # Extract evaluation results
+    is_sufficient = content_evaluation.is_sufficient
+    confidence_score = content_evaluation.confidence_score
+    current_loop = state.get("content_loop_count", 0)
+    max_loops = state.get("max_content_loops", 2)
+    
+    # Decision logic following Google pattern
+    if is_sufficient and confidence_score >= 0.7:
+        logger.info(f"Content is sufficient (confidence: {confidence_score:.2f}) - finalizing")
+        return True
+    elif current_loop >= max_loops:
+        logger.info(f"Maximum content loops reached ({max_loops}) - finalizing with current content")
+        return True
+    else:
+        logger.info(f"Content needs refinement (confidence: {confidence_score:.2f}, loop: {current_loop}/{max_loops}) - continuing")
+        return False
+
+async def generate_content_refinement_queries(
+    state: LearningPathState,
+    module_id: int,
+    sub_id: int,
+    module: EnhancedModule,
+    submodule: Submodule,
+    content_evaluation: Any,
+    current_content: str
+) -> List[SearchQuery]:
+    """
+    Generates targeted search queries to address specific content gaps and improvements.
+    """
+    logger = logging.getLogger("learning_path.content_refinement_queries")
+    logger.info(f"Generating content refinement queries for submodule {module_id+1}.{sub_id+1}: {submodule.title}")
+    
+    # Get key providers and language settings
+    google_key_provider = state.get("google_key_provider")
+    output_language = state.get('language', 'en')
+    search_language = state.get('search_language', 'en')
+    
+    # Import necessary components
+    from backend.prompts.learning_path_prompts import CONTENT_REFINEMENT_QUERY_GENERATION_PROMPT
+    from backend.parsers.parsers import content_refinement_query_parser
+    from backend.core.graph_nodes.helpers import escape_curly_braces, run_chain, get_llm
+    from langchain.prompts import ChatPromptTemplate
+    
+    # Prepare context with escaped content
+    user_topic = escape_curly_braces(state["user_topic"])
+    module_title = escape_curly_braces(module.title)
+    submodule_title = escape_curly_braces(submodule.title)
+    
+    # Extract evaluation details
+    content_gaps_text = "\n".join([f"- {gap}" for gap in content_evaluation.content_gaps])
+    improvement_areas_text = "\n".join([f"- {area}" for area in content_evaluation.improvement_areas])
+    
+    # Summarize existing research
+    existing_queries = state.get("content_search_queries", [])
+    existing_queries_text = "\n".join([f"- {query.keywords}" for query in existing_queries[-5:]])  # Last 5 queries
+    
+    current_loop = state.get("content_loop_count", 0)
+    max_loops = state.get("max_content_loops", 2)
+    
+    prompt = ChatPromptTemplate.from_template(CONTENT_REFINEMENT_QUERY_GENERATION_PROMPT)
+    
+    try:
+        refinement_result = await run_chain(prompt, lambda: get_llm_for_evaluation(key_provider=google_key_provider, user=state.get('user')), content_refinement_query_parser, {
+            "user_topic": user_topic,
+            "module_title": module_title,
+            "submodule_title": submodule_title,
+            "content_status": "insufficient" if not content_evaluation.is_sufficient else "needs_improvement",
+            "current_loop": current_loop,
+            "max_loops": max_loops,
+            "content_gaps": content_gaps_text,
+            "improvement_areas": improvement_areas_text,
+            "depth_assessment": escape_curly_braces(content_evaluation.depth_assessment),
+            "clarity_assessment": escape_curly_braces(content_evaluation.clarity_assessment),
+            "quality_issues": escape_curly_braces(content_evaluation.rationale),
+            "existing_queries": existing_queries_text,
+            "current_research_summary": f"Content loop {current_loop} - targeting gaps in educational effectiveness",
+            "search_language": search_language,
+            "output_language": output_language,
+            "format_instructions": content_refinement_query_parser.get_format_instructions()
+        })
+        
+        # Store refinement queries in state
+        state["content_refinement_queries"] = refinement_result.queries
+        
+        logger.info(f"Generated {len(refinement_result.queries)} content refinement queries for submodule {module_id+1}.{sub_id+1}")
+        
+        return refinement_result.queries
+        
+    except Exception as e:
+        logger.exception(f"Error generating content refinement queries for submodule {module_id+1}.{sub_id+1}: {str(e)}")
+        # Return fallback queries
+        from backend.models.models import SearchQuery
+        fallback_queries = [
+            SearchQuery(
+                keywords=f"{submodule.title} detailed explanation examples",
+                rationale="Fallback query for content enhancement due to query generation error"
+            ),
+            SearchQuery(
+                keywords=f"{submodule.title} practical applications tutorial",
+                rationale="Fallback query for practical examples due to query generation error"
+            )
+        ]
+        return fallback_queries
+
+async def execute_content_refinement_searches(
+    state: LearningPathState,
+    module_id: int,
+    sub_id: int,
+    module: EnhancedModule,
+    submodule: Submodule,
+    refinement_queries: List[SearchQuery]
+) -> List[SearchServiceResult]:
+    """
+    Executes content refinement searches with accumulation in state following Google pattern.
+    """
+    logger = logging.getLogger("learning_path.content_refinement_search")
+    logger.info(f"Executing {len(refinement_queries)} content refinement searches for submodule {module_id+1}.{sub_id+1}")
+    
+    if not refinement_queries:
+        logger.warning(f"No refinement queries provided for submodule {module_id+1}.{sub_id+1}")
+        return []
+    
+    # Get search configuration
+    brave_key_provider = state.get("brave_key_provider")
+    if not brave_key_provider:
+        raise ValueError(f"Brave Search key provider not found in state for content refinement")
+    
+    max_results_per_query = int(os.environ.get("SEARCH_MAX_RESULTS", 3))  # Reduced for refinement
+    scrape_timeout = int(os.environ.get("SCRAPE_TIMEOUT", 10))
+    
+    results = []
+    
+    # Import search utilities
+    from backend.core.graph_nodes.search_utils import execute_search_with_llm_retry
+    import asyncio
+    
+    # Create semaphore for controlled concurrency
+    sem = asyncio.Semaphore(2)  # Reduced concurrency for refinement searches
+    
+    async def bounded_refinement_search(query_obj: SearchQuery):
+        async with sem:
+            provider = brave_key_provider.set_operation("content_refinement_search")
+            
+            return await execute_search_with_llm_retry(
+                state=state,
+                initial_query=query_obj,
+                regenerate_query_func=regenerate_content_refinement_query,
+                search_provider_key_provider=provider,
+                search_config={
+                    "max_results": max_results_per_query,
+                    "scrape_timeout": scrape_timeout
+                },
+                regenerate_args={
+                    "module_id": module_id,
+                    "sub_id": sub_id,
+                    "module": module,
+                    "submodule": submodule
+                }
+            )
+    
+    try:
+        tasks = [bounded_refinement_search(query) for query in refinement_queries]
+        results_or_excs = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for i, res_or_exc in enumerate(results_or_excs):
+            if isinstance(res_or_exc, Exception):
+                logger.error(f"Content refinement search error for submodule {module_id+1}.{sub_id+1}: {str(res_or_exc)}")
+                # Create error result
+                from backend.models.models import SearchServiceResult
+                error_result = SearchServiceResult(
+                    query=refinement_queries[i].keywords,
+                    search_provider_error=f"Content refinement search error: {str(res_or_exc)}"
+                )
+                results.append(error_result)
+            else:
+                results.append(res_or_exc)
+        
+        # Add results to accumulative state following Google pattern
+        state["content_search_queries"].extend(refinement_queries)
+        state["content_search_results"].extend(results)
+        
+        logger.info(f"Completed {len(results)} content refinement searches for submodule {module_id+1}.{sub_id+1}")
+        return results
+        
+    except Exception as e:
+        logger.exception(f"Error executing content refinement searches for submodule {module_id+1}.{sub_id+1}: {str(e)}")
+        from backend.models.models import SearchServiceResult
+        return [SearchServiceResult(
+            query=f"Error: {str(e)}",
+            search_provider_error=f"Failed to execute content refinement searches: {str(e)}"
+        )]
+
+async def regenerate_content_refinement_query(
+    state: LearningPathState,
+    failed_query: SearchQuery,
+    module_id: int = None,
+    sub_id: int = None,
+    module: EnhancedModule = None,
+    submodule: Submodule = None
+) -> Optional[SearchQuery]:
+    """
+    Regenerates a failed content refinement query with simpler terms.
+    """
+    logger = logging.getLogger("learning_path.content_refinement_retry")
+    logger.info(f"Regenerating failed content refinement query: {failed_query.keywords}")
+    
+    try:
+        # Get Google key provider for query regeneration
+        google_key_provider = state.get("google_key_provider")
+        
+        # Import necessary components
+        from backend.core.graph_nodes.helpers import escape_curly_braces, run_chain, get_llm
+        from langchain.prompts import ChatPromptTemplate
+        
+        # Create a simplified regeneration prompt
+        regeneration_prompt = """
+# CONTENT REFINEMENT QUERY REGENERATION
+
+The following search query returned no results:
+"{failed_query}"
+
+Generate a SIMPLER, broader query for finding content enhancement information about: {submodule_title}
+
+Requirements:
+- Use fewer, more common keywords
+- Remove technical jargon if present
+- Make the query broader to ensure results
+- Focus on educational/tutorial content
+- Maximum 4-5 keywords
+
+New Query: """
+        
+        prompt = ChatPromptTemplate.from_template(regeneration_prompt)
+        
+        # Simple string-based regeneration
+        llm = get_llm_for_evaluation(key_provider=google_key_provider, user=state.get('user'))
+        
+        response = await llm.ainvoke(prompt.format(
+            failed_query=failed_query.keywords,
+            submodule_title=submodule.title if submodule else "educational content"
+        ))
+        
+        # Extract the new query from response
+        new_query_text = response.content.strip()
+        if new_query_text.startswith("New Query:"):
+            new_query_text = new_query_text.replace("New Query:", "").strip()
+        
+        from backend.models.models import SearchQuery
+        new_query = SearchQuery(
+            keywords=new_query_text,
+            rationale=f"Regenerated simpler query for content refinement (original: {failed_query.keywords})"
+        )
+        
+        logger.info(f"Regenerated content refinement query: {new_query.keywords}")
+        return new_query
+        
+    except Exception as e:
+        logger.exception(f"Error regenerating content refinement query: {str(e)}")
+        return None
+
+async def develop_enhanced_content(
+    state: LearningPathState,
+    module_id: int,
+    sub_id: int,
+    module: EnhancedModule,
+    submodule: Submodule,
+    current_content: str,
+    refinement_search_results: List[SearchServiceResult]
+) -> str:
+    """
+    Enhances existing content with new information from refinement searches.
+    This performs ENHANCEMENT rather than complete regeneration.
+    """
+    logger = logging.getLogger("learning_path.content_enhancer")
+    logger.info(f"Enhancing content for submodule {module_id+1}.{sub_id+1}: {submodule.title}")
+    
+    # Get key providers and language settings
+    google_key_provider = state.get("google_key_provider")
+    output_language = state.get('language', 'en')
+    explanation_style = state.get('explanation_style', 'standard')
+    
+    # Import necessary components
+    from backend.core.graph_nodes.helpers import escape_curly_braces, run_chain, get_llm
+    from langchain.prompts import ChatPromptTemplate
+    
+    # Prepare refinement search context
+    refinement_context = ""
+    for result in refinement_search_results:
+        if result.search_provider_error:
+            continue
+        
+        for item in result.results:
+            refinement_context += f"Title: {item.title}\n"
+            refinement_context += f"Content: {item.content[:500]}...\n"  # Limit content length
+            refinement_context += f"URL: {item.url}\n\n"
+    
+    if not refinement_context.strip():
+        logger.warning(f"No useful refinement information found for submodule {module_id+1}.{sub_id+1}, returning original content")
+        return current_content
+    
+    # Content enhancement prompt
+    enhancement_prompt = """# EDUCATIONAL CONTENT ENHANCEMENT SPECIALIST
+
+Your task is to ENHANCE existing educational content by incorporating new information from refinement research.
+
+## ENHANCEMENT CONTEXT
+- Subject Topic: {user_topic}
+- Module: {module_title}
+- Submodule: {submodule_title}
+- Target Style: {explanation_style}
+- Language: {output_language}
+
+## CURRENT CONTENT (TO BE ENHANCED)
+{current_content}
+
+## REFINEMENT INFORMATION (FOR ENHANCEMENT)
+{refinement_context}
+
+## ENHANCEMENT INSTRUCTIONS
+
+### 1. PRESERVE STRUCTURE AND CORE CONTENT
+- Keep the existing content structure and organization
+- Preserve all correct information already present
+- Maintain the original educational flow and progression
+
+### 2. STRATEGIC ENHANCEMENT APPROACH
+- **ENHANCE** rather than rewrite completely
+- Add new information that fills gaps or improves explanations
+- Integrate better examples, analogies, or practical applications
+- Improve clarity where needed without losing technical accuracy
+
+### 3. ENHANCEMENT PRIORITIES
+- Add missing key concepts or details
+- Improve explanations that were unclear or incomplete
+- Insert better examples or real-world applications
+- Enhance technical accuracy with updated information
+- Add practical insights or methodologies
+
+### 4. INTEGRATION GUIDELINES
+- Seamlessly weave new information into existing content
+- Ensure enhanced content flows naturally
+- Maintain consistent tone and style throughout
+- Preserve the educational objectives and learning outcomes
+
+### 5. QUALITY ENHANCEMENT
+- Improve content depth without overwhelming the reader
+- Add clarifying details where concepts were too brief
+- Include practical examples that illustrate key points
+- Enhance pedagogical effectiveness for better learning
+
+## CONTENT STYLE REQUIREMENTS
+{style_description}
+
+## OUTPUT REQUIREMENTS
+Provide the ENHANCED content that:
+- Incorporates the most valuable refinement information
+- Maintains the original structure while improving quality
+- Addresses content gaps identified in evaluation
+- Remains focused on the submodule learning objectives
+- Is more comprehensive, clear, and educationally effective than the original
+
+## IMPORTANT: OUTPUT ONLY THE ENHANCED CONTENT
+Do not include meta-commentary, explanations of changes, or section headers describing the enhancement process.
+"""
+    
+    # Define style descriptions
+    style_descriptions = {
+        "standard": "",  # No specific style instructions for standard
+        "simple": "Use simple vocabulary and sentence structure. Incorporate basic analogies if helpful. Prioritize clarity over technical precision.",
+        "technical": "Use correct technical terms and formal language. Include specific details, mechanisms, and underlying principles.",
+        "example": "Illustrate every key concept with concrete, practical examples. Include relevant code snippets or pseudocode where applicable.",
+        "conceptual": "Emphasize core principles, relationships between ideas, and mental models. Focus on the 'why' behind concepts.",
+        "grumpy_genius": "Adopt a comedic reluctant expert persona while providing clear explanations. Use phrases showing mild intellectual impatience but always follow with correct information."
+    }
+    
+    style_description = style_descriptions.get(explanation_style, "")
+    
+    prompt = ChatPromptTemplate.from_template(enhancement_prompt)
+    
+    try:
+        # Simple string output parser for content enhancement
+        llm = get_llm_for_evaluation(key_provider=google_key_provider, user=state.get('user'))
+        
+        enhanced_content_response = await llm.ainvoke(prompt.format(
+            user_topic=escape_curly_braces(state["user_topic"]),
+            module_title=escape_curly_braces(module.title),
+            submodule_title=escape_curly_braces(submodule.title),
+            explanation_style=explanation_style,
+            output_language=output_language,
+            current_content=escape_curly_braces(current_content),
+            refinement_context=escape_curly_braces(refinement_context),
+            style_description=style_description
+        ))
+        
+        enhanced_content = enhanced_content_response.content.strip()
+        
+        # Ensure we have valid enhanced content
+        if len(enhanced_content) < len(current_content) * 0.8:  # Enhanced content should not be significantly shorter
+            logger.warning(f"Enhanced content seems too short for submodule {module_id+1}.{sub_id+1}, using original content")
+            return current_content
+        
+        logger.info(f"Content successfully enhanced for submodule {module_id+1}.{sub_id+1} (original: {len(current_content)} chars, enhanced: {len(enhanced_content)} chars)")
+        return enhanced_content
+        
+    except Exception as e:
+        logger.exception(f"Error enhancing content for submodule {module_id+1}.{sub_id+1}: {str(e)}")
+        logger.info(f"Returning original content due to enhancement error")
+        return current_content

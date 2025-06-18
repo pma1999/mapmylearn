@@ -318,7 +318,14 @@ if is_production:
     logger.info(f"Running in PRODUCTION mode with allowed origins: {allowed_origins}")
 else:
     # Entorno de desarrollo local
-    allowed_origins = ["http://localhost:3000"]
+    allowed_origins = [
+        "http://localhost:3000",    # Frontend React app
+        "http://localhost:8000",    # Backend FastAPI (for self-requests)
+        "http://127.0.0.1:3000",    # Alternative localhost notation
+        "http://127.0.0.1:8000",    # Alternative localhost notation
+        "http://0.0.0.0:3000",      # Docker/container access
+        "http://0.0.0.0:8000"       # Docker/container access
+    ]
     logger.info("Running in DEVELOPMENT mode with local origins only")
 
 # Añadir middleware CORS con la configuración apropiada

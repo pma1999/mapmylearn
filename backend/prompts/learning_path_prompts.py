@@ -556,6 +556,165 @@ Do not include general search results or low-quality resources.
 """
 
 # =========================================================================
+# Research Evaluation and Refinement Prompts (Following Google Pattern)
+# =========================================================================
+
+RESEARCH_EVALUATION_PROMPT = """
+# EXPERT CURRICULUM RESEARCH EVALUATOR INSTRUCTIONS
+
+Your task is to evaluate whether the current research information is sufficient to create a high-quality, comprehensive learning path for the topic: "{user_topic}".
+
+## LANGUAGE INSTRUCTIONS
+Conduct your analysis and provide responses in {language}.
+
+## CURRENT RESEARCH SUMMARY
+{search_results_summary}
+
+## EVALUATION CRITERIA
+
+Assess the research completeness across these CRITICAL DIMENSIONS for curriculum design:
+
+### 1. FOUNDATIONAL KNOWLEDGE COVERAGE
+- Are fundamental concepts, prerequisites, and core principles adequately covered?
+- Is there sufficient depth on basic building blocks needed for learning progression?
+
+### 2. COMPREHENSIVE TOPIC BREADTH 
+- Are all major sub-domains and essential areas within "{user_topic}" represented?
+- Is coverage balanced across different aspects of the field?
+
+### 3. LOGICAL LEARNING PROGRESSION
+- Is there enough information to understand natural learning sequences and dependencies?
+- Can you determine how concepts build upon each other?
+
+### 4. PRACTICAL APPLICATION INSIGHTS
+- Are real-world applications, examples, and skill development approaches covered?
+- Is there sufficient information about what learners should be able to DO?
+
+### 5. COMPLEXITY AND DEPTH MAPPING
+- Is there information covering different skill levels (beginner to advanced)?
+- Are challenging areas and common learning obstacles identified?
+
+### 6. STRUCTURED TEACHING APPROACHES
+- Is there insight into how this topic is typically taught or organized?
+- Are there examples of successful curriculum structures or pedagogical approaches?
+
+## EVALUATION PROCESS
+
+1. **Analyze Research Quality**: Review the depth, authority, and comprehensiveness of current research
+2. **Identify Coverage Gaps**: Pinpoint specific areas where information is insufficient or missing
+3. **Assess Curriculum Readiness**: Determine if current information can support high-quality module design
+4. **Calculate Confidence**: Rate your confidence in the research completeness (0.0-1.0 scale)
+
+## SUFFICIENCY STANDARDS
+
+Research is considered SUFFICIENT when:
+- All 6 critical dimensions have adequate coverage for curriculum design
+- Enough specific information exists to create detailed, well-structured modules
+- No major knowledge gaps would result in superficial or incomplete learning modules
+- Confidence level is 0.7 or higher
+
+Research is INSUFFICIENT when:
+- Any critical dimension lacks adequate coverage
+- Key areas have only surface-level information
+- Major gaps would compromise learning module quality
+- Confidence level is below 0.7
+
+## KNOWLEDGE GAP IDENTIFICATION
+
+If research is insufficient, identify specific gaps using this format:
+- "Insufficient coverage of [specific area] for [specific curriculum design need]"
+- "Missing information about [specific aspect] needed to [specific design goal]"
+- "Superficial treatment of [specific topic] requires deeper research for [specific reason]"
+
+Be specific and actionable - these gaps will guide targeted follow-up research.
+
+## OUTPUT REQUIREMENTS
+
+Provide your evaluation in the following structured format:
+
+{format_instructions}
+"""
+
+REFINEMENT_QUERY_GENERATION_PROMPT = """
+# EXPERT RESEARCH REFINEMENT SPECIALIST INSTRUCTIONS
+
+Your task is to generate targeted search queries that will address specific knowledge gaps identified in the current research for the topic: "{user_topic}".
+
+## LANGUAGE INSTRUCTIONS
+- Generate analysis in {language}
+- Create search queries in {search_language} to maximize information quality
+
+## KNOWLEDGE GAPS TO ADDRESS
+{knowledge_gaps}
+
+## EXISTING SEARCH QUERIES (Avoid Redundancy)
+{existing_queries}
+
+## REFINEMENT STRATEGY
+
+### 1. GAP-SPECIFIC TARGETING
+For each knowledge gap, design queries that:
+- Target the specific missing information precisely
+- Use terminology likely to find authoritative, detailed sources
+- Focus on curriculum design and educational structure insights
+- Avoid redundancy with existing searches
+
+### 2. AUTHORITATIVE SOURCE OPTIMIZATION
+Structure queries to find:
+- Academic syllabi and curriculum documents
+- Educational frameworks and standards
+- Expert discussions and pedagogical research
+- Comprehensive guides and authoritative references
+- Structured learning approaches and methodologies
+
+### 3. DEPTH AND SPECIFICITY BALANCE
+- Make queries specific enough to address the exact gaps
+- Keep them broad enough to return useful results
+- Target different types of authoritative sources
+- Ensure each query addresses a distinct aspect of the gaps
+
+## SEARCH QUERY REQUIREMENTS
+
+Generate 3-5 targeted search queries that:
+
+### Query Design Rules:
+- **QUOTE USAGE RULE: NEVER use more than ONE quoted phrase per query**
+- Quotes are ONLY for essential multi-word concepts that MUST be searched together
+- **DO NOT quote every keyword** - combine specific terms without quotes
+- **Getting some relevant gap-filling results is ALWAYS better than zero results from excessive quoting**
+
+### Examples of Proper Query Formation:
+- BAD (Too many quotes): "curriculum structure" "learning progression" "educational framework"
+- GOOD (One quote): "curriculum structure" learning progression educational framework
+- GOOD (No quotes): curriculum structure learning progression educational framework design
+
+### Target Content Types:
+- Educational curriculum documents and syllabi
+- Pedagogical research and teaching methodologies  
+- Learning progression frameworks and standards
+- Expert discussions on teaching approaches
+- Comprehensive educational resources and guides
+
+### Gap Alignment:
+- Each query must target specific identified knowledge gaps
+- Queries should complement rather than duplicate existing searches
+- Focus on filling the most critical information voids
+- Target information needed for comprehensive curriculum design
+
+## TARGETING STRATEGY EXPLANATION
+
+Provide a clear explanation of how your query set:
+- Strategically addresses each identified knowledge gap
+- Complements existing research without redundancy
+- Targets authoritative educational sources
+- Will likely yield curriculum-relevant information
+
+## OUTPUT REQUIREMENTS
+
+{format_instructions}
+"""
+
+# =========================================================================
 # Submodule Chatbot Prompts
 # =========================================================================
 
@@ -654,4 +813,191 @@ Submodule Description: {submodule_description}
 5.  **Language Flexibility:** Default to {language}. However, if the user communicates consistently in another language, adapt and respond in that language for a better experience. Prioritize the user's active language.
 6.  **Handle Ambiguity:** If a question is unclear, ask for clarification before providing an answer.
 7.  **Completeness within Scope:** Answer the user's query fully based on the available information (submodule content, research materials, and allowed general knowledge). If the information isn't available within your scope, state that.
+"""
+
+# =========================================================================
+# Content Evaluation and Refinement Prompts (Following Google Pattern for Content Quality)
+# =========================================================================
+
+CONTENT_EVALUATION_PROMPT = """# EXPERT EDUCATIONAL CONTENT EVALUATOR INSTRUCTIONS
+
+Your task is to rigorously evaluate educational content across multiple critical dimensions to determine if it meets high-quality educational standards for effective learning.
+
+## CONTENT EVALUATION CONTEXT
+- Subject Topic: {user_topic}
+- Module: {module_title}
+- Submodule: {submodule_title}
+- Submodule Description: {submodule_description}
+- Content Depth Level: {depth_level}
+- Target Learning Style: {explanation_style}
+
+## CONTENT TO EVALUATE
+{submodule_content}
+
+## EVALUATION FRAMEWORK
+Assess the content quality across these critical dimensions:
+
+### 1. DEPTH AND COMPLETENESS
+- Does the content adequately cover the submodule topic with appropriate depth?
+- Are key concepts, principles, and mechanisms explained thoroughly?
+- Are there missing fundamental elements that should be included?
+- Does the depth match the specified level and learning requirements?
+
+### 2. CLARITY AND ACCESSIBILITY
+- Is the content clearly written and well-structured?
+- Are complex concepts explained in an understandable manner?
+- Is the logical flow and progression appropriate?
+- Are explanations accessible for the intended learning style?
+
+### 3. ACCURACY AND PRECISION
+- Is the technical information accurate and up-to-date?
+- Are concepts and terminology used correctly?
+- Are there any factual errors or misleading statements?
+- Does the content reflect current best practices?
+
+### 4. EDUCATIONAL EFFECTIVENESS
+- Does the content support meaningful learning outcomes?
+- Are examples and illustrations helpful and relevant?
+- Is the content engaging and well-organized for learning?
+- Does it provide sufficient context and practical applications?
+
+### 5. COMPREHENSIVENESS
+- Are all essential aspects of the submodule topic covered?
+- Are important subtopics or related concepts addressed?
+- Is there a good balance between theory and practical application?
+- Are prerequisites and follow-up connections clear?
+
+### 6. PEDAGOGICAL QUALITY
+- Does the content follow sound educational principles?
+- Is information presented in a logical learning sequence?
+- Are there appropriate transitions and connections between concepts?
+- Does it facilitate understanding and retention?
+
+## EVALUATION CRITERIA
+Rate the content on whether it meets **high-quality educational standards** suitable for effective learning. Consider:
+- **SUFFICIENT**: Content is comprehensive, clear, accurate, and educationally effective
+- **INSUFFICIENT**: Content has significant gaps, unclear explanations, or pedagogical weaknesses
+
+## QUALITY THRESHOLD
+Set the bar HIGH. Content should be:
+- Educationally sound and effective for learning
+- Comprehensive enough to achieve stated learning objectives
+- Clear and accessible to the intended audience
+- Technically accurate and current
+- Well-structured with good pedagogical flow
+
+## OUTPUT REQUIREMENTS
+Provide a thorough, objective evaluation determining whether the content meets these high educational standards. If content is insufficient, identify specific gaps and improvement areas that would make it educationally effective.
+
+{format_instructions}
+"""
+
+CONTENT_REFINEMENT_QUERY_GENERATION_PROMPT = """# EXPERT CONTENT ENHANCEMENT RESEARCHER INSTRUCTIONS
+
+Your task is to generate highly targeted search queries to address specific content quality gaps and enhance educational material to meet high educational standards.
+
+## CONTENT REFINEMENT CONTEXT
+- Subject Topic: {user_topic}
+- Module: {module_title}
+- Submodule: {submodule_title}
+- Content Evaluation Status: {content_status}
+- Current Content Loop: {current_loop}/{max_loops}
+
+## IDENTIFIED CONTENT GAPS
+{content_gaps}
+
+## IMPROVEMENT AREAS NEEDED
+{improvement_areas}
+
+## CURRENT CONTENT ASSESSMENT
+### Depth Assessment:
+{depth_assessment}
+
+### Clarity Assessment:
+{clarity_assessment}
+
+### Quality Issues:
+{quality_issues}
+
+## EXISTING RESEARCH FOUNDATION
+### Previous Search Queries:
+{existing_queries}
+
+### Available Information:
+{current_research_summary}
+
+## CONTENT ENHANCEMENT MISSION
+Generate precise, targeted search queries that will find specific information to enhance the educational content and address the identified quality gaps.
+
+## REFINEMENT QUERY STRATEGY
+
+### 1. Gap-Specific Enhancement
+- Target each specific content deficiency with focused queries
+- Seek information that directly improves the identified weak areas
+- Look for deeper explanations, better examples, or clearer methodologies
+
+### 2. Quality Enhancement Focus
+- Find supplementary information that enhances content depth
+- Seek better pedagogical approaches and explanations
+- Look for practical examples, case studies, and real-world applications
+
+### 3. Educational Effectiveness
+- Target information that improves learning outcomes
+- Seek content that enhances clarity and understanding
+- Look for better ways to explain complex concepts
+
+### 4. Complementary Research
+- Build on existing information rather than duplicating it
+- Find perspectives or details not covered in current research
+- Seek information that fills specific educational gaps
+
+### 5. Content Type Targeting
+- Seek explanation methodologies and teaching approaches
+- Look for practical examples and demonstration techniques
+- Find analogies, visualizations, or frameworks that aid understanding
+
+## SEARCH QUERY REQUIREMENTS
+
+Generate 2-4 targeted search queries that:
+
+### Query Design Rules:
+- **QUOTE USAGE RULE: NEVER use more than ONE quoted phrase per query**
+- Quotes are ONLY for essential multi-word technical concepts that MUST be searched together
+- **DO NOT quote every keyword** - combine specific terms without quotes
+- **Getting relevant enhancement information is ALWAYS better than zero results from excessive quoting**
+
+### Examples of Proper Query Formation:
+- BAD (Too many quotes): "tutorial explanation" "practical examples" "step by step"
+- GOOD (One quote): "tutorial explanation" practical examples step by step guide
+- GOOD (No quotes): tutorial explanation practical examples step by step guide methods
+
+### Target Content Types:
+- Detailed explanations and clarification methods
+- Practical examples and real-world applications
+- Educational approaches and pedagogical techniques
+- Visual aids, analogies, and demonstration methods
+- Case studies and implementation examples
+
+### Enhancement Goals:
+- Address specific content gaps identified
+- Improve clarity and accessibility
+- Add practical examples and applications
+- Enhance pedagogical effectiveness
+- Fill missing educational elements
+
+## TARGETING STRATEGY EXPLANATION
+Provide a clear explanation of how your query set:
+- Strategically addresses each identified content gap
+- Complements existing content research without redundancy
+- Targets information for educational enhancement
+- Will likely yield content improvement materials
+
+## SEARCH LANGUAGE STRATEGY
+- Search queries in {search_language} for maximum information quality
+- Final enhanced content will be presented in {output_language}
+- Consider technical terminology and specialized educational resources
+
+## OUTPUT REQUIREMENTS
+
+{format_instructions}
 """

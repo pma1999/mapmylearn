@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field, HttpUrl
 from typing import List, Dict, Any, Optional, TypedDict, Annotated, Callable, TYPE_CHECKING, Tuple
+import operator
 
 # Import the key provider types but only for type checking
 if TYPE_CHECKING:  
@@ -136,14 +137,40 @@ class SearchServiceResult(BaseModel):
     results: List[ScrapedResult] = Field(default_factory=list, description="List of scraped results for the query")
     search_provider_error: Optional[str] = Field(default=None, description="Error from the search provider API (e.g., Brave)")
 
+# Research Evaluation Models (for self-reflection loop following Google pattern)
+class ResearchEvaluation(BaseModel):
+    is_sufficient: bool = Field(..., description="Whether current research is sufficient for quality course planning")
+    knowledge_gaps: List[str] = Field(default_factory=list, description="Specific areas needing deeper research")
+    confidence_score: float = Field(ge=0.0, le=1.0, default=0.5, description="Confidence in research completeness (0.0-1.0)")
+    rationale: str = Field(..., description="Detailed explanation of the sufficiency assessment")
+
+class RefinementQueryList(BaseModel):
+    queries: List[SearchQuery] = Field(..., description="Follow-up search queries to address knowledge gaps")
+    targeting_strategy: str = Field(..., description="Strategy for targeting identified knowledge gaps")
+
+# Content Evaluation Models (for content refinement loop following Google pattern)
+class ContentEvaluation(BaseModel):
+    is_sufficient: bool = Field(..., description="Whether content meets quality standards for educational effectiveness")
+    content_gaps: List[str] = Field(default_factory=list, description="Specific content deficiencies and missing elements")
+    confidence_score: float = Field(ge=0.0, le=1.0, default=0.5, description="Quality confidence score (0.0-1.0)")
+    improvement_areas: List[str] = Field(default_factory=list, description="Areas needing enhancement or clarification")
+    depth_assessment: str = Field(..., description="Analysis of content depth and technical coverage")
+    clarity_assessment: str = Field(..., description="Analysis of content clarity and accessibility")
+    rationale: str = Field(..., description="Detailed evaluation reasoning and quality analysis")
+
+class ContentRefinementQueryList(BaseModel):
+    queries: List[SearchQuery] = Field(..., description="Targeted queries for content improvement and gap filling")
+    targeting_strategy: str = Field(..., description="Strategy for addressing identified content gaps")
+    focus_areas: List[str] = Field(..., description="Specific content areas being targeted for enhancement")
+
 # Global State for the Graph (TypedDict)
 class LearningPathState(TypedDict):
     user_topic: str
     user: Optional[Any]  # User object for model selection
     topic_analysis: Optional[TopicAnalysis]
     module_planning: Optional[ModulePlanning]
-    search_queries: Optional[List[SearchQuery]]
-    search_results: Optional[List[SearchServiceResult]]
+    search_queries: Annotated[List[SearchQuery], operator.add]  # Changed to accumulative for research loop
+    search_results: Annotated[List[SearchServiceResult], operator.add]  # Changed to accumulative for research loop
     modules: Optional[List[Module]]
     steps: Annotated[List[str], ...]
     current_module_index: Optional[int]
@@ -168,6 +195,22 @@ class LearningPathState(TypedDict):
     quiz_questions_by_submodule: Optional[Dict[str, List[QuizQuestion]]]
     quiz_generation_in_progress: Optional[Dict[str, bool]]
     quiz_generation_errors: Optional[Dict[str, str]]
+    # Research evaluation loop control (following Google pattern)
+    research_loop_count: Optional[int]  # Counter for research iterations
+    max_research_loops: Optional[int]  # Maximum allowed research iterations (default 3)
+    is_research_sufficient: Optional[bool]  # Whether research is deemed sufficient
+    research_knowledge_gaps: Optional[List[str]]  # Identified knowledge gaps
+    research_confidence_score: Optional[float]  # Confidence in current research (0.0-1.0)
+    refinement_queries: Optional[List[SearchQuery]]  # Queries generated to address gaps
+    # Content evaluation loop control (following Google pattern for content refinement)
+    content_search_queries: Annotated[List[SearchQuery], operator.add]  # Accumulative content search queries
+    content_search_results: Annotated[List[SearchServiceResult], operator.add]  # Accumulative content search results
+    content_loop_count: Optional[int]  # Counter for content refinement iterations
+    max_content_loops: Optional[int]  # Maximum allowed content refinement iterations (default 2)
+    is_content_sufficient: Optional[bool]  # Whether content quality is deemed sufficient
+    content_gaps: Optional[List[str]]  # Identified content gaps and deficiencies
+    content_confidence_score: Optional[float]  # Confidence in content quality (0.0-1.0)
+    content_refinement_queries: Optional[List[SearchQuery]]  # Queries generated for content improvement
     # Key provider references instead of direct API keys
     google_key_provider: Optional[Any]  # GoogleKeyProvider but avoiding import cycles
     pplx_key_provider: Optional[Any]    # PerplexityKeyProvider but avoiding import cycles

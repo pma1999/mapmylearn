@@ -17,14 +17,25 @@ async def generate_search_queries(state: LearningPathState) -> Dict[str, Any]:
     """
     Generates optimal search queries for the user topic using an LLM chain.
     Enhanced with better error handling and JSON extraction.
+    Also initializes research loop control parameters.
     
     Args:
         state: The current LearningPathState with 'user_topic'.
         
     Returns:
-        A dictionary containing the generated search queries and a list of execution steps.
+        A dictionary containing the generated search queries, research loop initialization, and execution steps.
     """
     logging.info(f"Generating search queries for topic: {state['user_topic']}")
+    
+    # Initialize research loop control parameters (following Google pattern)
+    research_loop_initialization = {
+        'research_loop_count': 0,  # Start at 0, will be incremented in evaluation
+        'max_research_loops': 3,   # Default maximum research iterations
+        'is_research_sufficient': False,  # Initial assumption
+        'research_knowledge_gaps': [],    # Will be populated by evaluation
+        'research_confidence_score': 0.0, # Will be set by evaluation
+        'refinement_queries': []          # Will be populated by refinement generation
+    }
     
     # Send progress update if callback is available
     progress_callback = state.get('progress_callback')
@@ -151,10 +162,14 @@ Do not wrap your response in markdown code blocks. Return only the JSON object."
                 action="completed"
             )
         
-        return {
+        # Combine research loop initialization with search query results
+        result = {
             "search_queries": search_queries,
             "steps": [f"Generated {len(search_queries)} search queries for topic: {state['user_topic']}"]
         }
+        result.update(research_loop_initialization)
+        
+        return result
         
     except Exception as e:
         logging.error(f"Error generating search queries: {str(e)}")
@@ -173,10 +188,14 @@ Do not wrap your response in markdown code blocks. Return only the JSON object."
                     action="completed"
                 )
             
-            return {
+            # Include research loop initialization even for fallback
+            result = {
                 "search_queries": fallback_queries,
                 "steps": [f"Generated {len(fallback_queries)} fallback search queries due to error: {str(e)}"]
             }
+            result.update(research_loop_initialization)
+            
+            return result
             
         except Exception as fallback_error:
             logging.error(f"Fallback query generation also failed: {str(fallback_error)}")
@@ -190,8 +209,12 @@ Do not wrap your response in markdown code blocks. Return only the JSON object."
                     overall_progress=0.2,
                     action="error"
                 )
-                
-            return {"search_queries": [], "steps": [f"Error: {str(e)}"]}
+            
+            # Include research loop initialization even for errors
+            result = {"search_queries": [], "steps": [f"Error: {str(e)}"]}
+            result.update(research_loop_initialization)
+            
+            return result
 
 async def generate_fallback_queries(state: LearningPathState) -> List[SearchQuery]:
     """

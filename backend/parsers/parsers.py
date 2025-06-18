@@ -8,7 +8,11 @@ from backend.models.models import (
     ModulePlanning, 
     QuizQuestionList,
     ResourceList,
-    ResourceQuery
+    ResourceQuery,
+    ResearchEvaluation,
+    RefinementQueryList,
+    ContentEvaluation,
+    ContentRefinementQueryList
 )
 
 search_queries_parser = PydanticOutputParser(pydantic_object=SearchQueryList)
@@ -21,3 +25,7 @@ enhanced_modules_parser = PydanticOutputParser(pydantic_object=EnhancedModuleLis
 quiz_questions_parser = PydanticOutputParser(pydantic_object=QuizQuestionList)
 resource_list_parser = PydanticOutputParser(pydantic_object=ResourceList)
 resource_query_parser = PydanticOutputParser(pydantic_object=ResourceQuery)
+research_evaluation_parser = PydanticOutputParser(pydantic_object=ResearchEvaluation)
+refinement_query_parser = PydanticOutputParser(pydantic_object=RefinementQueryList)
+content_evaluation_parser = PydanticOutputParser(pydantic_object=ContentEvaluation)
+content_refinement_query_parser = PydanticOutputParser(pydantic_object=ContentRefinementQueryList)

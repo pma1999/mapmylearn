@@ -236,6 +236,59 @@ async def get_llm(key_provider=None, user=None):
         logger.error(f"Error initializing ChatGoogleGenerativeAI: {str(e)}")
         raise
 
+async def get_llm_for_evaluation(key_provider=None, user=None):
+    """
+    Initialize the Google Gemini LLM specifically for evaluations (research and content).
+    Always uses gemini-2.0-flash regardless of user to ensure consistent evaluation quality.
+    
+    Args:
+        key_provider: KeyProvider object for Google API key (or direct API key as string)
+        user: User object (optional, not used for model selection in evaluations)
+        
+    Returns:
+        Initialized ChatGoogleGenerativeAI instance with gemini-2.0-flash
+    """
+    google_api_key = None
+    
+    # Handle different input types
+    if hasattr(key_provider, 'get_key') and callable(key_provider.get_key):
+        # It's a KeyProvider
+        try:
+            google_api_key = await key_provider.get_key()
+            logger.debug("Retrieved Google API key from provider for evaluation")
+        except Exception as e:
+            logger.error(f"Error retrieving Google API key from provider: {str(e)}")
+            raise
+    elif isinstance(key_provider, str):
+        # Direct API key
+        google_api_key = key_provider
+        logger.debug("Using provided Google API key directly for evaluation")
+    else:
+        # Fallback to environment
+        google_api_key = os.environ.get("GOOGLE_API_KEY")
+        if not google_api_key:
+            logger.warning("GOOGLE_API_KEY not set in environment")
+        else:
+            logger.debug("Using Google API key from environment for evaluation")
+    
+    if not google_api_key:
+        raise ValueError("No Google API key available from any source")
+    
+    # Always use gemini-2.0-flash for evaluations for consistency
+    model = "gemini-2.0-flash"
+    logger.info(f"Using gemini-2.0-flash for evaluation (user: {getattr(user, 'email', 'unknown')})")
+    
+    try:
+        return ChatGoogleGenerativeAI(
+            model=model,
+            temperature=0.2,
+            google_api_key=google_api_key,
+            max_output_tokens=8192,
+        )
+    except Exception as e:
+        logger.error(f"Error initializing ChatGoogleGenerativeAI for evaluation: {str(e)}")
+        raise
+
 def _get_model_for_user(user):
     """
     Determine the appropriate Gemini model based on user.
