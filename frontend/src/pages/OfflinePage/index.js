@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Typography, List, ListItem, ListItemButton, ListItemText, Divider, IconButton } from '@mui/material';
+import { Box, Typography, List, ListItem, ListItemButton, ListItemText, Divider, IconButton, Button } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { Link as RouterLink } from 'react-router';
 import { getOfflinePaths, removeOfflinePath } from '../../services/offlineService';
+import { usePwaIntro } from '../../contexts/PwaIntroContext';
 
 const OfflinePage = () => {
   const [paths, setPaths] = useState([]);
+  const { openPwaIntro } = usePwaIntro();
 
   useEffect(() => {
     const data = getOfflinePaths();
@@ -20,9 +22,14 @@ const OfflinePage = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h5" gutterBottom>
-        Offline Learning Paths
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+        <Typography variant="h5" gutterBottom sx={{ mr: 2 }}>
+          Offline Learning Paths
+        </Typography>
+        <Button size="small" variant="outlined" onClick={openPwaIntro}>
+          App Tips
+        </Button>
+      </Box>
       {paths.length === 0 ? (
         <Typography>No offline courses saved.</Typography>
       ) : (

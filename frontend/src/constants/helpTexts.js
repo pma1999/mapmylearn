@@ -35,6 +35,12 @@ export const helpTexts = {
   submoduleTabAudio: (cost) => `Generate a spoken audio summary of this content (costs ${cost} credit).`,
   submoduleTabVisualization: (cost) => `Generate an interactive diagram of this submodule's content (costs ${cost} credit).`,
 
+  // PWA Intro Modal
+  pwaIntroTitle: "MapMyLearn on your device",
+  pwaInstall: "Install the app from your browser menu for a full-screen experience.",
+  pwaOfflineUsage: "Use the Offline page to access saved courses without an internet connection.",
+  pwaIntroGotIt: "Got it!",
+
   // Tooltip Defaults
   defaultInfoAlt: "More information",
-}; 
+};
