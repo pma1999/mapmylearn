@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { Container, Box } from '@mui/material';
+import { Box, useMediaQuery, useTheme } from '@mui/material';
 import { Analytics } from "@vercel/analytics/react";
 
 // Import components
@@ -21,6 +21,8 @@ import routesConfig from './routesConfig';
 
 // Import new components
 import WelcomeModal from './components/shared/WelcomeModal';
+import PwaIntroModal from './components/shared/PwaIntroModal';
+import PwaIntroContext from './contexts/PwaIntroContext';
 
 // Import the theme
 import theme from './theme/theme';
@@ -30,11 +32,29 @@ import GeneratingPage from './pages/GeneratingPage';
 // --- End import ---
 
 // New component to render routes and modal
+const PWA_FLAG_KEY = 'mapmylearn_pwa_intro_shown';
+
 const AppContent = () => {
   const { showWelcomeModal, markWelcomeModalShown } = useAuth();
+  const theme = useTheme();
+  const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
+  const [showPwaIntro, setShowPwaIntro] = useState(false);
+
+  useEffect(() => {
+    if (isSmallScreen && !localStorage.getItem(PWA_FLAG_KEY)) {
+      setShowPwaIntro(true);
+    }
+  }, [isSmallScreen]);
+
+  const handleClosePwaIntro = () => {
+    localStorage.setItem(PWA_FLAG_KEY, 'true');
+    setShowPwaIntro(false);
+  };
+
+  const openPwaIntro = () => setShowPwaIntro(true);
 
   return (
-    <>
+    <PwaIntroContext.Provider value={{ openPwaIntro }}>
       <Box sx={{ flexGrow: 1 }}>
         <Routes>
           {routesConfig.map((route, index) => {
@@ -79,7 +99,8 @@ const AppContent = () => {
         </Routes>
       </Box>
       <WelcomeModal open={showWelcomeModal} onClose={markWelcomeModalShown} />
-    </>
+      <PwaIntroModal open={showPwaIntro} onClose={handleClosePwaIntro} />
+    </PwaIntroContext.Provider>
   );
 }
 
