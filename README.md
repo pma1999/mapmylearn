@@ -62,6 +62,20 @@ Accessing MapMyLearn is simple:
 4.  **Learn:** Explore your personalized path, read content, take quizzes, chat with the AI tutor, and generate audio summaries.
 5.  **Save & Organize:** Save paths you like to your history, add tags, and mark favorites.
 
+## 📱 Mobile App & Offline Mode
+
+MapMyLearn is a **Progressive Web App (PWA)**. You can install it on your mobile device and keep courses available even when you're offline.
+
+### Install to your home screen
+
+1. Open [https://mapmylearn.com](https://mapmylearn.com) in your mobile browser.
+2. Use the browser menu and select **Add to Home Screen**.
+
+### Save courses for offline use
+
+1. While viewing a course, click the **Offline** button.
+2. Access saved courses anytime from the **Offline** menu item or by visiting `/offline`.
+
 ## 💰 Credits Explained
 
 *   **What they are:** Credits are used to access generation features.
