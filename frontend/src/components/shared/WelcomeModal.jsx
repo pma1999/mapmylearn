@@ -84,7 +84,7 @@ const WelcomeModal = ({ open, onClose }) => {
         <Stepper activeStep={activeStep} alternativeLabel={isMobile} sx={{ width: '100%', mb: 2 }}>
           {steps.map((step, index) => (
             <Step key={step.label}>
-              <StepLabel sx={{ '.MuiStepLabel-label': { fontSize: '0.8rem' } }} />
+              <StepLabel sx={{ '.MuiStepLabel-label': { fontSize: '0.8rem' } }}>{step.label}</StepLabel>
             </Step>
           ))}
         </Stepper>
