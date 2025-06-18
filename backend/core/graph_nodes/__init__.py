@@ -22,10 +22,11 @@ from .submodules import (
     check_submodule_batch_processing,
     # Content refinement loop functions (following Google pattern)
     develop_submodule_content_with_refinement_loop,
-    initialize_content_loop_control,
     evaluate_content_sufficiency,
     check_content_adequacy,
+    check_content_adequacy_local,
     generate_content_refinement_queries,
+    generate_content_refinement_queries_local,
     execute_content_refinement_searches,
     regenerate_content_refinement_query,
     develop_enhanced_content
