@@ -47,6 +47,12 @@ const AppContent = () => {
   const [pwaCapabilities, setPwaCapabilities] = useState(null);
   const [tutorialTracker] = useState(() => createTutorialTracker(TUTORIAL_VERSION));
 
+  // Detect PWA capabilities universally (regardless of tutorial state)
+  useEffect(() => {
+    const capabilities = detectPWACapabilities();
+    setPwaCapabilities(capabilities);
+  }, []);
+
   // Enhanced PWA tutorial trigger logic
   useEffect(() => {
     const shouldShowTutorial = () => {
@@ -55,10 +61,6 @@ const AppContent = () => {
       
       // Don't show if user has completed the current tutorial version
       if (tutorialTracker.hasCompleted()) return false;
-      
-      // Detect PWA capabilities
-      const capabilities = detectPWACapabilities();
-      setPwaCapabilities(capabilities);
       
       // Clean up legacy flag to force re-display for existing users
       if (localStorage.getItem(LEGACY_PWA_FLAG_KEY)) {

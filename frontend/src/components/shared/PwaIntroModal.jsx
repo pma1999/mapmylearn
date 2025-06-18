@@ -148,7 +148,8 @@ const PwaIntroModal = ({ open, onClose }) => {
         try {
           const isInstalled = await checkInstalledRelatedApps();
           if (mounted) {
-            setInstallationVerified(isInstalled || pwaCapabilities.isInstalled);
+            const newInstallationVerified = isInstalled || pwaCapabilities.isInstalled;
+            setInstallationVerified(newInstallationVerified);
             setIsCheckingInstallation(false);
             
             if (isInstalled && !installationVerified) {
@@ -170,7 +171,7 @@ const PwaIntroModal = ({ open, onClose }) => {
     return () => {
       mounted = false;
     };
-  }, [activeStep, pwaCapabilities, installationVerified]);
+  }, [activeStep, pwaCapabilities]);
 
   const handleNext = useCallback(() => {
     if (activeStep < PWA_TUTORIAL_STEPS.length - 1) {
