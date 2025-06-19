@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.tools import BraveSearch # Replaced TavilySearch
 from langchain_core.messages import AIMessage
-from typing import Optional, Union, Tuple, Any
+from typing import Optional, Union, Tuple, Any, Dict, List
 from bs4 import BeautifulSoup
 import trafilatura # Added for HTML extraction
 
@@ -46,7 +46,7 @@ except ImportError:
     logging.warning("LangSmith not available, tracing will be disabled for grounded LLM")
 
 # Import models directly for runtime use
-from backend.models.models import SearchServiceResult, ScrapedResult
+from backend.models.models import SearchServiceResult, ScrapedResult, GoogleSearchMetadata, LearningPathState
 
 # Import key provider for type hints but with proper import protection
 from typing import TYPE_CHECKING
@@ -839,6 +839,599 @@ class GroundedGeminiWrapper(Runnable[Any, AIMessage]):
                 content="Error processing grounded response",
                 additional_kwargs={'error': str(e)}
             )
+
+# =========================================================================
+# Search Services Architecture for Hybrid Pipeline
+# =========================================================================
+
+class GoogleNativeSearchService:
+    """
+    Native Google Search service using official Google GenAI SDK with grounding.
+    Provides search functionality without external scraping for premium users.
+    Now enhanced with scraping capabilities to provide full content.
+    """
+    
+    def __init__(self):
+        self.logger = logging.getLogger("GoogleNativeSearchService")
+        
+        if not GOOGLE_GENAI_AVAILABLE or genai is None:
+            raise ValueError("Google GenAI SDK not available for native search service")
+        
+        # Initialize LangSmith client for search tracing
+        self.langsmith_client = None
+        if LANGSMITH_AVAILABLE and LangSmithClient:
+            try:
+                self.langsmith_client = LangSmithClient()
+                self.logger.debug("LangSmith client initialized for Google Search native tracing")
+            except Exception as e:
+                self.logger.warning(f"Failed to initialize LangSmith client for search: {e}")
+                self.langsmith_client = None
+    
+    async def perform_search(
+        self, 
+        query: str, 
+        google_key_provider=None, 
+        user=None,
+        max_results: int = 5,
+        scrape_timeout: int = 10,
+        langsmith_extra: Dict[str, Any] = None,
+        **kwargs
+    ) -> 'SearchServiceResult':
+        """
+        Perform native Google Search using the official Google GenAI SDK.
+        
+        Args:
+            query: The search query string
+            google_key_provider: Provider for Google API key
+            user: User object for model selection
+            max_results: Maximum number of results (used for context in prompt)
+            scrape_timeout: Timeout for scraping operations
+            langsmith_extra: Additional metadata for LangSmith tracing
+            **kwargs: Additional configuration parameters
+            
+        Returns:
+            SearchServiceResult with native Google Search metadata
+        """
+        self.logger.info(f"Executing native Google Search for query: '{query}'")
+        
+        # Initialize LangSmith tracing for this search operation
+        run_tree = None
+        if self.langsmith_client and LANGSMITH_AVAILABLE and RunTree:
+            try:
+                # Prepare metadata for search tracing
+                langsmith_extra = langsmith_extra or {}
+                metadata = langsmith_extra.get('metadata', {})
+                metadata.update({
+                    'user_email': getattr(user, 'email', 'unknown'),
+                    'user_id': getattr(user, 'id', 'unknown'),
+                    'search_query': query,
+                    'search_type': 'google_native_search',
+                    'max_results': max_results,
+                    'service': 'GoogleNativeSearchService'
+                })
+                
+                run_tree = RunTree(
+                    name=langsmith_extra.get('name', 'GoogleNativeSearch'),
+                    run_type='tool',
+                    inputs={'query': query, 'max_results': max_results},
+                    metadata=metadata,
+                    tags=langsmith_extra.get('tags', ['google_search', 'native_search', 'premium_feature']),
+                    project_name=langsmith_extra.get('project_name', os.environ.get('LANGSMITH_PROJECT', 'default'))
+                )
+                
+                # Post the run to start tracing
+                await asyncio.get_event_loop().run_in_executor(None, run_tree.post)
+                self.logger.debug(f"Started LangSmith trace for Google Search: {run_tree.id}")
+                
+            except Exception as e:
+                self.logger.warning(f"Failed to create LangSmith trace for search: {e}")
+                run_tree = None
+        
+        try:
+            # Get Google API key
+            google_api_key = await _get_google_api_key(google_key_provider)
+            
+            # Determine model based on user
+            model = _get_model_for_user(user)
+            
+            # Create Google GenAI client
+            client = genai.Client(api_key=google_api_key)
+            
+            # Create optimized search prompt
+            search_prompt = f"""Conduct a comprehensive research search about: {query}
+
+Instructions:
+- Search for the most current, authoritative information available
+- Focus on finding detailed, factual content that would be useful for educational purposes
+- Gather information from diverse, credible sources
+- Synthesize findings into a well-structured research summary
+- Include specific details, examples, and key insights
+- Prioritize recent information and established sources
+
+Search Query: {query}"""
+            
+            # Create child run for the actual Google API call if tracing
+            search_run = None
+            if run_tree and LANGSMITH_AVAILABLE:
+                try:
+                    search_run = run_tree.create_child(
+                        name="GoogleGenAI_Search_Call",
+                        run_type="llm",
+                        inputs={"query": query, "model": model, "prompt": search_prompt}
+                    )
+                    await asyncio.get_event_loop().run_in_executor(None, search_run.post)
+                except Exception as e:
+                    self.logger.warning(f"Failed to create child run for Google Search: {e}")
+                    search_run = None
+            
+            # Execute search with grounding
+            loop = asyncio.get_event_loop()
+            
+            def _sync_search():
+                return client.models.generate_content(
+                    model=model,
+                    contents=search_prompt,
+                    config=GenerateContentConfig(
+                        tools=[Tool(google_search=GoogleSearch())],
+                        response_modalities=["TEXT"],
+                        temperature=0.1,  # Low temperature for factual research
+                    )
+                )
+            
+            # Run in thread executor to avoid blocking
+            response = await loop.run_in_executor(None, _sync_search)
+            
+            # Complete child run if available
+            if search_run:
+                try:
+                    # Extract response details for child run
+                    search_outputs = {
+                        "response_received": True,
+                        "model_used": model
+                    }
+                    
+                    # Add usage data if available
+                    if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                        usage = response.usage_metadata
+                        search_outputs['usage'] = {
+                            'prompt_tokens': getattr(usage, 'prompt_token_count', 0),
+                            'completion_tokens': getattr(usage, 'candidates_token_count', 0),
+                            'total_tokens': getattr(usage, 'total_token_count', 0)
+                        }
+                    
+                    search_run.end(outputs=search_outputs)
+                    await asyncio.get_event_loop().run_in_executor(None, search_run.patch)
+                except Exception as e:
+                    self.logger.warning(f"Failed to complete child run for Google Search: {e}")
+            
+            # Process the response, now including scraping
+            result = await self._process_google_response(response, query, scrape_timeout, run_tree)
+            
+            # Complete main trace if available
+            if run_tree:
+                try:
+                    # Extract comprehensive trace outputs
+                    trace_outputs = {
+                        'search_query': query,
+                        'sources_found': result.grounding_metadata.grounding_sources if result.grounding_metadata else 0,
+                        'search_successful': not bool(result.search_provider_error),
+                        'result_type': 'google_native_search'
+                    }
+                    
+                    if result.grounding_metadata:
+                        trace_outputs.update({
+                            'search_queries_executed': result.grounding_metadata.web_search_queries,
+                            'grounding_chunks': len(result.grounding_metadata.grounding_chunks),
+                            'has_grounding_metadata': True
+                        })
+                    
+                    if result.search_provider_error:
+                        trace_outputs['error'] = result.search_provider_error
+                    
+                    run_tree.end(outputs=trace_outputs)
+                    await asyncio.get_event_loop().run_in_executor(None, run_tree.patch)
+                    self.logger.info(f"Completed LangSmith trace for Google Search: {run_tree.id}")
+                    
+                except Exception as e:
+                    self.logger.warning(f"Failed to complete LangSmith trace for search: {e}")
+                    if run_tree:
+                        try:
+                            run_tree.end(outputs={'error': str(e)})
+                            await asyncio.get_event_loop().run_in_executor(None, run_tree.patch)
+                        except:
+                            pass
+            
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Error in native Google Search for query '{query}': {str(e)}")
+            
+            # Mark trace as failed if available
+            if run_tree:
+                try:
+                    run_tree.end(outputs={'error': str(e), 'search_successful': False})
+                    await asyncio.get_event_loop().run_in_executor(None, run_tree.patch)
+                except:
+                    pass
+            
+            return SearchServiceResult(
+                query=query,
+                search_provider_error=f"Google Search native error: {str(e)}",
+                is_native_google_search=True
+            )
+    
+    def _extract_grounding_urls(self, response) -> List[Dict[str, str]]:
+        """Extracts real URLs and titles from Google Search grounding metadata."""
+        urls_info = []
+        if not (hasattr(response, 'candidates') and response.candidates):
+            return urls_info
+
+        candidate = response.candidates[0]
+        if not (hasattr(candidate, 'grounding_metadata') and candidate.grounding_metadata):
+            return urls_info
+
+        metadata = candidate.grounding_metadata
+        if not (hasattr(metadata, 'grounding_chunks') and metadata.grounding_chunks):
+            return urls_info
+
+        for chunk in metadata.grounding_chunks:
+            if hasattr(chunk, 'web') and chunk.web:
+                web_source = chunk.web
+                uri = getattr(web_source, 'uri', None)
+                title = getattr(web_source, 'title', 'No Title')
+                if uri:
+                    urls_info.append({'url': uri, 'title': title})
+        
+        self.logger.info(f"Extracted {len(urls_info)} URLs from grounding metadata.")
+        return urls_info
+
+    async def _scrape_grounding_urls(self, urls_info: List[Dict[str, str]], scrape_timeout: int, run_tree=None) -> List[ScrapedResult]:
+        """Scrapes a list of URLs extracted from Google Search grounding metadata."""
+        if not urls_info:
+            return []
+
+        scraping_run = None
+        if run_tree and LANGSMITH_AVAILABLE:
+            try:
+                scraping_run = run_tree.create_child(
+                    name="GoogleSearch_Scraping",
+                    run_type="tool",
+                    inputs={"url_count": len(urls_info)}
+                )
+                await asyncio.get_event_loop().run_in_executor(None, scraping_run.post)
+            except Exception as e:
+                self.logger.warning(f"Failed to create scraping child run: {e}")
+        
+        processed_results = []
+        async with aiohttp.ClientSession() as session:
+            sem = asyncio.Semaphore(3)
+
+            async def bounded_scrape(url_info: Dict):
+                async with sem:
+                    url = url_info['url']
+                    title = url_info.get('title', 'No Title')
+                    content, error = await _scrape_single_url(session, url, timeout=scrape_timeout)
+                    return ScrapedResult(
+                        title=title,
+                        url=url,
+                        search_snippet="Source found via Google Search grounding.",
+                        scraped_content=content,
+                        scrape_error=error
+                    )
+
+            tasks = [bounded_scrape(info) for info in urls_info]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for i, res in enumerate(results):
+                if isinstance(res, Exception):
+                    url_info = urls_info[i]
+                    processed_results.append(ScrapedResult(
+                        title=url_info.get('title', 'No Title'),
+                        url=url_info['url'],
+                        scrape_error=f"Scraping task failed: {str(res)}"
+                    ))
+                else:
+                    processed_results.append(res)
+        
+        if scraping_run:
+            successful_scrapes = sum(1 for r in processed_results if not r.scrape_error)
+            scraping_run.end(outputs={"successful_scrapes": successful_scrapes, "failed_scrapes": len(processed_results) - successful_scrapes})
+            await asyncio.get_event_loop().run_in_executor(None, scraping_run.patch)
+
+        self.logger.info(f"Scraping completed for {len(processed_results)} grounding URLs. Successful: {successful_scrapes}/{len(processed_results)}.")
+        return processed_results
+
+    async def _process_google_response(self, response, query: str, scrape_timeout: int, run_tree=None) -> 'SearchServiceResult':
+        """
+        Processes Google GenAI response: extracts URLs, scrapes them, and formats the result.
+        
+        Args:
+            response: Google GenAI response object
+            query: Original search query
+            scrape_timeout: Timeout for scraping individual URLs.
+            run_tree: LangSmith run tree for tracing
+            
+        Returns:
+            SearchServiceResult with extracted metadata and scraped content
+        """
+        # Create child run for response processing if tracing
+        processing_run = None
+        if run_tree and LANGSMITH_AVAILABLE:
+            try:
+                processing_run = run_tree.create_child(
+                    name="GoogleSearch_Response_Processing",
+                    run_type="parser",
+                    inputs={"query": query, "has_response": bool(response)}
+                )
+                await asyncio.get_event_loop().run_in_executor(None, processing_run.post)
+            except Exception as e:
+                self.logger.warning(f"Failed to create processing child run: {e}")
+                processing_run = None
+        
+        try:
+            # 1. Extract URLs from grounding metadata
+            urls_to_scrape = self._extract_grounding_urls(response)
+
+            # 2. Scrape the extracted URLs
+            scraped_results = await self._scrape_grounding_urls(urls_to_scrape, scrape_timeout, run_tree)
+
+            # 3. Extract original text and metadata from Google's response
+            content = ""
+            grounding_metadata_obj = None
+            if hasattr(response, 'candidates') and response.candidates:
+                candidate = response.candidates[0]
+                if hasattr(candidate, 'content') and candidate.content and hasattr(candidate.content, 'parts'):
+                    content = "".join([part.text for part in candidate.content.parts if hasattr(part, 'text')])
+                
+                if hasattr(candidate, 'grounding_metadata') and candidate.grounding_metadata:
+                    gm = candidate.grounding_metadata
+                    grounding_metadata_obj = GoogleSearchMetadata(
+                        grounding_chunks=[{'uri': c.web.uri, 'title': c.web.title} for c in gm.grounding_chunks if hasattr(c, 'web')],
+                        web_search_queries=list(gm.web_search_queries) if hasattr(gm, 'web_search_queries') else [],
+                        search_entry_point={'rendered_content': getattr(gm.search_entry_point, 'rendered_content', None)} if hasattr(gm, 'search_entry_point') else None,
+                        grounding_sources=len(gm.grounding_chunks) if hasattr(gm, 'grounding_chunks') else 0
+                    )
+            
+            # Prioritize successfully scraped content
+            final_results = [res for res in scraped_results if res.scraped_content and not res.scrape_error]
+            failed_results = [res for res in scraped_results if not res.scraped_content or res.scrape_error]
+            
+            # Fill with failed scrapes if we have space, to at least provide the source URL
+            if len(final_results) < len(scraped_results):
+                final_results.extend(failed_results[:len(scraped_results) - len(final_results)])
+
+            if processing_run:
+                processing_run.end(outputs={
+                    'content_length': len(content), 
+                    'sources_extracted': len(urls_to_scrape),
+                    'successful_scrapes': len(final_results),
+                    'processing_successful': True
+                })
+                await asyncio.get_event_loop().run_in_executor(None, processing_run.patch)
+
+            return SearchServiceResult(
+                query=query,
+                results=final_results,
+                search_provider_error=None,
+                grounding_metadata=grounding_metadata_obj,
+                is_native_google_search=True,
+                native_response_content=content
+            )
+
+        except Exception as e:
+            self.logger.error(f"Error processing Google Search response: {str(e)}")
+            if processing_run:
+                processing_run.end(outputs={'error': str(e), 'processing_successful': False})
+                await asyncio.get_event_loop().run_in_executor(None, processing_run.patch)
+            
+            return SearchServiceResult(
+                query=query,
+                search_provider_error=f"Error processing Google Search response: {str(e)}",
+                is_native_google_search=True
+            )
+
+
+class BraveSearchService:
+    """
+    Brave Search service wrapper around the existing perform_search_and_scrape functionality.
+    Maintains compatibility with the current implementation for non-premium users.
+    """
+    
+    def __init__(self):
+        self.logger = logging.getLogger("BraveSearchService")
+    
+    async def perform_search(
+        self, 
+        query: str, 
+        brave_key_provider=None,
+        max_results: int = 5,
+        scrape_timeout: int = 10,
+        **kwargs
+    ) -> 'SearchServiceResult':
+        """
+        Perform Brave Search with scraping using existing implementation.
+        
+        Args:
+            query: The search query string
+            brave_key_provider: Provider for Brave Search API key
+            max_results: Maximum number of search results
+            scrape_timeout: Timeout for scraping operations
+            **kwargs: Additional configuration parameters
+            
+        Returns:
+            SearchServiceResult from Brave Search + scraping
+        """
+        self.logger.debug(f"Executing Brave Search + scraping for query: '{query}'")
+        
+        if not brave_key_provider:
+            return SearchServiceResult(
+                query=query,
+                search_provider_error="Brave key provider not available",
+                is_native_google_search=False
+            )
+        
+        try:
+            # Use existing perform_search_and_scrape function
+            result = await perform_search_and_scrape(
+                query=query,
+                brave_key_provider=brave_key_provider,
+                max_results=max_results,
+                scrape_timeout=scrape_timeout
+            )
+            
+            # Ensure is_native_google_search is set to False for Brave results
+            result.is_native_google_search = False
+            
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Error in Brave Search for query '{query}': {str(e)}")
+            return SearchServiceResult(
+                query=query,
+                search_provider_error=f"Brave Search error: {str(e)}",
+                is_native_google_search=False
+            )
+
+
+class SearchServiceRouter:
+    """
+    Router that automatically selects the appropriate search service based on user permissions.
+    Implements the hybrid pipeline with automatic fallback mechanisms.
+    """
+    
+    def __init__(self):
+        self.logger = logging.getLogger("SearchServiceRouter")
+        self.google_service = None
+        self.brave_service = BraveSearchService()
+        
+        # Initialize Google service only if available
+        try:
+            if GOOGLE_GENAI_AVAILABLE:
+                self.google_service = GoogleNativeSearchService()
+        except Exception as e:
+            self.logger.warning(f"Google Native Search Service not available: {e}")
+            self.google_service = None
+    
+    async def execute_search(
+        self, 
+        state: LearningPathState, 
+        query: str, 
+        search_config: Dict[str, Any] = None,
+        langsmith_extra: Dict[str, Any] = None
+    ) -> 'SearchServiceResult':
+        """
+        Execute search using the appropriate service based on user permissions.
+        
+        Args:
+            state: LearningPathState containing user and key providers
+            query: The search query string
+            search_config: Configuration for search parameters
+            langsmith_extra: Additional metadata for LangSmith tracing
+            
+        Returns:
+            SearchServiceResult from the appropriate search service
+        """
+        if search_config is None:
+            search_config = {}
+        
+        if langsmith_extra is None:
+            langsmith_extra = {}
+        
+        user = state.get('user')
+        
+        # Check if user is eligible for Google Search native
+        if _is_premium_search_user(user) and self.google_service:
+            try:
+                self.logger.info(f"Using Google Search native for premium user: {getattr(user, 'email', 'unknown')}")
+                
+                # Enhance LangSmith metadata for Google Search
+                google_langsmith_extra = langsmith_extra.copy()
+                google_metadata = google_langsmith_extra.get('metadata', {})
+                google_metadata.update({
+                    'search_service': 'google_native',
+                    'user_type': 'premium',
+                    'query_origin': google_langsmith_extra.get('query_origin', 'unknown'),
+                    'operation_context': google_langsmith_extra.get('operation_context', 'search')
+                })
+                google_langsmith_extra['metadata'] = google_metadata
+                
+                # Update tags
+                google_tags = google_langsmith_extra.get('tags', [])
+                google_tags.extend(['google_search', 'native_search', 'premium_user'])
+                google_langsmith_extra['tags'] = list(set(google_tags))  # Remove duplicates
+                
+                google_key_provider = state.get('google_key_provider')
+                result = await self.google_service.perform_search(
+                    query=query,
+                    google_key_provider=google_key_provider,
+                    user=user,
+                    max_results=search_config.get('max_results', 5),
+                    scrape_timeout=search_config.get('scrape_timeout', 10),
+                    langsmith_extra=google_langsmith_extra
+                )
+                
+                # Log success
+                if not result.search_provider_error:
+                    sources_count = len(result.results)
+                    grounding_count = result.grounding_metadata.grounding_sources if result.grounding_metadata else 0
+                    self.logger.info(f"Google Search completed: {sources_count} sources, {grounding_count} grounding chunks")
+                
+                return result
+                
+            except Exception as e:
+                self.logger.warning(f"Google Search failed for user {getattr(user, 'email', 'unknown')}: {str(e)}. Falling back to Brave Search")
+                # Continue to Brave Search fallback
+        
+        # Use Brave Search (default or fallback)
+        self.logger.debug(f"Using Brave Search for user: {getattr(user, 'email', 'unknown')}")
+        
+        brave_key_provider = state.get('brave_key_provider')
+        return await self.brave_service.perform_search(
+            query=query,
+            brave_key_provider=brave_key_provider,
+            max_results=search_config.get('max_results', 5),
+            scrape_timeout=search_config.get('scrape_timeout', 10)
+        )
+    
+    @staticmethod
+    def get_search_service_type(user) -> str:
+        """
+        Determine which search service type should be used for a user.
+        
+        Args:
+            user: User object
+            
+        Returns:
+            'google_native' for premium users, 'brave_scraping' for others
+        """
+        if _is_premium_search_user(user):
+            return 'google_native'
+        return 'brave_scraping'
+
+
+# Global search router instance
+_search_router = SearchServiceRouter()
+
+
+async def execute_search_with_router(
+    state: LearningPathState, 
+    query: str, 
+    search_config: Dict[str, Any] = None,
+    langsmith_extra: Dict[str, Any] = None
+) -> 'SearchServiceResult':
+    """
+    Convenience function to execute search using the global router.
+    
+    Args:
+        state: LearningPathState containing user and key providers
+        query: The search query string
+        search_config: Configuration for search parameters
+        langsmith_extra: Additional metadata for LangSmith tracing
+        
+    Returns:
+        SearchServiceResult from the appropriate search service
+    """
+    return await _search_router.execute_search(state, query, search_config, langsmith_extra)
 
 # --- Start of Modified _scrape_single_url ---
 async def _scrape_single_url(session: aiohttp.ClientSession, url: str, timeout: int) -> Tuple[Optional[str], Optional[str]]:

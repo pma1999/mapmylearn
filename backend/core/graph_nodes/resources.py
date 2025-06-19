@@ -23,7 +23,7 @@ from backend.models.models import (
     ScrapedResult
 )
 from backend.parsers.parsers import resource_list_parser, resource_query_parser
-from backend.services.services import get_llm, perform_search_and_scrape
+from backend.services.services import get_llm, execute_search_with_router
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
@@ -562,7 +562,7 @@ async def generate_submodule_resources(
             "module_title": module_title,
             "submodule_title": submodule_title,
             "submodule_description": submodule_description,
-            "submodule_content": escape_curly_braces(submodule_content[:2000]), # Use generated content for context, truncated
+            "submodule_content": escape_curly_braces(submodule_content[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]), # Use generated content for context, truncated
             "submodule_order": sub_id + 1,
             "submodule_count": len(module.submodules),
             "module_order": module_id + 1,

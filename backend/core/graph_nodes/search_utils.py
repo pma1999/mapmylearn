@@ -12,7 +12,7 @@ import random   # Added for jitter
 from typing import Callable, Dict, Any, Optional, TypeVar, Awaitable, Union
 
 from backend.models.models import SearchQuery, LearningPathState, SearchServiceResult, ResourceQuery
-from backend.services.services import perform_search_and_scrape
+from backend.services.services import execute_search_with_router
 
 # Configure logger
 logger = logging.getLogger("learning_path.search_utils")
@@ -28,27 +28,30 @@ async def execute_search_with_llm_retry(
     state: LearningPathState,
     initial_query: QueryObjectType,
     regenerate_query_func: RegenerateQueryFunc,
-    search_provider_key_provider = None,
+    search_provider_key_provider = None,  # Deprecated parameter, kept for compatibility
     search_config: Dict[str, Any] = None,
     regenerate_args: Dict[str, Any] = None,
+    langsmith_extra: Dict[str, Any] = None,
 ) -> SearchServiceResult:
     """
     Execute a search with up to 4 total attempts, handling errors and potentially regenerating queries.
+    Now uses the SearchServiceRouter to automatically select Google Search native or Brave Search+scraping.
 
     Retries are performed for:
     1. "No results found" errors (attempts regeneration first, then standard backoff).
     2. Any other search provider errors (e.g., 429, API errors - uses standard backoff).
     
     Args:
-        state: The current LearningPathState containing context and key providers.
+        state: The current LearningPathState containing context and user information.
         initial_query: The first SearchQuery or ResourceQuery object to try.
         regenerate_query_func: An async function that takes state and failed_query 
                              (plus any additional args in regenerate_args) and returns a new 
                              SearchQuery or ResourceQuery, or None if regeneration fails.
-        search_provider_key_provider: The key provider for the search service (e.g., Brave).
-        search_config: Dictionary with configuration for perform_search_and_scrape 
+        search_provider_key_provider: DEPRECATED - key providers are now obtained from state automatically
+        search_config: Dictionary with configuration for search execution 
                      (max_results, scrape_timeout). Defaults to {max_results: 5, scrape_timeout: 10}.
         regenerate_args: Additional arguments to pass to regenerate_query_func.
+        langsmith_extra: Additional metadata for LangSmith tracing.
     
     Returns:
         A SearchServiceResult object containing the search results or the final error information after all attempts.
@@ -59,13 +62,12 @@ async def execute_search_with_llm_retry(
     if regenerate_args is None:
         regenerate_args = {}
     
-    if search_provider_key_provider is None:
-        provider_key_in_state = "brave_key_provider"
-        search_provider_key_provider = state.get(provider_key_in_state)
-        if not search_provider_key_provider:
-            logger.error(f"No search provider key provider found in state ({provider_key_in_state}) or passed as argument")
-            query_str = getattr(initial_query, 'keywords', getattr(initial_query, 'query', 'unknown'))
-            return SearchServiceResult(query=query_str, search_provider_error=f"No {provider_key_in_state} available")
+    if langsmith_extra is None:
+        langsmith_extra = {}
+    
+    # Log deprecation warning if old parameter is used
+    if search_provider_key_provider is not None:
+        logger.warning("search_provider_key_provider parameter is deprecated. Key providers are now obtained from state automatically.")
     
     current_query = initial_query
     result: Optional[SearchServiceResult] = None
@@ -90,17 +92,32 @@ async def execute_search_with_llm_retry(
             
         logger.info(f"Search attempt {attempt_number + 1}/{MAX_SEARCH_ATTEMPTS} with query: '{query_str}'")
         
-        # Direct call to perform_search_and_scrape (rate limit handled within)
+        # Enhance LangSmith metadata for this attempt
+        attempt_langsmith_extra = langsmith_extra.copy()
+        attempt_metadata = attempt_langsmith_extra.get('metadata', {})
+        attempt_metadata.update({
+            'search_attempt': attempt_number + 1,
+            'max_attempts': MAX_SEARCH_ATTEMPTS,
+            'query_type': type(current_query).__name__,
+            'retry_search': attempt_number > 0
+        })
+        attempt_langsmith_extra['metadata'] = attempt_metadata
+        
+        # Update name to include attempt number for clarity
+        base_name = attempt_langsmith_extra.get('name', 'SearchWithRetry')
+        attempt_langsmith_extra['name'] = f"{base_name}_Attempt_{attempt_number + 1}"
+        
+        # Use the new SearchServiceRouter instead of direct perform_search_and_scrape call
         try:
-            result = await perform_search_and_scrape(
+            result = await execute_search_with_router(
+                state=state,
                 query=query_str,
-                brave_key_provider=search_provider_key_provider,
-                max_results=search_config.get("max_results", 5),
-                scrape_timeout=search_config.get("scrape_timeout", 10)
+                search_config=search_config,
+                langsmith_extra=attempt_langsmith_extra
             )
         except Exception as e:
-            # Catch unexpected errors during perform_search_and_scrape itself
-            logger.exception(f"Unexpected error calling perform_search_and_scrape on attempt {attempt_number + 1}/{MAX_SEARCH_ATTEMPTS} for query '{query_str}': {e}")
+            # Catch unexpected errors during search execution
+            logger.exception(f"Unexpected error during search execution on attempt {attempt_number + 1}/{MAX_SEARCH_ATTEMPTS} for query '{query_str}': {e}")
             result = SearchServiceResult(query=query_str, search_provider_error=f"Internal error during search: {type(e).__name__} - {str(e)}")
 
         # --- Check result of this attempt --- 

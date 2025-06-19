@@ -560,79 +560,62 @@ Do not include general search results or low-quality resources.
 # =========================================================================
 
 RESEARCH_EVALUATION_PROMPT = """
-# EXPERT CURRICULUM RESEARCH EVALUATOR INSTRUCTIONS
+# EXPERT CURRICULUM ARCHITECT: RESEARCH EVALUATOR
 
-Your task is to evaluate whether the current research information is sufficient to create a high-quality, comprehensive learning path for the topic: "{user_topic}".
+Your task is to act as a curriculum architect and evaluate if the initial research provides enough information to **design a comprehensive course STRUCTURE** for the topic: "{user_topic}".
+
+At this stage, you are **NOT** evaluating if there's enough content to **WRITE** the full course. Your focus is solely on whether the gathered information is sufficient to **OUTLINE** a high-quality, well-organized learning path.
 
 ## LANGUAGE INSTRUCTIONS
 Conduct your analysis and provide responses in {language}.
 
-## CURRENT RESEARCH SUMMARY
-{search_results_summary}
+## EVALUATION CRITERIA: STRUCTURAL SUFFICIENCY
 
-## EVALUATION CRITERIA
+Review the provided research summary and assess if it contains enough information to define the following for a course structure:
 
-Assess the research completeness across these CRITICAL DIMENSIONS for curriculum design:
+1.  **Foundational Concepts & Prerequisites:** Are the essential starting points and prerequisite ideas clearly identifiable?
+2.  **Core Sub-domains & Key Topics:** Is there enough breadth to divide the subject into 3-7 coherent, self-contained modules?
+3.  **Learning Progression & Dependencies:** Do the results reveal how concepts build on each other so you can order the modules logically?
+4.  **High-Level Practical Focus:** Is there evidence of practical or applied dimensions that can be translated into *one or more* modules (without needing very granular examples)?
+5.  **Advanced or Specialized Areas:** Is it clear what constitutes more advanced material that would appear near the end of the course?
 
-### 1. FOUNDATIONAL KNOWLEDGE COVERAGE
-- Are fundamental concepts, prerequisites, and core principles adequately covered?
-- Is there sufficient depth on basic building blocks needed for learning progression?
+## EVALUATION PROCESS & SUFFICIENCY STANDARDS
 
-### 2. COMPREHENSIVE TOPIC BREADTH 
-- Are all major sub-domains and essential areas within "{user_topic}" represented?
-- Is coverage balanced across different aspects of the field?
+1.  **Analyze Research**: Review the depth and breadth of the search results summary below.
+2.  **Identify Structural Gaps**: Pinpoint specific areas where information is missing *for the purpose of outlining the course structure*.
+3.  **Assess Readiness for Design**: Determine if you can confidently design a course outline (Modules and their sequence).
+4.  **Rate Confidence**: Give a confidence score (0.0 to 1.0) on how ready the research is for the *structural design phase*.
 
-### 3. LOGICAL LEARNING PROGRESSION
-- Is there enough information to understand natural learning sequences and dependencies?
-- Can you determine how concepts build upon each other?
+Research is **SUFFICIENT for STRUCTURING** if:
+- All 5 evaluation criteria are adequately covered.
+- You can confidently define a logical sequence of 3-7 modules.
+- Your confidence score is 0.7 or higher.
 
-### 4. PRACTICAL APPLICATION INSIGHTS
-- Are real-world applications, examples, and skill development approaches covered?
-- Is there sufficient information about what learners should be able to DO?
-
-### 5. COMPLEXITY AND DEPTH MAPPING
-- Is there information covering different skill levels (beginner to advanced)?
-- Are challenging areas and common learning obstacles identified?
-
-### 6. STRUCTURED TEACHING APPROACHES
-- Is there insight into how this topic is typically taught or organized?
-- Are there examples of successful curriculum structures or pedagogical approaches?
-
-## EVALUATION PROCESS
-
-1. **Analyze Research Quality**: Review the depth, authority, and comprehensiveness of current research
-2. **Identify Coverage Gaps**: Pinpoint specific areas where information is insufficient or missing
-3. **Assess Curriculum Readiness**: Determine if current information can support high-quality module design
-4. **Calculate Confidence**: Rate your confidence in the research completeness (0.0-1.0 scale)
-
-## SUFFICIENCY STANDARDS
-
-Research is considered SUFFICIENT when:
-- All 6 critical dimensions have adequate coverage for curriculum design
-- Enough specific information exists to create detailed, well-structured modules
-- No major knowledge gaps would result in superficial or incomplete learning modules
-- Confidence level is 0.7 or higher
-
-Research is INSUFFICIENT when:
-- Any critical dimension lacks adequate coverage
-- Key areas have only surface-level information
-- Major gaps would compromise learning module quality
-- Confidence level is below 0.7
+Research is **INSUFFICIENT** if:
+- One or more criteria are poorly covered (e.g., you can't determine a logical flow).
+- The information is too superficial to define distinct modules.
+- Confidence is below 0.7.
 
 ## KNOWLEDGE GAP IDENTIFICATION
 
-If research is insufficient, identify specific gaps using this format:
-- "Insufficient coverage of [specific area] for [specific curriculum design need]"
-- "Missing information about [specific aspect] needed to [specific design goal]"
-- "Superficial treatment of [specific topic] requires deeper research for [specific reason]"
+If INSUFFICIENT, list **high-level structural gaps only** (do **NOT** ask for very specific content or examples). Each gap statement should:
+- Reference the missing structural dimension in general terms.
+- Avoid demanding concrete lesson examples or deep content details.
 
-Be specific and actionable - these gaps will guide targeted follow-up research.
+Examples of acceptable gap statements:
+- "Insufficient coverage of foundational concepts to define the opening module."
+- "Cannot determine a clear learning progression across the main sub-domains."
+- "Lacks high-level practical context to justify an application-focused module."
+
+Avoid overly granular statements such as requesting specific case studies or niche applications.
 
 ## OUTPUT REQUIREMENTS
-
-Provide your evaluation in the following structured format:
+Provide your evaluation in the structured format defined by the tool.
 
 {format_instructions}
+
+## CURRENT RESEARCH SUMMARY TO EVALUATE
+{search_results_summary}
 """
 
 REFINEMENT_QUERY_GENERATION_PROMPT = """
@@ -1000,4 +983,163 @@ Provide a clear explanation of how your query set:
 ## OUTPUT REQUIREMENTS
 
 {format_instructions}
+"""
+
+# Initial Flow Generation Prompt
+INITIAL_FLOW_PROMPT = """Create a comprehensive learning path for the given topic. Structure the response as a detailed course with multiple modules and submodules.
+
+Format your response as a JSON object with the following structure:
+{
+  "modules": [
+    {
+      "title": "Module Title",
+      "description": "Brief description of what this module covers",
+      "submodules": [
+        {
+          "title": "Submodule Title",
+          "description": "Detailed description of the submodule content",
+          "content": "Main educational content for this submodule",
+          "duration_minutes": 30,
+          "difficulty": "beginner|intermediate|advanced",
+          "learning_objectives": ["objective1", "objective2", "objective3"]
+        }
+      ]
+    }
+  ]
+}
+
+Guidelines:
+- Create 3-5 main modules
+- Each module should have 2-4 submodules
+- Content should be comprehensive and educational
+- Include practical examples where applicable
+- Ensure logical progression from basic to advanced concepts
+- Duration should be realistic for the content depth
+- Learning objectives should be specific and measurable"""
+
+# Search Query Regeneration Prompt
+REGENERATE_SEARCH_QUERY_PROMPT = """The search query "{failed_query}" didn't return useful results for the topic: {original_topic}
+
+Generate a new, more effective search query that might find better information about this topic.
+
+Guidelines:
+- Try different keywords or synonyms
+- Consider related concepts or broader/narrower terms
+- Make the query more specific or more general as needed
+- Focus on educational or informational content
+
+Return only the new search query, nothing else."""
+
+# Topic Resource Search Prompt
+TOPIC_RESOURCE_SEARCH_PROMPT = """Generate 2-3 search queries to find educational resources for the topic: {topic}
+
+{flow_context}
+
+Focus on finding:
+- Official documentation or guides
+- Educational websites and tutorials
+- Academic resources or research papers
+- Practical examples and case studies
+
+Format your response as a numbered list:
+1. [first search query]
+2. [second search query]
+3. [third search query]"""
+
+# Resource Query Regeneration Prompt
+REGENERATE_RESOURCE_QUERY_PROMPT = """The resource search query "{failed_query}" didn't find good educational resources for: {original_topic}
+
+Create a new search query that might find better educational resources, documentation, or learning materials.
+
+Guidelines:
+- Try different combinations of keywords
+- Consider official sources, tutorials, or guides
+- Look for specific resource types (documentation, examples, tutorials)
+- Make the query more targeted to educational content
+
+Return only the new search query, nothing else."""
+
+# =========================================================================
+# Enhanced Submodule Content Development Prompt (Comprehensive & Detailed)
+# =========================================================================
+
+ENHANCED_SUBMODULE_CONTENT_DEVELOPMENT_PROMPT = """
+# EXPERT EDUCATIONAL CONTENT ARCHITECT
+
+You are an expert educational content developer creating comprehensive, engaging learning material. Your task is to develop detailed, step-by-step content for a specific submodule that thoroughly covers the topic while being highly engaging and educational.
+
+## SUBMODULE CONTEXT
+- **Topic**: {user_topic}
+- **Module**: {module_title} (Module {module_order} of {module_count})
+- **Current Submodule**: {submodule_title} (Submodule {submodule_order} of {submodule_count})
+- **Description**: {submodule_description}
+- **Core Concept**: {core_concept}
+- **Learning Objective**: {learning_objective}
+- **Key Components**: {key_components}
+- **Depth Level**: {depth_level}
+
+## COURSE STRUCTURE CONTEXT
+{learning_path_context}
+
+## MODULE CONTEXT
+{module_context}
+
+## ADJACENT SUBMODULES
+{adjacent_context}
+
+## CONTENT DEVELOPMENT REQUIREMENTS
+
+### 1. COMPREHENSIVE DEPTH & LENGTH
+- **Target Length**: Minimum 1500-2500 words of substantial educational content
+- **Deep Exploration**: Go beyond surface-level explanations
+- **Progressive Complexity**: Build understanding layer by layer
+- **Thorough Coverage**: Address all key components comprehensively
+
+### 2. ENGAGING & DIDACTIC APPROACH
+- **Narrative Flow**: Create a compelling learning journey
+- **Practical Examples**: Include relevant, illustrative examples throughout
+- **Interactive Elements**: Pose questions, scenarios, and thought experiments
+- **Real-World Applications**: Connect theory to practical applications
+- **Step-by-Step Guidance**: Break complex concepts into digestible steps
+
+### 3. CONTEXTUAL AWARENESS
+- **Submodule Position**: Acknowledge where this fits in the learning path
+- **Prerequisites**: Reference necessary background knowledge appropriately
+- **Learning Progression**: Build on previous submodules, prepare for next ones
+- **Module Coherence**: Ensure alignment with overall module objectives
+
+### 4. STYLE ADAPTATION
+{style_instructions}
+
+### 5. CONTENT STRUCTURE REQUIREMENTS
+- **Introduction** (150-200 words): Set context and preview what will be learned
+- **Core Content Sections** (1200-2000 words): 4-6 substantial sections covering key components
+- **Practical Applications** (200-300 words): Real-world examples and use cases
+- **Integration & Connections** (100-150 words): How this connects to other learning
+- **Summary & Next Steps** (100-150 words): Consolidate learning and preview progression
+
+### 6. EDUCATIONAL EFFECTIVENESS
+- **Clear Learning Outcomes**: Ensure content delivers on stated objectives
+- **Conceptual Scaffolding**: Build concepts systematically
+- **Multiple Perspectives**: Present different angles and approaches
+- **Critical Thinking**: Encourage analysis and evaluation
+- **Retention Aids**: Use analogies, mnemonics, and memorable frameworks
+
+## LANGUAGE REQUIREMENTS
+- **Content Language**: Write all content in {language}
+- **Technical Accuracy**: Ensure precise use of terminology
+- **Accessibility**: Make complex concepts understandable at the specified depth level
+
+## OUTPUT REQUIREMENTS
+Provide ONLY the comprehensive educational content. Do NOT include:
+- Meta-commentary about the content creation process
+- Explanations of your approach
+- Headers describing the structure unless they're part of the educational content
+
+The content should flow naturally and engage the learner from start to finish.
+
+## RESEARCH RESOURCES & CONTEXT
+The following research materials and scraped content provide additional context and information to enhance your content development. Use these resources to create more comprehensive, accurate, and detailed educational material:
+
+{search_results_context}
 """

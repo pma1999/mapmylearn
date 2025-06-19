@@ -24,7 +24,7 @@ from backend.models.models import (
     QuizQuestionList
 )
 from backend.parsers.parsers import submodule_parser, module_queries_parser, quiz_questions_parser, search_queries_parser # Added search_queries_parser
-from backend.services.services import get_llm, perform_search_and_scrape, get_llm_with_search, get_llm_for_evaluation
+from backend.services.services import get_llm, execute_search_with_router, get_llm_with_search, get_llm_for_evaluation
 from backend.core.graph_nodes.helpers import run_chain, escape_curly_braces, batch_items, MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT # Import constant
 from backend.core.graph_nodes.search_utils import execute_search_with_llm_retry
 
@@ -32,7 +32,8 @@ from backend.core.graph_nodes.search_utils import execute_search_with_llm_retry
 from backend.prompts.learning_path_prompts import (
     SUBMODULE_PLANNING_PROMPT,
     SUBMODULE_QUIZ_GENERATION_PROMPT,
-    MODULE_SUBMODULE_PLANNING_QUERY_GENERATION_PROMPT # Added new prompt import
+    MODULE_SUBMODULE_PLANNING_QUERY_GENERATION_PROMPT, # Added new prompt import
+    ENHANCED_SUBMODULE_CONTENT_DEVELOPMENT_PROMPT # Added enhanced prompt import
     # Removed imports for prompts now defined inline
     # SUBMODULE_QUERY_GENERATION_PROMPT,
     # SUBMODULE_CONTENT_DEVELOPMENT_PROMPT
@@ -1430,178 +1431,89 @@ async def develop_submodule_specific_content(
     sub_search_results: List[SearchServiceResult]
 ) -> str:
     """
-    Develops the specific content for a submodule using LLM, informed by search results and user-selected style.
+    Develops comprehensive, detailed content for a submodule using enhanced prompting.
     """
     logger = logging.getLogger("learning_path.content_developer")
-    logger.info(f"Developing content for submodule: {submodule.title}")
+    logger.info(f"Developing enhanced content for submodule: {submodule.title}")
 
-    # Get language settings
+    # Get language and style settings
     output_language = state.get('language', 'en')
-
-    # Get explanation style
     style = state.get('explanation_style', 'standard')
 
-    # Define style descriptions based on user input
+    # Enhanced style descriptions with length guidance
     style_descriptions = {
-        "standard": "Provide a balanced, clear, and informative explanation suitable for a general audience. Use standard terminology and provide sufficient detail without oversimplification or excessive jargon. Assume general intelligence but not deep prior knowledge.",
-        "simple": "Explain like you're talking to someone smart but new to the topic. Prioritize clarity and understanding over technical precision. Use simple vocabulary and sentence structure. Incorporate basic analogies if helpful.",
-        "technical": "Be precise and detailed. Use correct technical terms and formal language. Dive into specifics, mechanisms, and underlying principles. Assume the reader has prerequisite knowledge.",
-        "example": "Illustrate every key concept with concrete, practical examples. If the topic is technical, provide relevant code snippets or pseudocode where applicable. Focus on application and real-world scenarios.",
-        "conceptual": "Emphasize the core principles, the 'why' behind concepts, relationships between ideas, and the overall context. Focus on mental models. De-emphasize specific implementation steps unless critical to the concept.",
-        "grumpy_genius": "Adopt the persona of an incredibly smart expert who finds it slightly tedious to explain this topic *yet again*. Write clear and accurate explanations, but frame them with comedic reluctance and mild intellectual impatience. Use phrases like 'Okay, *fine*, let\'s break down this supposedly \"difficult\" concept...', 'The surprisingly straightforward reason for this is (though most get it wrong)...', 'Look, pay attention, this part is actually important...', or '*Sigh*... Why they make this so complicated, I\'ll never know, but here\'s the deal...'. Inject relatable (and slightly exaggerated) sighs or comments about the inherent (or perceived) difficulty/complexity, but always follow through immediately with a correct and clear explanation. The humor comes from the grumpy-but-brilliant persona."
+        "standard": """
+**Style Instructions**: Provide balanced, comprehensive explanations suitable for focused learning. Use clear terminology and provide extensive detail with good depth. Structure content logically with smooth transitions between concepts. Aim for 1800-2200 words of substantial educational content.
+""",
+        "simple": """
+**Style Instructions**: Explain concepts as if teaching someone intelligent but new to the topic. Prioritize absolute clarity and understanding. Use accessible vocabulary while maintaining accuracy. Include plenty of analogies and step-by-step breakdowns. Build concepts very gradually. Aim for 1600-2000 words with extensive explanations and examples.
+""",
+        "technical": """
+**Style Instructions**: Provide precise, detailed technical exposition. Use correct technical terminology and formal language. Include specific mechanisms, implementation details, and underlying principles. Assume solid foundational knowledge but explain advanced concepts thoroughly. Aim for 2000-2500 words with comprehensive technical depth.
+""",
+        "example": """
+**Style Instructions**: Illustrate every key concept with concrete, practical examples. Include relevant code snippets, case studies, or real-world scenarios throughout. Each major point should be demonstrated with at least one detailed example. Focus heavily on application and implementation. Aim for 1800-2300 words with extensive practical examples.
+""",
+        "conceptual": """
+**Style Instructions**: Emphasize core principles, the 'why' behind concepts, and relationships between ideas. Focus on building mental models and deep understanding. Explore implications and connections extensively. Prioritize conceptual frameworks over implementation details. Aim for 1700-2100 words with thorough conceptual exploration.
+""",
+        "grumpy_genius": """
+**Style Instructions**: Adopt the persona of a brilliant expert who finds explaining this topic mildly tedious but does so with comedic reluctance and sharp insights. Use phrases like "Look, this is actually straightforward once you stop overthinking it..." or "*Sigh*... Fine, let me explain why everyone gets this wrong...". Maintain accuracy while adding personality and humor. Aim for 1800-2200 words with engaging, personality-driven explanations.
+"""
     }
-    explanation_style_description = style_descriptions.get(style, style_descriptions["standard"])
 
-    # ---> MODIFICATION START <---
-    # If the style is standard, we don't want to add any specific style instructions.
-    if style == 'standard':
-        explanation_style_description = ""
-    # ---> MODIFICATION END <---
+    style_instructions = style_descriptions.get(style, style_descriptions["standard"])
 
-    # Build context from various sources
-    # 1. Course Context
-    learning_path_context = ""
-    modules = state.get("enhanced_modules", [])
-    for i, mod in enumerate(modules):
-        indicator = " (CURRENT MODULE)" if i == module_id else ""
-        mod_title = escape_curly_braces(mod.title)
-        mod_desc = escape_curly_braces(mod.description)
-        learning_path_context += f"Module {i+1}: {mod_title}{indicator}\n{mod_desc}\n\n"
+    # Build comprehensive context sections
+    learning_path_context = _build_learning_path_context(state, module_id)
+    module_context = _build_module_context(module, sub_id)
+    adjacent_context = _build_adjacent_context(module, sub_id)
+    
+    # Enhanced search results context with better organization
+    search_results_context = _build_enhanced_search_context(sub_search_results)
 
-    # 2. Current Module Context
-    module_title = escape_curly_braces(module.title)
-    module_context = f"Current Module ({module_id+1}): {module_title}\nSubmodules:\n"
-    for i, s in enumerate(module.submodules):
-        indicator = " (CURRENT SUBMODULE)" if i == sub_id else ""
-        sub_title = escape_curly_braces(s.title)
-        sub_desc = escape_curly_braces(s.description)
-        module_context += f"  {i+1}. {sub_title}{indicator}\n  {sub_desc}\n"
+    # Use the new enhanced prompt
+    from backend.prompts.learning_path_prompts import ENHANCED_SUBMODULE_CONTENT_DEVELOPMENT_PROMPT
+    prompt = ChatPromptTemplate.from_template(ENHANCED_SUBMODULE_CONTENT_DEVELOPMENT_PROMPT)
 
-    # 3. Adjacent Submodules Context
-    adjacent_context = "Adjacent Submodules:\n"
-    if sub_id > 0:
-        prev = module.submodules[sub_id-1]
-        prev_title = escape_curly_braces(prev.title); prev_desc = escape_curly_braces(prev.description)
-        adjacent_context += f"Previous ({sub_id}): {prev_title}\n{prev_desc}\n"
-    else: adjacent_context += "No previous submodule.\n"
-    if sub_id < len(module.submodules) - 1:
-        nxt = module.submodules[sub_id+1]
-        nxt_title = escape_curly_braces(nxt.title); nxt_desc = escape_curly_braces(nxt.description)
-        adjacent_context += f"Next ({sub_id+2}): {nxt_title}\n{nxt_desc}\n"
-    else: adjacent_context += "No next submodule.\n"
+    # Execute enhanced content generation
+    try:
+        llm = await get_llm_with_search(key_provider=state.get("google_key_provider"), user=state.get('user'))
+        chain = prompt | llm | StrOutputParser()
 
-    # 4. Search Results Context (Using new structure)
-    search_context_parts = []
-    max_context_per_query_llm = 3
-    # Use constant here
-    # max_chars_per_result_llm = 3000 # OLD value
+        developed_content = await chain.ainvoke({
+            "user_topic": escape_curly_braces(state["user_topic"]),
+            "module_title": escape_curly_braces(module.title),
+            "module_order": module_id + 1,
+            "module_count": len(state.get("enhanced_modules", [])),
+            "submodule_title": escape_curly_braces(submodule.title),
+            "submodule_order": sub_id + 1,
+            "submodule_count": len(module.submodules),
+            "submodule_description": escape_curly_braces(submodule.description),
+            "core_concept": escape_curly_braces(submodule.core_concept),
+            "learning_objective": escape_curly_braces(submodule.learning_objective),
+            "key_components": escape_curly_braces(', '.join(submodule.key_components)),
+            "depth_level": escape_curly_braces(submodule.depth_level),
+            "learning_path_context": learning_path_context,
+            "module_context": module_context,
+            "adjacent_context": adjacent_context,
+            "style_instructions": style_instructions,
+            "language": output_language,
+            "search_results_context": search_results_context
+        })
 
-    for report in sub_search_results:
-        query = escape_curly_braces(report.query)
-        search_context_parts.append(f"\n## Research for Query: \"{query}\"\n")
-        results_included_llm = 0
-        for res in report.results:
-            if results_included_llm >= max_context_per_query_llm:
-                break
-            title = escape_curly_braces(res.title or 'N/A')
-            url = res.url
-            search_context_parts.append(f"### Source: {url} (Title: {title})")
-            if res.scraped_content:
-                content = escape_curly_braces(res.scraped_content)
-                # Use constant
-                truncated_content = content[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
-                if len(content) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
-                    truncated_content += "... (truncated)"
-                search_context_parts.append(f"Content Snippet:\n{truncated_content}")
-                results_included_llm += 1
-            elif res.search_snippet: # Renamed tavily_snippet
-                snippet = escape_curly_braces(res.search_snippet) # Renamed tavily_snippet
-                error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
-                # Use constant
-                truncated_snippet = snippet[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
-                if len(snippet) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
-                     truncated_snippet += "... (truncated)"
-                search_context_parts.append(f"Search Snippet:{error_info}\n{truncated_snippet}") # Updated label
-                results_included_llm += 1
-            else:
-                 error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
-                 search_context_parts.append(f"Content: Not available.{error_info}")
-            search_context_parts.append("---")
-        if results_included_llm == 0:
-             search_context_parts.append("(No usable content found for this query)")
-    search_results_context = "\n".join(search_context_parts)
+        # Validate content length and quality
+        content_length = len(developed_content)
+        logger.info(f"Generated enhanced content for {submodule.title}: {content_length} characters")
+        
+        if content_length < 3000:  # Roughly 1500 words
+            logger.warning(f"Generated content may be shorter than expected: {content_length} chars")
 
-    # Prepare prompt for content development
-    # Using an f-string for dynamic prompt construction based on available context
+        return developed_content
 
-    # ---> MODIFICATION START <---
-    # Conditionally add the style instruction part to the prompt
-    style_instruction_part = ""
-    if explanation_style_description:
-        # Use triple quotes directly for the f-string content
-        style_instruction_part = f'''
-8.  **Style:** Adhere strictly to the requested explanation style: **{explanation_style_description}**. Ensure tone, vocabulary, sentence structure, and examples align consistently with this style.
-9.  **Output Format:** Provide ONLY the developed content for the submodule in well-formatted Markdown. Do NOT include introductions like "Here is the content..." or summaries unless requested as part of the content itself.
-'''
-    else:
-        # Use triple quotes directly for the f-string content
-        style_instruction_part = f'''
-8.  **Output Format:** Provide ONLY the developed content for the submodule in well-formatted Markdown. Do NOT include introductions like "Here is the content..." or summaries unless requested as part of the content itself.
-'''
-
-    prompt_text = f'''
-# EXPERT CONTENT DEVELOPER & EDUCATOR
-
-## YOUR TASK
-Develop comprehensive, engaging, and educational content for a specific submodule within a larger course. The content should be based on the provided context, including the submodule's description, its place within the module/path, and relevant information gathered from web searches.
-
-## CONTEXT
-
-### Overall Topic: {escape_curly_braces(state["user_topic"])}
-
-### Course Structure:
-{learning_path_context}
-### Current Module Context:
-{module_context}
-### Adjacent Submodules:
-{adjacent_context}
-### Submodule to Develop:
-Title: {escape_curly_braces(submodule.title)}
-Description: {escape_curly_braces(submodule.description)}
-Core Concept: {escape_curly_braces(submodule.core_concept)}
-Learning Objective: {escape_curly_braces(submodule.learning_objective)}
-Key Components: {escape_curly_braces(', '.join(submodule.key_components))}
-Depth Level: {escape_curly_braces(submodule.depth_level)}
-
-### Relevant Research & Scraped Content:
-{search_results_context}
-
-## INSTRUCTIONS
-1.  **Synthesize Information:** Combine the submodule description, objectives, and key components with the insights from the provided research/scraped content.
-2.  **Develop Content:** Write detailed, clear, and accurate content explaining the key components and addressing the learning objective. Aim for approximately 500-1000 words, adjusting based on the complexity and depth level required.
-3.  **Structure:** Organize the content logically with clear headings (use Markdown ## or ###), paragraphs, bullet points, or numbered lists as appropriate.
-4.  **Engagement:** Make the content engaging and easy to understand for the target learner (assume the specified depth level).
-5.  **Accuracy:** Ensure the technical information presented is accurate based on the provided research.
-6.  **Language:** Write ALL content in {output_language}.
-7.  **Focus:** Strictly focus on the content for THIS submodule. Do not repeat content from other submodules unless necessary for context.
-{style_instruction_part}
-## DEVELOPED CONTENT FOR "{escape_curly_braces(submodule.title)}":
-'''
-    # ---> MODIFICATION END <---
-
-    prompt = ChatPromptTemplate.from_template(prompt_text)
-
-    # Use the search-enabled LLM (e.g., Gemini with search) for content generation
-    llm = await get_llm_with_search(key_provider=state.get("google_key_provider"), user=state.get('user'))
-
-    # Simple chain for content generation
-    chain = prompt | llm | StrOutputParser()
-
-    # Execute the chain
-    developed_content = await chain.ainvoke({"explanation_style_description": explanation_style_description})
-
-    logger.info(f"Developed content for submodule: {submodule.title} (Length: {len(developed_content)}) with style: {style}")
-    return developed_content
+    except Exception as e:
+        logger.exception(f"Error in enhanced content development: {str(e)}")
+        raise
 
 async def generate_submodule_quiz(
     state: LearningPathState,
@@ -1687,7 +1599,7 @@ async def generate_submodule_quiz(
                 "module_title": module_title,
                 "submodule_title": submodule_title,
                 "submodule_description": submodule_description,
-                "submodule_content": escaped_content[:100000],  # Limit content length to avoid token limits
+                "submodule_content": escaped_content[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT],  # Limit content length to avoid token limits
                 "language": output_language,
                 "format_instructions": quiz_questions_parser.get_format_instructions()
             })
@@ -1709,7 +1621,7 @@ async def generate_submodule_quiz(
                     "module_title": module_title,
                     "submodule_title": submodule_title,
                     "submodule_description": submodule_description,
-                    "submodule_content": escaped_content[:100000],
+                    "submodule_content": escaped_content[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT],
                     "language": output_language,
                     "format_instructions": quiz_questions_parser.get_format_instructions()
                 },
@@ -3366,3 +3278,239 @@ async def generate_content_refinement_queries(
             )
         ]
         return fallback_queries
+
+# =========================================================================
+# Enhanced Content Development Helper Functions
+# =========================================================================
+
+def _build_learning_path_context(state: LearningPathState, current_module_id: int) -> str:
+    """
+    Builds comprehensive learning path context highlighting course structure and progression.
+    """
+    try:
+        modules = state.get("enhanced_modules", [])
+        if not modules:
+            return "No course structure available."
+        
+        context_parts = ["# COMPLETE COURSE STRUCTURE\n"]
+        
+        for i, mod in enumerate(modules):
+            is_current = i == current_module_id
+            status_indicator = " **← CURRENT MODULE**" if is_current else ""
+            
+            mod_title = escape_curly_braces(getattr(mod, 'title', f'Module {i+1}'))
+            mod_desc = escape_curly_braces(getattr(mod, 'description', 'No description'))
+            
+            context_parts.append(f"## Module {i+1}: {mod_title}{status_indicator}")
+            context_parts.append(f"**Description**: {mod_desc}")
+            
+            # Add submodule preview if available
+            if hasattr(mod, 'submodules') and mod.submodules:
+                context_parts.append("**Submodules**:")
+                for j, sub in enumerate(mod.submodules):
+                    sub_title = escape_curly_braces(getattr(sub, 'title', f'Submodule {j+1}'))
+                    context_parts.append(f"  {j+1}. {sub_title}")
+            
+            context_parts.append("")  # Add spacing
+        
+        return "\n".join(context_parts)
+        
+    except Exception as e:
+        logging.error(f"Error building learning path context: {str(e)}")
+        return f"Error building course context: {str(e)}"
+
+def _build_module_context(module: EnhancedModule, current_sub_id: int) -> str:
+    """
+    Builds detailed module context showing submodule structure and relationships.
+    """
+    try:
+        module_title = escape_curly_braces(getattr(module, 'title', 'Current Module'))
+        module_desc = escape_curly_braces(getattr(module, 'description', 'No description'))
+        
+        context_parts = [
+            f"# CURRENT MODULE DETAILS",
+            f"**Title**: {module_title}",
+            f"**Description**: {module_desc}",
+            "",
+            "## Module Submodules Structure:"
+        ]
+        
+        if hasattr(module, 'submodules') and module.submodules:
+            for i, sub in enumerate(module.submodules):
+                is_current = i == current_sub_id
+                status_indicator = " **← CURRENT SUBMODULE**" if is_current else ""
+                
+                sub_title = escape_curly_braces(getattr(sub, 'title', f'Submodule {i+1}'))
+                sub_desc = escape_curly_braces(getattr(sub, 'description', 'No description'))
+                
+                context_parts.append(f"### {i+1}. {sub_title}{status_indicator}")
+                context_parts.append(f"**Description**: {sub_desc}")
+                
+                # Add key components if available
+                if hasattr(sub, 'key_components') and sub.key_components:
+                    components = ', '.join([escape_curly_braces(comp) for comp in sub.key_components])
+                    context_parts.append(f"**Key Components**: {components}")
+                
+                # Add learning objective if available
+                if hasattr(sub, 'learning_objective'):
+                    objective = escape_curly_braces(getattr(sub, 'learning_objective', ''))
+                    if objective:
+                        context_parts.append(f"**Learning Objective**: {objective}")
+                
+                context_parts.append("")  # Add spacing
+        else:
+            context_parts.append("No submodules defined for this module.")
+        
+        return "\n".join(context_parts)
+        
+    except Exception as e:
+        logging.error(f"Error building module context: {str(e)}")
+        return f"Error building module context: {str(e)}"
+
+def _build_adjacent_context(module: EnhancedModule, current_sub_id: int) -> str:
+    """
+    Builds context for adjacent submodules to show learning progression.
+    """
+    try:
+        if not hasattr(module, 'submodules') or not module.submodules:
+            return "No adjacent submodules available."
+        
+        context_parts = ["# LEARNING PROGRESSION CONTEXT\n"]
+        
+        # Previous submodule
+        if current_sub_id > 0:
+            prev_sub = module.submodules[current_sub_id - 1]
+            prev_title = escape_curly_braces(getattr(prev_sub, 'title', f'Previous Submodule'))
+            prev_desc = escape_curly_braces(getattr(prev_sub, 'description', 'No description'))
+            
+            context_parts.append(f"## Previous Submodule ({current_sub_id}): {prev_title}")
+            context_parts.append(f"**Description**: {prev_desc}")
+            
+            # Add key concepts from previous submodule
+            if hasattr(prev_sub, 'core_concept'):
+                prev_concept = escape_curly_braces(getattr(prev_sub, 'core_concept', ''))
+                if prev_concept:
+                    context_parts.append(f"**Core Concept**: {prev_concept}")
+            
+            context_parts.append("*This provides the foundation for the current submodule.*")
+            context_parts.append("")
+        else:
+            context_parts.append("## Previous Submodule: None (This is the first submodule)")
+            context_parts.append("")
+        
+        # Next submodule
+        if current_sub_id < len(module.submodules) - 1:
+            next_sub = module.submodules[current_sub_id + 1]
+            next_title = escape_curly_braces(getattr(next_sub, 'title', f'Next Submodule'))
+            next_desc = escape_curly_braces(getattr(next_sub, 'description', 'No description'))
+            
+            context_parts.append(f"## Next Submodule ({current_sub_id + 2}): {next_title}")
+            context_parts.append(f"**Description**: {next_desc}")
+            
+            # Add key concepts from next submodule
+            if hasattr(next_sub, 'core_concept'):
+                next_concept = escape_curly_braces(getattr(next_sub, 'core_concept', ''))
+                if next_concept:
+                    context_parts.append(f"**Core Concept**: {next_concept}")
+            
+            context_parts.append("*The current submodule should prepare learners for this next step.*")
+        else:
+            context_parts.append("## Next Submodule: None (This is the final submodule)")
+            context_parts.append("*This submodule should provide comprehensive closure for the module.*")
+        
+        return "\n".join(context_parts)
+        
+    except Exception as e:
+        logging.error(f"Error building adjacent context: {str(e)}")
+        return f"Error building adjacent context: {str(e)}"
+
+def _build_enhanced_search_context(search_results: List[SearchServiceResult]) -> str:
+    """
+    Builds comprehensive, well-organized search context from research materials.
+    Places resources at the end as requested by the user.
+    """
+    try:
+        if not search_results:
+            return "No research materials available for this submodule."
+        
+        context_parts = []
+        total_sources = 0
+        max_results_per_query = 4  # Increased for enhanced context
+        
+        for result_group in search_results:
+            if result_group.search_provider_error:
+                # Skip failed searches but log them
+                logging.warning(f"Skipping failed search: {result_group.search_provider_error}")
+                continue
+            
+            query = escape_curly_braces(result_group.query)
+            context_parts.append(f"\n## Research Query: \"{query}\"")
+            context_parts.append(f"*This search aimed to gather information relevant to the submodule development.*")
+            context_parts.append("")
+            
+            valid_results = 0
+            for i, result_item in enumerate(result_group.results):
+                if valid_results >= max_results_per_query:
+                    break
+                
+                # Check if we have usable content
+                has_content = bool(result_item.scraped_content or result_item.search_snippet)
+                if not has_content:
+                    continue
+                
+                valid_results += 1
+                total_sources += 1
+                
+                # Build source header
+                title = escape_curly_braces(result_item.title or 'Untitled Source')
+                url = result_item.url or 'No URL'
+                
+                context_parts.append(f"### Source {valid_results}: {title}")
+                context_parts.append(f"**URL**: {url}")
+                
+                # Add content with preference for scraped content
+                if result_item.scraped_content:
+                    content = escape_curly_braces(result_item.scraped_content)
+                    # Use enhanced length for comprehensive context
+                    truncated_content = content[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT * 2]  # Double the usual limit
+                    if len(content) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT * 2:
+                        truncated_content += "\n\n*(Content truncated for brevity)*"
+                    
+                    context_parts.append(f"**Content Summary**:")
+                    context_parts.append(truncated_content)
+                
+                elif result_item.search_snippet:
+                    snippet = escape_curly_braces(result_item.search_snippet)
+                    error_info = ""
+                    if result_item.scrape_error:
+                        error_info = f" *(Note: Full content scraping failed - {escape_curly_braces(result_item.scrape_error)})*"
+                    
+                    # Use enhanced length for search snippets too
+                    truncated_snippet = snippet[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
+                    if len(snippet) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
+                        truncated_snippet += "\n\n*(Snippet truncated)*"
+                    
+                    context_parts.append(f"**Search Snippet**:{error_info}")
+                    context_parts.append(truncated_snippet)
+                
+                context_parts.append("")  # Add spacing between sources
+            
+            if valid_results == 0:
+                context_parts.append("*No usable content was found for this research query.*")
+                context_parts.append("")
+            else:
+                context_parts.append(f"*Found {valid_results} relevant sources for this query.*")
+                context_parts.append("")
+        
+        # Add summary header
+        summary_header = [
+            f"# COMPREHENSIVE RESEARCH MATERIALS",
+            f"*The following {total_sources} sources provide research context and information to enhance submodule content development.*",
+            ""
+        ]
+        
+        return "\n".join(summary_header + context_parts)
+        
+    except Exception as e:
+        logging.error(f"Error building enhanced search context: {str(e)}")
+        return f"Error building research context: {str(e)}"

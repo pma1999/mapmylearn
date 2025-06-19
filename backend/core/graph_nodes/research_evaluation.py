@@ -19,9 +19,9 @@ from backend.models.models import (
     RefinementQueryList
 )
 from backend.parsers.parsers import research_evaluation_parser, refinement_query_parser
-from backend.services.services import get_llm, get_llm_for_evaluation
+from backend.services.services import get_llm, get_llm_for_evaluation, execute_search_with_router
 from langchain_core.prompts import ChatPromptTemplate
-from backend.core.graph_nodes.helpers import run_chain, escape_curly_braces
+from backend.core.graph_nodes.helpers import run_chain, escape_curly_braces, MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT
 from backend.core.graph_nodes.search_utils import execute_search_with_llm_retry
 
 # Configure logger
@@ -568,15 +568,15 @@ def format_search_results_for_evaluation(search_results: List[SearchServiceResul
             if res.scraped_content:
                 content = escape_curly_braces(res.scraped_content)
                 # Use a reasonable limit for evaluation context
-                truncated_content = content[:2000]  # Smaller limit for evaluation
-                if len(content) > 2000:
+                truncated_content = content[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]  # Use constant
+                if len(content) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
                     truncated_content += "... (truncated)"
                 context_parts.append(f"**Content**: {truncated_content}")
                 results_included += 1
             elif res.search_snippet:
                 snippet = escape_curly_braces(res.search_snippet)
-                truncated_snippet = snippet[:1000]
-                if len(snippet) > 1000:
+                truncated_snippet = snippet[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT] # Use constant
+                if len(snippet) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
                     truncated_snippet += "... (truncated)"
                 context_parts.append(f"**Snippet**: {truncated_snippet}")
                 results_included += 1

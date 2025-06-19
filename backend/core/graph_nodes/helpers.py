@@ -389,3 +389,131 @@ def format_search_results(search_results: List[Dict[str, Any]]) -> str:
             formatted += "\n"
     
     return formatted
+
+async def handle_llm_generation_with_retry(
+    state: Dict[str, Any],
+    llm: Any,
+    prompt: str,
+    parser_func: Callable[[str], T],
+    operation_description: str,
+    max_retries: int = 3,
+    langsmith_extra: Dict[str, Any] = None
+) -> Optional[T]:
+    """
+    Handle LLM generation with automatic retry and parsing.
+    
+    Args:
+        state: The current state containing context
+        llm: The LLM instance to use
+        prompt: The prompt string to send to the LLM
+        parser_func: Function to parse the LLM response
+        operation_description: Description of the operation for logging
+        max_retries: Maximum number of retry attempts
+        langsmith_extra: Additional metadata for LangSmith tracing
+        
+    Returns:
+        Parsed result from parser_func or None if failed
+    """
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Attempting {operation_description} (attempt {attempt + 1}/{max_retries})")
+            
+            # Create a simple prompt template
+            prompt_template = ChatPromptTemplate.from_messages([("user", prompt)])
+            
+            # Execute the chain with LangSmith metadata if available
+            if langsmith_extra and hasattr(llm, 'ainvoke'):
+                # For LangChain LLMs that support langsmith_extra in kwargs
+                chain = prompt_template | llm | StrOutputParser()
+                response = await chain.ainvoke({}, langsmith_extra=langsmith_extra)
+            else:
+                # Standard execution without tracing metadata
+                chain = prompt_template | llm | StrOutputParser()
+                response = await chain.ainvoke({})
+            
+            # Parse the response
+            parsed_result = parser_func(response)
+            
+            if parsed_result:
+                logger.info(f"Successfully completed {operation_description}")
+                return parsed_result
+            else:
+                logger.warning(f"Parser returned None for {operation_description} (attempt {attempt + 1})")
+                
+        except Exception as e:
+            logger.error(f"Error in {operation_description} (attempt {attempt + 1}): {str(e)}")
+            
+            if attempt == max_retries - 1:
+                logger.error(f"Failed {operation_description} after {max_retries} attempts")
+                return None
+            
+            # Wait before retry
+            await asyncio.sleep(1.0 * (2 ** attempt))
+    
+    return None
+
+async def handle_llm_generation_with_retry_no_parse(
+    state: Dict[str, Any],
+    llm: Any,
+    prompt: str,
+    operation_description: str,
+    max_retries: int = 3,
+    langsmith_extra: Dict[str, Any] = None
+) -> Optional[Any]:
+    """
+    Handle LLM generation with automatic retry but no parsing.
+    
+    Args:
+        state: The current state containing context
+        llm: The LLM instance to use
+        prompt: The prompt string to send to the LLM
+        operation_description: Description of the operation for logging
+        max_retries: Maximum number of retry attempts
+        langsmith_extra: Additional metadata for LangSmith tracing
+        
+    Returns:
+        Raw LLM response or None if failed
+    """
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Attempting {operation_description} (attempt {attempt + 1}/{max_retries})")
+            
+            # Create a simple prompt template
+            prompt_template = ChatPromptTemplate.from_messages([("user", prompt)])
+            
+            # Execute the chain with LangSmith metadata if available
+            if langsmith_extra:
+                # Check if it's a GroundedGeminiWrapper or standard LangChain LLM
+                if hasattr(llm, 'ainvoke'):
+                    try:
+                        # For GroundedGeminiWrapper and LangChain LLMs
+                        response = await llm.ainvoke(prompt_template.format(), langsmith_extra=langsmith_extra)
+                    except TypeError:
+                        # Fallback if langsmith_extra is not supported
+                        response = await llm.ainvoke(prompt_template.format())
+                else:
+                    # For non-LangChain LLMs
+                    chain = prompt_template | llm
+                    response = await chain.ainvoke({})
+            else:
+                # Standard execution without tracing metadata
+                chain = prompt_template | llm
+                response = await chain.ainvoke({})
+            
+            if response:
+                logger.info(f"Successfully completed {operation_description}")
+                return response
+            else:
+                logger.warning(f"LLM returned empty response for {operation_description} (attempt {attempt + 1})")
+                
+        except Exception as e:
+            logger.error(f"Error in {operation_description} (attempt {attempt + 1}): {str(e)}")
+            
+            if attempt == max_retries - 1:
+                logger.error(f"Failed {operation_description} after {max_retries} attempts")
+                return None
+            
+            # Wait before retry
+            await asyncio.sleep(1.0 * (2 ** attempt))
+    
+    return None

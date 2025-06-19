@@ -5,13 +5,18 @@ from datetime import datetime
 from langchain_core.messages import HumanMessage
 import os
 
-from backend.models.models import SearchQuery, LearningPathState, SearchServiceResult, ScrapedResult
-from backend.parsers.parsers import search_queries_parser, enhanced_modules_parser
-from backend.services.services import get_llm, perform_search_and_scrape, get_llm_with_search
+from backend.models.models import SearchQuery, LearningPathState, SearchServiceResult, ScrapedResult, ResourceQuery
+from backend.parsers.parsers import search_queries_parser, enhanced_modules_parser, parse_initial_flow_response, parse_search_queries, parse_resource_queries
+from backend.services.services import get_llm, execute_search_with_router, get_llm_with_search
 from langchain_core.prompts import ChatPromptTemplate
 
-from backend.core.graph_nodes.helpers import run_chain, batch_items, format_search_results, escape_curly_braces, MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT, extract_json_from_markdown
+from backend.core.graph_nodes.helpers import run_chain, batch_items, format_search_results, escape_curly_braces, MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT, extract_json_from_markdown, handle_llm_generation_with_retry, handle_llm_generation_with_retry_no_parse
 from backend.core.graph_nodes.search_utils import execute_search_with_llm_retry
+from backend.prompts.learning_path_prompts import (
+    INITIAL_FLOW_PROMPT, REGENERATE_SEARCH_QUERY_PROMPT, TOPIC_RESOURCE_SEARCH_PROMPT, REGENERATE_RESOURCE_QUERY_PROMPT
+)
+
+logger = logging.getLogger("learning_path.initial_flow")
 
 async def generate_search_queries(state: LearningPathState) -> Dict[str, Any]:
     """
@@ -786,3 +791,428 @@ Do not wrap your response in markdown code blocks. Return only the JSON object."
             },
             "steps": state.get("steps", []) + [f"Error creating course: {str(e)}"]
         }
+
+async def generate_initial_flow(state: LearningPathState) -> Dict[str, Any]:
+    """
+    Generate the initial learning path structure using LLM with search capabilities.
+    For premium users (Oscar/Pablo), uses Google Search native grounding.
+    For other users, uses traditional search and synthesis approach.
+    """
+    user_query = state.get("user_query", "")
+    user = state.get("user")
+    
+    logger.info(f"Generating initial learning path for query: '{user_query[:100]}{'...' if len(user_query) > 100 else ''}'")
+    
+    # Get LLM with search capabilities for premium users
+    llm_with_search = await get_llm_with_search(
+        key_provider=state.get("google_key_provider"),
+        user=user
+    )
+    
+    # Check if user has native Google Search capabilities
+    from backend.services.services import GroundedGeminiWrapper
+    if isinstance(llm_with_search, GroundedGeminiWrapper):
+        logger.info(f"Using Google Search native for initial flow generation for user: {getattr(user, 'email', 'unknown')}")
+        
+        # Use direct LLM generation with native Google Search grounding
+        enhanced_prompt = f"""{INITIAL_FLOW_PROMPT}
+
+User Query: {user_query}
+
+Instructions: Use your search capabilities to find the most current and comprehensive information about this topic. Generate a complete learning path based on your research findings."""
+        
+        try:
+            # Prepare LangSmith metadata for Google Search native
+            langsmith_extra = {
+                'name': 'InitialFlow_GoogleSearchNative',
+                'metadata': {
+                    'user_email': getattr(user, 'email', 'unknown'),
+                    'user_id': getattr(user, 'id', 'unknown'),
+                    'user_query': user_query[:100] + "..." if len(user_query) > 100 else user_query,
+                    'operation': 'initial_flow_generation',
+                    'search_type': 'google_native_grounding',
+                    'phase': 'learning_path_generation'
+                },
+                'tags': ['initial_flow', 'google_native', 'premium_user', 'learning_path_generation'],
+                'project_name': os.environ.get('LANGSMITH_PROJECT', 'learni-backend')
+            }
+            
+            response = await handle_llm_generation_with_retry_no_parse(
+                state=state,
+                llm=llm_with_search,
+                prompt=enhanced_prompt,
+                operation_description="initial flow generation with Google Search native",
+                langsmith_extra=langsmith_extra
+            )
+            
+            # Parse the response using existing parser
+            parsed_result = parse_initial_flow_response(response.content if hasattr(response, 'content') else str(response))
+            
+            if not parsed_result:
+                logger.error("Failed to parse initial flow response from Google Search native")
+                return {"error": "Failed to parse initial flow response"}
+            
+            # Extract grounding metadata if available
+            grounding_info = {}
+            if hasattr(response, 'additional_kwargs') and response.additional_kwargs.get('grounding_metadata'):
+                metadata = response.additional_kwargs['grounding_metadata']
+                grounding_info = {
+                    'search_queries_used': metadata.get('search_queries', []),
+                    'sources_found': metadata.get('grounding_sources', 0),
+                    'grounding_chunks': metadata.get('grounding_chunks', [])
+                }
+                logger.info(f"Google Search native found {grounding_info['sources_found']} sources using queries: {grounding_info['search_queries_used']}")
+            
+            return {
+                "initial_flow": parsed_result,
+                "search_method": "google_native",
+                "grounding_metadata": grounding_info
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in Google Search native initial flow generation: {str(e)}")
+            # Continue to fallback traditional approach
+    
+    # Traditional approach with separate search and synthesis for non-premium users or fallback
+    logger.info(f"Using traditional search + synthesis approach for user: {getattr(user, 'email', 'unknown')}")
+    
+    # Step 1: Generate search queries
+    search_queries = await generate_search_queries_for_topic(state, user_query)
+    if not search_queries:
+        logger.error("Failed to generate search queries for initial flow")
+        return {"error": "Failed to generate search queries"}
+    
+    # Step 2: Execute searches using the new router
+    search_results = []
+    for query in search_queries:
+        logger.info(f"Executing search for query: '{query.keywords}'")
+        
+        try:
+            # Prepare LangSmith metadata for traditional search
+            search_langsmith_extra = {
+                'name': 'InitialFlow_TraditionalSearch',
+                'metadata': {
+                    'user_email': getattr(user, 'email', 'unknown'),
+                    'user_id': getattr(user, 'id', 'unknown'),
+                    'search_query': query.keywords,
+                    'operation': 'initial_flow_research',
+                    'search_type': 'traditional_search_synthesis',
+                    'phase': 'topic_research',
+                    'query_origin': 'initial_flow'
+                },
+                'tags': ['initial_flow', 'traditional_search', 'topic_research'],
+                'project_name': os.environ.get('LANGSMITH_PROJECT', 'learni-backend')
+            }
+            
+            result = await execute_search_with_llm_retry(
+                state=state,
+                initial_query=query,
+                regenerate_query_func=regenerate_search_query_for_topic,
+                search_config={"max_results": 5, "scrape_timeout": 10},
+                regenerate_args={"original_topic": user_query},
+                langsmith_extra=search_langsmith_extra
+            )
+            
+            if result and not result.search_provider_error:
+                search_results.append(result)
+                logger.info(f"Search completed successfully. Found {len(result.results)} results")
+            else:
+                logger.warning(f"Search failed for query '{query.keywords}': {result.search_provider_error if result else 'No result returned'}")
+                
+        except Exception as e:
+            logger.error(f"Error during search execution for query '{query.keywords}': {str(e)}")
+    
+    if not search_results:
+        logger.warning("No successful searches found. Proceeding with LLM-only generation")
+    
+    # Step 3: Synthesize learning path from search results
+    return await synthesize_initial_flow_from_search(state, user_query, search_results)
+
+async def generate_search_queries_for_topic(state: LearningPathState, topic: str) -> List[SearchQuery]:
+    """Generate search queries for a given topic using LLM."""
+    llm = await get_llm(key_provider=state.get("google_key_provider"), user=state.get("user"))
+    
+    prompt = f"""Generate effective search queries to research information about: {topic}
+
+Create 3-4 specific search queries that will help gather comprehensive information about this topic.
+Focus on different aspects: fundamentals, current trends, practical applications, and resources.
+
+Return your response in this exact format:
+SEARCH_QUERIES:
+1. [first query]
+2. [second query]  
+3. [third query]
+4. [fourth query] (optional)
+
+Topic: {topic}"""
+
+    try:
+        response = await handle_llm_generation_with_retry(
+            state=state,
+            llm=llm,
+            prompt=prompt,
+            parser_func=parse_search_queries,
+            operation_description="search query generation for topic research"
+        )
+        
+        if response and isinstance(response, list):
+            logger.info(f"Generated {len(response)} search queries for topic research")
+            return response
+        else:
+            logger.error("Failed to parse search queries from LLM response")
+            return []
+            
+    except Exception as e:
+        logger.error(f"Error generating search queries for topic: {str(e)}")
+        return []
+
+async def regenerate_search_query_for_topic(state: LearningPathState, failed_query: SearchQuery, original_topic: str) -> Optional[SearchQuery]:
+    """Regenerate a search query that failed to return results."""
+    llm = await get_llm(key_provider=state.get("google_key_provider"), user=state.get("user"))
+    
+    prompt = REGENERATE_SEARCH_QUERY_PROMPT.format(
+        failed_query=failed_query.keywords,
+        original_topic=original_topic
+    )
+    
+    try:
+        response = await handle_llm_generation_with_retry_no_parse(
+            state=state,
+            llm=llm,
+            prompt=prompt,
+            operation_description="search query regeneration for topic"
+        )
+        
+        if response:
+            # Extract the new query from the response
+            content = response.content if hasattr(response, 'content') else str(response)
+            # Simple extraction - look for quoted text or clean the response
+            new_query = content.strip().strip('"').strip("'")
+            if new_query and new_query != failed_query.keywords:
+                return SearchQuery(keywords=new_query)
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error regenerating search query: {str(e)}")
+        return None
+
+async def synthesize_initial_flow_from_search(
+    state: LearningPathState, 
+    user_query: str, 
+    search_results: List
+) -> Dict[str, Any]:
+    """Synthesize learning path from search results using LLM."""
+    llm = await get_llm(key_provider=state.get("google_key_provider"), user=state.get("user"))
+    
+    # Prepare context from search results
+    search_context = ""
+    total_sources = 0
+    
+    for i, result in enumerate(search_results, 1):
+        search_context += f"\n=== Search Result {i} (Query: {result.query}) ===\n"
+        
+        if result.is_native_google_search and result.native_response_content:
+            # For native Google Search, include the generated content
+            search_context += f"Research Content:\n{result.native_response_content}\n"
+            if result.grounding_metadata:
+                search_context += f"Sources: {result.grounding_metadata.grounding_sources} grounding sources\n"
+                total_sources += result.grounding_metadata.grounding_sources
+        else:
+            # For traditional search, include scraped content
+            for j, scraped_result in enumerate(result.results[:3], 1):  # Limit to top 3 per query
+                if scraped_result.scraped_content:
+                    search_context += f"\nSource {j}: {scraped_result.title or 'No title'}\n"
+                    search_context += f"URL: {scraped_result.url}\n"
+                    search_context += f"Content: {scraped_result.scraped_content[:1000]}...\n"
+                    total_sources += 1
+    
+    # Build synthesis prompt
+    synthesis_prompt = f"""{INITIAL_FLOW_PROMPT}
+
+User Query: {user_query}
+
+Research Context (based on {len(search_results)} searches, {total_sources} sources):
+{search_context}
+
+Instructions: Using the research context above, create a comprehensive learning path. Incorporate insights from the search results to ensure the content is current and well-informed."""
+
+    try:
+        response = await handle_llm_generation_with_retry(
+            state=state,
+            llm=llm,
+            prompt=synthesis_prompt,
+            parser_func=parse_initial_flow_response,
+            operation_description="initial flow synthesis from search results"
+        )
+        
+        if not response:
+            logger.error("Failed to synthesize initial flow from search results")
+            return {"error": "Failed to synthesize learning path"}
+        
+        return {
+            "initial_flow": response,
+            "search_method": "traditional_synthesis",
+            "searches_performed": len(search_results),
+            "sources_used": total_sources
+        }
+        
+    except Exception as e:
+        logger.error(f"Error synthesizing initial flow: {str(e)}")
+        return {"error": f"Failed to synthesize learning path: {str(e)}"}
+
+async def research_topic_resources(state: LearningPathState) -> Dict[str, Any]:
+    """
+    Research and gather educational resources for the topic using search capabilities.
+    """
+    user_query = state.get("user_query", "")
+    initial_flow = state.get("initial_flow")
+    user = state.get("user")
+    
+    logger.info(f"Researching topic resources for: '{user_query[:100]}{'...' if len(user_query) > 100 else ''}'")
+    
+    # Step 1: Generate resource search queries
+    resource_queries = await generate_resource_queries(state, user_query, initial_flow)
+    if not resource_queries:
+        logger.warning("No resource queries generated, proceeding without additional research")
+        return {"topic_resources": [], "resource_search_performed": False}
+    
+    # Step 2: Execute resource searches using the new router
+    resource_results = []
+    for query in resource_queries:
+        logger.info(f"Searching for resources with query: '{query.query}'")
+        
+        try:
+            # Prepare LangSmith metadata for resource search
+            resource_langsmith_extra = {
+                'name': 'InitialFlow_ResourceSearch',
+                'metadata': {
+                    'user_email': getattr(user, 'email', 'unknown'),
+                    'user_id': getattr(user, 'id', 'unknown'),
+                    'search_query': query.query,
+                    'operation': 'topic_resource_research',
+                    'search_type': 'resource_discovery',
+                    'phase': 'resource_collection',
+                    'query_origin': 'resource_research'
+                },
+                'tags': ['resource_search', 'topic_resources', 'educational_materials'],
+                'project_name': os.environ.get('LANGSMITH_PROJECT', 'learni-backend')
+            }
+            
+            result = await execute_search_with_llm_retry(
+                state=state,
+                initial_query=query,
+                regenerate_query_func=regenerate_resource_query,
+                search_config={"max_results": 4, "scrape_timeout": 8},
+                regenerate_args={"original_topic": user_query},
+                langsmith_extra=resource_langsmith_extra
+            )
+            
+            if result and not result.search_provider_error:
+                resource_results.append(result)
+                logger.info(f"Resource search completed. Found {len(result.results)} results")
+            else:
+                logger.warning(f"Resource search failed for query '{query.query}': {result.search_provider_error if result else 'No result returned'}")
+                
+        except Exception as e:
+            logger.error(f"Error during resource search for query '{query.query}': {str(e)}")
+    
+    # Step 3: Process and format the resource results
+    formatted_resources = []
+    total_resources = 0
+    
+    for result in resource_results:
+        if result.is_native_google_search and result.grounding_metadata:
+            # Extract resources from Google Search grounding metadata
+            for chunk in result.grounding_metadata.grounding_chunks:
+                formatted_resources.append({
+                    "title": chunk.get("title", "Educational Resource"),
+                    "url": chunk.get("uri", ""),
+                    "description": "Resource found through Google Search grounding",
+                    "source": "google_search_native"
+                })
+                total_resources += 1
+        else:
+            # Extract resources from traditional search results
+            for scraped_result in result.results:
+                if scraped_result.url and scraped_result.title:
+                    formatted_resources.append({
+                        "title": scraped_result.title,
+                        "url": scraped_result.url,
+                        "description": scraped_result.search_snippet or "Educational resource",
+                        "source": "brave_search_scraping"
+                    })
+                    total_resources += 1
+    
+    logger.info(f"Collected {total_resources} topic resources from {len(resource_results)} searches")
+    
+    return {
+        "topic_resources": formatted_resources,
+        "resource_search_performed": True,
+        "resource_searches_count": len(resource_results),
+        "total_resources_found": total_resources
+    }
+
+async def generate_resource_queries(state: LearningPathState, topic: str, initial_flow) -> List[ResourceQuery]:
+    """Generate resource-specific search queries."""
+    llm = await get_llm(key_provider=state.get("google_key_provider"), user=state.get("user"))
+    
+    # Build context from initial flow if available
+    flow_context = ""
+    if initial_flow and hasattr(initial_flow, 'submodules'):
+        submodule_titles = [sub.title for sub in initial_flow.submodules[:3]]  # First 3
+        flow_context = f"Learning modules: {', '.join(submodule_titles)}"
+    
+    prompt = TOPIC_RESOURCE_SEARCH_PROMPT.format(
+        topic=topic,
+        flow_context=flow_context
+    )
+    
+    try:
+        response = await handle_llm_generation_with_retry(
+            state=state,
+            llm=llm,
+            prompt=prompt,
+            parser_func=parse_resource_queries,
+            operation_description="resource query generation"
+        )
+        
+        if response and isinstance(response, list):
+            logger.info(f"Generated {len(response)} resource queries")
+            return response
+        else:
+            logger.error("Failed to parse resource queries from LLM response")
+            return []
+            
+    except Exception as e:
+        logger.error(f"Error generating resource queries: {str(e)}")
+        return []
+
+async def regenerate_resource_query(state: LearningPathState, failed_query: ResourceQuery, original_topic: str) -> Optional[ResourceQuery]:
+    """Regenerate a resource query that failed to return results."""
+    llm = await get_llm(key_provider=state.get("google_key_provider"), user=state.get("user"))
+    
+    prompt = REGENERATE_RESOURCE_QUERY_PROMPT.format(
+        failed_query=failed_query.query,
+        original_topic=original_topic
+    )
+    
+    try:
+        response = await handle_llm_generation_with_retry_no_parse(
+            state=state,
+            llm=llm,
+            prompt=prompt,
+            operation_description="resource query regeneration"
+        )
+        
+        if response:
+            content = response.content if hasattr(response, 'content') else str(response)
+            new_query = content.strip().strip('"').strip("'")
+            if new_query and new_query != failed_query.query:
+                return ResourceQuery(query=new_query)
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error regenerating resource query: {str(e)}")
+        return None
