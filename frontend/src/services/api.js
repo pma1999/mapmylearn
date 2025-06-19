@@ -1114,7 +1114,7 @@ export const purchaseChatAllowance = async () => {
  * @param {string} pathId - The ID of the course (can be temporary task ID or persistent UUID)
  * @param {number} moduleIndex - Zero-based index of the module
  * @param {number} submoduleIndex - Zero-based index of the submodule
- * @param {object} requestData - The request data including optional path_data for temporary paths
+ * @param {object} requestData - The request data including optional path_data for temporary paths and the diagram language
  * @returns {Promise<object>} The API response containing mermaid_syntax or error message
  */
 export const generateSubmoduleVisualization = async (pathId, moduleIndex, submoduleIndex, requestData) => {

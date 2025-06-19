@@ -277,6 +277,7 @@ class GenerateAudioResponse(BaseModel):
 class GenerateVisualizationRequest(BaseModel):
     """Request body for generating interactive visualizations."""
     path_data: Optional[Dict[str, Any]] = Field(None, description="Full path_data if the course is temporary and not yet saved to history")
+    language: str = Field(..., description="ISO language code like 'en', 'es'")
 
 
 class GenerateVisualizationResponse(BaseModel):

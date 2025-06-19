@@ -49,7 +49,9 @@ logger = logging.getLogger(__name__) # Add logger instance
 
 # Define supported languages
 SUPPORTED_AUDIO_LANGUAGES = ["en", "es", "fr", "de", "it", "pt"]
+SUPPORTED_VISUALIZATION_LANGUAGES = ["en", "es", "fr", "de", "it", "pt"]
 DEFAULT_AUDIO_LANGUAGE = "en" # Although we expect frontend to always send it
+DEFAULT_VISUALIZATION_LANGUAGE = "en"
 
 @router.get("", response_model=LearningPathList)
 async def get_learning_paths(
@@ -1086,6 +1088,13 @@ async def generate_submodule_visualization_endpoint(
     """
     logger.info(f"Visualization request for path {path_id}, M{module_index}, S{submodule_index} by user {user.id}")
 
+    requested_language = request_data.language or DEFAULT_VISUALIZATION_LANGUAGE
+    if requested_language not in SUPPORTED_VISUALIZATION_LANGUAGES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported language '{requested_language}'. Supported languages are: {SUPPORTED_VISUALIZATION_LANGUAGES}"
+        )
+
     # --- TEMP DEBUG: Print TransactionType attributes ---
     import inspect
     logger.info("DEBUG: Available TransactionType attributes:")
@@ -1193,6 +1202,7 @@ async def generate_submodule_visualization_endpoint(
             submodule_title=submodule_title,
             submodule_description=submodule_description,
             submodule_content=submodule_content,
+            language=requested_language,
             google_key_provider=google_key_provider,
             user=user
         )

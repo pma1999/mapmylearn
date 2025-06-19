@@ -172,12 +172,14 @@ const ContentPanel = forwardRef(({
   }, [actualPathData?.language]);
 
   const [selectedLanguage, setSelectedLanguage] = useState(getInitialLanguage);
+  const [selectedVizLanguage, setSelectedVizLanguage] = useState(getInitialLanguage);
 
   useEffect(() => {
     if (displayType === 'submodule' && submodule) {
       setAudioUrl(getAbsoluteAudioUrl(submodule?.audio_url));
       setSelectedLanguage(getInitialLanguage());
-      setAudioError(null); 
+      setSelectedVizLanguage(getInitialLanguage());
+      setAudioError(null);
       // Clear visualization state
       setMermaidSyntax(null);
       setVisualizationError(null);
@@ -191,6 +193,7 @@ const ContentPanel = forwardRef(({
       setVisualizationError(null);
       setVisualizationMessage(null);
       setIsVisualizationLoading(false);
+      setSelectedVizLanguage(getInitialLanguage());
     }
   }, [submodule, displayType, getAbsoluteAudioUrl, getInitialLanguage]);
 
@@ -251,7 +254,12 @@ const ContentPanel = forwardRef(({
   
   const handleLanguageChange = (event) => {
     setSelectedLanguage(event.target.value);
-    setAudioError(null); 
+    setAudioError(null);
+  };
+
+  const handleVizLanguageChange = (event) => {
+    setSelectedVizLanguage(event.target.value);
+    setVisualizationError(null);
   };
 
   const handleAudioStyleChange = (event) => {
@@ -278,7 +286,7 @@ const ContentPanel = forwardRef(({
       console.log('Generating visualization for submodule:', submodule.title);
 
       // Determine request data based on path type (temporary vs persisted)
-      const requestData = isTemporaryPath && actualPathData ? { path_data: actualPathData } : {};
+      const requestData = isTemporaryPath && actualPathData ? { path_data: actualPathData, language: selectedVizLanguage } : { language: selectedVizLanguage };
 
       const response = await generateSubmoduleVisualization(
         pathId,
@@ -646,9 +654,25 @@ const ContentPanel = forwardRef(({
                              </Button>
                          </Box>
                      )}
-                     {tab.component === 'Visualization' && (
-                         <Box data-tut="content-panel-tab-visualization" sx={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 2.5, p: { xs: 2, sm: 3 } }}>
-                             {isVisualizationLoading && <CircularProgress sx={{ my: 2, alignSelf: 'center' }} />}
+                    {tab.component === 'Visualization' && (
+                        <Box data-tut="content-panel-tab-visualization" sx={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 2.5, p: { xs: 2, sm: 3 } }}>
+                            <FormControl fullWidth sx={{ maxWidth: '300px' }} disabled={isVisualizationLoading}>
+                                <InputLabel id={`viz-language-select-label`}>Diagram Language</InputLabel>
+                                <Select
+                                    labelId={`viz-language-select-label`}
+                                    value={selectedVizLanguage}
+                                    label="Diagram Language"
+                                    onChange={handleVizLanguageChange}
+                                    variant="outlined"
+                                    size="small"
+                                >
+                                    {supportedLanguages.map((lang) => (
+                                        <MenuItem key={lang.code} value={lang.code}>{lang.name}</MenuItem>
+                                    ))}
+                                </Select>
+                                <FormHelperText>Language used for visualization labels.</FormHelperText>
+                            </FormControl>
+                            {isVisualizationLoading && <CircularProgress sx={{ my: 2, alignSelf: 'center' }} />}
                              {visualizationError && !isVisualizationLoading && <Alert severity="error" sx={{ width: '100%', mb: 1 }}>{visualizationError}</Alert>}
                              {visualizationMessage && !isVisualizationLoading && <Alert severity="info" sx={{ width: '100%', mb: 1 }}>{visualizationMessage}</Alert>}
                              
