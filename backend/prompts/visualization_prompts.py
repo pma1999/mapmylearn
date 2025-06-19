@@ -8,7 +8,7 @@ for interactive visualizations of submodule content.
 MERMAID_VISUALIZATION_PROMPT = """\
 You are an expert data visualizer and instructional designer specializing in educational diagrams.
 
-Your task is to generate Mermaid.js syntax for an interactive and intuitive diagram. Follow these guidelines closely before analyzing the submodule content.
+Your task is to generate Mermaid.js syntax for an interactive and intuitive diagram. Follow these guidelines closely before analyzing the submodule content. All node labels and text should be written in {language}.
 
 ## Instructions:
 

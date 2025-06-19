@@ -14,6 +14,7 @@ async def generate_mermaid_visualization(
     submodule_title: str,
     submodule_description: str,
     submodule_content: str,
+    language: str,
     google_key_provider: Optional[Any] = None,
     user: Optional[Any] = None  # Add user parameter for model selection
 ) -> Dict[str, Optional[str]]:
@@ -24,6 +25,7 @@ async def generate_mermaid_visualization(
         submodule_title: The title of the submodule
         submodule_description: The description of the submodule  
         submodule_content: The main content of the submodule
+        language: Target language for diagram labels (ISO code)
         google_key_provider: Optional key provider for Google API
         user: Optional user parameter for model selection
         
@@ -49,6 +51,7 @@ async def generate_mermaid_visualization(
             "submodule_title": submodule_title,
             "submodule_description": submodule_description or "No description provided",
             "submodule_content": submodule_content[:15000],  # Limit content length for LLM
+            "language": language,
         })
 
         # Try to parse as JSON first (for "not suitable" message)
