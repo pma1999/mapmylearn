@@ -48,8 +48,8 @@ router = APIRouter(prefix="/v1/learning-paths", tags=["learning-paths"])
 logger = logging.getLogger(__name__) # Add logger instance
 
 # Define supported languages
-SUPPORTED_AUDIO_LANGUAGES = ["en", "es", "fr", "de", "it", "pt"]
-SUPPORTED_VISUALIZATION_LANGUAGES = ["en", "es", "fr", "de", "it", "pt"]
+SUPPORTED_AUDIO_LANGUAGES = ["en", "es", "fr", "de", "it", "pt", "ca"]
+SUPPORTED_VISUALIZATION_LANGUAGES = ["en", "es", "fr", "de", "it", "pt", "ca"]
 DEFAULT_AUDIO_LANGUAGE = "en" # Although we expect frontend to always send it
 DEFAULT_VISUALIZATION_LANGUAGE = "en"
 

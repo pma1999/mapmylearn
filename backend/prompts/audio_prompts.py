@@ -193,6 +193,39 @@ Crie um **roteiro de áudio original** otimizado para escuta e aprendizado. **N�
 **Roteiro de Áudio Gerado (em Português):**
 """
 
+# Catalan Prompt
+PROMPT_CA = """\
+Ets un expert **Dissenyador Instruccional i Guionista d'Àudio**. El teu objectiu és crear el **millor guió de lliçó d'àudio possible** per al submòdul descrit a continuació, sintetitzant informació del context proporcionat i els recursos rellevants.
+
+**La Teva Tasca:**
+Crea un **guió d'àudio original** optimitzat per a l'escolta i l'aprenentatge. **NO** et limitis a narrar el contingut del submòdul proporcionat. En el seu lloc, **sintetitza** informació de la descripció del submòdul, els seus objectius, el contingut de referència i els fragments de recursos *més rellevants* per construir una explicació clara, atractiva i pedagògicament sòlida.
+
+**Instruccions:**
+1.  **Perfil i To:** Escriu amb la veu d'un **tutor entusiasta, encoratjador i clar**. El to ha de ser positiu, atractiu i útil. Fes que soni com una persona experta explicant el tema directament a un aprenent, no com un document formal.
+2.  **Atractiu i Conversacional:** Utilitza un llenguatge clar i concís i patrons de parla naturals. Evita l'argot o explica'l de manera senzilla la primera vegada que l'utilitzis. Varia l'estructura de les frases.
+3.  **Estructura Orientada a l'Àudio:**
+    *   Utilitza **frases i paràgrafs curts** adequats per a l'escolta.
+    *   Incorpora **paraules i frases de transició naturals** (p. ex., "Bé, doncs...", "A continuació...", "Ara, per què és important això?", "Per acabar...", "D'acord, fem un resum...").
+    *   Assegura un flux lògic amb una introducció breu i atractiva i un resum/conclusió concís.
+4.  **Sintetitza, No Només Recitis:** Tracta el "Contingut de Referència del Submòdul" proporcionat com una guia de l'**abast i els punts clau requerits**, però **reexplica els conceptes de manera exhaustiva amb les teves pròpies paraules** d'una manera optimitzada per a l'aprenentatge auditiu. HAS de cobrir tots els temes essencials definits per la descripció, l'objectiu i el concepte central del submòdul. Pots reorganitzar la informació per millorar-ne el flux.
+5.  **Avaluació de Recursos (CRÍTIC):** Avalua acuradament el "Contingut Addicional dels Recursos". **Incorpora informació NOMÉS SI és directament rellevant, precisa, aporta un valor significatiu** a l'objectiu del submòdul i s'ajusta al nivell de profunditat objectiu. **Ignora o referencia mínimament els fragments de recursos que estiguin fora de tema, siguin redundants, massa complexos o de baixa qualitat.** Cita breument la font de manera conceptual si utilitzes una idea específica (p. ex., "Un estudi va trobar que..." o "Com s'explica a [Nom del lloc web]...").
+6.  **Enfoc Didàctic:** Intenta realment *ensenyar* el concepte. Explica el 'per què', utilitza analogies o exemples senzills (adequats a l'estil) i anticipa possibles punts de confusió.
+7.  **Enfocament i Exhaustivitat:** Ajusta't estrictament al tema d'aquest submòdul. **Assegura't que el teu guió cobreixi de manera exhaustiva tots els aspectes clau i objectius d'aprenentatge definits per a aquest submòdul.** No afegeixis informació externa o opinions que no donin suport directament a l'objectiu del submòdul.
+8.  **Claredat:** Explica els termes tècnics amb claredat. Adapta el contingut visual (taules, codi) a descripcions amigables per a l'àudio. Evita les indicacions visuals ("vegeu la figura 1").
+9.  **Puresa Lingüística CRÍTICA:** Genera el guió **exclusivament** en català. No utilitzis paraules d'altres idiomes a menys que sigui un terme acceptat globalment sense equivalent clar en català (p. ex., 'software').
+10. **Sortida:** Proporciona *només* el text final del guió. No incloguis introduccions ("Aquí tens el guió:"), títols de secció ("Introducció:"), acotacions [com aquestes], ni altres comentaris meta.
+
+# Guia d'Estil Específica:
+# {audio_style_script_instruction}
+
+**Context Proporcionat:**
+---
+{context}
+---
+
+**Guió d'Àudio Generat (en Català):**
+"""
+
 # Dictionary mapping language code to prompt
 AUDIO_SCRIPT_PROMPTS_BY_LANG = {
     "en": PROMPT_EN,
@@ -201,5 +234,6 @@ AUDIO_SCRIPT_PROMPTS_BY_LANG = {
     "de": PROMPT_DE,
     "it": PROMPT_IT,
     "pt": PROMPT_PT,
+    "ca": PROMPT_CA,
     # Add other languages here if supported in the future AND defined in SubmoduleCard.js
 }
