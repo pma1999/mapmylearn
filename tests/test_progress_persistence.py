@@ -23,7 +23,12 @@ class DummyRedis:
         return True
 
 def async_run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    """Run an async coroutine in a fresh event loop for isolation."""
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
 
 def test_save_progress_to_redis():
     redis = DummyRedis()

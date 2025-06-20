@@ -695,9 +695,22 @@ async def generate_learning_path_task(
                 active_generations[task_id]["progress_stream"].append(progress_dict)
                 active_generations[task_id]["progress_stream"] = active_generations[task_id]["progress_stream"][-50:]
             else:
-                logger.warning(f"Task {task_id} not found in active_generations when trying to append progress.")
+                logger.warning(
+                    f"Task {task_id} not found in active_generations when trying to append progress."
+                )
 
-        await save_progress_event(task_id, progress_update_obj.model_dump(), last_id if 'last_id' in locals() else 0)
+        if last_id == 0:
+            client = await get_redis_client()
+            if client:
+                try:
+                    raw = await client.lrange(f"progress:{task_id}", -1, -1)
+                    if raw:
+                        last_id = json.loads(raw[0]).get("id", 0) + 1
+                    else:
+                        last_id = 1
+                except Exception as e:
+                    logger.error(f"Failed to read last event id for {task_id}: {e}")
+        await save_progress_event(task_id, progress_update_obj.model_dump(), last_id)
 
 
     try:
@@ -1338,13 +1351,19 @@ async def learning_path_progress_stream(task_id: str, request: Request):
 
                 async with active_generations_lock:
                     task_info = active_generations.get(task_id)
+                    if task_info:
+                        current_status = task_info.get("status", "pending")
+                        memory_stream = list(task_info.get("progress_stream", []))
+                    else:
+                        current_status = None
+                        memory_stream = []
 
                 if not task_info:
-                    logger.warning(f"SSE stream request for unknown or completed task {task_id}.")
+                    logger.warning(
+                        f"SSE stream request for unknown or completed task {task_id}."
+                    )
                     yield f"data: {json.dumps({'error': 'Task not found or completed.', 'status': 'unknown'})}" + "\n\n"
                     break
-
-                current_status = task_info.get("status", "pending")
 
                 progress_items = []
                 if redis_client:
@@ -1354,7 +1373,7 @@ async def learning_path_progress_stream(task_id: str, request: Request):
                     except Exception as e:
                         logger.error(f"Error reading Redis for task {task_id}: {e}")
                 if not progress_items:
-                    progress_items = task_info.get("progress_stream", [])
+                    progress_items = memory_stream
 
                 new_events = [e for e in progress_items if e.get("id", 0) > last_event_id]
                 for event in new_events:
