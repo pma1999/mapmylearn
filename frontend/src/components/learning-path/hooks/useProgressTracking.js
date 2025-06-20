@@ -420,8 +420,17 @@ const useProgressTracking = (taskId, onTaskComplete) => {
   const progressEventSourceRef = useRef(null);
   const pollingIntervalRef = useRef(null);
   
-  // --- Use reducer for liveBuildData ---
-  const [liveBuildData, dispatchLiveBuildDataUpdate] = useReducer(liveBuildDataReducer, initialLiveBuildData);
+  const eventIdKey = `lastEventId-${taskId}`;
+  const storedLive = sessionStorage.getItem(`liveBuildData-${taskId}`);
+  const [liveBuildData, dispatchLiveBuildDataUpdate] = useReducer(
+    liveBuildDataReducer,
+    storedLive ? JSON.parse(storedLive) : initialLiveBuildData
+  );
+  const lastEventIdRef = useRef(parseInt(sessionStorage.getItem(eventIdKey)) || 0);
+
+  useEffect(() => {
+    sessionStorage.setItem(`liveBuildData-${taskId}`, JSON.stringify(liveBuildData));
+  }, [liveBuildData, taskId]);
   const [overallProgress, setOverallProgress] = useState(0); // Separate state for overall progress bar
   const [error, setError] = useState(null); // For task-level errors from polling or SSE 'error' action
 
@@ -444,6 +453,11 @@ const useProgressTracking = (taskId, onTaskComplete) => {
 
             if (eventData.message) {
               setProgressMessages((prev) => [...prev, eventData].slice(-100)); // Keep last 100 messages
+            }
+
+            if (eventData.id) {
+              lastEventIdRef.current = eventData.id;
+              sessionStorage.setItem(eventIdKey, String(eventData.id));
             }
 
             // Update overall progress if present in the event
@@ -489,10 +503,7 @@ const useProgressTracking = (taskId, onTaskComplete) => {
             if (progressEventSourceRef.current) {
                 progressEventSourceRef.current.close();
             }
-            // Fallback to polling if SSE fails critically
-            if (!isPolling) {
-                startPollingForResult();
-            }
+            setTimeout(setupProgressUpdates, 1000);
           },
           () => {
             // SSE stream closed by server (e.g., on task completion or explicit close)
@@ -500,7 +511,8 @@ const useProgressTracking = (taskId, onTaskComplete) => {
             if (!isPolling) {
               startPollingForResult();
             }
-          }
+          },
+          lastEventIdRef.current
         );
         
         progressEventSourceRef.current = eventSource;

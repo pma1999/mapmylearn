@@ -1224,7 +1224,7 @@ export const copyPublicPath = async (shareId) => {
 };
 
 // --- NEW: Function to stream progress updates via SSE --- 
-export const streamProgressUpdates = (taskId, onMessage, onError, onClose) => {
+export const streamProgressUpdates = (taskId, onMessage, onError, onClose, lastEventId = 0) => {
   if (!taskId) {
     if (onError) onError(new Error("Task ID is required for progress updates."));
     return null; // Or throw error, depending on desired strictness
@@ -1241,7 +1241,9 @@ export const streamProgressUpdates = (taskId, onMessage, onError, onClose) => {
   //   ? `${API_URL}/api/learning-path/${taskId}/progress-stream?token=${authToken}` 
   //   : `${API_URL}/api/learning-path/${taskId}/progress-stream`;
   // Simpler approach for now, assuming cookie-based auth or public endpoint for SSE if no token passed in query
-  const sseUrl = `${API_URL}/api/learning-path/${taskId}/progress-stream`;
+  const sseUrl = lastEventId
+    ? `${API_URL}/api/learning-path/${taskId}/progress-stream?lastEventId=${lastEventId}`
+    : `${API_URL}/api/learning-path/${taskId}/progress-stream`;
 
   console.log(`Connecting to SSE: ${sseUrl}`);
   const eventSource = new EventSource(sseUrl, { withCredentials: true }); // Added withCredentials for cookie-based auth

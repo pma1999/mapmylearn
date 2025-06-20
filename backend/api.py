@@ -428,6 +428,22 @@ async def get_redis_client():
         return None
 # --- End Helper Function ---
 
+# --- Helper to persist progress updates ---
+async def save_progress_event(task_id: str, progress_data: Dict[str, Any], event_id: int):
+    """Save a progress event in Redis for later retrieval."""
+    client = await get_redis_client()
+    if not client:
+        return
+    key = f"progress:{task_id}"
+    try:
+        data = json.dumps({**progress_data, "id": event_id}, cls=DateTimeEncoder)
+        await client.rpush(key, data)
+        # Set TTL of 24h so old progress is cleaned up automatically
+        await client.expire(key, 60 * 60 * 24)
+    except Exception as e:
+        logger.error(f"Failed to store progress for {task_id} in Redis: {e}")
+
+
 @app.post("/api/auth/api-keys")
 async def authenticate_api_keys(request: ApiKeyAuthRequest, req: Request):
     """
@@ -547,11 +563,12 @@ async def api_generate_learning_path(request: LearningPathRequest, background_ta
     # Initialize the task in active_generations dictionary
     async with active_generations_lock:
         active_generations[task_id] = {
-            "status": "pending", 
-            "result": None, 
+            "status": "pending",
+            "result": None,
             "user_id": user_id,
             "progress_stream": [], # Initialize progress_stream list
-            "error": None # Initialize error field
+            "error": None, # Initialize error field
+            "last_event_id": 0
         }
 
     # Create key providers with server API keys (prioritized)
@@ -622,6 +639,10 @@ async def generate_learning_path_task(
     result = None
     current_overall_progress = 0.0 # Track current overall progress
 
+    redis_client = await get_redis_client()
+    if redis_client:
+        await redis_client.expire(f"progress:{task_id}", 60 * 60 * 24)
+
     # Define a wrapper progress callback to ensure messages are logged and structured
     async def enhanced_progress_callback(message: str,
                                          phase: Optional[str] = None,
@@ -662,16 +683,21 @@ async def generate_learning_path_task(
             action=action
         )
 
+        last_id = 0
         async with active_generations_lock:
             if task_id in active_generations:
-                # Ensure progress_stream exists, defensively
                 if "progress_stream" not in active_generations[task_id]:
                     active_generations[task_id]["progress_stream"] = []
-                active_generations[task_id]["progress_stream"].append(progress_update_obj.model_dump()) # Store as dict
-                # Keep only the last N updates if necessary to save memory, e.g., last 50
+                last_id = active_generations[task_id].get("last_event_id", 0) + 1
+                active_generations[task_id]["last_event_id"] = last_id
+                progress_dict = progress_update_obj.model_dump()
+                progress_dict["id"] = last_id
+                active_generations[task_id]["progress_stream"].append(progress_dict)
                 active_generations[task_id]["progress_stream"] = active_generations[task_id]["progress_stream"][-50:]
             else:
                 logger.warning(f"Task {task_id} not found in active_generations when trying to append progress.")
+
+        await save_progress_event(task_id, progress_update_obj.model_dump(), last_id if 'last_id' in locals() else 0)
 
 
     try:
@@ -1296,37 +1322,46 @@ async def learning_path_progress_stream(task_id: str, request: Request):
     Server-Sent Events endpoint to stream progress updates for a learning path generation task.
     """
     async def event_generator():
-        last_sent_index = 0
+        header_id = request.headers.get("Last-Event-ID") or request.query_params.get("lastEventId")
+        try:
+            last_event_id = int(header_id)
+        except (TypeError, ValueError):
+            last_event_id = 0
+
+        redis_client = await get_redis_client()
+        last_ping = time.time()
         try:
             while True:
-                # Check for client disconnect
                 if await request.is_disconnected():
                     logger.info(f"Client disconnected from SSE stream for task {task_id}.")
                     break
 
                 async with active_generations_lock:
                     task_info = active_generations.get(task_id)
-                    if not task_info:
-                        # Task not found or already cleaned up
-                        logger.warning(f"SSE stream request for unknown or completed task {task_id}.")
-                        yield f"data: {json.dumps({'error': 'Task not found or completed.', 'status': 'unknown'})}" + "\n\n"
-                        break
-                    
-                    progress_items = task_info.get("progress_stream", [])
-                    current_status = task_info.get("status", "pending")
-                
-                # Send new messages
-                if len(progress_items) > last_sent_index:
-                    for i in range(last_sent_index, len(progress_items)):
-                        message_to_send = progress_items[i]
-                        # Ensure message_to_send is a dict (it should be from model_dump())
-                        if isinstance(message_to_send, dict):
-                            yield f"data: {json.dumps(message_to_send, cls=DateTimeEncoder)}" + "\n\n"
-                        else:
-                            logger.warning(f"Skipping non-dict progress item for task {task_id}: {type(message_to_send)}")
-                    last_sent_index = len(progress_items)
 
-                # Check if task is completed or failed to close stream
+                if not task_info:
+                    logger.warning(f"SSE stream request for unknown or completed task {task_id}.")
+                    yield f"data: {json.dumps({'error': 'Task not found or completed.', 'status': 'unknown'})}" + "\n\n"
+                    break
+
+                current_status = task_info.get("status", "pending")
+
+                progress_items = []
+                if redis_client:
+                    try:
+                        raw_items = await redis_client.lrange(f"progress:{task_id}", 0, -1)
+                        progress_items = [json.loads(r) for r in raw_items]
+                    except Exception as e:
+                        logger.error(f"Error reading Redis for task {task_id}: {e}")
+                if not progress_items:
+                    progress_items = task_info.get("progress_stream", [])
+
+                new_events = [e for e in progress_items if e.get("id", 0) > last_event_id]
+                for event in new_events:
+                    last_event_id = event.get("id", last_event_id)
+                    yield f"id: {event.get('id')}\ndata: {json.dumps(event, cls=DateTimeEncoder)}\n\n"
+                    last_ping = time.time()
+
                 if current_status in ["completed", "failed"]:
                     logger.info(f"Task {task_id} reached terminal state ({current_status}). Closing SSE stream.")
                     final_message = {
@@ -1338,8 +1373,12 @@ async def learning_path_progress_stream(task_id: str, request: Request):
                     }
                     yield f"data: {json.dumps(final_message)}" + "\n\n"
                     break
-                
-                await asyncio.sleep(0.5)  # Poll for new messages periodically
+
+                if time.time() - last_ping > 15:
+                    yield ": ping\n\n"
+                    last_ping = time.time()
+
+                await asyncio.sleep(0.5)
         except asyncio.CancelledError:
             logger.info(f"SSE stream for task {task_id} was cancelled (client likely disconnected).")
         except Exception as e:
@@ -1353,6 +1392,19 @@ async def learning_path_progress_stream(task_id: str, request: Request):
             logger.info(f"SSE event_generator for task {task_id} finished.")
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+@app.get("/api/learning-path/{task_id}/progress")
+async def get_learning_path_progress(task_id: str):
+    """Return all stored progress events for a task."""
+    client = await get_redis_client()
+    if not client:
+        raise HTTPException(status_code=503, detail="Progress storage unavailable")
+    try:
+        raw = await client.lrange(f"progress:{task_id}", 0, -1)
+        return [json.loads(r) for r in raw]
+    except Exception as e:
+        logger.error(f"Failed to fetch progress for {task_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve progress")
 
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
