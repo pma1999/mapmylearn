@@ -84,6 +84,7 @@ const supportedLanguages = [
   { code: 'de', name: 'Deutsch' },
   { code: 'it', name: 'Italiano' },
   { code: 'pt', name: 'Português' },
+  { code: 'ca', name: 'Català' },
 ];
 const defaultLanguageCode = 'en';
 const AUDIO_CREDIT_COST = 1;

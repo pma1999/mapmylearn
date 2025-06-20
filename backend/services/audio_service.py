@@ -41,6 +41,7 @@ Tts_accent_map = {
     "de": "standard German accent (Hochdeutsch)",
     "it": "standard Italian accent",
     "pt": "standard European Portuguese accent",
+    "ca": "standard Catalan accent",
     # Add other languages and desired accents here, e.g.:
     # "zh": "Mandarin Chinese accent",
     # "ja": "standard Japanese accent",

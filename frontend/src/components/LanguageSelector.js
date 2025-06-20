@@ -13,6 +13,7 @@ const LANGUAGE_OPTIONS = [
   { code: 'de', name: 'Deutsch', flagUrl: `${FLAG_BASE_URL}/de.png` },
   { code: 'it', name: 'Italiano', flagUrl: `${FLAG_BASE_URL}/it.png` },
   { code: 'pt', name: 'Português', flagUrl: `${FLAG_BASE_URL}/pt.png` },
+  { code: 'ca', name: 'Català', flagUrl: `${FLAG_BASE_URL}/ad.png` },
   { code: 'zh', name: '中文', flagUrl: `${FLAG_BASE_URL}/cn.png` },
   { code: 'ja', name: '日本語', flagUrl: `${FLAG_BASE_URL}/jp.png` },
   { code: 'ru', name: 'Русский', flagUrl: `${FLAG_BASE_URL}/ru.png` },
