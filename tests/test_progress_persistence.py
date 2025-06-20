@@ -41,10 +41,19 @@ def test_last_event_id_resume():
     async_run(redis.rpush('progress:taskx', json.dumps({'id':1,'message':'one'})))
     async_run(redis.rpush('progress:taskx', json.dumps({'id':2,'message':'two'})))
     with patch('backend.api.get_redis_client', fake_get):
-        async_run(active_generations_lock.acquire())
-        active_generations['taskx'] = {'status':'completed','progress_stream':[], 'last_event_id':2}
-        active_generations_lock.release()
+        async def setup_active_generation():
+            async with active_generations_lock:
+                active_generations['taskx'] = {
+                    'status': 'completed',
+                    'progress_stream': [],
+                    'last_event_id': 2
+                }
+        async_run(setup_active_generation())
+
         client = TestClient(app)
-        resp = client.get('/api/learning-path/taskx/progress-stream', headers={'Last-Event-ID':'1'})
+        resp = client.get(
+            '/api/learning-path/taskx/progress-stream',
+            headers={'Last-Event-ID': '1'}
+        )
         body = resp.content.decode()
         assert 'two' in body and 'one' not in body

@@ -422,9 +422,16 @@ const useProgressTracking = (taskId, onTaskComplete) => {
   
   const eventIdKey = `lastEventId-${taskId}`;
   const storedLive = sessionStorage.getItem(`liveBuildData-${taskId}`);
+  let initialState;
+  try {
+    initialState = storedLive ? JSON.parse(storedLive) : initialLiveBuildData;
+  } catch (err) {
+    console.error('Failed to parse stored live build data', err);
+    initialState = initialLiveBuildData;
+  }
   const [liveBuildData, dispatchLiveBuildDataUpdate] = useReducer(
     liveBuildDataReducer,
-    storedLive ? JSON.parse(storedLive) : initialLiveBuildData
+    initialState
   );
   const lastEventIdRef = useRef(parseInt(sessionStorage.getItem(eventIdKey)) || 0);
 
