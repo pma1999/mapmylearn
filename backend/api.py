@@ -698,18 +698,22 @@ async def generate_learning_path_task(
                 logger.warning(
                     f"Task {task_id} not found in active_generations when trying to append progress."
                 )
-
-        if last_id == 0:
-            client = await get_redis_client()
-            if client:
-                try:
-                    raw = await client.lrange(f"progress:{task_id}", -1, -1)
-                    if raw:
-                        last_id = json.loads(raw[0]).get("id", 0) + 1
-                    else:
+                client = await get_redis_client()
+                if client:
+                    try:
+                        raw = await client.lrange(f"progress:{task_id}", -1, -1)
+                        if raw:
+                            last_id = json.loads(raw[0]).get("id", 0) + 1
+                        else:
+                            last_id = 1
+                    except Exception as e:
+                        logger.error(f"Failed to read last event id for {task_id}: {e}")
                         last_id = 1
-                except Exception as e:
-                    logger.error(f"Failed to read last event id for {task_id}: {e}")
+                if last_id == 0:
+                    last_id = 1
+
+        if last_id <= 0:
+            last_id = 1
         await save_progress_event(task_id, progress_update_obj.model_dump(), last_id)
 
 
