@@ -642,6 +642,7 @@ async def generate_learning_path_task(
     redis_client = await get_redis_client()
     if redis_client:
         await redis_client.expire(f"progress:{task_id}", 60 * 60 * 24)
+        await redis_client.expire(f"progress:{task_id}:id", 60 * 60 * 24)
 
     # Define a wrapper progress callback to ensure messages are logged and structured
     async def enhanced_progress_callback(message: str,
@@ -684,34 +685,33 @@ async def generate_learning_path_task(
         )
 
         last_id = 0
-        task_missing = False
+        client = await get_redis_client()
+        if client:
+            try:
+                last_id = await client.incr(f"progress:{task_id}:id")
+                await client.expire(f"progress:{task_id}:id", 60 * 60 * 24)
+            except Exception as e:
+                logger.error(f"Failed to increment event id for {task_id}: {e}")
+                last_id = 0
+
         async with active_generations_lock:
-            if task_id in active_generations:
-                if "progress_stream" not in active_generations[task_id]:
-                    active_generations[task_id]["progress_stream"] = []
-                last_id = active_generations[task_id].get("last_event_id", 0) + 1
-                active_generations[task_id]["last_event_id"] = last_id
+            task_info = active_generations.get(task_id)
+            if task_info:
+                if "progress_stream" not in task_info:
+                    task_info["progress_stream"] = []
+                if last_id == 0:
+                    last_id = task_info.get("last_event_id", 0) + 1
+                task_info["last_event_id"] = last_id
                 progress_dict = progress_update_obj.model_dump()
                 progress_dict["id"] = last_id
-                active_generations[task_id]["progress_stream"].append(progress_dict)
-                active_generations[task_id]["progress_stream"] = active_generations[task_id]["progress_stream"][-50:]
+                task_info["progress_stream"].append(progress_dict)
+                task_info["progress_stream"] = task_info["progress_stream"][-50:]
             else:
-                task_missing = True
-
-        if task_missing:
-            logger.warning(
-                f"Task {task_id} not found in active_generations when trying to append progress."
-            )
-            client = await get_redis_client()
-            if client:
-                try:
-                    last_id = await client.incr(f"progress:{task_id}:id")
-                    await client.expire(f"progress:{task_id}:id", 60 * 60 * 24)
-                except Exception as e:
-                    logger.error(f"Failed to increment event id for {task_id}: {e}")
+                if last_id == 0:
                     last_id = 1
-            if last_id == 0:
-                last_id = 1
+                logger.warning(
+                    f"Task {task_id} not found in active_generations when trying to append progress."
+                )
 
         await save_progress_event(task_id, progress_update_obj.model_dump(), last_id)
 
