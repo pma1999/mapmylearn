@@ -420,8 +420,24 @@ const useProgressTracking = (taskId, onTaskComplete) => {
   const progressEventSourceRef = useRef(null);
   const pollingIntervalRef = useRef(null);
   
-  // --- Use reducer for liveBuildData ---
-  const [liveBuildData, dispatchLiveBuildDataUpdate] = useReducer(liveBuildDataReducer, initialLiveBuildData);
+  const eventIdKey = `lastEventId-${taskId}`;
+  const storedLive = sessionStorage.getItem(`liveBuildData-${taskId}`);
+  let initialState;
+  try {
+    initialState = storedLive ? JSON.parse(storedLive) : initialLiveBuildData;
+  } catch (err) {
+    console.error('Failed to parse stored live build data', err);
+    initialState = initialLiveBuildData;
+  }
+  const [liveBuildData, dispatchLiveBuildDataUpdate] = useReducer(
+    liveBuildDataReducer,
+    initialState
+  );
+  const lastEventIdRef = useRef(parseInt(sessionStorage.getItem(eventIdKey)) || 0);
+
+  useEffect(() => {
+    sessionStorage.setItem(`liveBuildData-${taskId}`, JSON.stringify(liveBuildData));
+  }, [liveBuildData, taskId]);
   const [overallProgress, setOverallProgress] = useState(0); // Separate state for overall progress bar
   const [error, setError] = useState(null); // For task-level errors from polling or SSE 'error' action
 
@@ -435,6 +451,9 @@ const useProgressTracking = (taskId, onTaskComplete) => {
         dispatchLiveBuildDataUpdate({ type: 'SET_TOPIC', payload: { topic: storedTopic } });
     }
     
+    let retryCount = 0;
+    const maxRetries = 5;
+
     const setupProgressUpdates = () => {
       try {
         const eventSource = streamProgressUpdates(
@@ -444,6 +463,11 @@ const useProgressTracking = (taskId, onTaskComplete) => {
 
             if (eventData.message) {
               setProgressMessages((prev) => [...prev, eventData].slice(-100)); // Keep last 100 messages
+            }
+
+            if (eventData.id) {
+              lastEventIdRef.current = eventData.id;
+              sessionStorage.setItem(eventIdKey, String(eventData.id));
             }
 
             // Update overall progress if present in the event
@@ -485,14 +509,19 @@ const useProgressTracking = (taskId, onTaskComplete) => {
           (sseError) => {
             console.error('SSE Connection Error:', sseError);
             setError({ message: 'Connection to server lost. Please check your internet and try again.' });
-            // Potentially stop polling or retry SSE connection based on error type
             if (progressEventSourceRef.current) {
                 progressEventSourceRef.current.close();
             }
-            // Fallback to polling if SSE fails critically
-            if (!isPolling) {
+            retryCount += 1;
+            if (retryCount > maxRetries) {
+              console.error('Max SSE retries reached, falling back to polling.');
+              if (!isPolling) {
                 startPollingForResult();
+              }
+              return;
             }
+            const delay = Math.min(30000, 1000 * 2 ** (retryCount - 1));
+            setTimeout(setupProgressUpdates, delay);
           },
           () => {
             // SSE stream closed by server (e.g., on task completion or explicit close)
@@ -500,9 +529,14 @@ const useProgressTracking = (taskId, onTaskComplete) => {
             if (!isPolling) {
               startPollingForResult();
             }
-          }
+          },
+          lastEventIdRef.current
         );
-        
+
+        eventSource.onopen = () => {
+          retryCount = 0; // reset backoff on successful connection
+        };
+
         progressEventSourceRef.current = eventSource;
       } catch (err) {
         console.error('Error setting up progress updates:', err);
