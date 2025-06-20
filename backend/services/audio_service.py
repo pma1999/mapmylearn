@@ -148,6 +148,9 @@ async def generate_submodule_audio(
     concatenation, and database updates if applicable.
     Respects the force_regenerate flag to bypass cache checks.
     """
+    from backend.utils.language_utils import get_full_language_name
+    language_name = get_full_language_name(language)
+
     # --- Validate Language ---
     if language not in AUDIO_SCRIPT_PROMPTS_BY_LANG:
          logger.error(f"Unsupported language requested for audio generation: {language}")
@@ -306,7 +309,7 @@ async def generate_submodule_audio(
     instruction_text = (
         f"Base Persona: Act as an {TTS_PERSONA} explaining '{submodule_title}' to a learner. "
         f"Base Tone/Pacing: Maintain a {Tts_tone} tone. Speak clearly at a {Tts_pacing}. Use natural speech patterns and {Tts_intonation}. "
-        f"Language/Accent: Ensure accurate pronunciation using a {target_accent} in the {language} language. "
+        f"Language/Accent: Ensure accurate pronunciation using a {target_accent} in the {language_name} language. "
         f"Specific Style Guidance: {tts_instruction_suffix}" # Append style-specific instructions
     )
     logger.info(f"Using Rich TTS instruction: {instruction_text}")

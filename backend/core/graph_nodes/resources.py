@@ -68,8 +68,11 @@ async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
 
     try:
         # Get language information
-        output_language = state.get('language', 'en')
-        search_language = state.get('search_language', 'en')
+        from backend.utils.language_utils import get_full_language_name
+        output_language_code = state.get('language', 'en')
+        search_language_code = state.get('search_language', 'en')
+        output_language = get_full_language_name(output_language_code)
+        search_language = get_full_language_name(search_language_code)
         escaped_topic = escape_curly_braces(state["user_topic"])
 
         # Build course context (same logic as before)
@@ -282,8 +285,11 @@ async def generate_module_resources(state: LearningPathState, module_id: int, mo
 
     try:
         # Get language information
-        output_language = state.get('language', 'en')
-        search_language = state.get('search_language', 'en')
+        from backend.utils.language_utils import get_full_language_name
+        output_language_code = state.get('language', 'en')
+        search_language_code = state.get('search_language', 'en')
+        output_language = get_full_language_name(output_language_code)
+        search_language = get_full_language_name(search_language_code)
         escaped_topic = escape_curly_braces(state["user_topic"])
 
         # Build course context (same as before)
@@ -515,8 +521,11 @@ async def generate_submodule_resources(
 
     try:
         # Get language information
-        output_language = state.get('language', 'en')
-        search_language = state.get('search_language', 'en')
+        from backend.utils.language_utils import get_full_language_name
+        output_language_code = state.get('language', 'en')
+        search_language_code = state.get('search_language', 'en')
+        output_language = get_full_language_name(output_language_code)
+        search_language = get_full_language_name(search_language_code)
         escaped_topic = escape_curly_braces(state["user_topic"])
 
         # Build context (similar logic as before)
@@ -1088,8 +1097,11 @@ async def regenerate_resource_query(
     logger.info(f"Regenerating {target_level} resource query after no results for: {failed_query.query}")
     
     # Get language information from state
-    output_language = state.get('language', 'en')
-    search_language = state.get('search_language', 'en')
+    from backend.utils.language_utils import get_full_language_name
+    output_language_code = state.get('language', 'en')
+    search_language_code = state.get('search_language', 'en')
+    output_language = get_full_language_name(output_language_code)
+    search_language = get_full_language_name(search_language_code)
     
     # Get Google key provider from state
     google_key_provider = state.get("google_key_provider")

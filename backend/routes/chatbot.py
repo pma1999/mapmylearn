@@ -58,52 +58,7 @@ except ValueError:
     CHAT_FREE_LIMIT_PER_DAY = 100
 
 # --- Helper function to convert language code to full language name --- #
-def get_full_language_name(language_code):
-    """
-    Convert an ISO 639-1 language code to its full language name.
-    """
-    language_map = {
-        "en": "English",
-        "es": "Spanish",
-        "fr": "French",
-        "de": "German",
-        "it": "Italian",
-        "pt": "Portuguese",
-        "ru": "Russian",
-        "zh": "Chinese",
-        "ja": "Japanese",
-        "ko": "Korean",
-        "ar": "Arabic",
-        "hi": "Hindi",
-        "bn": "Bengali",
-        "pa": "Punjabi",
-        "jv": "Javanese",
-        "id": "Indonesian",
-        "tr": "Turkish",
-        "vi": "Vietnamese",
-        "pl": "Polish",
-        "uk": "Ukrainian",
-        "nl": "Dutch",
-        "el": "Greek",
-        "cs": "Czech",
-        "sv": "Swedish",
-        "hu": "Hungarian",
-        "fi": "Finnish",
-        "no": "Norwegian",
-        "da": "Danish",
-        "th": "Thai",
-        "he": "Hebrew",
-        "ca": "Catalan"
-    }
-    
-    # Handle more specific language codes with regions (e.g., "pt-BR")
-    if "-" in language_code:
-        base_code = language_code.split("-")[0]
-        if base_code in language_map:
-            return language_map[base_code]
-    
-    # Return the full name if found in the map, otherwise return the original code
-    return language_map.get(language_code, language_code)
+from backend.utils.language_utils import get_full_language_name
 
 # --- Helper function to format path structure --- #
 def format_path_structure(path_data):

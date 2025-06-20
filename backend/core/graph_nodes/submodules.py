@@ -70,8 +70,11 @@ async def regenerate_submodule_content_query(
     logger.info(f"Regenerating submodule content query after no results for: {failed_query.keywords}")
     
     # Get language information from state
-    output_language = state.get('language', 'en')
-    search_language = state.get('search_language', 'en')
+    from backend.utils.language_utils import get_full_language_name
+    output_language_code = state.get('language', 'en')
+    search_language_code = state.get('search_language', 'en')
+    output_language = get_full_language_name(output_language_code)
+    search_language = get_full_language_name(search_language_code)
     
     # Get Google key provider from state
     google_key_provider = state.get("google_key_provider")
@@ -345,7 +348,9 @@ async def plan_module_submodules(state: LearningPathState, idx: int, module) -> 
         )
     
     # Get language from state
-    output_language = state.get('language', 'en')
+    from backend.utils.language_utils import get_full_language_name
+    output_language_code = state.get('language', 'en')
+    output_language = get_full_language_name(output_language_code)
     
     learning_path_context = "\n".join([f"Module {i+1}: {mod.title}\n{mod.description}" 
                                        for i, mod in enumerate(state["modules"])])
@@ -1173,8 +1178,11 @@ async def generate_submodule_specific_queries(
         )
     
     # Get language information from state
-    output_language = state.get('language', 'en')
-    search_language = state.get('search_language', 'en')
+    from backend.utils.language_utils import get_full_language_name
+    output_language_code = state.get('language', 'en')
+    search_language_code = state.get('search_language', 'en')
+    output_language = get_full_language_name(output_language_code)
+    search_language = get_full_language_name(search_language_code)
     
     # Import función para escapar llaves
     from backend.core.graph_nodes.helpers import escape_curly_braces
@@ -1437,7 +1445,9 @@ async def develop_submodule_specific_content(
     logger.info(f"Developing enhanced content for submodule: {submodule.title}")
 
     # Get language and style settings
-    output_language = state.get('language', 'en')
+    from backend.utils.language_utils import get_full_language_name
+    output_language_code = state.get('language', 'en')
+    output_language = get_full_language_name(output_language_code)
     style = state.get('explanation_style', 'standard')
 
     # Enhanced style descriptions with length guidance
@@ -1564,7 +1574,9 @@ async def generate_submodule_quiz(
             )
         
         # Get output language from state
-        output_language = state.get('language', 'en')
+        from backend.utils.language_utils import get_full_language_name
+        output_language_code = state.get('language', 'en')
+        output_language = get_full_language_name(output_language_code)
         
         # Import escape function from helpers
         from backend.core.graph_nodes.helpers import escape_curly_braces
@@ -1966,9 +1978,12 @@ async def generate_module_specific_planning_queries(state: LearningPathState, mo
     logger.info(f"Generating structural planning queries for module {module_id+1}: {module.title}")
 
     # Get providers and language settings
+    from backend.utils.language_utils import get_full_language_name
     google_key_provider = state.get("google_key_provider")
-    output_language = state.get('language', 'en')
-    search_language = state.get('search_language', 'en')
+    output_language_code = state.get('language', 'en')
+    search_language_code = state.get('search_language', 'en')
+    output_language = get_full_language_name(output_language_code)
+    search_language = get_full_language_name(search_language_code)
 
     # Prepare context
     user_topic = escape_curly_braces(state["user_topic"])
@@ -2028,8 +2043,11 @@ async def regenerate_module_planning_query(
     logger.info(f"Regenerating module planning query for module {module_id+1} after no results for: {failed_query.keywords}")
 
     # Get language information from state
-    output_language = state.get('language', 'en')
-    search_language = state.get('search_language', 'en')
+    from backend.utils.language_utils import get_full_language_name
+    output_language_code = state.get('language', 'en')
+    search_language_code = state.get('search_language', 'en')
+    output_language = get_full_language_name(output_language_code)
+    search_language = get_full_language_name(search_language_code)
 
     # Get Google key provider from state
     google_key_provider = state.get("google_key_provider")
@@ -2364,7 +2382,9 @@ async def plan_module_submodules(
         )
         
     # Get language from state
-    output_language = state.get('language', 'en')
+    from backend.utils.language_utils import get_full_language_name
+    output_language_code = state.get('language', 'en')
+    output_language = get_full_language_name(output_language_code)
     
     # Prepare context
     learning_path_context = "\n".join([f"Module {i+1}: {m.title}\n{m.description}"
@@ -2716,9 +2736,12 @@ async def generate_content_refinement_queries_local(
     logger.info(f"Generating content refinement queries for submodule {module_id+1}.{sub_id+1}: {submodule.title}")
     
     # Get key providers and language settings
+    from backend.utils.language_utils import get_full_language_name
     google_key_provider = state.get("google_key_provider")
-    output_language = state.get('language', 'en')
-    search_language = state.get('search_language', 'en')
+    output_language_code = state.get('language', 'en')
+    search_language_code = state.get('search_language', 'en')
+    output_language = get_full_language_name(output_language_code)
+    search_language = get_full_language_name(search_language_code)
     
     # Import necessary components
     from backend.prompts.learning_path_prompts import CONTENT_REFINEMENT_QUERY_GENERATION_PROMPT
@@ -2960,8 +2983,10 @@ async def develop_enhanced_content(
     logger.info(f"Enhancing content for submodule {module_id+1}.{sub_id+1}: {submodule.title}")
     
     # Get key providers and language settings
+    from backend.utils.language_utils import get_full_language_name
     google_key_provider = state.get("google_key_provider")
-    output_language = state.get('language', 'en')
+    output_language_code = state.get('language', 'en')
+    output_language = get_full_language_name(output_language_code)
     explanation_style = state.get('explanation_style', 'standard')
     
     # Import necessary components
@@ -3109,8 +3134,10 @@ async def evaluate_content_sufficiency(
     logger.info(f"Evaluating content sufficiency for submodule {module_id+1}.{sub_id+1}: {submodule.title}")
     
     # Get key providers and language settings
+    from backend.utils.language_utils import get_full_language_name
     google_key_provider = state.get("google_key_provider")
-    output_language = state.get('language', 'en')
+    output_language_code = state.get('language', 'en')
+    output_language = get_full_language_name(output_language_code)
     explanation_style = state.get('explanation_style', 'standard')
     
     # Import necessary components
@@ -3208,9 +3235,12 @@ async def generate_content_refinement_queries(
     logger.info(f"Generating content refinement queries for submodule {module_id+1}.{sub_id+1}: {submodule.title}")
     
     # Get key providers and language settings
+    from backend.utils.language_utils import get_full_language_name
     google_key_provider = state.get("google_key_provider")
-    output_language = state.get('language', 'en')
-    search_language = state.get('search_language', 'en')
+    output_language_code = state.get('language', 'en')
+    search_language_code = state.get('search_language', 'en')
+    output_language = get_full_language_name(output_language_code)
+    search_language = get_full_language_name(search_language_code)
     
     # Import necessary components
     from backend.prompts.learning_path_prompts import CONTENT_REFINEMENT_QUERY_GENERATION_PROMPT
