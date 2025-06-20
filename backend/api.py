@@ -684,6 +684,7 @@ async def generate_learning_path_task(
         )
 
         last_id = 0
+        task_missing = False
         async with active_generations_lock:
             if task_id in active_generations:
                 if "progress_stream" not in active_generations[task_id]:
@@ -695,25 +696,23 @@ async def generate_learning_path_task(
                 active_generations[task_id]["progress_stream"].append(progress_dict)
                 active_generations[task_id]["progress_stream"] = active_generations[task_id]["progress_stream"][-50:]
             else:
-                logger.warning(
-                    f"Task {task_id} not found in active_generations when trying to append progress."
-                )
-                client = await get_redis_client()
-                if client:
-                    try:
-                        raw = await client.lrange(f"progress:{task_id}", -1, -1)
-                        if raw:
-                            last_id = json.loads(raw[0]).get("id", 0) + 1
-                        else:
-                            last_id = 1
-                    except Exception as e:
-                        logger.error(f"Failed to read last event id for {task_id}: {e}")
-                        last_id = 1
-                if last_id == 0:
-                    last_id = 1
+                task_missing = True
 
-        if last_id <= 0:
-            last_id = 1
+        if task_missing:
+            logger.warning(
+                f"Task {task_id} not found in active_generations when trying to append progress."
+            )
+            client = await get_redis_client()
+            if client:
+                try:
+                    last_id = await client.incr(f"progress:{task_id}:id")
+                    await client.expire(f"progress:{task_id}:id", 60 * 60 * 24)
+                except Exception as e:
+                    logger.error(f"Failed to increment event id for {task_id}: {e}")
+                    last_id = 1
+            if last_id == 0:
+                last_id = 1
+
         await save_progress_event(task_id, progress_update_obj.model_dump(), last_id)
 
 

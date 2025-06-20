@@ -451,6 +451,9 @@ const useProgressTracking = (taskId, onTaskComplete) => {
         dispatchLiveBuildDataUpdate({ type: 'SET_TOPIC', payload: { topic: storedTopic } });
     }
     
+    let retryCount = 0;
+    const maxRetries = 5;
+
     const setupProgressUpdates = () => {
       try {
         const eventSource = streamProgressUpdates(
@@ -506,11 +509,19 @@ const useProgressTracking = (taskId, onTaskComplete) => {
           (sseError) => {
             console.error('SSE Connection Error:', sseError);
             setError({ message: 'Connection to server lost. Please check your internet and try again.' });
-            // Potentially stop polling or retry SSE connection based on error type
             if (progressEventSourceRef.current) {
                 progressEventSourceRef.current.close();
             }
-            setTimeout(setupProgressUpdates, 1000);
+            retryCount += 1;
+            if (retryCount > maxRetries) {
+              console.error('Max SSE retries reached, falling back to polling.');
+              if (!isPolling) {
+                startPollingForResult();
+              }
+              return;
+            }
+            const delay = Math.min(30000, 1000 * 2 ** (retryCount - 1));
+            setTimeout(setupProgressUpdates, delay);
           },
           () => {
             // SSE stream closed by server (e.g., on task completion or explicit close)
@@ -521,7 +532,11 @@ const useProgressTracking = (taskId, onTaskComplete) => {
           },
           lastEventIdRef.current
         );
-        
+
+        eventSource.onopen = () => {
+          retryCount = 0; // reset backoff on successful connection
+        };
+
         progressEventSourceRef.current = eventSource;
       } catch (err) {
         console.error('Error setting up progress updates:', err);

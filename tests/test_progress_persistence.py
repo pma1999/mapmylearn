@@ -17,6 +17,10 @@ class DummyRedis:
         else:
             end += 1
         return data[start:end]
+    async def incr(self, key):
+        val = int(self.store.get(key, 0)) + 1
+        self.store[key] = val
+        return val
     async def expire(self, key, ttl):
         pass
     async def ping(self):
