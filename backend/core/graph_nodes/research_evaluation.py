@@ -397,7 +397,9 @@ async def analyze_research_completeness(state: LearningPathState) -> ResearchEva
     search_context = format_search_results_for_evaluation(search_results)
     
     # Get language settings
-    output_language = state.get('language', 'en')
+    from backend.utils.language_utils import get_full_language_name
+    output_language_code = state.get('language', 'en')
+    output_language = get_full_language_name(output_language_code)
     
     # Import the prompt (will be defined in prompts file)
     from backend.prompts.learning_path_prompts import RESEARCH_EVALUATION_PROMPT
@@ -432,8 +434,11 @@ async def create_targeted_queries(state: LearningPathState, knowledge_gaps: List
         existing_queries = [q.keywords for q in state['search_queries']]
     
     # Get language settings
-    output_language = state.get('language', 'en')
-    search_language = state.get('search_language', 'en')
+    from backend.utils.language_utils import get_full_language_name
+    output_language_code = state.get('language', 'en')
+    search_language_code = state.get('search_language', 'en')
+    output_language = get_full_language_name(output_language_code)
+    search_language = get_full_language_name(search_language_code)
     
     # Import the prompt
     from backend.prompts.learning_path_prompts import REFINEMENT_QUERY_GENERATION_PROMPT

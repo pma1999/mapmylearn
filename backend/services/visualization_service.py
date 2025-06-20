@@ -47,11 +47,13 @@ async def generate_mermaid_visualization(
         logger.info(f"Requesting Mermaid visualization from LLM for submodule: {submodule_title}")
         
         # Generate response
+        from backend.utils.language_utils import get_full_language_name
+        language_name = get_full_language_name(language)
         response_text = await chain.ainvoke({
             "submodule_title": submodule_title,
             "submodule_description": submodule_description or "No description provided",
             "submodule_content": submodule_content[:15000],  # Limit content length for LLM
-            "language": language,
+            "language": language_name,
         })
 
         # Try to parse as JSON first (for "not suitable" message)

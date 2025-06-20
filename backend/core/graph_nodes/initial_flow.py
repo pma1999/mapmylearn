@@ -55,8 +55,11 @@ async def generate_search_queries(state: LearningPathState) -> Dict[str, Any]:
         )
     
     # Get language information from state
-    output_language = state.get('language', 'en')
-    search_language = state.get('search_language', 'en')
+    from backend.utils.language_utils import get_full_language_name
+    output_language_code = state.get('language', 'en')
+    search_language_code = state.get('search_language', 'en')
+    output_language = get_full_language_name(output_language_code)
+    search_language = get_full_language_name(search_language_code)
     
     # Improved prompt template with better structure and formatting
     prompt_text = """# EXPERT LEARNING PATH ARCHITECT & CURRICULUM DESIGNER
@@ -266,8 +269,11 @@ async def regenerate_initial_structure_query(
     logging.info(f"Regenerating structure query after no results for: {failed_query.keywords}")
     
     # Get language information from state
-    output_language = state.get('language', 'en')
-    search_language = state.get('search_language', 'en')
+    from backend.utils.language_utils import get_full_language_name
+    output_language_code = state.get('language', 'en')
+    search_language_code = state.get('search_language', 'en')
+    output_language = get_full_language_name(output_language_code)
+    search_language = get_full_language_name(search_language_code)
     
     # Get Google key provider from state
     google_key_provider = state.get("google_key_provider")
@@ -561,7 +567,9 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
         logging.debug("Found Google key provider in state, using for course creation")
 
     # Get language information from state
-    output_language = state.get('language', 'en')
+    from backend.utils.language_utils import get_full_language_name
+    output_language_code = state.get('language', 'en')
+    output_language = get_full_language_name(output_language_code)
 
     # Get explanation style
     style = state.get('explanation_style', 'standard')
