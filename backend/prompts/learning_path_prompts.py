@@ -698,6 +698,54 @@ Provide a clear explanation of how your query set:
 """
 
 # =========================================================================
+# Submodule Research Evaluation Prompts (Google-Style Pattern)
+# =========================================================================
+
+SUBMODULE_RESEARCH_EVALUATION_PROMPT = """# EXPERT SUBMODULE RESEARCH EVALUATOR
+
+You are reviewing collected web research to determine if there is enough
+information to write high-quality educational content for the submodule
+"{submodule_title}" in the module "{module_title}" of the course about
+"{user_topic}".
+
+## LANGUAGE INSTRUCTIONS
+- Provide your analysis in {language}.
+
+## EVALUATION CRITERIA
+- Coverage of the submodule description and depth level
+- Diversity and credibility of sources
+- Overall sufficiency to write a detailed explanation
+
+Summarize missing areas as **knowledge gaps** if the research is insufficient.
+
+{format_instructions}
+
+## CURRENT RESEARCH SUMMARY
+{search_results_summary}
+"""
+
+SUBMODULE_REFINEMENT_QUERY_GENERATION_PROMPT = """# SUBMODULE RESEARCH REFINEMENT
+
+Generate additional search queries to fill the knowledge gaps for the submodule
+"{submodule_title}" of module "{module_title}" in the course on "{user_topic}".
+
+## LANGUAGE INSTRUCTIONS
+- Write your analysis in {language}
+- Formulate search queries in {search_language}
+
+## KNOWLEDGE GAPS
+{knowledge_gaps}
+
+## EXISTING QUERIES
+{existing_queries}
+
+Provide 1-3 concise follow-up queries that address the gaps without duplicating
+existing searches.
+
+{format_instructions}
+"""
+
+# =========================================================================
 # Submodule Chatbot Prompts
 # =========================================================================
 

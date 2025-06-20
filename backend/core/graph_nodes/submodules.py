@@ -18,10 +18,11 @@ from backend.models.models import (
     EnhancedModule, 
     Submodule, 
     SubmoduleContent,
-    SearchServiceResult, 
-    ScrapedResult, 
+    SearchServiceResult,
+    ScrapedResult,
     QuizQuestion,
-    QuizQuestionList
+    QuizQuestionList,
+    ResearchEvaluation
 )
 from backend.parsers.parsers import submodule_parser, module_queries_parser, quiz_questions_parser, search_queries_parser # Added search_queries_parser
 from backend.services.services import get_llm, execute_search_with_router, get_llm_with_search, get_llm_for_evaluation
@@ -985,9 +986,26 @@ async def process_single_submodule(
                 action="processing"
             )
             
-        # STEP 3: Content development with refinement loop (following Google pattern)
-        submodule_content = await develop_submodule_content_with_refinement_loop(
-            state, module_id, sub_id, module, submodule, submodule_search_queries, submodule_search_results, progress_callback
+        # STEP 3: Ensure research sufficiency before content development
+        submodule_search_queries, submodule_search_results = await gather_research_until_sufficient(
+            state,
+            module_id,
+            sub_id,
+            module,
+            submodule,
+            submodule_search_queries,
+            submodule_search_results,
+            progress_callback,
+        )
+
+        submodule_content = await develop_submodule_specific_content(
+            state,
+            module_id,
+            sub_id,
+            module,
+            submodule,
+            submodule_search_queries,
+            submodule_search_results,
         )
         content_time = time.time() - step_start
         
@@ -2551,11 +2569,154 @@ async def plan_and_research_module_submodules(state: LearningPathState, module_i
             break
             
     planning_search_context = "\n".join(planning_context_parts)
-    
+
     # 4. Plan submodules using the context
     enhanced_module = await plan_module_submodules(state, module_id, module, planning_search_context)
-    
+
     return enhanced_module
+
+# =========================================================================
+# Submodule Research Evaluation Loop (Google Style)
+# =========================================================================
+
+async def evaluate_submodule_research_sufficiency(
+    state: LearningPathState,
+    module_id: int,
+    sub_id: int,
+    module: EnhancedModule,
+    submodule: Submodule,
+    search_results: List[SearchServiceResult],
+) -> ResearchEvaluation:
+    """Evaluate if gathered research is sufficient to write the submodule."""
+
+    from backend.utils.language_utils import get_full_language_name
+    from backend.prompts.learning_path_prompts import SUBMODULE_RESEARCH_EVALUATION_PROMPT
+    from backend.parsers.parsers import research_evaluation_parser
+    logger = logging.getLogger("learning_path.submodule_research_eval")
+
+    search_summary = _build_enhanced_search_context(search_results)
+    output_language = get_full_language_name(state.get("language", "en"))
+
+    prompt = ChatPromptTemplate.from_template(SUBMODULE_RESEARCH_EVALUATION_PROMPT)
+
+    result = await run_chain(
+        prompt,
+        lambda: get_llm_for_evaluation(key_provider=state.get("google_key_provider"), user=state.get("user")),
+        research_evaluation_parser,
+        {
+            "user_topic": state["user_topic"],
+            "module_title": module.title,
+            "submodule_title": submodule.title,
+            "submodule_description": submodule.description,
+            "language": output_language,
+            "search_results_summary": search_summary,
+            "format_instructions": research_evaluation_parser.get_format_instructions(),
+        },
+    )
+
+    logger.info(
+        f"Submodule research evaluation {module_id+1}.{sub_id+1}: sufficient={result.is_sufficient}, confidence={result.confidence_score:.2f}"
+    )
+    return result
+
+
+async def generate_submodule_refinement_queries(
+    state: LearningPathState,
+    module_id: int,
+    sub_id: int,
+    module: EnhancedModule,
+    submodule: Submodule,
+    knowledge_gaps: List[str],
+    existing_queries: List[SearchQuery],
+) -> List[SearchQuery]:
+    """Generate follow-up queries to fill knowledge gaps."""
+
+    from backend.utils.language_utils import get_full_language_name
+    from backend.prompts.learning_path_prompts import SUBMODULE_REFINEMENT_QUERY_GENERATION_PROMPT
+    from backend.parsers.parsers import refinement_query_parser
+
+    output_language = get_full_language_name(state.get("language", "en"))
+    search_language = get_full_language_name(state.get("search_language", "en"))
+
+    prompt = ChatPromptTemplate.from_template(SUBMODULE_REFINEMENT_QUERY_GENERATION_PROMPT)
+
+    result = await run_chain(
+        prompt,
+        lambda: get_llm_for_evaluation(key_provider=state.get("google_key_provider"), user=state.get("user")),
+        refinement_query_parser,
+        {
+            "user_topic": state["user_topic"],
+            "module_title": module.title,
+            "submodule_title": submodule.title,
+            "submodule_description": submodule.description,
+            "knowledge_gaps": "\n".join([f"- {gap}" for gap in knowledge_gaps]),
+            "existing_queries": "\n".join([f"- {q.keywords}" for q in existing_queries]),
+            "language": output_language,
+            "search_language": search_language,
+            "format_instructions": refinement_query_parser.get_format_instructions(),
+        },
+    )
+
+    return result.queries
+
+
+async def gather_research_until_sufficient(
+    state: LearningPathState,
+    module_id: int,
+    sub_id: int,
+    module: EnhancedModule,
+    submodule: Submodule,
+    initial_queries: List[SearchQuery],
+    initial_results: List[SearchServiceResult],
+    progress_callback=None,
+) -> Tuple[List[SearchQuery], List[SearchServiceResult]]:
+    """Iteratively gather research until deemed sufficient."""
+
+    local_queries = list(initial_queries)
+    local_results = list(initial_results)
+    loop_count = 0
+    max_loops = 2
+
+    while loop_count < max_loops:
+        loop_count += 1
+
+        if progress_callback:
+            await progress_callback(
+                f"Evaluating research sufficiency for {module.title} > {submodule.title} (Loop {loop_count})",
+                phase="submodule_research",
+                phase_progress=0.9,
+                overall_progress=0.65,
+                action="processing",
+            )
+
+        evaluation = await evaluate_submodule_research_sufficiency(
+            state, module_id, sub_id, module, submodule, local_results
+        )
+
+        if evaluation.is_sufficient:
+            break
+
+        follow_up = await generate_submodule_refinement_queries(
+            state,
+            module_id,
+            sub_id,
+            module,
+            submodule,
+            evaluation.knowledge_gaps,
+            local_queries,
+        )
+
+        if not follow_up:
+            break
+
+        new_results = await execute_submodule_specific_searches(
+            state, module_id, sub_id, module, submodule, follow_up
+        )
+
+        local_queries.extend(follow_up)
+        local_results.extend(new_results)
+
+    return local_queries, local_results
 
 # =========================================================================
 # Content Refinement Loop Functions (Following Google Pattern)
