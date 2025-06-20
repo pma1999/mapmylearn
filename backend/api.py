@@ -709,6 +709,15 @@ async def generate_learning_path_task(
             else:
                 if last_id == 0:
                     last_id = 1
+                # Cache the latest event id even if the task isn't in memory yet
+                active_generations[task_id] = {
+                    "status": "running",
+                    "result": None,
+                    "user_id": user_id,
+                    "progress_stream": [],
+                    "error": None,
+                    "last_event_id": last_id,
+                }
                 logger.warning(
                     f"Task {task_id} not found in active_generations when trying to append progress."
                 )
