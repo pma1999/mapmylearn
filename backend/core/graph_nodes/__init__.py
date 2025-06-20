@@ -20,8 +20,7 @@ from .submodules import (
     develop_submodule_specific_content,
     finalize_enhanced_learning_path,
     check_submodule_batch_processing,
-    # Content refinement loop functions (following Google pattern)
-    develop_submodule_content_with_refinement_loop,
+    # Legacy content refinement functions (no longer used in default flow)
     evaluate_content_sufficiency,
     check_content_adequacy,
     check_content_adequacy_local,
