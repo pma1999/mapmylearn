@@ -110,9 +110,27 @@ const MermaidVisualization = ({
    */
   const embedSvgStyles = useCallback((svgString) => {
     try {
+      if (!svgString || svgString.trim().length === 0) {
+        console.warn('embedSvgStyles: Empty SVG string provided');
+        return svgString;
+      }
+
       const parser = new DOMParser();
       const svgDoc = parser.parseFromString(svgString, 'image/svg+xml');
+      
+      // Check for parsing errors
+      const parserError = svgDoc.querySelector('parsererror');
+      if (parserError) {
+        console.error('embedSvgStyles: SVG parsing error:', parserError.textContent);
+        return svgString;
+      }
+      
       const svgElement = svgDoc.documentElement;
+      
+      if (!svgElement || svgElement.tagName !== 'svg') {
+        console.warn('embedSvgStyles: Invalid SVG element, using original string');
+        return svgString;
+      }
 
       // Get all existing style elements
       const existingStyles = svgElement.querySelectorAll('style');
@@ -225,9 +243,16 @@ const MermaidVisualization = ({
       svgElement.insertBefore(styleElement, svgElement.firstChild);
 
       // Serialize back to string
-      return new XMLSerializer().serializeToString(svgDoc);
+      const result = new XMLSerializer().serializeToString(svgDoc);
+      
+      if (!result || result.trim().length === 0) {
+        console.warn('embedSvgStyles: Serialization resulted in empty string, using original');
+        return svgString;
+      }
+      
+      return result;
     } catch (error) {
-      console.warn('Failed to embed styles, using original SVG:', error);
+      console.warn('embedSvgStyles: Failed to embed styles, using original SVG:', error);
       return svgString;
     }
   }, []);
@@ -240,44 +265,58 @@ const MermaidVisualization = ({
   const inlineSvgStyles = useCallback((svgElement) => {
     if (!svgElement) return;
 
-    // Temporarily add the SVG to the DOM so getComputedStyle works correctly
-    svgElement.style.position = 'absolute';
-    svgElement.style.opacity = '0';
-    svgElement.style.pointerEvents = 'none';
-    document.body.appendChild(svgElement);
+    try {
+      // Create a clone of the SVG element in the current document context
+      const svgClone = document.importNode(svgElement, true);
+      
+      // Temporarily add the cloned SVG to the DOM so getComputedStyle works correctly
+      svgClone.style.position = 'absolute';
+      svgClone.style.top = '-9999px';
+      svgClone.style.left = '-9999px';
+      svgClone.style.opacity = '0';
+      svgClone.style.pointerEvents = 'none';
+      document.body.appendChild(svgClone);
 
-    const properties = [
-      'fill',
-      'stroke',
-      'stroke-width',
-      'font-size',
-      'font-family',
-      'color',
-      'opacity',
-      'stroke-opacity',
-      'fill-opacity',
-      'font-weight',
-      'font-style',
-      'text-anchor'
-    ];
+      const properties = [
+        'fill',
+        'stroke',
+        'stroke-width',
+        'font-size',
+        'font-family',
+        'color',
+        'opacity',
+        'stroke-opacity',
+        'fill-opacity',
+        'font-weight',
+        'font-style',
+        'text-anchor'
+      ];
 
-    const allNodes = svgElement.querySelectorAll('*');
-    allNodes.forEach((node) => {
-      const computed = window.getComputedStyle(node);
-      let styleText = '';
-      properties.forEach((prop) => {
-        const val = computed.getPropertyValue(prop);
-        if (val) {
-          styleText += `${prop}:${val};`;
+      // Apply styles to the original element based on the cloned element's computed styles
+      const allNodes = svgClone.querySelectorAll('*');
+      const originalNodes = svgElement.querySelectorAll('*');
+      
+      allNodes.forEach((node, index) => {
+        if (originalNodes[index]) {
+          const computed = window.getComputedStyle(node);
+          let styleText = '';
+          properties.forEach((prop) => {
+            const val = computed.getPropertyValue(prop);
+            if (val && val !== 'none' && val !== 'auto') {
+              styleText += `${prop}:${val};`;
+            }
+          });
+          if (styleText) {
+            originalNodes[index].setAttribute('style', styleText);
+          }
         }
       });
-      if (styleText) {
-        node.setAttribute('style', styleText);
-      }
-    });
 
-    // Remove from DOM after styles are inlined
-    document.body.removeChild(svgElement);
+      // Remove the clone from DOM after styles are applied
+      document.body.removeChild(svgClone);
+    } catch (error) {
+      console.warn('Failed to inline SVG styles, continuing without style inlining:', error);
+    }
   }, []);
 
   /**
@@ -285,22 +324,56 @@ const MermaidVisualization = ({
    * Implements multiple fallback strategies for maximum browser compatibility
    */
   const handleDownloadPNG = useCallback(async () => {
-    if (!renderedSvgString) return;
+    if (!renderedSvgString) {
+      console.warn('Cannot download PNG: No SVG content available');
+      return;
+    }
 
     try {
+      console.log('Starting PNG download process...');
+      
       // First, embed styles in the SVG for proper rendering
       const styledSvgString = embedSvgStyles(renderedSvgString);
+      
+      if (!styledSvgString || styledSvgString.trim().length === 0) {
+        console.error('Styled SVG string is empty after embedSvgStyles');
+        downloadSVGFallback();
+        return;
+      }
 
       // Parse the SVG string so we can inline all computed styles
       const parser = new DOMParser();
       const svgDoc = parser.parseFromString(styledSvgString, 'image/svg+xml');
+      
+      // Check for parsing errors
+      const parserError = svgDoc.querySelector('parsererror');
+      if (parserError) {
+        console.error('SVG parsing error:', parserError.textContent);
+        downloadSVGFallback();
+        return;
+      }
+      
       const svgElement = svgDoc.documentElement;
+      
+      if (!svgElement || svgElement.tagName !== 'svg') {
+        console.error('Invalid SVG element after parsing');
+        downloadSVGFallback();
+        return;
+      }
 
       // Inline styles directly on each SVG element
       inlineSvgStyles(svgElement);
 
       // Serialize back to string for rendering
       const finalSvgString = new XMLSerializer().serializeToString(svgDoc);
+      
+      if (!finalSvgString || finalSvgString.trim().length === 0) {
+        console.error('Final SVG string is empty after processing');
+        downloadSVGFallback();
+        return;
+      }
+      
+      console.log('SVG processing completed, final string length:', finalSvgString.length);
 
       // Get dimensions from SVG or use sensible defaults
       let width = parseInt(svgElement.getAttribute('width')) || 800;
@@ -320,9 +393,12 @@ const MermaidVisualization = ({
       const scaledWidth = width * scale;
       const scaledHeight = height * scale;
 
+      console.log(`Canvas dimensions: ${scaledWidth}x${scaledHeight}`);
+
       // Strategy 1: Try OffscreenCanvas for modern browsers (most secure)
       if (typeof OffscreenCanvas !== 'undefined') {
         try {
+          console.log('Attempting OffscreenCanvas approach...');
           const offscreenCanvas = new OffscreenCanvas(scaledWidth, scaledHeight);
           const offscreenCtx = offscreenCanvas.getContext('2d');
           
@@ -343,6 +419,7 @@ const MermaidVisualization = ({
           // Convert directly to blob and download
           const blob = await offscreenCanvas.convertToBlob({ type: 'image/png' });
           downloadBlob(blob, `${title.replace(/\s+/g, '_').substring(0, 30)}.png`);
+          console.log('PNG download successful via OffscreenCanvas');
           return;
         } catch (offscreenError) {
           console.warn('OffscreenCanvas approach failed, trying regular canvas:', offscreenError);
@@ -351,6 +428,7 @@ const MermaidVisualization = ({
 
       // Strategy 2: Fallback to regular canvas with canvg
       try {
+        console.log('Attempting regular canvas approach...');
         const canvas = document.createElement('canvas');
         canvas.width = scaledWidth;
         canvas.height = scaledHeight;
@@ -374,6 +452,7 @@ const MermaidVisualization = ({
         canvas.toBlob((blob) => {
           if (blob) {
             downloadBlob(blob, `${title.replace(/\s+/g, '_').substring(0, 30)}.png`);
+            console.log('PNG download successful via regular canvas');
           } else {
             throw new Error('Canvas toBlob failed');
           }
