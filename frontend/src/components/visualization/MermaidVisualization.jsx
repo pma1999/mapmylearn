@@ -20,6 +20,9 @@ import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline'; /
 import RestartAltIcon from '@mui/icons-material/RestartAlt'; // Reset
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 
+// Library to export DOM nodes as images
+import { toPng } from 'html-to-image';
+
 // Import pan and zoom library
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 
@@ -92,6 +95,7 @@ const MermaidVisualization = ({
   ...props 
 }) => {
   const elementRef = useRef(null); // For the inline view
+  const modalElementRef = useRef(null); // For the modal view
   const [isRendering, setIsRendering] = useState(false);
   const [renderError, setRenderError] = useState(null);
   const [renderedSvgString, setRenderedSvgString] = useState('');
@@ -126,6 +130,36 @@ const MermaidVisualization = ({
       console.error('SVG download failed:', error);
     }
   }, [renderedSvgString, title]);
+
+  /**
+   * Downloads the rendered diagram as a PNG image
+   */
+  const handleDownloadPNG = useCallback(async () => {
+    const target = modalOpen && modalElementRef.current ? modalElementRef.current : elementRef.current;
+    if (!target) {
+      console.warn('Cannot download PNG: element not available');
+      return;
+    }
+
+    try {
+      const dataUrl = await toPng(target, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: '#ffffff'
+      });
+
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `${title.replace(/\s+/g, '_').substring(0, 30)}.png`;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      console.log('PNG download successful');
+    } catch (error) {
+      console.error('PNG download failed:', error);
+    }
+  }, [title, modalOpen]);
 
   // Initialize Mermaid with configuration
   useEffect(() => {
@@ -230,6 +264,11 @@ ${mermaidSyntax}`;
         </Typography>
         {renderedSvgString && !isRendering && (
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Tooltip title="Download PNG">
+              <IconButton onClick={handleDownloadPNG} size="small" sx={{ mr: 1 }}>
+                <FileDownloadIcon />
+              </IconButton>
+            </Tooltip>
             <Tooltip title="Download SVG">
               <IconButton onClick={handleDownloadSVG} size="small" sx={{ mr: 1 }}>
                 <FileDownloadIcon />
@@ -295,8 +334,9 @@ ${mermaidSyntax}`;
               wrapperStyle={{ width: "100%", height: "100%" }} 
               contentStyle={{ display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "100%" }}
             >
-              <div 
-                dangerouslySetInnerHTML={{ __html: renderedSvgString }} 
+              <div
+                ref={elementRef}
+                dangerouslySetInnerHTML={{ __html: renderedSvgString }}
                 style={{ display: 'inline-block', maxWidth: '100%', maxHeight: '100%' }} // Ensure SVG inside also tries to respect bounds
               />
             </TransformComponent>
@@ -317,6 +357,11 @@ ${mermaidSyntax}`;
             <Box sx={modalHeaderStyle}>
               <Typography variant="h6" component="h2">{title} (Expanded)</Typography>
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Tooltip title="Download PNG">
+                  <IconButton onClick={handleDownloadPNG} size="small" sx={{ mr: 1 }}>
+                    <FileDownloadIcon />
+                  </IconButton>
+                </Tooltip>
                 <Tooltip title="Download SVG">
                   <IconButton onClick={handleDownloadSVG} size="small" sx={{ mr: 1 }}>
                     <FileDownloadIcon />
@@ -355,15 +400,16 @@ ${mermaidSyntax}`;
                         wrapperStyle={{ width: "100%", height: "100%" }} 
                         contentStyle={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}
                     >
-                      <div 
-                        dangerouslySetInnerHTML={{ __html: renderedSvgString }} 
-                        style={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center', 
-                          width: '100%', 
-                          height: '100%' 
-                        }} 
+                      <div
+                        ref={modalElementRef}
+                        dangerouslySetInnerHTML={{ __html: renderedSvgString }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '100%',
+                          height: '100%'
+                        }}
                       />
                     </TransformComponent>
                   </>
