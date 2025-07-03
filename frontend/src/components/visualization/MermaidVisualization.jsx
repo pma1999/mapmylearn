@@ -233,6 +233,54 @@ const MermaidVisualization = ({
   }, []);
 
   /**
+   * Inlines computed styles onto every element within the SVG.
+   * This helps when exporting the SVG as PNG so that all styling
+   * is preserved even without external stylesheets.
+   */
+  const inlineSvgStyles = useCallback((svgElement) => {
+    if (!svgElement) return;
+
+    // Temporarily add the SVG to the DOM so getComputedStyle works correctly
+    svgElement.style.position = 'absolute';
+    svgElement.style.opacity = '0';
+    svgElement.style.pointerEvents = 'none';
+    document.body.appendChild(svgElement);
+
+    const properties = [
+      'fill',
+      'stroke',
+      'stroke-width',
+      'font-size',
+      'font-family',
+      'color',
+      'opacity',
+      'stroke-opacity',
+      'fill-opacity',
+      'font-weight',
+      'font-style',
+      'text-anchor'
+    ];
+
+    const allNodes = svgElement.querySelectorAll('*');
+    allNodes.forEach((node) => {
+      const computed = window.getComputedStyle(node);
+      let styleText = '';
+      properties.forEach((prop) => {
+        const val = computed.getPropertyValue(prop);
+        if (val) {
+          styleText += `${prop}:${val};`;
+        }
+      });
+      if (styleText) {
+        node.setAttribute('style', styleText);
+      }
+    });
+
+    // Remove from DOM after styles are inlined
+    document.body.removeChild(svgElement);
+  }, []);
+
+  /**
    * Downloads the rendered SVG as a PNG file using canvg for secure conversion
    * Implements multiple fallback strategies for maximum browser compatibility
    */
@@ -242,12 +290,18 @@ const MermaidVisualization = ({
     try {
       // First, embed styles in the SVG for proper rendering
       const styledSvgString = embedSvgStyles(renderedSvgString);
-      
-      // Extract SVG dimensions for proper canvas sizing
+
+      // Parse the SVG string so we can inline all computed styles
       const parser = new DOMParser();
       const svgDoc = parser.parseFromString(styledSvgString, 'image/svg+xml');
       const svgElement = svgDoc.documentElement;
-      
+
+      // Inline styles directly on each SVG element
+      inlineSvgStyles(svgElement);
+
+      // Serialize back to string for rendering
+      const finalSvgString = new XMLSerializer().serializeToString(svgDoc);
+
       // Get dimensions from SVG or use sensible defaults
       let width = parseInt(svgElement.getAttribute('width')) || 800;
       let height = parseInt(svgElement.getAttribute('height')) || 600;
@@ -277,7 +331,7 @@ const MermaidVisualization = ({
           offscreenCtx.fillRect(0, 0, scaledWidth, scaledHeight);
           
           // Use canvg to render styled SVG to OffscreenCanvas
-          const v = Canvg.fromString(offscreenCtx, styledSvgString, {
+          const v = Canvg.fromString(offscreenCtx, finalSvgString, {
             ignoreDimensions: true,
             scaleWidth: scaledWidth,
             scaleHeight: scaledHeight,
@@ -307,7 +361,7 @@ const MermaidVisualization = ({
         ctx.fillRect(0, 0, scaledWidth, scaledHeight);
         
         // Use canvg to render styled SVG to regular canvas
-        const v = Canvg.fromString(ctx, styledSvgString, {
+        const v = Canvg.fromString(ctx, finalSvgString, {
           ignoreDimensions: true,
           scaleWidth: scaledWidth,
           scaleHeight: scaledHeight,
@@ -337,7 +391,7 @@ const MermaidVisualization = ({
       // Last resort: download as SVG
       downloadSVGFallback();
     }
-  }, [renderedSvgString, title, embedSvgStyles]);
+  }, [renderedSvgString, title, embedSvgStyles, inlineSvgStyles]);
 
   /**
    * Helper function to download a blob with proper cleanup
