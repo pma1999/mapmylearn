@@ -117,7 +117,10 @@ const MermaidVisualization = ({
         ctx.scale(scale, scale);
         ctx.drawImage(img, 0, 0);
         canvas.toBlob((blob) => {
-          if (!blob) return;
+          if (!blob) {
+            URL.revokeObjectURL(url);
+            return;
+          }
           const pngUrl = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = pngUrl;
