@@ -209,6 +209,15 @@ const ContentPanel = forwardRef(({
           return;
       }
 
+      // Ensure any open dropdowns are closed and focus is properly managed
+      // This prevents accessibility violations with aria-hidden elements retaining focus
+      if (document.activeElement && document.activeElement.blur) {
+          document.activeElement.blur();
+      }
+
+      // Small delay to ensure blur completes before state changes
+      await new Promise(resolve => setTimeout(resolve, 50));
+
       setIsAudioLoading(true);
       setAudioError(null);
       setNotification({ open: false, message: '', severity: 'info' });
@@ -277,6 +286,15 @@ const ContentPanel = forwardRef(({
       setNotification({ open: true, message: 'Insufficient credits for visualization generation', severity: 'error' });
       return;
     }
+
+    // Ensure any open dropdowns are closed and focus is properly managed
+    // This prevents accessibility violations with aria-hidden elements retaining focus
+    if (document.activeElement && document.activeElement.blur) {
+      document.activeElement.blur();
+    }
+
+    // Small delay to ensure blur completes before state changes
+    await new Promise(resolve => setTimeout(resolve, 50));
 
     setIsVisualizationLoading(true);
     setVisualizationError(null);

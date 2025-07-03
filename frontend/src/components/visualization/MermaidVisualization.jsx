@@ -26,9 +26,6 @@ import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 // Import mermaid package for diagram rendering
 import mermaid from 'mermaid';
 
-// Import canvg for secure SVG to canvas conversion
-import { Canvg } from 'canvg';
-
 const modalStyle = {
   position: 'absolute',
   top: '50%',
@@ -97,8 +94,7 @@ const MermaidVisualization = ({
   const elementRef = useRef(null); // For the inline view
   const [isRendering, setIsRendering] = useState(false);
   const [renderError, setRenderError] = useState(null);
-  const [diagramId, setDiagramId] = useState(null);
-  const [renderedSvgString, setRenderedSvgString] = useState(''); // Store the SVG string
+  const [renderedSvgString, setRenderedSvgString] = useState('');
 
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -106,399 +102,30 @@ const MermaidVisualization = ({
   const handleCloseModal = () => setModalOpen(false);
 
   /**
-   * Extracts and embeds CSS styles from Mermaid SVG for proper canvg rendering
+   * Downloads the rendered SVG as an SVG file
    */
-  const embedSvgStyles = useCallback((svgString) => {
-    try {
-      if (!svgString || svgString.trim().length === 0) {
-        console.warn('embedSvgStyles: Empty SVG string provided');
-        return svgString;
-      }
-
-      const parser = new DOMParser();
-      const svgDoc = parser.parseFromString(svgString, 'image/svg+xml');
-      
-      // Check for parsing errors
-      const parserError = svgDoc.querySelector('parsererror');
-      if (parserError) {
-        console.error('embedSvgStyles: SVG parsing error:', parserError.textContent);
-        return svgString;
-      }
-      
-      const svgElement = svgDoc.documentElement;
-      
-      if (!svgElement || svgElement.tagName !== 'svg') {
-        console.warn('embedSvgStyles: Invalid SVG element, using original string');
-        return svgString;
-      }
-
-      // Get all existing style elements
-      const existingStyles = svgElement.querySelectorAll('style');
-      let combinedStyles = '';
-      
-      existingStyles.forEach(style => {
-        combinedStyles += style.textContent || '';
-      });
-
-      // Define comprehensive Mermaid theme styles based on the neutral theme
-      const mermaidThemeStyles = `
-        .node rect, .node circle, .node ellipse, .node polygon {
-          fill: #f0f0f0 !important;
-          stroke: #333333 !important;
-          stroke-width: 2px !important;
-        }
-        
-        .node .label {
-          font-family: Arial, sans-serif !important;
-          font-size: 14px !important;
-          fill: #333333 !important;
-          text-anchor: middle !important;
-          dominant-baseline: middle !important;
-        }
-        
-        .edgePath .path {
-          stroke: #777777 !important;
-          stroke-width: 2px !important;
-          fill: none !important;
-        }
-        
-        .arrowheadPath {
-          fill: #777777 !important;
-          stroke: #777777 !important;
-        }
-        
-        .edgeLabel {
-          background-color: #ffffff !important;
-          font-family: Arial, sans-serif !important;
-          font-size: 12px !important;
-          fill: #333333 !important;
-        }
-        
-        .cluster rect {
-          fill: #adcbe3 !important;
-          stroke: #5fa8d3 !important;
-          stroke-width: 2px !important;
-          rx: 4px !important;
-        }
-        
-        .cluster .label {
-          font-family: Arial, sans-serif !important;
-          font-size: 16px !important;
-          font-weight: bold !important;
-          fill: #333333 !important;
-        }
-        
-        .flowchart-link {
-          stroke: #777777 !important;
-          stroke-width: 2px !important;
-          fill: none !important;
-        }
-        
-        .marker {
-          fill: #777777 !important;
-          stroke: #777777 !important;
-        }
-        
-        /* Additional styles for different diagram types */
-        .actor {
-          stroke: #333333 !important;
-          fill: #f0f0f0 !important;
-        }
-        
-        .actor-line {
-          stroke: #777777 !important;
-          stroke-width: 1px !important;
-        }
-        
-        .messageLine0, .messageLine1 {
-          stroke: #333333 !important;
-          stroke-width: 2px !important;
-        }
-        
-        .messageText {
-          font-family: Arial, sans-serif !important;
-          font-size: 12px !important;
-          fill: #333333 !important;
-        }
-        
-        .labelText {
-          font-family: Arial, sans-serif !important;
-          font-size: 12px !important;
-          fill: #333333 !important;
-        }
-      `;
-
-      // Combine existing styles with theme styles
-      const finalStyles = combinedStyles + mermaidThemeStyles;
-
-      // Remove existing style elements
-      existingStyles.forEach(style => style.remove());
-
-      // Create new comprehensive style element
-      const styleElement = svgDoc.createElement('style');
-      styleElement.setAttribute('type', 'text/css');
-      styleElement.textContent = finalStyles;
-
-      // Insert style as first child of SVG
-      svgElement.insertBefore(styleElement, svgElement.firstChild);
-
-      // Serialize back to string
-      const result = new XMLSerializer().serializeToString(svgDoc);
-      
-      if (!result || result.trim().length === 0) {
-        console.warn('embedSvgStyles: Serialization resulted in empty string, using original');
-        return svgString;
-      }
-      
-      return result;
-    } catch (error) {
-      console.warn('embedSvgStyles: Failed to embed styles, using original SVG:', error);
-      return svgString;
-    }
-  }, []);
-
-  /**
-   * Inlines computed styles onto every element within the SVG.
-   * This helps when exporting the SVG as PNG so that all styling
-   * is preserved even without external stylesheets.
-   */
-  const inlineSvgStyles = useCallback((svgElement) => {
-    if (!svgElement) return;
-
-    try {
-      // Create a clone of the SVG element in the current document context
-      const svgClone = document.importNode(svgElement, true);
-      
-      // Temporarily add the cloned SVG to the DOM so getComputedStyle works correctly
-      svgClone.style.position = 'absolute';
-      svgClone.style.top = '-9999px';
-      svgClone.style.left = '-9999px';
-      svgClone.style.opacity = '0';
-      svgClone.style.pointerEvents = 'none';
-      document.body.appendChild(svgClone);
-
-      const properties = [
-        'fill',
-        'stroke',
-        'stroke-width',
-        'font-size',
-        'font-family',
-        'color',
-        'opacity',
-        'stroke-opacity',
-        'fill-opacity',
-        'font-weight',
-        'font-style',
-        'text-anchor'
-      ];
-
-      // Apply styles to the original element based on the cloned element's computed styles
-      const allNodes = svgClone.querySelectorAll('*');
-      const originalNodes = svgElement.querySelectorAll('*');
-      
-      allNodes.forEach((node, index) => {
-        if (originalNodes[index]) {
-          const computed = window.getComputedStyle(node);
-          let styleText = '';
-          properties.forEach((prop) => {
-            const val = computed.getPropertyValue(prop);
-            if (val && val !== 'none' && val !== 'auto') {
-              styleText += `${prop}:${val};`;
-            }
-          });
-          if (styleText) {
-            originalNodes[index].setAttribute('style', styleText);
-          }
-        }
-      });
-
-      // Remove the clone from DOM after styles are applied
-      document.body.removeChild(svgClone);
-    } catch (error) {
-      console.warn('Failed to inline SVG styles, continuing without style inlining:', error);
-    }
-  }, []);
-
-  /**
-   * Downloads the rendered SVG as a PNG file using canvg for secure conversion
-   * Implements multiple fallback strategies for maximum browser compatibility
-   */
-  const handleDownloadPNG = useCallback(async () => {
+  const handleDownloadSVG = useCallback(() => {
     if (!renderedSvgString) {
-      console.warn('Cannot download PNG: No SVG content available');
+      console.warn('Cannot download SVG: No SVG content available');
       return;
     }
 
     try {
-      console.log('Starting PNG download process...');
-      
-      // First, embed styles in the SVG for proper rendering
-      const styledSvgString = embedSvgStyles(renderedSvgString);
-      
-      if (!styledSvgString || styledSvgString.trim().length === 0) {
-        console.error('Styled SVG string is empty after embedSvgStyles');
-        downloadSVGFallback();
-        return;
-      }
-
-      // Parse the SVG string so we can inline all computed styles
-      const parser = new DOMParser();
-      const svgDoc = parser.parseFromString(styledSvgString, 'image/svg+xml');
-      
-      // Check for parsing errors
-      const parserError = svgDoc.querySelector('parsererror');
-      if (parserError) {
-        console.error('SVG parsing error:', parserError.textContent);
-        downloadSVGFallback();
-        return;
-      }
-      
-      const svgElement = svgDoc.documentElement;
-      
-      if (!svgElement || svgElement.tagName !== 'svg') {
-        console.error('Invalid SVG element after parsing');
-        downloadSVGFallback();
-        return;
-      }
-
-      // Inline styles directly on each SVG element
-      inlineSvgStyles(svgElement);
-
-      // Serialize back to string for rendering
-      const finalSvgString = new XMLSerializer().serializeToString(svgDoc);
-      
-      if (!finalSvgString || finalSvgString.trim().length === 0) {
-        console.error('Final SVG string is empty after processing');
-        downloadSVGFallback();
-        return;
-      }
-      
-      console.log('SVG processing completed, final string length:', finalSvgString.length);
-
-      // Get dimensions from SVG or use sensible defaults
-      let width = parseInt(svgElement.getAttribute('width')) || 800;
-      let height = parseInt(svgElement.getAttribute('height')) || 600;
-      
-      // Handle percentage or auto dimensions by using viewBox
-      if (isNaN(width) || isNaN(height)) {
-        const viewBox = svgElement.getAttribute('viewBox');
-        if (viewBox) {
-          const [, , vbWidth, vbHeight] = viewBox.split(' ').map(Number);
-          width = vbWidth || 800;
-          height = vbHeight || 600;
-        }
-      }
-
-      const scale = 2; // High resolution scale factor
-      const scaledWidth = width * scale;
-      const scaledHeight = height * scale;
-
-      console.log(`Canvas dimensions: ${scaledWidth}x${scaledHeight}`);
-
-      // Strategy 1: Try OffscreenCanvas for modern browsers (most secure)
-      if (typeof OffscreenCanvas !== 'undefined') {
-        try {
-          console.log('Attempting OffscreenCanvas approach...');
-          const offscreenCanvas = new OffscreenCanvas(scaledWidth, scaledHeight);
-          const offscreenCtx = offscreenCanvas.getContext('2d');
-          
-          // Set white background
-          offscreenCtx.fillStyle = '#ffffff';
-          offscreenCtx.fillRect(0, 0, scaledWidth, scaledHeight);
-          
-          // Use canvg to render styled SVG to OffscreenCanvas
-          const v = Canvg.fromString(offscreenCtx, finalSvgString, {
-            ignoreDimensions: true,
-            scaleWidth: scaledWidth,
-            scaleHeight: scaledHeight,
-            offsetX: 0,
-            offsetY: 0
-          });
-          await v.render();
-          
-          // Convert directly to blob and download
-          const blob = await offscreenCanvas.convertToBlob({ type: 'image/png' });
-          downloadBlob(blob, `${title.replace(/\s+/g, '_').substring(0, 30)}.png`);
-          console.log('PNG download successful via OffscreenCanvas');
-          return;
-        } catch (offscreenError) {
-          console.warn('OffscreenCanvas approach failed, trying regular canvas:', offscreenError);
-        }
-      }
-
-      // Strategy 2: Fallback to regular canvas with canvg
-      try {
-        console.log('Attempting regular canvas approach...');
-        const canvas = document.createElement('canvas');
-        canvas.width = scaledWidth;
-        canvas.height = scaledHeight;
-        const ctx = canvas.getContext('2d');
-        
-        // Set white background
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, scaledWidth, scaledHeight);
-        
-        // Use canvg to render styled SVG to regular canvas
-        const v = Canvg.fromString(ctx, finalSvgString, {
-          ignoreDimensions: true,
-          scaleWidth: scaledWidth,
-          scaleHeight: scaledHeight,
-          offsetX: 0,
-          offsetY: 0
-        });
-        await v.render();
-        
-        // Convert canvas to blob and download
-        canvas.toBlob((blob) => {
-          if (blob) {
-            downloadBlob(blob, `${title.replace(/\s+/g, '_').substring(0, 30)}.png`);
-            console.log('PNG download successful via regular canvas');
-          } else {
-            throw new Error('Canvas toBlob failed');
-          }
-        }, 'image/png');
-        return;
-      } catch (canvasError) {
-        console.warn('Regular canvas approach failed, falling back to SVG:', canvasError);
-      }
-
-      // Strategy 3: Final fallback - download as SVG
-      downloadSVGFallback();
-      
-    } catch (error) {
-      console.error('All PNG download strategies failed:', error);
-      // Last resort: download as SVG
-      downloadSVGFallback();
-    }
-  }, [renderedSvgString, title, embedSvgStyles, inlineSvgStyles]);
-
-  /**
-   * Helper function to download a blob with proper cleanup
-   */
-  const downloadBlob = useCallback((blob, filename) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, []);
-
-  /**
-   * Fallback function to download the visualization as SVG
-   */
-  const downloadSVGFallback = useCallback(() => {
-    try {
       const blob = new Blob([renderedSvgString], { type: 'image/svg+xml;charset=utf-8' });
-      downloadBlob(blob, `${title.replace(/\s+/g, '_').substring(0, 30)}.svg`);
-      console.info('Downloaded as SVG instead of PNG due to browser compatibility');
-    } catch (svgError) {
-      console.error('Even SVG download failed:', svgError);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${title.replace(/\s+/g, '_').substring(0, 30)}.svg`;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      console.log('SVG download successful');
+    } catch (error) {
+      console.error('SVG download failed:', error);
     }
-  }, [renderedSvgString, title, downloadBlob]);
+  }, [renderedSvgString, title]);
 
   // Initialize Mermaid with configuration
   useEffect(() => {
@@ -539,22 +166,6 @@ const MermaidVisualization = ({
         useMaxWidth: true
       }
     });
-  }, []);
-
-  const clearContainer = useCallback((ref) => {
-    if (ref.current) {
-      try {
-        const element = ref.current;
-        while (element.firstChild) {
-          element.removeChild(element.firstChild);
-        }
-      } catch (error) {
-        console.warn('RemoveChild failed, using innerHTML to clear:', error);
-        if (ref.current) {
-          ref.current.innerHTML = '';
-        }
-      }
-    }
   }, []);
 
   // Render Mermaid diagram when syntax changes
@@ -607,13 +218,6 @@ ${mermaidSyntax}`;
     renderDiagram();
   }, [mermaidSyntax]);
 
-  // Cleanup on unmount - not strictly necessary with current approach but good practice
-  useEffect(() => {
-    return () => {
-      // Potentially clear any global mermaid state if necessary, though usually not needed
-    };
-  }, []);
-
   if (!mermaidSyntax && !isRendering) {
     return null; // Don't render anything if no syntax and not loading
   }
@@ -626,8 +230,8 @@ ${mermaidSyntax}`;
         </Typography>
         {renderedSvgString && !isRendering && (
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Tooltip title="Download PNG">
-              <IconButton onClick={handleDownloadPNG} size="small" sx={{ mr: 1 }}>
+            <Tooltip title="Download SVG">
+              <IconButton onClick={handleDownloadSVG} size="small" sx={{ mr: 1 }}>
                 <FileDownloadIcon />
               </IconButton>
             </Tooltip>
@@ -713,8 +317,8 @@ ${mermaidSyntax}`;
             <Box sx={modalHeaderStyle}>
               <Typography variant="h6" component="h2">{title} (Expanded)</Typography>
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <Tooltip title="Download PNG">
-                  <IconButton onClick={handleDownloadPNG} size="small" sx={{ mr: 1 }}>
+                <Tooltip title="Download SVG">
+                  <IconButton onClick={handleDownloadSVG} size="small" sx={{ mr: 1 }}>
                     <FileDownloadIcon />
                   </IconButton>
                 </Tooltip>
