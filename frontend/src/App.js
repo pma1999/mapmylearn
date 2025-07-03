@@ -4,6 +4,7 @@ import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { Box, useMediaQuery, useTheme } from '@mui/material';
 import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 
 // Import components
 import Navbar from './components/Navbar';
@@ -172,6 +173,7 @@ function App() {
   return (
     <AuthProvider>
       <Analytics />
+      <SpeedInsights />
       <ThemeProvider theme={theme}>
         <NotificationProvider>
           <CssBaseline />
