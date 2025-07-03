@@ -106,6 +106,133 @@ const MermaidVisualization = ({
   const handleCloseModal = () => setModalOpen(false);
 
   /**
+   * Extracts and embeds CSS styles from Mermaid SVG for proper canvg rendering
+   */
+  const embedSvgStyles = useCallback((svgString) => {
+    try {
+      const parser = new DOMParser();
+      const svgDoc = parser.parseFromString(svgString, 'image/svg+xml');
+      const svgElement = svgDoc.documentElement;
+
+      // Get all existing style elements
+      const existingStyles = svgElement.querySelectorAll('style');
+      let combinedStyles = '';
+      
+      existingStyles.forEach(style => {
+        combinedStyles += style.textContent || '';
+      });
+
+      // Define comprehensive Mermaid theme styles based on the neutral theme
+      const mermaidThemeStyles = `
+        .node rect, .node circle, .node ellipse, .node polygon {
+          fill: #f0f0f0 !important;
+          stroke: #333333 !important;
+          stroke-width: 2px !important;
+        }
+        
+        .node .label {
+          font-family: Arial, sans-serif !important;
+          font-size: 14px !important;
+          fill: #333333 !important;
+          text-anchor: middle !important;
+          dominant-baseline: middle !important;
+        }
+        
+        .edgePath .path {
+          stroke: #777777 !important;
+          stroke-width: 2px !important;
+          fill: none !important;
+        }
+        
+        .arrowheadPath {
+          fill: #777777 !important;
+          stroke: #777777 !important;
+        }
+        
+        .edgeLabel {
+          background-color: #ffffff !important;
+          font-family: Arial, sans-serif !important;
+          font-size: 12px !important;
+          fill: #333333 !important;
+        }
+        
+        .cluster rect {
+          fill: #adcbe3 !important;
+          stroke: #5fa8d3 !important;
+          stroke-width: 2px !important;
+          rx: 4px !important;
+        }
+        
+        .cluster .label {
+          font-family: Arial, sans-serif !important;
+          font-size: 16px !important;
+          font-weight: bold !important;
+          fill: #333333 !important;
+        }
+        
+        .flowchart-link {
+          stroke: #777777 !important;
+          stroke-width: 2px !important;
+          fill: none !important;
+        }
+        
+        .marker {
+          fill: #777777 !important;
+          stroke: #777777 !important;
+        }
+        
+        /* Additional styles for different diagram types */
+        .actor {
+          stroke: #333333 !important;
+          fill: #f0f0f0 !important;
+        }
+        
+        .actor-line {
+          stroke: #777777 !important;
+          stroke-width: 1px !important;
+        }
+        
+        .messageLine0, .messageLine1 {
+          stroke: #333333 !important;
+          stroke-width: 2px !important;
+        }
+        
+        .messageText {
+          font-family: Arial, sans-serif !important;
+          font-size: 12px !important;
+          fill: #333333 !important;
+        }
+        
+        .labelText {
+          font-family: Arial, sans-serif !important;
+          font-size: 12px !important;
+          fill: #333333 !important;
+        }
+      `;
+
+      // Combine existing styles with theme styles
+      const finalStyles = combinedStyles + mermaidThemeStyles;
+
+      // Remove existing style elements
+      existingStyles.forEach(style => style.remove());
+
+      // Create new comprehensive style element
+      const styleElement = svgDoc.createElement('style');
+      styleElement.setAttribute('type', 'text/css');
+      styleElement.textContent = finalStyles;
+
+      // Insert style as first child of SVG
+      svgElement.insertBefore(styleElement, svgElement.firstChild);
+
+      // Serialize back to string
+      return new XMLSerializer().serializeToString(svgDoc);
+    } catch (error) {
+      console.warn('Failed to embed styles, using original SVG:', error);
+      return svgString;
+    }
+  }, []);
+
+  /**
    * Downloads the rendered SVG as a PNG file using canvg for secure conversion
    * Implements multiple fallback strategies for maximum browser compatibility
    */
@@ -113,9 +240,12 @@ const MermaidVisualization = ({
     if (!renderedSvgString) return;
 
     try {
+      // First, embed styles in the SVG for proper rendering
+      const styledSvgString = embedSvgStyles(renderedSvgString);
+      
       // Extract SVG dimensions for proper canvas sizing
       const parser = new DOMParser();
-      const svgDoc = parser.parseFromString(renderedSvgString, 'image/svg+xml');
+      const svgDoc = parser.parseFromString(styledSvgString, 'image/svg+xml');
       const svgElement = svgDoc.documentElement;
       
       // Get dimensions from SVG or use sensible defaults
@@ -142,8 +272,18 @@ const MermaidVisualization = ({
           const offscreenCanvas = new OffscreenCanvas(scaledWidth, scaledHeight);
           const offscreenCtx = offscreenCanvas.getContext('2d');
           
-          // Use canvg to render SVG to OffscreenCanvas
-          const v = Canvg.fromString(offscreenCtx, renderedSvgString);
+          // Set white background
+          offscreenCtx.fillStyle = '#ffffff';
+          offscreenCtx.fillRect(0, 0, scaledWidth, scaledHeight);
+          
+          // Use canvg to render styled SVG to OffscreenCanvas
+          const v = Canvg.fromString(offscreenCtx, styledSvgString, {
+            ignoreDimensions: true,
+            scaleWidth: scaledWidth,
+            scaleHeight: scaledHeight,
+            offsetX: 0,
+            offsetY: 0
+          });
           await v.render();
           
           // Convert directly to blob and download
@@ -162,8 +302,18 @@ const MermaidVisualization = ({
         canvas.height = scaledHeight;
         const ctx = canvas.getContext('2d');
         
-        // Use canvg to render SVG to regular canvas
-        const v = Canvg.fromString(ctx, renderedSvgString);
+        // Set white background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, scaledWidth, scaledHeight);
+        
+        // Use canvg to render styled SVG to regular canvas
+        const v = Canvg.fromString(ctx, styledSvgString, {
+          ignoreDimensions: true,
+          scaleWidth: scaledWidth,
+          scaleHeight: scaledHeight,
+          offsetX: 0,
+          offsetY: 0
+        });
         await v.render();
         
         // Convert canvas to blob and download
@@ -187,7 +337,7 @@ const MermaidVisualization = ({
       // Last resort: download as SVG
       downloadSVGFallback();
     }
-  }, [renderedSvgString, title]);
+  }, [renderedSvgString, title, embedSvgStyles]);
 
   /**
    * Helper function to download a blob with proper cleanup
