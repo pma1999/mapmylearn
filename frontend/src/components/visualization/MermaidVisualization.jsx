@@ -108,31 +108,53 @@ const MermaidVisualization = ({
       const svgBlob = new Blob([renderedSvgString], { type: 'image/svg+xml;charset=utf-8' });
       const url = URL.createObjectURL(svgBlob);
       const img = new Image();
+      
+      // Set crossOrigin to prevent canvas tainting
+      img.crossOrigin = 'anonymous';
+      
       img.onload = () => {
-        const scale = 2; // higher resolution
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width * scale;
-        canvas.height = img.height * scale;
-        const ctx = canvas.getContext('2d');
-        ctx.scale(scale, scale);
-        ctx.drawImage(img, 0, 0);
-        canvas.toBlob((blob) => {
-          if (!blob) {
+        try {
+          const scale = 2; // higher resolution
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width * scale;
+          canvas.height = img.height * scale;
+          const ctx = canvas.getContext('2d');
+          ctx.scale(scale, scale);
+          ctx.drawImage(img, 0, 0);
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              URL.revokeObjectURL(url);
+              return;
+            }
+            const pngUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = pngUrl;
+            a.download = `${title.replace(/\s+/g, '_').substring(0, 30)}.png`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(pngUrl);
             URL.revokeObjectURL(url);
-            return;
-          }
-          const pngUrl = URL.createObjectURL(blob);
+          }, 'image/png');
+        } catch (canvasError) {
+          console.error('Canvas operation failed:', canvasError);
+          URL.revokeObjectURL(url);
+          // Fallback: download as SVG instead
           const a = document.createElement('a');
-          a.href = pngUrl;
-          a.download = `${title.replace(/\s+/g, '_').substring(0, 30)}.png`;
+          a.href = url;
+          a.download = `${title.replace(/\s+/g, '_').substring(0, 30)}.svg`;
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
-          URL.revokeObjectURL(pngUrl);
           URL.revokeObjectURL(url);
-        }, 'image/png');
+        }
       };
-      img.onerror = () => URL.revokeObjectURL(url);
+      
+      img.onerror = (imgError) => {
+        console.error('Image loading failed:', imgError);
+        URL.revokeObjectURL(url);
+      };
+      
       img.src = url;
     } catch (err) {
       console.error('Failed to download PNG', err);
