@@ -18,6 +18,7 @@ import CloseIcon from '@mui/icons-material/Close'; // Close icon
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'; // Zoom In
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline'; // Zoom Out
 import RestartAltIcon from '@mui/icons-material/RestartAlt'; // Reset
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 
 // Import pan and zoom library
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
@@ -100,6 +101,43 @@ const MermaidVisualization = ({
 
   const handleOpenModal = () => setModalOpen(true);
   const handleCloseModal = () => setModalOpen(false);
+
+  const handleDownloadPNG = useCallback(() => {
+    if (!renderedSvgString) return;
+    try {
+      const svgBlob = new Blob([renderedSvgString], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(svgBlob);
+      const img = new Image();
+      img.onload = () => {
+        const scale = 2; // higher resolution
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext('2d');
+        ctx.scale(scale, scale);
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            URL.revokeObjectURL(url);
+            return;
+          }
+          const pngUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = pngUrl;
+          a.download = `${title.replace(/\s+/g, '_').substring(0, 30)}.png`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(pngUrl);
+          URL.revokeObjectURL(url);
+        }, 'image/png');
+      };
+      img.onerror = () => URL.revokeObjectURL(url);
+      img.src = url;
+    } catch (err) {
+      console.error('Failed to download PNG', err);
+    }
+  }, [renderedSvgString, title]);
 
   // Initialize Mermaid with configuration
   useEffect(() => {
@@ -226,11 +264,18 @@ ${mermaidSyntax}`;
           {title}
         </Typography>
         {renderedSvgString && !isRendering && (
-          <Tooltip title="Expand Visualization">
-            <IconButton onClick={handleOpenModal} size="small">
-              <ZoomOutMapIcon />
-            </IconButton>
-          </Tooltip>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Tooltip title="Download PNG">
+              <IconButton onClick={handleDownloadPNG} size="small" sx={{ mr: 1 }}>
+                <FileDownloadIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Expand Visualization">
+              <IconButton onClick={handleOpenModal} size="small">
+                <ZoomOutMapIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
         )}
       </Box>
       
@@ -306,7 +351,14 @@ ${mermaidSyntax}`;
           <Box sx={modalStyle}>
             <Box sx={modalHeaderStyle}>
               <Typography variant="h6" component="h2">{title} (Expanded)</Typography>
-              <IconButton onClick={handleCloseModal} aria-label="close"><CloseIcon /></IconButton>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Tooltip title="Download PNG">
+                  <IconButton onClick={handleDownloadPNG} size="small" sx={{ mr: 1 }}>
+                    <FileDownloadIcon />
+                  </IconButton>
+                </Tooltip>
+                <IconButton onClick={handleCloseModal} aria-label="close"><CloseIcon /></IconButton>
+              </Box>
             </Box>
             <Box sx={modalContentWrapperStyle}>
               <TransformWrapper
