@@ -26,6 +26,9 @@ import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 // Import mermaid package for diagram rendering
 import mermaid from 'mermaid';
 
+// Import canvg for secure SVG to canvas conversion
+import { Canvg } from 'canvg';
+
 const modalStyle = {
   position: 'absolute',
   top: '50%',
@@ -102,64 +105,117 @@ const MermaidVisualization = ({
   const handleOpenModal = () => setModalOpen(true);
   const handleCloseModal = () => setModalOpen(false);
 
-  const handleDownloadPNG = useCallback(() => {
+  /**
+   * Downloads the rendered SVG as a PNG file using canvg for secure conversion
+   * Implements multiple fallback strategies for maximum browser compatibility
+   */
+  const handleDownloadPNG = useCallback(async () => {
     if (!renderedSvgString) return;
+
     try {
-      const svgBlob = new Blob([renderedSvgString], { type: 'image/svg+xml;charset=utf-8' });
-      const url = URL.createObjectURL(svgBlob);
-      const img = new Image();
+      // Extract SVG dimensions for proper canvas sizing
+      const parser = new DOMParser();
+      const svgDoc = parser.parseFromString(renderedSvgString, 'image/svg+xml');
+      const svgElement = svgDoc.documentElement;
       
-      // Set crossOrigin to prevent canvas tainting
-      img.crossOrigin = 'anonymous';
+      // Get dimensions from SVG or use sensible defaults
+      let width = parseInt(svgElement.getAttribute('width')) || 800;
+      let height = parseInt(svgElement.getAttribute('height')) || 600;
       
-      img.onload = () => {
-        try {
-          const scale = 2; // higher resolution
-          const canvas = document.createElement('canvas');
-          canvas.width = img.width * scale;
-          canvas.height = img.height * scale;
-          const ctx = canvas.getContext('2d');
-          ctx.scale(scale, scale);
-          ctx.drawImage(img, 0, 0);
-          canvas.toBlob((blob) => {
-            if (!blob) {
-              URL.revokeObjectURL(url);
-              return;
-            }
-            const pngUrl = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = pngUrl;
-            a.download = `${title.replace(/\s+/g, '_').substring(0, 30)}.png`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(pngUrl);
-            URL.revokeObjectURL(url);
-          }, 'image/png');
-        } catch (canvasError) {
-          console.error('Canvas operation failed:', canvasError);
-          URL.revokeObjectURL(url);
-          // Fallback: download as SVG instead
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${title.replace(/\s+/g, '_').substring(0, 30)}.svg`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
+      // Handle percentage or auto dimensions by using viewBox
+      if (isNaN(width) || isNaN(height)) {
+        const viewBox = svgElement.getAttribute('viewBox');
+        if (viewBox) {
+          const [, , vbWidth, vbHeight] = viewBox.split(' ').map(Number);
+          width = vbWidth || 800;
+          height = vbHeight || 600;
         }
-      };
+      }
+
+      const scale = 2; // High resolution scale factor
+      const scaledWidth = width * scale;
+      const scaledHeight = height * scale;
+
+      // Strategy 1: Try OffscreenCanvas for modern browsers (most secure)
+      if (typeof OffscreenCanvas !== 'undefined') {
+        try {
+          const offscreenCanvas = new OffscreenCanvas(scaledWidth, scaledHeight);
+          const offscreenCtx = offscreenCanvas.getContext('2d');
+          
+          // Use canvg to render SVG to OffscreenCanvas
+          const v = Canvg.fromString(offscreenCtx, renderedSvgString);
+          await v.render();
+          
+          // Convert directly to blob and download
+          const blob = await offscreenCanvas.convertToBlob({ type: 'image/png' });
+          downloadBlob(blob, `${title.replace(/\s+/g, '_').substring(0, 30)}.png`);
+          return;
+        } catch (offscreenError) {
+          console.warn('OffscreenCanvas approach failed, trying regular canvas:', offscreenError);
+        }
+      }
+
+      // Strategy 2: Fallback to regular canvas with canvg
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = scaledWidth;
+        canvas.height = scaledHeight;
+        const ctx = canvas.getContext('2d');
+        
+        // Use canvg to render SVG to regular canvas
+        const v = Canvg.fromString(ctx, renderedSvgString);
+        await v.render();
+        
+        // Convert canvas to blob and download
+        canvas.toBlob((blob) => {
+          if (blob) {
+            downloadBlob(blob, `${title.replace(/\s+/g, '_').substring(0, 30)}.png`);
+          } else {
+            throw new Error('Canvas toBlob failed');
+          }
+        }, 'image/png');
+        return;
+      } catch (canvasError) {
+        console.warn('Regular canvas approach failed, falling back to SVG:', canvasError);
+      }
+
+      // Strategy 3: Final fallback - download as SVG
+      downloadSVGFallback();
       
-      img.onerror = (imgError) => {
-        console.error('Image loading failed:', imgError);
-        URL.revokeObjectURL(url);
-      };
-      
-      img.src = url;
-    } catch (err) {
-      console.error('Failed to download PNG', err);
+    } catch (error) {
+      console.error('All PNG download strategies failed:', error);
+      // Last resort: download as SVG
+      downloadSVGFallback();
     }
   }, [renderedSvgString, title]);
+
+  /**
+   * Helper function to download a blob with proper cleanup
+   */
+  const downloadBlob = useCallback((blob, filename) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, []);
+
+  /**
+   * Fallback function to download the visualization as SVG
+   */
+  const downloadSVGFallback = useCallback(() => {
+    try {
+      const blob = new Blob([renderedSvgString], { type: 'image/svg+xml;charset=utf-8' });
+      downloadBlob(blob, `${title.replace(/\s+/g, '_').substring(0, 30)}.svg`);
+      console.info('Downloaded as SVG instead of PNG due to browser compatibility');
+    } catch (svgError) {
+      console.error('Even SVG download failed:', svgError);
+    }
+  }, [renderedSvgString, title, downloadBlob]);
 
   // Initialize Mermaid with configuration
   useEffect(() => {
