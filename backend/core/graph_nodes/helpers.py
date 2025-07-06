@@ -7,6 +7,7 @@ import json
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import BaseOutputParser, StrOutputParser
 from langchain_google_genai import ChatGoogleGenerativeAI
+from backend.services.services import GroundedGeminiWrapper
 
 logger = logging.getLogger("learning_path.helpers")
 
@@ -173,7 +174,7 @@ async def run_chain(prompt, llm_getter, parser: BaseOutputParser[T], params: Dic
     api_retry_start_time = None
     parsing_retries = 0
     parsing_retry_start_time = None
-    is_gemini = isinstance(llm, ChatGoogleGenerativeAI)
+    is_gemini = isinstance(llm, (ChatGoogleGenerativeAI, GroundedGeminiWrapper))
     last_raw_response = None  # Track the last raw response for parsing error retries
     
     while True:
@@ -339,15 +340,26 @@ async def run_chain(prompt, llm_getter, parser: BaseOutputParser[T], params: Dic
                 await asyncio.sleep(parsing_retry_delay)
                 continue
             
-            # Handle API call errors
-            if is_gemini and api_retries < max_retries and ("api" in error_str.lower() or "400" in error_str):
+            # Handle API call errors, including rate limits
+            is_rate_limit_error = (
+                "429" in error_str or
+                "RESOURCE_EXHAUSTED" in error_str or
+                "quota" in error_str.lower()
+            )
+            if is_gemini and api_retries < max_retries and (
+                "api" in error_str.lower() or
+                "400" in error_str or
+                is_rate_limit_error
+            ):
                 if not api_retry_start_time:
                     api_retry_start_time = time.time()
-                
+
                 api_retries += 1
                 retry_delay = initial_retry_delay * (2 ** (api_retries - 1))
-                
-                logger.warning(f"Gemini API error: {error_str}. Retry attempt {api_retries}/{max_retries} after {retry_delay:.2f}s delay")
+
+                logger.warning(
+                    f"Gemini API error: {error_str}. Retry attempt {api_retries}/{max_retries} after {retry_delay:.2f}s delay"
+                )
                 await asyncio.sleep(retry_delay)
                 continue
             
@@ -442,13 +454,24 @@ async def handle_llm_generation_with_retry(
                 
         except Exception as e:
             logger.error(f"Error in {operation_description} (attempt {attempt + 1}): {str(e)}")
-            
+
             if attempt == max_retries - 1:
                 logger.error(f"Failed {operation_description} after {max_retries} attempts")
                 return None
-            
-            # Wait before retry
-            await asyncio.sleep(1.0 * (2 ** attempt))
+
+            # Determine if this is a rate limit error to log more clearly
+            error_str = str(e)
+            is_rate_limit = (
+                "429" in error_str or
+                "RESOURCE_EXHAUSTED" in error_str or
+                "quota" in error_str.lower()
+            )
+            retry_delay = 1.0 * (2 ** attempt)
+            if is_rate_limit:
+                logger.warning(
+                    f"Rate limit encountered during {operation_description}. Retry after {retry_delay:.2f}s"
+                )
+            await asyncio.sleep(retry_delay)
     
     return None
 
@@ -508,12 +531,22 @@ async def handle_llm_generation_with_retry_no_parse(
                 
         except Exception as e:
             logger.error(f"Error in {operation_description} (attempt {attempt + 1}): {str(e)}")
-            
+
             if attempt == max_retries - 1:
                 logger.error(f"Failed {operation_description} after {max_retries} attempts")
                 return None
-            
-            # Wait before retry
-            await asyncio.sleep(1.0 * (2 ** attempt))
+
+            error_str = str(e)
+            is_rate_limit = (
+                "429" in error_str or
+                "RESOURCE_EXHAUSTED" in error_str or
+                "quota" in error_str.lower()
+            )
+            retry_delay = 1.0 * (2 ** attempt)
+            if is_rate_limit:
+                logger.warning(
+                    f"Rate limit encountered during {operation_description}. Retry after {retry_delay:.2f}s"
+                )
+            await asyncio.sleep(retry_delay)
     
     return None
