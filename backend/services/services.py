@@ -84,6 +84,62 @@ FETCH_BUFFER = 3 # How many extra results to fetch beyond max_results
 _brave_search_lock = threading.Lock()
 _last_brave_call_time = 0.0
 
+# ---------------------------------------------------------------------------
+# Gemini Retry Helpers
+# ---------------------------------------------------------------------------
+
+def _is_rate_limit_error(error: Exception) -> bool:
+    """Return True if the exception indicates a Gemini API rate limit."""
+    err = str(error).lower()
+    return "resource_exhausted" in err or "quota" in err or "429" in err
+
+
+def _extract_retry_delay(error: Exception) -> float | None:
+    """Extract recommended retry delay from error message."""
+    match = re.search(r"retrydelay['\"]?:\s*'?([0-9]+(?:\.[0-9]+)?)s", str(error), re.IGNORECASE)
+    if match:
+        try:
+            return float(match.group(1))
+        except ValueError:
+            return None
+    return None
+
+
+class RetryChatGoogleGenerativeAI(ChatGoogleGenerativeAI):
+    """ChatGoogleGenerativeAI with automatic retries on 429 errors."""
+
+    def __init__(self, *args, retry_attempts: int = 4, **kwargs):
+        super().__init__(*args, **kwargs)
+        object.__setattr__(self, "retry_attempts", retry_attempts)
+        self.logger = logging.getLogger("RetryChatGoogleGenerativeAI")
+
+    def invoke(self, input: Any, config=None, **kwargs) -> AIMessage:
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        return loop.run_until_complete(self.ainvoke(input, config=config, **kwargs))
+
+    async def ainvoke(self, input: Any, config=None, **kwargs) -> AIMessage:
+        attempt = 0
+        delay = 1.0
+        while True:
+            try:
+                return await super().ainvoke(input, config=config, **kwargs)
+            except Exception as e:
+                if attempt < self.retry_attempts and _is_rate_limit_error(e):
+                    retry_delay = _extract_retry_delay(e) or delay
+                    self.logger.warning(
+                        f"Gemini rate limit encountered. Retry {attempt + 1}/{self.retry_attempts} in {retry_delay}s"
+                    )
+                    await asyncio.sleep(retry_delay)
+                    attempt += 1
+                    delay = min(delay * 2, 60)
+                    continue
+                raise
+
 # --- Start of Modified PDF Helper Function ---
 def _extract_pdf_text_sync(pdf_bytes: bytes, source_url: str) -> str:
     """Synchronous helper to extract text from PDF bytes using PyMuPDF block analysis.
@@ -226,7 +282,7 @@ async def get_llm(key_provider=None, user=None):
     model = _get_model_for_user(user)
     
     try:
-        return ChatGoogleGenerativeAI(
+        return RetryChatGoogleGenerativeAI(
             model=model,
             temperature=0.2,
             google_api_key=google_api_key,
@@ -279,7 +335,7 @@ async def get_llm_for_evaluation(key_provider=None, user=None):
     logger.info(f"Using gemini-2.0-flash for evaluation (user: {getattr(user, 'email', 'unknown')})")
     
     try:
-        return ChatGoogleGenerativeAI(
+        return RetryChatGoogleGenerativeAI(
             model=model,
             temperature=0.2,
             google_api_key=google_api_key,
@@ -410,7 +466,8 @@ async def get_llm_with_search(key_provider=None, user=None) -> Union['GroundedGe
             client=client,
             model=model,
             search_tool=google_search_tool,
-            user=user
+            user=user,
+            max_retries=4
         )
         
     except Exception as e:
@@ -427,12 +484,13 @@ class GroundedGeminiWrapper(Runnable[Any, AIMessage]):
     Inherits from Runnable to support LangChain chain composition with | operator.
     """
     
-    def __init__(self, client: Optional['GenAIClient'], model: str, search_tool: Optional['GenAITool'], user=None):
+    def __init__(self, client: Optional['GenAIClient'], model: str, search_tool: Optional['GenAITool'], user=None, max_retries: int = 4):
         super().__init__()
         self.client = client
         self.model = model
         self.search_tool = search_tool
         self.user = user
+        self.max_retries = max_retries
         self.logger = logging.getLogger("GroundedGeminiWrapper")
         
         # Initialize LangSmith client for tracing
@@ -510,13 +568,25 @@ class GroundedGeminiWrapper(Runnable[Any, AIMessage]):
                 run_tree = None
         
         try:
-            # Convert LangChain messages to Google GenAI format
-            content = self._convert_langchain_to_genai_content(input)
-            
-            self.logger.debug(f"Converted content for grounded generation: {content[:200]}...")
-            
-            # Generate content with grounding and tracing
-            response = await self._generate_with_grounding(content, run_tree)
+            attempt = 0
+            delay = 1.0
+            while True:
+                try:
+                    content = self._convert_langchain_to_genai_content(input)
+                    self.logger.debug(f"Converted content for grounded generation: {content[:200]}...")
+                    response = await self._generate_with_grounding(content, run_tree)
+                    break
+                except Exception as e:
+                    if attempt < self.max_retries and _is_rate_limit_error(e):
+                        retry_delay = _extract_retry_delay(e) or delay
+                        self.logger.warning(
+                            f"Gemini rate limit in grounding. Retry {attempt + 1}/{self.max_retries} in {retry_delay}s"
+                        )
+                        await asyncio.sleep(retry_delay)
+                        attempt += 1
+                        delay = min(delay * 2, 60)
+                        continue
+                    raise
             
             # Convert response back to LangChain format
             langchain_response = self._convert_genai_to_langchain_response(response)
@@ -978,8 +1048,24 @@ Search Query: {query}"""
                     )
                 )
             
-            # Run in thread executor to avoid blocking
-            response = await loop.run_in_executor(None, _sync_search)
+            # Run in thread executor to avoid blocking with retry on rate limit
+            attempt = 0
+            delay = 1.0
+            while True:
+                try:
+                    response = await loop.run_in_executor(None, _sync_search)
+                    break
+                except Exception as e:
+                    if attempt < 4 and _is_rate_limit_error(e):
+                        retry_delay = _extract_retry_delay(e) or delay
+                        self.logger.warning(
+                            f"Gemini search rate limit. Retry {attempt + 1}/4 in {retry_delay}s"
+                        )
+                        await asyncio.sleep(retry_delay)
+                        attempt += 1
+                        delay = min(delay * 2, 60)
+                        continue
+                    raise
             
             # Complete child run if available
             if search_run:
