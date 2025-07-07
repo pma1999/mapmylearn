@@ -28,6 +28,7 @@ import {
 } from '@mui/material';
 import { motion, AnimatePresence } from 'framer-motion';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import PlayCircleFilledIcon from '@mui/icons-material/PlayCircleFilled';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
 import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
@@ -49,7 +50,9 @@ const CourseOverview = ({
   onStartCourse,
   progressMap,
   onToggleProgress,
-  isPublicView = false
+  isPublicView = false,
+  lastVisitedModuleIdx = null,
+  lastVisitedSubmoduleIdx = null
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -61,6 +64,17 @@ const CourseOverview = ({
   const totalSubmodules = modules.reduce((total, module) => total + (module.submodules?.length || 0), 0);
   const completedSubmodules = Object.values(progressMap || {}).filter(Boolean).length;
   const overallProgress = totalSubmodules > 0 ? (completedSubmodules / totalSubmodules) * 100 : 0;
+
+  // Determine if the user has started the course
+  const hasStartedCourse = 
+    (lastVisitedModuleIdx !== null && lastVisitedSubmoduleIdx !== null) ||
+    Object.values(progressMap || {}).some(Boolean);
+
+  // Dynamic button text and icon
+  const buttonText = hasStartedCourse ? "Resume Course" : "Start Course";
+  const heroButtonText = hasStartedCourse ? "Resume Learning Journey" : "Start Learning Journey";
+  const buttonIcon = hasStartedCourse ? <PlayCircleFilledIcon /> : <PlayArrowIcon />;
+  const ctaText = hasStartedCourse ? "Ready to jump back in?" : "Ready to begin your learning journey?";
 
   // Calculate progress for each module
   const getModuleProgress = (moduleIndex, module) => {
@@ -187,7 +201,7 @@ const CourseOverview = ({
           <Button
             variant="contained"
             size="large"
-            startIcon={<PlayArrowIcon />}
+            startIcon={buttonIcon}
             onClick={onStartCourse}
             sx={{
               px: 4,
@@ -204,7 +218,7 @@ const CourseOverview = ({
               transition: 'all 0.3s ease'
             }}
           >
-            Start Learning Journey
+            {heroButtonText}
           </Button>
         </Paper>
       </motion.div>
@@ -499,12 +513,12 @@ const CourseOverview = ({
       <motion.div variants={cardVariants}>
         <Box sx={{ textAlign: 'center', mt: 6, mb: 4 }}>
           <Typography variant="h6" gutterBottom sx={{ fontWeight: 500 }}>
-            Ready to begin your learning journey?
+            {ctaText}
           </Typography>
           <Button
             variant="contained"
             size="large"
-            startIcon={<PlayArrowIcon />}
+            startIcon={buttonIcon}
             onClick={onStartCourse}
             sx={{
               px: 4,
@@ -515,7 +529,7 @@ const CourseOverview = ({
               mt: 2
             }}
           >
-            Start Course
+            {buttonText}
           </Button>
         </Box>
       </motion.div>
@@ -531,7 +545,9 @@ CourseOverview.propTypes = {
   onStartCourse: PropTypes.func.isRequired,
   progressMap: PropTypes.object,
   onToggleProgress: PropTypes.func,
-  isPublicView: PropTypes.bool
+  isPublicView: PropTypes.bool,
+  lastVisitedModuleIdx: PropTypes.number,
+  lastVisitedSubmoduleIdx: PropTypes.number
 };
 
 export default CourseOverview;

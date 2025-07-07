@@ -80,6 +80,10 @@ const LearningPathView = ({ source }) => {
     mobileNavOpen,
     localDetailsHaveBeenSet,
 
+    // Progress tracking
+    lastVisitedModuleIdx,
+    lastVisitedSubmoduleIdx,
+
     // IDs
     currentEntryId,
     relevantShareIdForHeader,
@@ -297,6 +301,8 @@ const LearningPathView = ({ source }) => {
                 progressMap={progressMap}
                 onToggleProgress={handleToggleProgress}
                 isPublicView={isPublicView}
+                lastVisitedModuleIdx={lastVisitedModuleIdx}
+                lastVisitedSubmoduleIdx={lastVisitedSubmoduleIdx}
               />
             }
             focusComponent={

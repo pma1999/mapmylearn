@@ -48,6 +48,7 @@ const useLearningPathView = (source, options = {}) => {
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [localDetailsHaveBeenSet, setLocalDetailsHaveBeenSet] = useState(false);
   const [localEntryId, setLocalEntryId] = useState(null);
+  const [hasSetInitialNavigation, setHasSetInitialNavigation] = useState(false);
 
   // Load learning path data
   const {
@@ -86,16 +87,20 @@ const useLearningPathView = (source, options = {}) => {
       } else {
         setLocalEntryId(null);
       }
+    } else {
+      // Reset navigation flag when starting to load new data
+      setHasSetInitialNavigation(false);
     }
   }, [loading, initialDetailsWereSet, isFromHistory, persistentPathId]);
 
-  // Set initial navigation when data loads
+  // Set initial navigation when data loads (only once)
   useEffect(() => {
-    if (initialLoadComplete && learningPath) {
+    if (initialLoadComplete && learningPath && !hasSetInitialNavigation) {
       const actualPathData = learningPath?.path_data || learningPath || {};
       navigationState.setInitialNavigation(actualPathData, lastVisitedModuleIdx, lastVisitedSubmoduleIdx);
+      setHasSetInitialNavigation(true);
     }
-  }, [initialLoadComplete, learningPath, lastVisitedModuleIdx, lastVisitedSubmoduleIdx, navigationState]);
+  }, [initialLoadComplete, learningPath, lastVisitedModuleIdx, lastVisitedSubmoduleIdx, hasSetInitialNavigation, navigationState]);
 
   // Derived data
   const actualPathData = learningPath?.path_data || learningPath || {};
@@ -199,8 +204,8 @@ const useLearningPathView = (source, options = {}) => {
     enabled: enableTutorial // Pass enabled flag to the hook
   });
 
-  // Progress management
-  const handleToggleProgress = useCallback(async (modIndex, subIndex) => {
+    // Progress management
+    const handleToggleProgress = useCallback(async (modIndex, subIndex) => {
     if (isPublicView) {
       console.warn('Cannot toggle progress in public view.');
       return;
@@ -301,13 +306,28 @@ const useLearningPathView = (source, options = {}) => {
 
   const handleStartCourse = useCallback(() => {
     if (actualPathData?.modules?.length > 0) {
-      const firstModule = actualPathData.modules[0];
-      if (firstModule.submodules?.length > 0) {
-        navigationState.selectSubmodule(0, 0);
-        viewModeState.switchToFocus();
+      // Check if there's a valid last visited position
+      const isValidLastVisited = 
+        lastVisitedModuleIdx !== null && 
+        lastVisitedModuleIdx >= 0 && 
+        lastVisitedModuleIdx < actualPathData.modules.length &&
+        lastVisitedSubmoduleIdx !== null && 
+        lastVisitedSubmoduleIdx >= 0 && 
+        actualPathData.modules[lastVisitedModuleIdx]?.submodules?.length > lastVisitedSubmoduleIdx;
+
+      if (isValidLastVisited) {
+        // Navigate to the last visited submodule
+        navigationState.selectSubmodule(lastVisitedModuleIdx, lastVisitedSubmoduleIdx);
+      } else {
+        // Navigate to the first submodule (current behavior)
+        const firstModule = actualPathData.modules[0];
+        if (firstModule.submodules?.length > 0) {
+          navigationState.selectSubmodule(0, 0);
+        }
       }
+      viewModeState.switchToFocus();
     }
-  }, [actualPathData, navigationState.selectSubmodule, viewModeState.switchToFocus]);
+  }, [actualPathData, lastVisitedModuleIdx, lastVisitedSubmoduleIdx, navigationState.selectSubmodule, viewModeState.switchToFocus]);
 
   return {
     // Core data
@@ -347,6 +367,10 @@ const useLearningPathView = (source, options = {}) => {
     isCopying,
     mobileNavOpen,
     localDetailsHaveBeenSet,
+
+    // Progress tracking
+    lastVisitedModuleIdx,
+    lastVisitedSubmoduleIdx,
 
     // IDs
     currentEntryId,
