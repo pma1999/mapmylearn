@@ -147,7 +147,23 @@ const LearningPathView = ({ source }) => {
 
   // Extract top-level info directly from learningPath state
   const topic = learningPath?.topic || 'Loading Topic...'; // Use directly from learningPath
-  const topicResources = learningPath?.topic_resources || []; // Use directly from learningPath
+  
+  // Smart extraction of topic_resources - handles both newly generated and history paths
+  const topicResources = useMemo(() => {
+    // Priority 1: Search at root level (newly generated courses)
+    if (learningPath?.topic_resources && Array.isArray(learningPath.topic_resources)) {
+      return learningPath.topic_resources;
+    }
+    
+    // Priority 2: Search within path_data (history courses)
+    if (actualPathData?.topic_resources && Array.isArray(actualPathData.topic_resources)) {
+      return actualPathData.topic_resources;
+    }
+    
+    // Fallback: empty array
+    return [];
+  }, [learningPath?.topic_resources, actualPathData?.topic_resources]);
+  
   const isPublic = learningPath?.is_public || false;
   // Rename to avoid conflict with shareId from useParams
   const loadedShareId = learningPath?.share_id || null; 
