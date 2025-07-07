@@ -1061,7 +1061,10 @@ Search Query: {query}"""
             )
     
     def _extract_grounding_urls(self, response) -> List[Dict[str, str]]:
-        """Extracts real URLs and titles from Google Search grounding metadata."""
+        """Extracts URLs and titles from Google Search grounding metadata.
+        
+        Note: URLs may be Google redirect URLs that will be resolved during scraping.
+        """
         urls_info = []
         if not (hasattr(response, 'candidates') and response.candidates):
             return urls_info
@@ -1074,6 +1077,7 @@ Search Query: {query}"""
         if not (hasattr(metadata, 'grounding_chunks') and metadata.grounding_chunks):
             return urls_info
 
+        redirect_count = 0
         for chunk in metadata.grounding_chunks:
             if hasattr(chunk, 'web') and chunk.web:
                 web_source = chunk.web
@@ -1081,8 +1085,12 @@ Search Query: {query}"""
                 title = getattr(web_source, 'title', 'No Title')
                 if uri:
                     urls_info.append({'url': uri, 'title': title})
-        
-        self.logger.info(f"Extracted {len(urls_info)} URLs from grounding metadata.")
+                    # Log if this is a Google redirect URL
+                    if _is_google_redirect_url(uri):
+                        redirect_count += 1
+                        self.logger.debug(f"Found Google redirect URL: {uri}")
+
+        self.logger.info(f"Extracted {len(urls_info)} URLs from grounding metadata ({redirect_count} redirect URLs detected).")
         return urls_info
 
     async def _scrape_grounding_urls(self, urls_info: List[Dict[str, str]], scrape_timeout: int, run_tree=None) -> List[ScrapedResult]:
@@ -1433,12 +1441,68 @@ async def execute_search_with_router(
     """
     return await _search_router.execute_search(state, query, search_config, langsmith_extra)
 
+def _is_google_redirect_url(url: str) -> bool:
+    """Check if URL is a Google redirect URL that needs to be resolved."""
+    if not url:
+        return False
+    
+    google_redirect_patterns = [
+        'vertexaisearch.cloud.google.com/grounding-api-redirect/',
+        'google.com/url?',
+        'google.com/search?',
+        'googleusercontent.com/url?'
+    ]
+    
+    return any(pattern in url for pattern in google_redirect_patterns)
+
+async def _resolve_google_redirect_url(session: aiohttp.ClientSession, redirect_url: str, timeout: int) -> Tuple[str, Optional[str]]:
+    """Resolve a Google redirect URL to get the real destination URL.
+    
+    Args:
+        session: The aiohttp client session.
+        redirect_url: The Google redirect URL to resolve.
+        timeout: Request timeout in seconds.
+        
+    Returns:
+        A tuple containing (resolved_url, error_message).
+        If resolution fails, returns (original_url, error_message).
+    """
+    headers = {'User-Agent': 'Mozilla/5.0 (compatible; LearniBot/1.0; +https://learni.com/bot)'}
+    
+    try:
+        logger.debug(f"Resolving Google redirect URL: {redirect_url}")
+        
+        # Use HEAD request to follow redirects without downloading content
+        timeout_obj = aiohttp.ClientTimeout(total=timeout)
+        async with session.head(redirect_url, timeout=timeout_obj, headers=headers, ssl=False, allow_redirects=True) as response:
+            # The final URL after all redirects
+            final_url = str(response.url)
+            
+            # Verify we got a different URL
+            if final_url != redirect_url:
+                logger.info(f"Resolved Google redirect: {redirect_url} -> {final_url}")
+                return final_url, None
+            else:
+                logger.warning(f"Google redirect resolution didn't change URL: {redirect_url}")
+                return redirect_url, "URL resolution didn't produce a different URL"
+                
+    except asyncio.TimeoutError:
+        logger.warning(f"Timeout resolving Google redirect URL: {redirect_url}")
+        return redirect_url, f"Timeout resolving redirect after {timeout}s"
+    except aiohttp.ClientError as e:
+        logger.warning(f"Client error resolving Google redirect URL {redirect_url}: {type(e).__name__}")
+        return redirect_url, f"Client error resolving redirect: {type(e).__name__}"
+    except Exception as e:
+        logger.error(f"Unexpected error resolving Google redirect URL {redirect_url}: {type(e).__name__} - {e}")
+        return redirect_url, f"Unexpected error resolving redirect: {type(e).__name__}"
+
 # --- Start of Modified _scrape_single_url ---
 async def _scrape_single_url(session: aiohttp.ClientSession, url: str, timeout: int) -> Tuple[Optional[str], Optional[str]]:
     """Scrapes cleaned textual content from a single URL (HTML or PDF).
 
     Prioritizes using Trafilatura for HTML and block analysis for PDF, with fallbacks.
     Cleans the content THEN truncates to MAX_SCRAPE_LENGTH.
+    Now includes Google redirect URL resolution.
 
     Args:
         session: The aiohttp client session.
@@ -1453,10 +1517,24 @@ async def _scrape_single_url(session: aiohttp.ClientSession, url: str, timeout: 
     headers = {'User-Agent': 'Mozilla/5.0 (compatible; LearniBot/1.0; +https://learni.com/bot)'} # Example Bot UA
     clean_text: Optional[str] = None
     error_message: Optional[str] = None
+    
+    # Resolve Google redirect URLs first
+    actual_url = url
+    if _is_google_redirect_url(url):
+        logger.info(f"Detected Google redirect URL, resolving: {url}")
+        resolved_url, resolve_error = await _resolve_google_redirect_url(session, url, timeout)
+        if resolve_error:
+            logger.warning(f"Failed to resolve Google redirect URL {url}: {resolve_error}")
+            # Continue with original URL but log the issue
+            actual_url = url
+        else:
+            actual_url = resolved_url
+            logger.info(f"Successfully resolved Google redirect: {url} -> {actual_url}")
 
     try:
-        logger.debug(f"Attempting to scrape URL: {url}")
-        async with session.get(url, timeout=timeout, headers=headers, ssl=False) as response:
+        logger.debug(f"Attempting to scrape URL: {actual_url}")
+        timeout_obj = aiohttp.ClientTimeout(total=timeout)
+        async with session.get(actual_url, timeout=timeout_obj, headers=headers, ssl=False) as response:
             response.raise_for_status()
             content_type = response.headers.get("Content-Type", "").lower()
             
