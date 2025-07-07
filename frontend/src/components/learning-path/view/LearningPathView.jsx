@@ -39,6 +39,7 @@ import ResourcesSection from '../../shared/ResourcesSection';
 import ModuleNavigationColumn from './ModuleNavigationColumn';
 import ContentPanel from './ContentPanel';
 import MobileBottomNavigation from './MobileBottomNavigation.jsx';
+import CourseOverview from './CourseOverview';
 
 const DRAWER_WIDTH = 300; // Define a width for the mobile drawer
 const AUDIO_CREDIT_COST = 1; // Define or import this
@@ -95,6 +96,9 @@ const LearningPathView = ({ source }) => {
   const [activeSubmoduleIndex, setActiveSubmoduleIndex] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+
+  // --- NEW: View mode state ---
+  const [viewMode, setViewMode] = useState('overview'); // 'overview' or 'focus'
 
   // --- NEW: State for ContentPanel display type ---
   const [contentPanelDisplayType, setContentPanelDisplayType] = useState('submodule'); // 'submodule' or 'module_resources'
@@ -180,6 +184,27 @@ const LearningPathView = ({ source }) => {
       contentPanelRef.current.scrollTop = 0;
     }
   }, [setActiveModuleIndex, setActiveSubmoduleIndex, setContentPanelDisplayType, setActiveTab]);
+
+  // --- NEW: Overview mode handlers ---
+  const handleSelectSubmoduleFromOverview = useCallback((moduleIndex, submoduleIndex) => {
+    selectSubmodule(moduleIndex, submoduleIndex);
+    setViewMode('focus');
+  }, [selectSubmodule]);
+
+  const handleStartCourse = useCallback(() => {
+    // Start with the first submodule of the first module
+    if (actualPathData?.modules?.length > 0) {
+      const firstModule = actualPathData.modules[0];
+      if (firstModule.submodules?.length > 0) {
+        selectSubmodule(0, 0);
+        setViewMode('focus');
+      }
+    }
+  }, [actualPathData, selectSubmodule]);
+
+  const handleBackToOverview = useCallback(() => {
+    setViewMode('overview');
+  }, []);
 
 
   // Effect to set initial active module/submodule from last visited or default
@@ -879,7 +904,7 @@ const LearningPathView = ({ source }) => {
               onSaveOffline={handleSaveOffline}
               onNewLearningPath={handleNewLearningPathClick}
                onOpenMobileNav={handleMobileNavToggle} 
-               showMobileNavButton={isMobileLayout} 
+               showMobileNavButton={isMobileLayout && viewMode === 'focus'} 
                progressMap={progressMap}
                actualPathData={actualPathData} 
                onStartTutorial={startTutorial} 
@@ -892,6 +917,8 @@ const LearningPathView = ({ source }) => {
                onCopyShareLink={handleCopyShareLink} 
                onCopyToHistory={handleCopyToHistory} 
                isCopying={isCopying} 
+               viewMode={viewMode}
+               onBackToOverview={handleBackToOverview}
              />
              {/* --- NEW: Topic Resources Section --- */}
               {topicResources && topicResources.length > 0 && (
@@ -909,114 +936,132 @@ const LearningPathView = ({ source }) => {
           </Box>
 
           <Box sx={{ flexGrow: 1, overflow: 'hidden', position: 'relative' }}> 
-            {isMobileLayout ? (
-               <> 
-                  <Box sx={{ height: '100%' }}> 
-                      <ContentPanel
-                         ref={contentPanelRef}
-                         sx={{ height: '100%' }}
-                         displayType={contentPanelDisplayType} // Pass new prop
-                         module={currentModule}
-                         moduleIndex={activeModuleIndex}
-                         submodule={currentSubmodule} // Will be null if displayType is 'module_resources'
-                         submoduleIndex={activeSubmoduleIndex} // Will be null if displayType is 'module_resources'
-                         pathId={derivedPathId}
-                         isTemporaryPath={isTemporaryPath}
-                         actualPathData={actualPathData} 
+            {viewMode === 'overview' ? (
+              <Box sx={{ height: '100%', overflowY: 'auto' }}>
+                <CourseOverview
+                  actualPathData={actualPathData}
+                  topic={topic}
+                  topicResources={topicResources}
+                  onSelectSubmodule={handleSelectSubmoduleFromOverview}
+                  onStartCourse={handleStartCourse}
+                  progressMap={progressMap}
+                  onToggleProgress={handleToggleProgress}
+                  isPublicView={isPublicView}
+                />
+              </Box>
+            ) : (
+              // Focus mode layout
+              <>
+                {isMobileLayout ? (
+                   <> 
+                      <Box sx={{ height: '100%' }}> 
+                          <ContentPanel
+                             ref={contentPanelRef}
+                             sx={{ height: '100%' }}
+                             displayType={contentPanelDisplayType} // Pass new prop
+                             module={currentModule}
+                             moduleIndex={activeModuleIndex}
+                             submodule={currentSubmodule} // Will be null if displayType is 'module_resources'
+                             submoduleIndex={activeSubmoduleIndex} // Will be null if displayType is 'module_resources'
+                             pathId={derivedPathId}
+                             isTemporaryPath={isTemporaryPath}
+                             actualPathData={actualPathData} 
+                             onNavigate={handleNavigation}
+                             totalModules={totalModules}
+                             totalSubmodulesInModule={totalSubmodulesInModule}
+                             isMobileLayout={isMobileLayout}
+                             activeTab={activeTab}
+                             setActiveTab={setActiveTab}
+                             progressMap={progressMap}
+                             onToggleProgress={handleToggleProgress}
+                             isPublicView={isPublicView} 
+                          />
+                      </Box>
+
+                      <Drawer
+                         anchor="left"
+                         open={mobileNavOpen}
+                         onClose={handleMobileNavClose}
+                         ModalProps={{ keepMounted: true }}
+                         PaperProps={{ sx: { width: DRAWER_WIDTH } }}
+                      >
+                         <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
+                             <Typography variant="h6">Modules</Typography>
+                         </Box>
+                         <ModuleNavigationColumn
+                             modules={actualPathData?.modules || []} 
+                             activeModuleIndex={activeModuleIndex}
+                             setActiveModuleIndex={setActiveModuleIndex}
+                             activeSubmoduleIndex={activeSubmoduleIndex}
+                             selectSubmodule={selectSubmodule}
+                             onSelectModuleResources={handleSelectModuleResources}
+                             contentPanelDisplayType={contentPanelDisplayType}
+                             progressMap={progressMap}
+                             onToggleProgress={handleToggleProgress}
+                             isPublicView={isPublicView}
+                             onSubmoduleSelect={handleSubmoduleSelectFromDrawer} 
+                          />
+                      </Drawer>
+                      
+                      <MobileBottomNavigation 
                          onNavigate={handleNavigation}
+                         activeModuleIndex={activeModuleIndex}
+                         activeSubmoduleIndex={activeSubmoduleIndex}
                          totalModules={totalModules}
                          totalSubmodulesInModule={totalSubmodulesInModule}
-                         isMobileLayout={isMobileLayout}
                          activeTab={activeTab}
                          setActiveTab={setActiveTab}
-                         progressMap={progressMap}
-                         onToggleProgress={handleToggleProgress}
-                         isPublicView={isPublicView} 
-                      />
-                  </Box>
-
-                  <Drawer
-                     anchor="left"
-                     open={mobileNavOpen}
-                     onClose={handleMobileNavClose}
-                     ModalProps={{ keepMounted: true }}
-                     PaperProps={{ sx: { width: DRAWER_WIDTH } }}
-                  >
-                     <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
-                         <Typography variant="h6">Modules</Typography>
-                     </Box>
-                     <ModuleNavigationColumn
-                         modules={actualPathData?.modules || []} 
-                         activeModuleIndex={activeModuleIndex}
-                         setActiveModuleIndex={setActiveModuleIndex}
-                         activeSubmoduleIndex={activeSubmoduleIndex}
-                         selectSubmodule={selectSubmodule}
-                         onSelectModuleResources={handleSelectModuleResources}
+                         availableTabs={availableTabs} 
+                         onOpenMobileNav={handleMobileNavToggle}
+                         // Pass display type to potentially adjust its behavior if needed (e.g. disable nav buttons)
                          contentPanelDisplayType={contentPanelDisplayType}
-                         progressMap={progressMap}
-                         onToggleProgress={handleToggleProgress}
-                         isPublicView={isPublicView}
-                         onSubmoduleSelect={handleSubmoduleSelectFromDrawer} 
                       />
-                  </Drawer>
-                  
-                  <MobileBottomNavigation 
-                     onNavigate={handleNavigation}
-                     activeModuleIndex={activeModuleIndex}
-                     activeSubmoduleIndex={activeSubmoduleIndex}
-                     totalModules={totalModules}
-                     totalSubmodulesInModule={totalSubmodulesInModule}
-                     activeTab={activeTab}
-                     setActiveTab={setActiveTab}
-                     availableTabs={availableTabs} 
-                     onOpenMobileNav={handleMobileNavToggle}
-                     // Pass display type to potentially adjust its behavior if needed (e.g. disable nav buttons)
-                     contentPanelDisplayType={contentPanelDisplayType}
-                  />
-               </>
-            ) : (
-               <Grid container spacing={{ xs: 0, md: 2 }} sx={{ height: '100%', flexGrow: 1 }}> 
-                  <Grid item xs={12} md={4} sx={{ 
-                     height: { xs: 'auto', md: '100%' }, 
-                     pb: { xs: 2, md: 0 } 
-                  }}> 
-                     <ModuleNavigationColumn
-                        modules={actualPathData?.modules || []} 
-                        activeModuleIndex={activeModuleIndex}
-                        setActiveModuleIndex={setActiveModuleIndex}
-                        activeSubmoduleIndex={activeSubmoduleIndex}
-                        selectSubmodule={selectSubmodule}
-                        onSelectModuleResources={handleSelectModuleResources}
-                        contentPanelDisplayType={contentPanelDisplayType}
-                        progressMap={progressMap}
-                        onToggleProgress={handleToggleProgress}
-                        isPublicView={isPublicView}
-                     />
-                  </Grid>
-                  <Grid item xs={12} md={8} sx={{ /* No height/overflow needed here */ }}> 
-                     <ContentPanel
-                        ref={contentPanelRef}
-                        sx={{ height: '100%' }}
-                        displayType={contentPanelDisplayType} // Pass new prop
-                        module={currentModule}
-                        moduleIndex={activeModuleIndex}
-                        submodule={currentSubmodule}
-                        submoduleIndex={activeSubmoduleIndex}
-                        pathId={derivedPathId}
-                        isTemporaryPath={isTemporaryPath}
-                        actualPathData={actualPathData} 
-                        onNavigate={handleNavigation}
-                        totalModules={totalModules}
-                        totalSubmodulesInModule={totalSubmodulesInModule}
-                        isMobileLayout={isMobileLayout}
-                        activeTab={activeTab}
-                        setActiveTab={setActiveTab}
-                        progressMap={progressMap}
-                        onToggleProgress={handleToggleProgress}
-                        isPublicView={isPublicView}
-                     />
-                  </Grid>
-               </Grid>
+                   </>
+                ) : (
+                   <Grid container spacing={{ xs: 0, md: 2 }} sx={{ height: '100%', flexGrow: 1 }}> 
+                      <Grid item xs={12} md={4} sx={{ 
+                         height: { xs: 'auto', md: '100%' }, 
+                         pb: { xs: 2, md: 0 } 
+                      }}> 
+                         <ModuleNavigationColumn
+                            modules={actualPathData?.modules || []} 
+                            activeModuleIndex={activeModuleIndex}
+                            setActiveModuleIndex={setActiveModuleIndex}
+                            activeSubmoduleIndex={activeSubmoduleIndex}
+                            selectSubmodule={selectSubmodule}
+                            onSelectModuleResources={handleSelectModuleResources}
+                            contentPanelDisplayType={contentPanelDisplayType}
+                            progressMap={progressMap}
+                            onToggleProgress={handleToggleProgress}
+                            isPublicView={isPublicView}
+                         />
+                      </Grid>
+                      <Grid item xs={12} md={8} sx={{ /* No height/overflow needed here */ }}> 
+                         <ContentPanel
+                            ref={contentPanelRef}
+                            sx={{ height: '100%' }}
+                            displayType={contentPanelDisplayType} // Pass new prop
+                            module={currentModule}
+                            moduleIndex={activeModuleIndex}
+                            submodule={currentSubmodule}
+                            submoduleIndex={activeSubmoduleIndex}
+                            pathId={derivedPathId}
+                            isTemporaryPath={isTemporaryPath}
+                            actualPathData={actualPathData} 
+                            onNavigate={handleNavigation}
+                            totalModules={totalModules}
+                            totalSubmodulesInModule={totalSubmodulesInModule}
+                            isMobileLayout={isMobileLayout}
+                            activeTab={activeTab}
+                            setActiveTab={setActiveTab}
+                            progressMap={progressMap}
+                            onToggleProgress={handleToggleProgress}
+                            isPublicView={isPublicView}
+                         />
+                      </Grid>
+                   </Grid>
+                )}
+              </>
             )}
           </Box>
         </>

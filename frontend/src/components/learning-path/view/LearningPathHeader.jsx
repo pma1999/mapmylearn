@@ -29,6 +29,7 @@ import LinkIcon from '@mui/icons-material/Link';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import LockIcon from '@mui/icons-material/Lock';
 import BookmarkAddIcon from '@mui/icons-material/BookmarkAdd';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CircularProgress from '@mui/material/CircularProgress';
 import { motion } from 'framer-motion';
 import InfoTooltip from '../../shared/InfoTooltip';
@@ -60,6 +61,8 @@ import { helpTexts } from '../../../constants/helpTexts';
  * @param {boolean} [props.isLoggedIn=false] Whether the current user is logged in
  * @param {Function} [props.onCopyToHistory] Handler to copy public course to user's history
  * @param {boolean} [props.isCopying=false] Loading state for the copy operation
+ * @param {string} [props.viewMode='overview'] Current view mode ('overview' or 'focus')
+ * @param {Function} [props.onBackToOverview] Handler to go back to overview mode
  * @returns {JSX.Element} Header component
  */
 const LearningPathHeader = ({ 
@@ -84,7 +87,9 @@ const LearningPathHeader = ({
   entryId = null,
   isLoggedIn = false,
   onCopyToHistory,
-  isCopying = false
+  isCopying = false,
+  viewMode = 'overview',
+  onBackToOverview
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -209,18 +214,41 @@ const LearningPathHeader = ({
           </Box>
           
           <Box sx={{ mt: 1, mb: 2 }}>
-            <Typography 
-              variant="h5"
-              color="primary"
-              sx={{ 
-                fontWeight: theme.typography.fontWeightMedium,
-                mb: 1,
-                wordBreak: 'break-word',
-                textAlign: { xs: 'center', sm: 'left' }
-              }}
-            >
-              {topic}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+              <Typography 
+                variant="h5"
+                color="primary"
+                sx={{ 
+                  fontWeight: theme.typography.fontWeightMedium,
+                  wordBreak: 'break-word',
+                  flexGrow: 1
+                }}
+              >
+                {topic}
+              </Typography>
+              {viewMode === 'focus' && onBackToOverview && (
+                <motion.div variants={buttonVariants}>
+                  <Tooltip title="Back to Course Overview">
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<ArrowBackIcon />}
+                      onClick={onBackToOverview}
+                      sx={{
+                        borderColor: theme.palette.primary.main,
+                        color: theme.palette.primary.main,
+                        '&:hover': {
+                          backgroundColor: theme.palette.primary.main,
+                          color: theme.palette.primary.contrastText
+                        }
+                      }}
+                    >
+                      Overview
+                    </Button>
+                  </Tooltip>
+                </motion.div>
+              )}
+            </Box>
           </Box>
 
           {/* Progress Bar Section (Only if totalSubmodules > 0) */}
@@ -524,6 +552,8 @@ LearningPathHeader.propTypes = {
   isLoggedIn: PropTypes.bool,
   onCopyToHistory: PropTypes.func,
   isCopying: PropTypes.bool,
+  viewMode: PropTypes.string,
+  onBackToOverview: PropTypes.func,
 };
 
-export default LearningPathHeader; 
+export default LearningPathHeader;
