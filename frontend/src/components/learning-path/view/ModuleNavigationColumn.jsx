@@ -9,7 +9,7 @@ import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
 const ModuleNavigationColumn = ({ 
   modules, 
   activeModuleIndex, 
-  setActiveModuleIndex,
+  onModuleClick,
   activeSubmoduleIndex,
   selectSubmodule,
   onSelectModuleResources,
@@ -21,7 +21,7 @@ const ModuleNavigationColumn = ({
   const theme = useTheme();
 
   const handleModuleClick = (index) => {
-    setActiveModuleIndex(index === activeModuleIndex ? null : index);
+    onModuleClick(index);
   };
 
   const handleSubmoduleClick = (modIndex, subIndex) => {
@@ -232,7 +232,7 @@ const ModuleNavigationColumn = ({
 ModuleNavigationColumn.propTypes = {
   modules: PropTypes.array.isRequired,
   activeModuleIndex: PropTypes.number,
-  setActiveModuleIndex: PropTypes.func.isRequired,
+  onModuleClick: PropTypes.func.isRequired,
   activeSubmoduleIndex: PropTypes.number,
   selectSubmodule: PropTypes.func.isRequired,
   onSelectModuleResources: PropTypes.func.isRequired,
@@ -242,4 +242,4 @@ ModuleNavigationColumn.propTypes = {
   onToggleProgress: PropTypes.func.isRequired,
 };
 
-export default ModuleNavigationColumn; 
+export default ModuleNavigationColumn;
