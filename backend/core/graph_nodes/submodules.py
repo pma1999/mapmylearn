@@ -1088,7 +1088,7 @@ async def process_single_submodule(
             
             # Generate resources and integrate with the result
             result = await integrate_resources_with_submodule_processing(
-                state, module_id, sub_id, module, submodule, submodule_content, initial_result
+                state, module_id, sub_id, module, submodule, submodule_content, initial_result, submodule_search_results
             )
         else:
             logger.warning(f"Skipping resource generation for submodule {module_id}.{sub_id} due to content generation failure")

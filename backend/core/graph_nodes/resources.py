@@ -871,131 +871,117 @@ async def integrate_resources_with_submodule_processing(
     sub_id: int,
     module: EnhancedModule,
     submodule: Submodule,
-    submodule_content: str, # Content generated in the previous step
-    original_result: Dict[str, Any] # Result from process_single_submodule
+    submodule_content: str,
+    original_result: Dict[str, Any],
+    submodule_search_results: List[SearchServiceResult]
 ) -> Dict[str, Any]:
     """
-    Generates resources for a submodule and integrates them into the original result.
-
-    This function acts as a wrapper or subsequent step after submodule content
-    is generated, allowing resource generation to happen alongside or after
-    content development within the submodule processing loop.
+    Extracts resources for a submodule from existing search results and integrates them.
+    This function no longer performs a new search.
     """
-    logger.debug(f"Integrating resources for submodule {module_id+1}.{sub_id+1}: {submodule.title}")
+    logger.debug(f"Extracting resources from existing search results for submodule {module_id+1}.{sub_id+1}: {submodule.title}")
 
-    submodule_key = f"{module_id}_{sub_id}"
-    submodule_resources_in_process = state.get("submodule_resources_in_process", {})
-    progress_callback = state.get("progress_callback") # Get progress_callback from state
+    progress_callback = state.get("progress_callback")
 
     if state.get("resource_generation_enabled") is False:
-        logger.debug(f"Resource generation disabled, skipping integration for {submodule_key}")
-        submodule_resources_in_process[submodule_key] = {"status": "skipped"}
-        original_result["resources"] = [] # Ensure resources list is empty
-        original_result["resource_query"] = None
-        original_result["resource_search_results"] = None
-        # Send a progress update if callback is available
+        logger.debug(f"Resource generation disabled, skipping resource extraction for submodule {module_id+1}.{sub_id+1}")
+        original_result["resources"] = []
+        return original_result
+
+    try:
+        if not submodule_search_results:
+            logger.warning(f"No search results provided to extract resources for submodule {module_id+1}.{sub_id+1}")
+            original_result["resources"] = []
+            return original_result
+
         if progress_callback:
             await progress_callback(
-                f"Resource generation already processed/skipped for {submodule.title}",
+                f"Extracting resources for {submodule.title} from existing research...",
                 phase="submodule_resources",
-                preview_data={
-                    "type": "submodule_resource_status_update",
-                    "data": {
-                        "module_id": module_id,
-                        "submodule_id": sub_id,
-                        "status_detail": submodule_resources_in_process.get(submodule_key, {}).get("status", "unknown")
-                    }
-                },
-                action="skipped" # or retrieved
+                action="processing"
             )
-        return {**original_result, "submodule_resources_in_process": submodule_resources_in_process}
 
+        # Prepare context from the existing search results
+        scraped_context_parts = []
+        max_context_per_query_llm = 10  # Use more results as we are not re-searching
+        results_included_llm = 0
+        source_urls_for_llm = []
 
-    # Check if already processed
-    if submodule_resources_in_process.get(submodule_key, {}).get("status") != "pending":
-        logger.debug(f"Resource generation already processed for {submodule_key}, status: {submodule_resources_in_process.get(submodule_key, {}).get('status')}")
-        # Ensure the original result reflects the previously generated resources
-        # This assumes the 'submodule' object passed in already has the resources if completed previously
-        original_result["resources"] = submodule.resources
-        # We might not have stored query/results in state, so set to None
-        original_result["resource_query"] = None
-        original_result["resource_search_results"] = None
-        # Send a progress update if callback is available
+        for search_result_group in submodule_search_results:
+            for res in search_result_group.results:
+                if results_included_llm >= max_context_per_query_llm:
+                    break
+                
+                title = escape_curly_braces(res.title or 'N/A')
+                url = res.url
+                source_urls_for_llm.append(url)
+                scraped_context_parts.append(f"### Source: {url} (Title: {title})")
+
+                if res.scraped_content:
+                    content = escape_curly_braces(res.scraped_content)
+                    truncated_content = content[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
+                    if len(content) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
+                        truncated_content += "... (truncated)"
+                    scraped_context_parts.append(f"Content Snippet:\n{truncated_content}")
+                    results_included_llm += 1
+                elif res.search_snippet:
+                    snippet = escape_curly_braces(res.search_snippet)
+                    scraped_context_parts.append(f"Search Snippet:\n{snippet}")
+                    results_included_llm += 1
+                
+                scraped_context_parts.append("---")
+            if results_included_llm >= max_context_per_query_llm:
+                break
+
+        search_results_context_for_llm = "\n".join(scraped_context_parts)
+
+        # Extract resources using the LLM
+        resource_extractor_prompt = ChatPromptTemplate.from_template(RESOURCE_EXTRACTION_PROMPT)
+        additional_context = (
+            f"This is submodule {sub_id+1} ('{submodule.title}') of module {module_id+1} ('{module.title}'). "
+            f"Resources should be highly targeted to this specific submodule's content and learning objectives."
+        )
+
+        extraction_result = await run_chain(
+            resource_extractor_prompt,
+            lambda: get_llm(key_provider=state.get("google_key_provider"), user=state.get('user')),
+            resource_list_parser,
+            {
+                "search_query": "N/A (using pre-existing search results)",
+                "target_level": "submodule",
+                "user_topic": escape_curly_braces(state["user_topic"]),
+                "additional_context": additional_context,
+                "search_results": search_results_context_for_llm,
+                "search_citations": source_urls_for_llm,
+                "resource_count": 3,
+                "format_instructions": resource_list_parser.get_format_instructions()
+            }
+        )
+
+        submodule_resources = extraction_result.resources
+        logger.info(f"Extracted {len(submodule_resources)} resources for submodule: {submodule.title}")
+
+        # Integrate results into the original submodule processing result
+        original_result["resources"] = submodule_resources
+
         if progress_callback:
             await progress_callback(
-                f"Resource generation already processed/skipped for {submodule.title}",
+                f"Resource extraction for {submodule.title} complete.",
                 phase="submodule_resources",
-                preview_data={
-                    "type": "submodule_resource_status_update",
-                    "data": {
-                        "module_id": module_id,
-                        "submodule_id": sub_id,
-                        "status_detail": submodule_resources_in_process.get(submodule_key, {}).get("status", "unknown")
-                    }
-                },
-                action="skipped" # or retrieved
+                action="completed"
             )
-        return {**original_result, "submodule_resources_in_process": submodule_resources_in_process}
 
-    # Generate resources for this submodule
-    # Send progress update before calling generate_submodule_resources
-    if progress_callback:
-        await progress_callback(
-            f"Initiating resource generation for {submodule.title}",
-            phase="submodule_resources",
-            preview_data={
-                "type": "submodule_resource_status_update",
-                "data": {
-                    "module_id": module_id,
-                    "submodule_id": sub_id,
-                    "submodule_title": submodule.title,
-                    "status_detail": "generation_started"
-                }
-            },
-            action="processing"
-        )
+    except Exception as e:
+        logger.exception(f"Error extracting resources for submodule '{submodule.title}': {str(e)}")
+        original_result["resources"] = []
+        if progress_callback:
+            await progress_callback(
+                f"Error extracting resources for {submodule.title}: {str(e)}",
+                phase="submodule_resources",
+                action="error"
+            )
 
-    resource_result = await generate_submodule_resources(
-        state, module_id, sub_id, module, submodule, submodule_content
-    )
-
-    # Update tracking state
-    submodule_resources_in_process[submodule_key] = {
-        "status": resource_result.get("status", "error"),
-        "error": resource_result.get("error"),
-        "resource_count": len(resource_result.get("resources", [])),
-        "query": resource_result.get("resource_query").query if resource_result.get("resource_query") else None,
-    }
-
-    # Integrate results into the original submodule processing result
-    # The 'submodule' object was updated in-place by generate_submodule_resources
-    original_result["resources"] = resource_result.get("resources", [])
-    original_result["resource_query"] = resource_result.get("resource_query")
-    original_result["resource_search_results"] = resource_result.get("search_results") # Store the SearchServiceResult dict
-
-    # Send progress update after resource generation attempt for this submodule
-    if progress_callback:
-        await progress_callback(
-            f"Resource generation attempt for {submodule.title} finished with status: {resource_result.get('status')}",
-            phase="submodule_resources",
-            preview_data={
-                "type": "submodule_resource_status_update",
-                "data": {
-                    "module_id": module_id,
-                    "submodule_id": sub_id,
-                    "submodule_title": submodule.title,
-                    "status_detail": f"generation_{resource_result.get('status', 'error')}",
-                    "resource_count": len(resource_result.get("resources", [])),
-                    "error": resource_result.get('error')
-                }
-            },
-            action="completed" if resource_result.get('status') == "completed" else "error"
-        )
-
-    logger.debug(f"Finished integrating resources for submodule {module_id+1}.{sub_id+1}. Status: {resource_result.get('status')}")
-
-    # Return the combined result, including updated tracking state
-    return {**original_result, "submodule_resources_in_process": submodule_resources_in_process}
+    return original_result
 
 
 
@@ -1184,4 +1170,4 @@ Your response should include just ONE search query and a brief rationale for why
         return result
     except Exception as e:
         logger.exception(f"Error regenerating resource query: {str(e)}")
-        return None 
+        return None
