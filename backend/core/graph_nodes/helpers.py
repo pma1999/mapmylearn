@@ -177,10 +177,13 @@ async def run_chain(prompt, llm_getter, parser: BaseOutputParser[T], params: Dic
     is_gemini = isinstance(llm, (ChatGoogleGenerativeAI, GroundedGeminiWrapper))
     last_raw_response = None  # Track the last raw response for parsing error retries
     
+    # Check if this is a StrOutputParser - for these we skip JSON parsing logic
+    is_string_parser = isinstance(parser, StrOutputParser)
+    
     while True:
         try:
-            # If we're retrying after a parsing error, try JSON extraction first
-            if parsing_retry_start_time and retry_parsing_errors and last_raw_response:
+            # If we're retrying after a parsing error, try JSON extraction first (only for non-string parsers)
+            if parsing_retry_start_time and retry_parsing_errors and last_raw_response and not is_string_parser:
                 logger.info(f"Attempting JSON extraction from previous response (attempt {parsing_retries}/{max_parsing_retries})")
                 
                 # Try to extract JSON from the previous response
@@ -251,7 +254,30 @@ async def run_chain(prompt, llm_getter, parser: BaseOutputParser[T], params: Dic
             raw_response = await chain.ainvoke(escaped_params)
             last_raw_response = raw_response
             
-            # Try to extract JSON first
+            # For StrOutputParser, skip JSON parsing logic and return the raw response directly
+            if is_string_parser:
+                # Check if result is empty for Gemini retry logic
+                is_empty = not raw_response.strip()
+                
+                # Only retry for Gemini LLMs returning empty responses
+                if is_empty and is_gemini and api_retries < max_retries:
+                    if not api_retry_start_time:
+                        api_retry_start_time = time.time()
+                    
+                    api_retries += 1
+                    retry_delay = initial_retry_delay * (2 ** (api_retries - 1))
+                    
+                    logger.warning(f"Empty response from Gemini detected. Retry attempt {api_retries}/{max_retries} after {retry_delay:.2f}s delay")
+                    await asyncio.sleep(retry_delay)
+                    continue
+                
+                # Success case for string output
+                if api_retry_start_time and not is_empty:
+                    logger.info(f"Successfully got content from Gemini after {api_retries} retries")
+                
+                return raw_response
+            
+            # For other parsers, try to extract JSON first
             extracted_json = extract_json_from_markdown(raw_response)
             
             if extracted_json:
@@ -318,14 +344,16 @@ async def run_chain(prompt, llm_getter, parser: BaseOutputParser[T], params: Dic
             error_str = str(e)
             logger.error(f"Error in LLM chain execution: {error_str}")
             
-            # Identify if this is a parsing error
+            # Identify if this is a parsing error - only for non-string parsers
             is_parsing_error = (
-                "json" in error_str.lower() or 
-                "validation error" in error_str.lower() or 
-                "output_parsing_failure" in error_str.lower() or
-                "jsondecodeerror" in error_str.lower() or
-                "expected value" in error_str.lower() or
-                "failed to parse" in error_str.lower()
+                not is_string_parser and (
+                    "json" in error_str.lower() or 
+                    "validation error" in error_str.lower() or 
+                    "output_parsing_failure" in error_str.lower() or
+                    "jsondecodeerror" in error_str.lower() or
+                    "expected value" in error_str.lower() or
+                    "failed to parse" in error_str.lower()
+                )
             )
             
             # Handle parsing errors with retry if enabled

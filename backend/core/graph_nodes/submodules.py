@@ -1504,7 +1504,7 @@ async def develop_submodule_specific_content(
     from backend.prompts.learning_path_prompts import ENHANCED_SUBMODULE_CONTENT_DEVELOPMENT_PROMPT
     prompt = ChatPromptTemplate.from_template(ENHANCED_SUBMODULE_CONTENT_DEVELOPMENT_PROMPT)
 
-    # Execute enhanced content generation with retry
+    # Execute enhanced content generation with retry for 429 errors
     try:
         llm_getter = lambda: get_llm_with_search(
             key_provider=state.get("google_key_provider"),
@@ -1516,25 +1516,25 @@ async def develop_submodule_specific_content(
             llm_getter,
             StrOutputParser(),
             {
-            "user_topic": escape_curly_braces(state["user_topic"]),
-            "module_title": escape_curly_braces(module.title),
-            "module_order": module_id + 1,
-            "module_count": len(state.get("enhanced_modules", [])),
-            "submodule_title": escape_curly_braces(submodule.title),
-            "submodule_order": sub_id + 1,
-            "submodule_count": len(module.submodules),
-            "submodule_description": escape_curly_braces(submodule.description),
-            "core_concept": escape_curly_braces(submodule.core_concept),
-            "learning_objective": escape_curly_braces(submodule.learning_objective),
-            "key_components": escape_curly_braces(', '.join(submodule.key_components)),
-            "depth_level": escape_curly_braces(submodule.depth_level),
-            "learning_path_context": learning_path_context,
-            "module_context": module_context,
-            "adjacent_context": adjacent_context,
-            "style_instructions": style_instructions,
-            "language": output_language,
-            "search_results_context": search_results_context,
-        },
+                "user_topic": escape_curly_braces(state["user_topic"]),
+                "module_title": escape_curly_braces(module.title),
+                "module_order": module_id + 1,
+                "module_count": len(state.get("enhanced_modules", [])),
+                "submodule_title": escape_curly_braces(submodule.title),
+                "submodule_order": sub_id + 1,
+                "submodule_count": len(module.submodules),
+                "submodule_description": escape_curly_braces(submodule.description),
+                "core_concept": escape_curly_braces(submodule.core_concept),
+                "learning_objective": escape_curly_braces(submodule.learning_objective),
+                "key_components": escape_curly_braces(', '.join(submodule.key_components)),
+                "depth_level": escape_curly_braces(submodule.depth_level),
+                "learning_path_context": learning_path_context,
+                "module_context": module_context,
+                "adjacent_context": adjacent_context,
+                "style_instructions": style_instructions,
+                "language": output_language,
+                "search_results_context": search_results_context
+            },
             max_retries=5,
             initial_retry_delay=1.0,
         )
