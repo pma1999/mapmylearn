@@ -1504,12 +1504,18 @@ async def develop_submodule_specific_content(
     from backend.prompts.learning_path_prompts import ENHANCED_SUBMODULE_CONTENT_DEVELOPMENT_PROMPT
     prompt = ChatPromptTemplate.from_template(ENHANCED_SUBMODULE_CONTENT_DEVELOPMENT_PROMPT)
 
-    # Execute enhanced content generation
+    # Execute enhanced content generation with retry
     try:
-        llm = await get_llm_with_search(key_provider=state.get("google_key_provider"), user=state.get('user'))
-        chain = prompt | llm | StrOutputParser()
+        llm_getter = lambda: get_llm_with_search(
+            key_provider=state.get("google_key_provider"),
+            user=state.get("user")
+        )
 
-        developed_content = await chain.ainvoke({
+        developed_content = await run_chain(
+            prompt,
+            llm_getter,
+            StrOutputParser(),
+            {
             "user_topic": escape_curly_braces(state["user_topic"]),
             "module_title": escape_curly_braces(module.title),
             "module_order": module_id + 1,
@@ -1527,8 +1533,11 @@ async def develop_submodule_specific_content(
             "adjacent_context": adjacent_context,
             "style_instructions": style_instructions,
             "language": output_language,
-            "search_results_context": search_results_context
-        })
+            "search_results_context": search_results_context,
+        },
+            max_retries=5,
+            initial_retry_delay=1.0,
+        )
 
         # Validate content length and quality
         content_length = len(developed_content)
