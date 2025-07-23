@@ -203,6 +203,50 @@ li {
 
 .resources ul {
     margin-bottom: 0;
+    padding-left: 0;
+    list-style-type: none;
+}
+
+.resource-item {
+    margin-bottom: 0.5cm;
+    padding-bottom: 0.3cm;
+    border-bottom: 1px solid #eee;
+}
+
+.resource-item:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.resource-title {
+    font-weight: bold;
+    font-size: 11pt;
+    margin-bottom: 0.2cm;
+}
+
+.resource-description {
+    font-size: 10pt;
+    margin-bottom: 0.2cm;
+    color: #666;
+}
+
+.resource-url {
+    font-size: 9pt;
+    margin-bottom: 0.2cm;
+    color: #3498db;
+    word-break: break-all;
+}
+
+.resource-url a {
+    color: #3498db;
+    text-decoration: underline;
+}
+
+.resource-type {
+    font-size: 9pt;
+    color: #888;
+    font-style: italic;
 }
 
 .page-break {

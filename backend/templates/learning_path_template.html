@@ -67,7 +67,20 @@
             <h4>Resources</h4>
             <ul>
                 {% for resource in module.resources %}
-                <li>{{ resource }}</li>
+                <li>
+                    <div class="resource-item">
+                        <div class="resource-title">{{ resource.title }}</div>
+                        {% if resource.description %}
+                        <div class="resource-description">{{ resource.description }}</div>
+                        {% endif %}
+                        {% if resource.url %}
+                        <div class="resource-url"><a href="{{ resource.url }}">{{ resource.url }}</a></div>
+                        {% endif %}
+                        {% if resource.type %}
+                        <div class="resource-type">Type: {{ resource.type }}</div>
+                        {% endif %}
+                    </div>
+                </li>
                 {% endfor %}
             </ul>
         </div>
@@ -110,7 +123,20 @@
                 <h4>Resources</h4>
                 <ul>
                     {% for resource in sub_module.resources %}
-                    <li>{{ resource }}</li>
+                    <li>
+                        <div class="resource-item">
+                            <div class="resource-title">{{ resource.title }}</div>
+                            {% if resource.description %}
+                            <div class="resource-description">{{ resource.description }}</div>
+                            {% endif %}
+                            {% if resource.url %}
+                            <div class="resource-url"><a href="{{ resource.url }}">{{ resource.url }}</a></div>
+                            {% endif %}
+                            {% if resource.type %}
+                            <div class="resource-type">Type: {{ resource.type }}</div>
+                            {% endif %}
+                        </div>
+                    </li>
                     {% endfor %}
                 </ul>
             </div>

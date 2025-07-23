@@ -35,64 +35,64 @@ class TemplateManager:
     # Base CSS content
     BASE_CSS = """
 @page {
-    margin: 1cm;
-    @top-center {
-        content: "Course";
-        font-family: 'Helvetica', sans-serif;
-        font-size: 9pt;
-        color: #888;
-    }
-    @bottom-right {
-        content: counter(page);
-        font-family: 'Helvetica', sans-serif;
-        font-size: 9pt;
-    }
+   margin: 1cm;
+   @top-center {
+       content: "Course";
+       font-family: 'Helvetica', sans-serif;
+       font-size: 9pt;
+       color: #888;
+   }
+   @bottom-right {
+       content: counter(page);
+       font-family: 'Helvetica', sans-serif;
+       font-size: 9pt;
+   }
 }
 
 @page :first {
-    margin: 0;
-    @top-center { content: normal; }
-    @bottom-right { content: normal; }
+   margin: 0;
+   @top-center { content: normal; }
+   @bottom-right { content: normal; }
 }
 
 html {
-    font-family: 'Helvetica', 'Arial', sans-serif;
-    font-size: 11pt;
-    line-height: 1.5;
-    color: #333;
+   font-family: 'Helvetica', 'Arial', sans-serif;
+   font-size: 11pt;
+   line-height: 1.5;
+   color: #333;
 }
 
 body {
-    margin: 0;
-    padding: 0;
+   margin: 0;
+   padding: 0;
 }
 
 .cover {
-    height: 100vh;
-    padding: 2cm;
-    background-color: #f5f5f5;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
+   height: 100vh;
+   padding: 2cm;
+   background-color: #f5f5f5;
+   display: flex;
+   flex-direction: column;
+   justify-content: center;
 }
 
 .cover h1 {
-    font-size: 28pt;
-    color: #2c3e50;
-    margin-bottom: 1cm;
-    line-height: 1.2;
+   font-size: 28pt;
+   color: #2c3e50;
+   margin-bottom: 1cm;
+   line-height: 1.2;
 }
 
 .cover .metadata {
-    margin-top: 2cm;
+   margin-top: 2cm;
 }
 
 h1, h2, h3, h4, h5, h6 {
-    font-family: 'Helvetica', 'Arial', sans-serif;
-    font-weight: bold;
-    color: #2c3e50;
-    margin-top: 1em;
-    margin-bottom: 0.5em;
+   font-family: 'Helvetica', 'Arial', sans-serif;
+   font-weight: bold;
+   color: #2c3e50;
+   margin-top: 1em;
+   margin-bottom: 0.5em;
 }
 
 h1 { font-size: 20pt; page-break-before: always; }
@@ -101,191 +101,235 @@ h3 { font-size: 14pt; color: #2980b9; }
 h4 { font-size: 12pt; color: #1abc9c; }
 
 p {
-    margin-bottom: 0.5em;
+   margin-bottom: 0.5em;
 }
 
 ul, ol {
-    margin-top: 0.2em;
-    margin-bottom: 0.5em;
+   margin-top: 0.2em;
+   margin-bottom: 0.5em;
 }
 
 li {
-    margin-bottom: 0.2em;
+   margin-bottom: 0.2em;
 }
 
 .toc {
-    margin: 1cm 0;
-    page-break-after: always;
+   margin: 1cm 0;
+   page-break-after: always;
 }
 
 .toc h2 {
-    font-size: 16pt;
-    margin-bottom: 1cm;
+   font-size: 16pt;
+   margin-bottom: 1cm;
 }
 
 .toc ul {
-    list-style-type: none;
-    padding-left: 0;
+   list-style-type: none;
+   padding-left: 0;
 }
 
 .toc ul ul {
-    padding-left: 1cm;
+   padding-left: 1cm;
 }
 
 .toc a {
-    text-decoration: none;
-    color: #333;
+   text-decoration: none;
+   color: #333;
 }
 
 .toc .toc-item-level-1 {
-    font-weight: bold;
-    margin-top: 0.5cm;
+   font-weight: bold;
+   margin-top: 0.5cm;
 }
 
 .toc .toc-item-level-2 {
-    margin-top: 0.2cm;
+   margin-top: 0.2cm;
 }
 
 .toc .toc-page-num {
-    float: right;
+   float: right;
 }
 
 .toc .toc-line {
-    border-bottom: 1px dotted #ccc;
+   border-bottom: 1px dotted #ccc;
 }
 
 .tag {
-    display: inline-block;
-    background-color: #e1f5fe;
-    color: #0288d1;
-    border-radius: 4px;
-    padding: 0.1cm 0.3cm;
-    margin-right: 0.2cm;
-    margin-bottom: 0.2cm;
-    font-size: 9pt;
+   display: inline-block;
+   background-color: #e1f5fe;
+   color: #0288d1;
+   border-radius: 4px;
+   padding: 0.1cm 0.3cm;
+   margin-right: 0.2cm;
+   margin-bottom: 0.2cm;
+   font-size: 9pt;
 }
 
 /* Module intro styling */
 .module-intro {
-    min-height: 70vh;
-    padding: 1cm 0;
-    display: flex;
-    flex-direction: column;
+   min-height: 70vh;
+   padding: 1cm 0;
+   display: flex;
+   flex-direction: column;
 }
 
 .module-intro h1 {
-    margin-top: 0;
+   margin-top: 0;
 }
 
 .module-page-break {
-    page-break-after: always;
+   page-break-after: always;
 }
 
 .module-toc {
-    margin-top: auto;
-    border-top: 1px solid #ddd;
-    padding-top: 1cm;
+   margin-top: auto;
+   border-top: 1px solid #ddd;
+   padding-top: 1cm;
 }
 
 .module-toc h3 {
-    margin-top: 0;
-    color: #3498db;
+   margin-top: 0;
+   color: #3498db;
 }
 
 .module-toc ul {
-    list-style-type: none;
-    padding-left: 0;
+   list-style-type: none;
+   padding-left: 0;
 }
 
 .module-toc li {
-    margin-bottom: 0.5cm;
-    font-size: 12pt;
+   margin-bottom: 0.5cm;
+   font-size: 12pt;
 }
 
 .module-toc a {
-    text-decoration: none;
-    color: #2c3e50;
+   text-decoration: none;
+   color: #2c3e50;
 }
 
 .submodule {
-    margin-bottom: 0.8cm;
-    page-break-inside: avoid;
-    page-break-before: auto;
+   margin-bottom: 0.8cm;
+   page-break-inside: avoid;
+   page-break-before: auto;
 }
 
 .submodule h3 {
-    page-break-after: avoid;
+   page-break-after: avoid;
 }
 
 .submodule .content {
-    margin-top: 0.5cm;
-    margin-bottom: 0.5cm;
-    line-height: 1.6;
-    page-break-before: auto;
-    page-break-after: auto;
-    page-break-inside: avoid;
+   margin-top: 0.5cm;
+   margin-bottom: 0.5cm;
+   line-height: 1.6;
+   page-break-before: auto;
+   page-break-after: auto;
+   page-break-inside: avoid;
 }
 
 .submodule .resources {
-    page-break-before: auto;
+   page-break-before: auto;
 }
 
 .submodule .content p {
-    margin-bottom: 0.8em;
+   margin-bottom: 0.8em;
 }
 
 .submodule .content ul, .submodule .content ol {
-    margin-left: 0.5cm;
-    margin-bottom: 0.8em;
+   margin-left: 0.5cm;
+   margin-bottom: 0.8em;
 }
 
 .submodule .content code {
-    font-family: 'Courier New', monospace;
-    background-color: #f5f5f5;
-    padding: 0.1cm 0.2cm;
-    border-radius: 3px;
-    font-size: 90%;
+   font-family: 'Courier New', monospace;
+   background-color: #f5f5f5;
+   padding: 0.1cm 0.2cm;
+   border-radius: 3px;
+   font-size: 90%;
 }
 
 .submodule .content pre {
-    background-color: #f5f5f5;
-    padding: 0.5cm;
-    border-radius: 5px;
-    overflow-x: auto;
-    font-family: 'Courier New', monospace;
-    font-size: 90%;
-    line-height: 1.4;
-    margin: 0.5cm 0;
+   background-color: #f5f5f5;
+   padding: 0.5cm;
+   border-radius: 5px;
+   overflow-x: auto;
+   font-family: 'Courier New', monospace;
+   font-size: 90%;
+   line-height: 1.4;
+   margin: 0.5cm 0;
 }
 
 .resources {
-    background-color: #f9f9f9;
-    border-left: 4px solid #3498db;
-    padding: 0.5cm;
-    margin-top: 0.5cm;
-    margin-bottom: 0.5cm;
-    page-break-before: auto;
-    page-break-inside: avoid;
+   background-color: #f9f9f9;
+   border-left: 4px solid #3498db;
+   padding: 0.5cm;
+   margin-top: 0.5cm;
+   margin-bottom: 0.5cm;
+   page-break-before: auto;
+   page-break-inside: avoid;
 }
 
 .resources h4 {
-    margin-top: 0;
-    color: #3498db;
+   margin-top: 0;
+   color: #3498db;
 }
 
 .resources ul {
-    margin-bottom: 0;
+   margin-bottom: 0;
+   padding-left: 0;
+   list-style-type: none;
+}
+
+.resource-item {
+   margin-bottom: 0.5cm;
+   padding-bottom: 0.3cm;
+   border-bottom: 1px solid #eee;
+}
+
+.resource-item:last-child {
+   margin-bottom: 0;
+   padding-bottom: 0;
+   border-bottom: none;
+}
+
+.resource-title {
+   font-weight: bold;
+   font-size: 11pt;
+   margin-bottom: 0.2cm;
+}
+
+.resource-description {
+   font-size: 10pt;
+   margin-bottom: 0.2cm;
+   color: #666;
+}
+
+.resource-url {
+   font-size: 9pt;
+   margin-bottom: 0.2cm;
+   color: #3498db;
+   word-break: break-all;
+}
+
+.resource-url a {
+   color: #3498db;
+   text-decoration: underline;
+}
+
+.resource-type {
+   font-size: 9pt;
+   color: #888;
+   font-style: italic;
 }
 
 .page-break {
-    page-break-after: always;
+   page-break-after: always;
 }
 
 .footer {
-    margin-top: 1cm;
-    font-size: 9pt;
-    color: #888;
-    text-align: center;
+   margin-top: 1cm;
+   font-size: 9pt;
+   color: #888;
+   text-align: center;
 }
 """
     
@@ -294,110 +338,136 @@ li {
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <title>{{ learning_path.topic }}</title>
-    <style>
-        {{ css }}
-    </style>
+   <meta charset="UTF-8">
+   <title>{{ learning_path.topic }}</title>
+   <style>
+       {{ css }}
+   </style>
 </head>
 <body>
-    <!-- Cover Page -->
-    <div class="cover">
-        <h1>{{ learning_path.topic }}</h1>
-        <div class="metadata">
-            <p><strong>Creation Date:</strong> {{ creation_date }}</p>
-            {% if last_modified_date %}
-            <p><strong>Last Modified:</strong> {{ last_modified_date }}</p>
-            {% endif %}
-            {% if learning_path.tags %}
-            <p><strong>Tags:</strong> 
-                {% for tag in learning_path.tags %}
-                <span class="tag">{{ tag }}</span>
-                {% endfor %}
-            </p>
-            {% endif %}
-            <p><strong>Source:</strong> {{ learning_path.source }}</p>
-        </div>
-    </div>
+   <!-- Cover Page -->
+   <div class="cover">
+       <h1>{{ learning_path.topic }}</h1>
+       <div class="metadata">
+           <p><strong>Creation Date:</strong> {{ creation_date }}</p>
+           {% if last_modified_date %}
+           <p><strong>Last Modified:</strong> {{ last_modified_date }}</p>
+           {% endif %}
+           {% if learning_path.tags %}
+           <p><strong>Tags:</strong>
+               {% for tag in learning_path.tags %}
+               <span class="tag">{{ tag }}</span>
+               {% endfor %}
+           </p>
+           {% endif %}
+           <p><strong>Source:</strong> {{ learning_path.source }}</p>
+       </div>
+   </div>
 
-    <!-- Table of Contents -->
-    <div class="toc">
-        <h2>Table of Contents</h2>
-        <ul>
-            {% for module in modules %}
-            <li class="toc-item-level-1">
-                <span class="toc-line">
-                    <a href="#module-{{ loop.index }}">{{ module.title }}</a>
-                    <span class="toc-page-num"><!-- Page number --></span>
-                </span>
-                {% if module.sub_modules %}
-                {% set module_index = loop.index %}
-                <ul>
-                    {% for sub_module in module.sub_modules %}
-                    <li class="toc-item-level-2">
-                        <span class="toc-line">
-                            <a href="#submodule-{{ module_index }}-{{ loop.index }}">{{ sub_module.title }}</a>
-                            <span class="toc-page-num"><!-- Page number --></span>
-                        </span>
-                    </li>
-                    {% endfor %}
-                </ul>
-                {% endif %}
-            </li>
-            {% endfor %}
-        </ul>
-    </div>
+   <!-- Table of Contents -->
+   <div class="toc">
+       <h2>Table of Contents</h2>
+       <ul>
+           {% for module in modules %}
+           <li class="toc-item-level-1">
+               <span class="toc-line">
+                   <a href="#module-{{ loop.index }}">{{ module.title }}</a>
+                   <span class="toc-page-num"><!-- Page number --></span>
+               </span>
+               {% if module.sub_modules %}
+               {% set module_index = loop.index %}
+               <ul>
+                   {% for sub_module in module.sub_modules %}
+                   <li class="toc-item-level-2">
+                       <span class="toc-line">
+                           <a href="#submodule-{{ module_index }}-{{ loop.index }}">{{ sub_module.title }}</a>
+                           <span class="toc-page-num"><!-- Page number --></span>
+                       </span>
+                   </li>
+                   {% endfor %}
+               </ul>
+               {% endif %}
+           </li>
+           {% endfor %}
+       </ul>
+   </div>
 
-    <!-- Content -->
-    {% for module in modules %}
-    <div class="module">
-        <h1 id="module-{{ loop.index }}">{{ module.title }}</h1>
-        {{ module.description|safe }}
-        
-        {% if module.resources %}
-        <div class="resources">
-            <h4>Resources</h4>
-            <ul>
-                {% for resource in module.resources %}
-                <li>{{ resource }}</li>
-                {% endfor %}
-            </ul>
-        </div>
-        {% endif %}
-        
-        {% if module.sub_modules %}
-            {% set module_index = loop.index %}
-            {% for sub_module in module.sub_modules %}
-            <div class="submodule">
-                <h3 id="submodule-{{ module_index }}-{{ loop.index }}">{{ sub_module.title }}</h3>
-                {{ sub_module.description|safe }}
-                
-                {% if sub_module.content %}
-                <div class="content">
-                    {{ sub_module.content|safe }}
-                </div>
-                {% endif %}
-                
-                {% if sub_module.resources %}
-                <div class="resources">
-                    <h4>Resources</h4>
-                    <ul>
-                        {% for resource in sub_module.resources %}
-                        <li>{{ resource }}</li>
-                        {% endfor %}
-                    </ul>
-                </div>
-                {% endif %}
-            </div>
-            {% endfor %}
-        {% endif %}
-    </div>
-    {% endfor %}
+   <!-- Content -->
+   {% for module in modules %}
+   <div class="module">
+       <h1 id="module-{{ loop.index }}">{{ module.title }}</h1>
+       {{ module.description|safe }}
+       
+       {% if module.resources %}
+       <div class="resources">
+           <h4>Resources</h4>
+           <ul>
+               {% for resource in module.resources %}
+               <li>
+                   <div class="resource-item">
+                       <div class="resource-title">{{ resource.title }}</div>
+                       {% if resource.description %}
+                       <div class="resource-description">{{ resource.description }}</div>
+                       {% endif %}
+                       {% if resource.url %}
+                       <div class="resource-url"><a href="{{ resource.url }}">{{ resource.url }}</a></div>
+                       {% endif %}
+                       {% if resource.type %}
+                       <div class="resource-type">Type: {{ resource.type }}</div>
+                       {% endif %}
+                   </div>
+               </li>
+               {% endfor %}
+           </ul>
+       </div>
+       {% endif %}
+       
+       {% if module.sub_modules %}
+           {% set module_index = loop.index %}
+           {% for sub_module in module.sub_modules %}
+           <div class="submodule">
+               <h3 id="submodule-{{ module_index }}-{{ loop.index }}">{{ sub_module.title }}</h3>
+               {{ sub_module.description|safe }}
+               
+               {% if sub_module.content %}
+               <div class="content">
+                   {{ sub_module.content|safe }}
+               </div>
+               {% endif %}
+               
+               {% if sub_module.resources %}
+               <div class="resources">
+                   <h4>Resources</h4>
+                   <ul>
+                       {% for resource in sub_module.resources %}
+                       <li>
+                           <div class="resource-item">
+                               <div class="resource-title">{{ resource.title }}</div>
+                               {% if resource.description %}
+                               <div class="resource-description">{{ resource.description }}</div>
+                               {% endif %}
+                               {% if resource.url %}
+                               <div class="resource-url"><a href="{{ resource.url }}">{{ resource.url }}</a></div>
+                               {% endif %}
+                               {% if resource.type %}
+                               <div class="resource-type">Type: {{ resource.type }}</div>
+                               {% endif %}
+                           </div>
+                       </li>
+                       {% endfor %}
+                   </ul>
+               </div>
+               {% endif %}
+           </div>
+           {% endfor %}
+       {% endif %}
+   </div>
+   {% endfor %}
 
-    <!-- Footer with generation info -->
-    <div class="footer">
-        <p>Generated on {{ generation_date }}</p>
-    </div>
+   <!-- Footer with generation info -->
+   <div class="footer">
+       <p>Generated on {{ generation_date }}</p>
+   </div>
 </body>
 </html>
 """
