@@ -219,10 +219,13 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
   const { fetchUserCredits } = useAuth();
 
-  const [threadId, setThreadId] = useState(() => 
+  const [threadId, setThreadId] = useState(() =>
     pathId ? `user-${userId || 'anon'}-path-${pathId}-mod-${moduleIndex}-sub-${submoduleIndex}` : null
   );
   const messagesEndRef = useRef(null);
+
+  // Track the previous submodule context to determine when to clear messages
+  const prevSubmoduleContextRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -232,19 +235,61 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
     scrollToBottom();
   }, [messages]);
 
+  // Save messages to session storage whenever they change
   useEffect(() => {
-    if (pathId) {
+    if (threadId && messages.length > 0) {
+      try {
+        sessionStorage.setItem(`chat-messages-${threadId}`, JSON.stringify(messages));
+      } catch (e) {
+        console.error("Failed to save chat messages to session storage:", e);
+      }
+    }
+  }, [messages, threadId]);
+
+  // Load messages from session storage when component mounts or submodule changes
+  useEffect(() => {
+    if (pathId && threadId) {
+      // Create a unique context identifier for the current submodule
+      const currentSubmoduleContext = `${pathId}-${moduleIndex}-${submoduleIndex}`;
+      
+      // Check if we're switching to a different submodule
+      const isDifferentSubmodule = prevSubmoduleContextRef.current !== currentSubmoduleContext;
+      
+      if (isDifferentSubmodule) {
+        // Clear messages when switching to a different submodule
+        setMessages([]);
+        // Update the previous context reference
+        prevSubmoduleContextRef.current = currentSubmoduleContext;
+      } else {
+        // Load messages from session storage for the same submodule
+        try {
+          const storedMessages = sessionStorage.getItem(`chat-messages-${threadId}`);
+          if (storedMessages) {
+            setMessages(JSON.parse(storedMessages));
+          }
+        } catch (e) {
+          console.error("Failed to load chat messages from session storage:", e);
+          // If parsing fails, clear messages
+          setMessages([]);
+        }
+      }
+      
+      // Update thread ID
       setThreadId(`user-${userId || 'anon'}-path-${pathId}-mod-${moduleIndex}-sub-${submoduleIndex}`);
-      setMessages([]);
-      setError(null);
-      setIsLoading(false);
-      setShowPurchasePrompt(false);
-      setIsPurchasing(false);
+      
+      // Reset other states only when switching submodules
+      if (isDifferentSubmodule) {
+        setError(null);
+        setIsLoading(false);
+        setShowPurchasePrompt(false);
+        setIsPurchasing(false);
+      }
     } else {
       setError("Chat context (pathId) is not available.");
       setThreadId(null);
+      setMessages([]);
     }
-  }, [pathId, moduleIndex, submoduleIndex, userId]);
+  }, [pathId, moduleIndex, submoduleIndex, userId, threadId]);
 
   const handleSendMessage = useCallback(async () => {
     const messageText = inputValue.trim();
@@ -272,9 +317,9 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
       }
 
       const response = await sendMessage(payload);
-      const aiMessage = { 
-        sender: 'ai', 
-        text: response.ai_response, 
+      const aiMessage = {
+        sender: 'ai',
+        text: response.ai_response,
         timestamp: new Date(),
         grounding_metadata: response.grounding_metadata || null // Store grounding metadata
       };
@@ -288,7 +333,7 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
         setMessages((prev) => prev.slice(0, -1));
       } else {
         setError(err.message || 'Failed to get response from the assistant.');
-        setMessages((prev) => prev.slice(0, -1)); 
+        setMessages((prev) => prev.slice(0, -1));
       }
     } finally {
       setIsLoading(false);
@@ -302,6 +347,14 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
     try {
       await clearChatHistory({ thread_id: threadId });
       setMessages([]);
+      // Also clear from session storage
+      if (threadId) {
+        try {
+          sessionStorage.removeItem(`chat-messages-${threadId}`);
+        } catch (e) {
+          console.error("Failed to clear chat messages from session storage:", e);
+        }
+      }
     } catch (err) {
       console.error("Error clearing chat history:", err);
       setError(err.message || 'Failed to clear chat history.');
