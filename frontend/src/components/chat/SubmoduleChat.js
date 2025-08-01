@@ -246,9 +246,18 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
     }
   }, [messages, threadId]);
 
-  // Load messages from session storage when component mounts or submodule changes
+  // Update thread ID when dependencies change
   useEffect(() => {
-    if (pathId && threadId) {
+    if (pathId) {
+      setThreadId(`user-${userId || 'anon'}-path-${pathId}-mod-${moduleIndex}-sub-${submoduleIndex}`);
+    } else {
+      setThreadId(null);
+    }
+  }, [pathId, moduleIndex, submoduleIndex, userId]);
+
+  // Load messages from session storage when threadId changes
+  useEffect(() => {
+    if (threadId) {
       // Create a unique context identifier for the current submodule
       const currentSubmoduleContext = `${pathId}-${moduleIndex}-${submoduleIndex}`;
       
@@ -260,12 +269,22 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
         setMessages([]);
         // Update the previous context reference
         prevSubmoduleContextRef.current = currentSubmoduleContext;
+        
+        // Reset other states when switching submodules
+        setError(null);
+        setIsLoading(false);
+        setShowPurchasePrompt(false);
+        setIsPurchasing(false);
       } else {
         // Load messages from session storage for the same submodule
         try {
           const storedMessages = sessionStorage.getItem(`chat-messages-${threadId}`);
           if (storedMessages) {
-            setMessages(JSON.parse(storedMessages));
+            const parsedMessages = JSON.parse(storedMessages);
+            setMessages(parsedMessages);
+          } else {
+            // If no stored messages, ensure we have an empty array
+            setMessages([]);
           }
         } catch (e) {
           console.error("Failed to load chat messages from session storage:", e);
@@ -273,23 +292,11 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
           setMessages([]);
         }
       }
-      
-      // Update thread ID
-      setThreadId(`user-${userId || 'anon'}-path-${pathId}-mod-${moduleIndex}-sub-${submoduleIndex}`);
-      
-      // Reset other states only when switching submodules
-      if (isDifferentSubmodule) {
-        setError(null);
-        setIsLoading(false);
-        setShowPurchasePrompt(false);
-        setIsPurchasing(false);
-      }
-    } else {
-      setError("Chat context (pathId) is not available.");
-      setThreadId(null);
+    } else if (pathId) {
+      // If we have pathId but no threadId, clear messages
       setMessages([]);
     }
-  }, [pathId, moduleIndex, submoduleIndex, userId, threadId]);
+  }, [threadId, pathId, moduleIndex, submoduleIndex]);
 
   const handleSendMessage = useCallback(async () => {
     const messageText = inputValue.trim();
@@ -330,10 +337,16 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
       if (err.response?.status === 429) {
         setError("You've reached your daily free message limit.");
         setShowPurchasePrompt(true);
-        setMessages((prev) => prev.slice(0, -1));
+        setMessages((prev) => {
+          const newMessages = prev.slice(0, -1);
+          return newMessages;
+        });
       } else {
         setError(err.message || 'Failed to get response from the assistant.');
-        setMessages((prev) => prev.slice(0, -1));
+        setMessages((prev) => {
+          const newMessages = prev.slice(0, -1);
+          return newMessages;
+        });
       }
     } finally {
       setIsLoading(false);
