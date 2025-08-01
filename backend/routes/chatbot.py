@@ -1,7 +1,6 @@
 import logging
 import functools # <-- Import functools
 import datetime # Add datetime import
-import uuid # Add uuid import
 import time # Import time for manual rate limiting
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from sqlalchemy.orm import Session
@@ -506,26 +505,12 @@ async def clear_chat(
     logger.info(f"Received clear chat request for thread_id: {request.thread_id} by user {user.id}")
     
     thread_id = request.thread_id
-    config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
-    
-    # Generate a UUID string to use as the ID for the cleared state checkpoint
-    cleared_checkpoint_id = str(uuid.uuid4())
-    
-    # Define an empty state checkpoint with the new UUID ID and expected keys
-    empty_checkpoint = {
-        "id": cleared_checkpoint_id,
-        "messages": [], 
-        "pending_sends": [],
-        "channel_values": {}, # Add expected channel_values key
-        "channel_versions": {}, # Add expected channel_versions key
-        "versions_seen": {} # Add expected versions_seen key
-    }
-    
+
     try:
-        # Use memory.put to overwrite the checkpoint for the thread_id with an empty state
-        # MemorySaver.put is synchronous and requires metadata (including 'step') and new_versions
-        memory.put(config, empty_checkpoint, {"step": 0}, {})
-        logger.info(f"Successfully cleared chat history for thread_id: {thread_id} (new checkpoint_id: {cleared_checkpoint_id})")
+        # Completely remove all checkpoints associated with the thread
+        # This ensures the next invocation starts with a clean state
+        memory.delete_thread(thread_id)
+        logger.info(f"Successfully cleared chat history for thread_id: {thread_id}")
         
     except Exception as e:
         logger.error(f"Failed to clear chat history for thread_id {thread_id}: {e}", exc_info=True)
