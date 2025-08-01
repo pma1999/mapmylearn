@@ -239,7 +239,13 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
   useEffect(() => {
     if (threadId && messages.length > 0) {
       try {
-        sessionStorage.setItem(`chat-messages-${threadId}`, JSON.stringify(messages));
+        const serialized = JSON.stringify(
+          messages.map((m) => ({
+            ...m,
+            timestamp: m.timestamp ? new Date(m.timestamp).toISOString() : null,
+          }))
+        );
+        sessionStorage.setItem(`chat-messages-${threadId}`, serialized);
       } catch (e) {
         console.error("Failed to save chat messages to session storage:", e);
       }
@@ -258,42 +264,38 @@ const SubmoduleChat = ({ pathId, moduleIndex, submoduleIndex, userId, submoduleC
   // Load messages from session storage when threadId changes
   useEffect(() => {
     if (threadId) {
-      // Create a unique context identifier for the current submodule
       const currentSubmoduleContext = `${pathId}-${moduleIndex}-${submoduleIndex}`;
-      
-      // Check if we're switching to a different submodule
-      const isDifferentSubmodule = prevSubmoduleContextRef.current !== currentSubmoduleContext;
-      
+
+      const isDifferentSubmodule =
+        prevSubmoduleContextRef.current &&
+        prevSubmoduleContextRef.current !== currentSubmoduleContext;
+
       if (isDifferentSubmodule) {
-        // Clear messages when switching to a different submodule
         setMessages([]);
-        // Update the previous context reference
-        prevSubmoduleContextRef.current = currentSubmoduleContext;
-        
-        // Reset other states when switching submodules
         setError(null);
         setIsLoading(false);
         setShowPurchasePrompt(false);
         setIsPurchasing(false);
-      } else {
-        // Load messages from session storage for the same submodule
-        try {
-          const storedMessages = sessionStorage.getItem(`chat-messages-${threadId}`);
-          if (storedMessages) {
-            const parsedMessages = JSON.parse(storedMessages);
-            setMessages(parsedMessages);
-          } else {
-            // If no stored messages, ensure we have an empty array
-            setMessages([]);
-          }
-        } catch (e) {
-          console.error("Failed to load chat messages from session storage:", e);
-          // If parsing fails, clear messages
+      }
+
+      prevSubmoduleContextRef.current = currentSubmoduleContext;
+
+      try {
+        const storedMessages = sessionStorage.getItem(`chat-messages-${threadId}`);
+        if (storedMessages) {
+          const parsedMessages = JSON.parse(storedMessages).map((m) => ({
+            ...m,
+            timestamp: m.timestamp ? new Date(m.timestamp) : null,
+          }));
+          setMessages(parsedMessages);
+        } else {
           setMessages([]);
         }
+      } catch (e) {
+        console.error("Failed to load chat messages from session storage:", e);
+        setMessages([]);
       }
     } else if (pathId) {
-      // If we have pathId but no threadId, clear messages
       setMessages([]);
     }
   }, [threadId, pathId, moduleIndex, submoduleIndex]);
