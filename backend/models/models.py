@@ -35,6 +35,16 @@ class Resource(BaseModel):
 class ResourceList(BaseModel):
     resources: List[Resource] = Field(default_factory=list, description="List of resources")
 
+class ResourceSelection(BaseModel):
+    """LLM-selected resource referencing a scraped source by ID."""
+    id: int = Field(..., description="Identifier of the scraped source")
+    title: str = Field(..., description="Title of the resource")
+    description: str = Field(..., description="Description of what the resource offers")
+    type: str = Field(..., description="Type of resource (article, video, book, course, code, etc.)")
+
+class ResourceSelectionList(BaseModel):
+    resources: List[ResourceSelection] = Field(default_factory=list, description="List of selected resources by ID")
+
 class ResourceQuery(BaseModel):
     query: str = Field(..., description="Search query for finding resources")
     context: str = Field(..., description="Context information for the resource search")

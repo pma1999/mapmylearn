@@ -12,17 +12,16 @@ import os
 from typing import Dict, Any, List, Optional
 
 from backend.models.models import (
-    SearchQuery,
     ResourceQuery,
     Resource,
-    ResourceList,
+    ResourceSelection,
     LearningPathState,
     EnhancedModule,
     Submodule,
     SearchServiceResult,
     ScrapedResult
 )
-from backend.parsers.parsers import resource_list_parser, resource_query_parser
+from backend.parsers.parsers import resource_selection_parser, resource_query_parser
 from backend.services.services import get_llm, execute_search_with_router
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -162,60 +161,73 @@ async def generate_topic_resources(state: LearningPathState) -> Dict[str, Any]:
         resource_extractor_prompt = ChatPromptTemplate.from_template(RESOURCE_EXTRACTION_PROMPT)
         additional_context = f"This is the top-level topic of the course. Resources should provide comprehensive coverage of {escaped_topic}."
 
-        # Prepare context from scraped results
+        # Prepare context from scraped results and build source table
         scraped_context_parts = []
+        source_table_lines: List[str] = []
+        id_to_result: Dict[int, ScrapedResult] = {}
         max_context_per_query_llm = 5
         results_included_llm = 0
-        for res in search_service_result.results:
-             if results_included_llm >= max_context_per_query_llm:
-                 break
+
+        for idx, res in enumerate(search_service_result.results, start=1):
+             id_to_result[idx] = res
              title = escape_curly_braces(res.title or 'N/A')
              url = res.url
-             scraped_context_parts.append(f"### Source: {url} (Title: {title})")
-             if res.scraped_content:
-                 content = escape_curly_braces(res.scraped_content)
-                 truncated_content = content[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
-                 if len(content) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
-                      truncated_content += "... (truncated)"
-                 scraped_context_parts.append(f"Content Snippet:\n{truncated_content}")
-                 results_included_llm += 1
-             elif res.search_snippet: # Fallback to snippet
-                 snippet = escape_curly_braces(res.search_snippet)
-                 error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
-                 truncated_snippet = snippet[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
-                 if len(snippet) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
-                      truncated_snippet += "... (truncated)"
-                 scraped_context_parts.append(f"Search Snippet:{error_info}\n{truncated_snippet}")
-                 results_included_llm += 1
-             else:
-                 error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
-                 scraped_context_parts.append(f"Content: Not available.{error_info}")
-                 # Don't increment results_included_llm if no content/snippet
-             scraped_context_parts.append("---")
-        search_results_context_for_llm = "\n".join(scraped_context_parts)
-        # Provide URLs as separate context in case LLM needs them
-        source_urls_for_llm = [res.url for res in search_service_result.results[:max_context_per_query_llm]]
+             source_table_lines.append(f"{idx}. {title} - {url}")
+             if results_included_llm < max_context_per_query_llm:
+                 scraped_context_parts.append(f"### Source {idx}: {url} (Title: {title})")
+                 if res.scraped_content:
+                     content = escape_curly_braces(res.scraped_content)
+                     truncated_content = content[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
+                     if len(content) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
+                          truncated_content += "... (truncated)"
+                     scraped_context_parts.append(f"Content Snippet:\n{truncated_content}")
+                     results_included_llm += 1
+                 elif res.search_snippet:  # Fallback to snippet
+                     snippet = escape_curly_braces(res.search_snippet)
+                     error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
+                     truncated_snippet = snippet[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
+                     if len(snippet) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
+                          truncated_snippet += "... (truncated)"
+                     scraped_context_parts.append(f"Search Snippet:{error_info}\n{truncated_snippet}")
+                     results_included_llm += 1
+                 else:
+                     error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
+                     scraped_context_parts.append(f"Content: Not available.{error_info}")
+                 scraped_context_parts.append("---")
 
+        search_results_context_for_llm = "\n".join(scraped_context_parts)
+        source_table = "\n".join(source_table_lines)
 
         extraction_result = await run_chain(
             resource_extractor_prompt,
             lambda: get_llm(key_provider=state.get("google_key_provider"), user=state.get('user')),
-            resource_list_parser,
+            resource_selection_parser,
             {
                 "search_query": resource_query.query,
                 "target_level": "topic",
                 "user_topic": escaped_topic,
                 "additional_context": additional_context,
-                # Use the processed scraped content/snippets as primary context
                 "search_results": search_results_context_for_llm,
-                # Provide URLs separately for potential reference by the LLM
-                "search_citations": source_urls_for_llm,
+                "source_table": source_table,
                 "resource_count": 6,  # Number of desired resources
-                "format_instructions": resource_list_parser.get_format_instructions()
+                "format_instructions": resource_selection_parser.get_format_instructions()
             }
         )
 
-        topic_resources = extraction_result.resources
+        topic_resources: List[Resource] = []
+        for selection in extraction_result.resources:
+            source = id_to_result.get(selection.id)
+            if not source:
+                logger.warning(f"LLM returned invalid source ID {selection.id} for topic resources")
+                continue
+            topic_resources.append(
+                Resource(
+                    title=selection.title,
+                    description=selection.description,
+                    url=source.url,
+                    type=selection.type,
+                )
+            )
         logger.info(f"Generated {len(topic_resources)} topic-level resources")
 
         # Update progress with completion message
@@ -380,55 +392,73 @@ async def generate_module_resources(state: LearningPathState, module_id: int, mo
         resource_extractor_prompt = ChatPromptTemplate.from_template(RESOURCE_EXTRACTION_PROMPT)
         additional_context = f"This is module {module_id+1} of the course focused on {module_title}. Resources should be specific to this module's content."
 
-        # Prepare context from scraped results
+        # Prepare context and source table
         scraped_context_parts = []
+        source_table_lines: List[str] = []
+        id_to_result: Dict[int, ScrapedResult] = {}
         max_context_per_query_llm = 5
         results_included_llm = 0
-        for res in search_service_result.results:
-             if results_included_llm >= max_context_per_query_llm:
-                 break
+
+        for idx, res in enumerate(search_service_result.results, start=1):
+             id_to_result[idx] = res
              title = escape_curly_braces(res.title or 'N/A')
              url = res.url
-             scraped_context_parts.append(f"### Source: {url} (Title: {title})")
-             if res.scraped_content:
-                 content = escape_curly_braces(res.scraped_content)
-                 truncated_content = content[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
-                 if len(content) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
-                      truncated_content += "... (truncated)"
-                 scraped_context_parts.append(f"Content Snippet:\n{truncated_content}")
-                 results_included_llm += 1
-             elif res.search_snippet: # Fallback to snippet
-                 snippet = escape_curly_braces(res.search_snippet)
-                 error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
-                 truncated_snippet = snippet[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
-                 if len(snippet) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
-                      truncated_snippet += "... (truncated)"
-                 scraped_context_parts.append(f"Search Snippet:{error_info}\n{truncated_snippet}")
-                 results_included_llm += 1
-             else:
-                 error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
-                 scraped_context_parts.append(f"Content: Not available.{error_info}")
-             scraped_context_parts.append("---")
+             source_table_lines.append(f"{idx}. {title} - {url}")
+             if results_included_llm < max_context_per_query_llm:
+                 scraped_context_parts.append(f"### Source {idx}: {url} (Title: {title})")
+                 if res.scraped_content:
+                     content = escape_curly_braces(res.scraped_content)
+                     truncated_content = content[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
+                     if len(content) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
+                          truncated_content += "... (truncated)"
+                     scraped_context_parts.append(f"Content Snippet:\n{truncated_content}")
+                     results_included_llm += 1
+                 elif res.search_snippet:  # Fallback to snippet
+                     snippet = escape_curly_braces(res.search_snippet)
+                     error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
+                     truncated_snippet = snippet[:MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT]
+                     if len(snippet) > MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT:
+                          truncated_snippet += "... (truncated)"
+                     scraped_context_parts.append(f"Search Snippet:{error_info}\n{truncated_snippet}")
+                     results_included_llm += 1
+                 else:
+                     error_info = f" (Scraping failed: {escape_curly_braces(res.scrape_error or 'Unknown error')})"
+                     scraped_context_parts.append(f"Content: Not available.{error_info}")
+                 scraped_context_parts.append("---")
+
         search_results_context_for_llm = "\n".join(scraped_context_parts)
-        source_urls_for_llm = [res.url for res in search_service_result.results[:max_context_per_query_llm]]
+        source_table = "\n".join(source_table_lines)
 
         extraction_result = await run_chain(
             resource_extractor_prompt,
             lambda: get_llm(key_provider=state.get("google_key_provider"), user=state.get('user')),
-            resource_list_parser,
+            resource_selection_parser,
             {
                 "search_query": resource_query.query,
                 "target_level": "module",
                 "user_topic": escaped_topic,
                 "additional_context": additional_context,
                 "search_results": search_results_context_for_llm,
-                "search_citations": source_urls_for_llm,
+                "source_table": source_table,
                 "resource_count": 4,  # Desired resource count for modules
-                "format_instructions": resource_list_parser.get_format_instructions()
+                "format_instructions": resource_selection_parser.get_format_instructions()
             }
         )
 
-        module_resources = extraction_result.resources
+        module_resources: List[Resource] = []
+        for selection in extraction_result.resources:
+            source = id_to_result.get(selection.id)
+            if not source:
+                logger.warning(f"LLM returned invalid source ID {selection.id} for module resources")
+                continue
+            module_resources.append(
+                Resource(
+                    title=selection.title,
+                    description=selection.description,
+                    url=source.url,
+                    type=selection.type,
+                )
+            )
         logger.info(f"Generated {len(module_resources)} resources for module: {module_title}")
 
         # Update the module's resources if it's an object
@@ -629,21 +659,24 @@ async def integrate_resources_with_submodule_processing(
                 action="processing"
             )
 
-        # Prepare context from the existing search results
+        # Prepare context from the existing search results and build source table
         scraped_context_parts = []
+        source_table_lines: List[str] = []
+        id_to_result: Dict[int, ScrapedResult] = {}
         max_context_per_query_llm = 10  # Use more results as we are not re-searching
         results_included_llm = 0
-        source_urls_for_llm = []
+        current_id = 1
 
         for search_result_group in submodule_search_results:
             for res in search_result_group.results:
                 if results_included_llm >= max_context_per_query_llm:
                     break
-                
+
                 title = escape_curly_braces(res.title or 'N/A')
                 url = res.url
-                source_urls_for_llm.append(url)
-                scraped_context_parts.append(f"### Source: {url} (Title: {title})")
+                id_to_result[current_id] = res
+                source_table_lines.append(f"{current_id}. {title} - {url}")
+                scraped_context_parts.append(f"### Source {current_id}: {url} (Title: {title})")
 
                 if res.scraped_content:
                     content = escape_curly_braces(res.scraped_content)
@@ -656,12 +689,14 @@ async def integrate_resources_with_submodule_processing(
                     snippet = escape_curly_braces(res.search_snippet)
                     scraped_context_parts.append(f"Search Snippet:\n{snippet}")
                     results_included_llm += 1
-                
+
                 scraped_context_parts.append("---")
+                current_id += 1
             if results_included_llm >= max_context_per_query_llm:
                 break
 
         search_results_context_for_llm = "\n".join(scraped_context_parts)
+        source_table = "\n".join(source_table_lines)
 
         # Extract resources using the LLM
         resource_extractor_prompt = ChatPromptTemplate.from_template(RESOURCE_EXTRACTION_PROMPT)
@@ -673,20 +708,33 @@ async def integrate_resources_with_submodule_processing(
         extraction_result = await run_chain(
             resource_extractor_prompt,
             lambda: get_llm(key_provider=state.get("google_key_provider"), user=state.get('user')),
-            resource_list_parser,
+            resource_selection_parser,
             {
                 "search_query": "N/A (using pre-existing search results)",
                 "target_level": "submodule",
                 "user_topic": escape_curly_braces(state["user_topic"]),
                 "additional_context": additional_context,
                 "search_results": search_results_context_for_llm,
-                "search_citations": source_urls_for_llm,
+                "source_table": source_table,
                 "resource_count": 3,
-                "format_instructions": resource_list_parser.get_format_instructions()
+                "format_instructions": resource_selection_parser.get_format_instructions()
             }
         )
 
-        submodule_resources = extraction_result.resources
+        submodule_resources: List[Resource] = []
+        for selection in extraction_result.resources:
+            source = id_to_result.get(selection.id)
+            if not source:
+                logger.warning(f"LLM returned invalid source ID {selection.id} for submodule resources")
+                continue
+            submodule_resources.append(
+                Resource(
+                    title=selection.title,
+                    description=selection.description,
+                    url=source.url,
+                    type=selection.type,
+                )
+            )
         logger.info(f"Extracted {len(submodule_resources)} resources for submodule: {submodule.title}")
 
         # Integrate results into the original submodule processing result

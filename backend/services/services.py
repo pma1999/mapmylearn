@@ -1118,10 +1118,10 @@ Search Query: {query}"""
                 async with sem:
                     url = url_info['url']
                     title = url_info.get('title', 'No Title')
-                    content, error = await _scrape_single_url(session, url, timeout=scrape_timeout)
+                    content, error, final_url = await _scrape_single_url(session, url, timeout=scrape_timeout)
                     return ScrapedResult(
                         title=title,
-                        url=url,
+                        url=final_url,
                         search_snippet="Source found via Google Search grounding.",
                         scraped_content=content,
                         scrape_error=error
@@ -1497,8 +1497,8 @@ async def _resolve_google_redirect_url(session: aiohttp.ClientSession, redirect_
         return redirect_url, f"Unexpected error resolving redirect: {type(e).__name__}"
 
 # --- Start of Modified _scrape_single_url ---
-async def _scrape_single_url(session: aiohttp.ClientSession, url: str, timeout: int) -> Tuple[Optional[str], Optional[str]]:
-    """Scrapes cleaned textual content from a single URL (HTML or PDF).
+async def _scrape_single_url(session: aiohttp.ClientSession, url: str, timeout: int) -> Tuple[Optional[str], Optional[str], str]:
+    """Scrapes cleaned textual content from a single URL (HTML or PDF) and resolves redirects.
 
     Prioritizes using Trafilatura for HTML and block analysis for PDF, with fallbacks.
     Cleans the content THEN truncates to MAX_SCRAPE_LENGTH.
@@ -1510,8 +1510,9 @@ async def _scrape_single_url(session: aiohttp.ClientSession, url: str, timeout: 
         timeout: Request timeout in seconds.
 
     Returns:
-        A tuple containing (cleaned_scraped_content, error_message).
+        A tuple containing (cleaned_scraped_content, error_message, final_url).
         cleaned_scraped_content is None if an error occurred or no content found after cleaning.
+        final_url is the resolved destination URL after any redirect handling.
         error_message contains details if scraping or processing failed.
     """
     headers = {'User-Agent': 'Mozilla/5.0 (compatible; LearniBot/1.0; +https://learni.com/bot)'} # Example Bot UA
@@ -1546,7 +1547,7 @@ async def _scrape_single_url(session: aiohttp.ClientSession, url: str, timeout: 
                     pdf_bytes = await response.read()
                     if not pdf_bytes:
                         logger.warning(f"Received empty response body for PDF: {url}")
-                        return None, "Received empty PDF content"
+                        return None, "Received empty PDF content", actual_url
 
                     loop = asyncio.get_running_loop()
                     clean_text = await loop.run_in_executor(
@@ -1658,20 +1659,20 @@ async def _scrape_single_url(session: aiohttp.ClientSession, url: str, timeout: 
                      error_message = "No text content found after cleaning"
 
             # Return the cleaned (and possibly truncated) text
-            return clean_text, error_message
+            return clean_text, error_message, actual_url
 
     except asyncio.TimeoutError:
         logger.warning(f"Scrape timed out for {url} after {timeout}s")
-        return None, f"Scrape timed out after {timeout}s"
+        return None, f"Scrape timed out after {timeout}s", actual_url
     except aiohttp.ClientResponseError as e:
         logger.warning(f"HTTP error scraping {url}: {e.status} {e.message}")
-        return None, f"HTTP error: {e.status} ({e.message})"
+        return None, f"HTTP error: {e.status} ({e.message})", actual_url
     except aiohttp.ClientError as e: # Includes connection errors etc.
         logger.warning(f"Client error scraping {url}: {type(e).__name__}")
-        return None, f"Scraping client error: {type(e).__name__}"
+        return None, f"Scraping client error: {type(e).__name__}", actual_url
     except Exception as e:
         logger.error(f"Unexpected error during initial scrape request for {url}: {type(e).__name__} - {str(e)}", exc_info=True)
-        return None, f"Unexpected scraping error: {type(e).__name__}"
+        return None, f"Unexpected scraping error: {type(e).__name__}", actual_url
 # --- End of Modified _scrape_single_url ---
 
 
@@ -1801,15 +1802,15 @@ async def perform_search_and_scrape(
                 if isinstance(scrape_outcome, Exception):
                     if isinstance(scrape_outcome, asyncio.CancelledError):
                         logger.warning(f"Scraping task for {url} was cancelled.")
-                        scraped_data_map[url] = (None, "Scraping task cancelled")
+                        scraped_data_map[url] = (None, "Scraping task cancelled", url)
                     else:
                         logger.error(f"Gather caught exception for scrape task {url}: {scrape_outcome}", exc_info=isinstance(scrape_outcome, Exception))
-                        scraped_data_map[url] = (None, f"Gather error: {type(scrape_outcome).__name__}")
-                elif isinstance(scrape_outcome, tuple) and len(scrape_outcome) == 2:
+                        scraped_data_map[url] = (None, f"Gather error: {type(scrape_outcome).__name__}", url)
+                elif isinstance(scrape_outcome, tuple) and len(scrape_outcome) == 3:
                     scraped_data_map[url] = scrape_outcome
                 else:
                     logger.error(f"Unexpected scrape outcome type for {url}: {type(scrape_outcome)} - {scrape_outcome}")
-                    scraped_data_map[url] = (None, f"Unexpected scrape result type: {type(scrape_outcome).__name__}")
+                    scraped_data_map[url] = (None, f"Unexpected scrape result type: {type(scrape_outcome).__name__}", url)
 
         # --- Start Prioritization Logic ---
         successful_scrapes = []
@@ -1819,14 +1820,14 @@ async def perform_search_and_scrape(
         for url in urls_to_scrape: # Iterate through all fetched URLs
             search_info = search_result_map.get(url)
             if search_info:
-                content, error = scraped_data_map.get(url, (None, "Scraping task result missing"))
+                content, error, final_url = scraped_data_map.get(url, (None, "Scraping task result missing", url))
                 # Treat empty string "" as failure too
                 if content: # Check if content is not None and not empty string
-                    successful_scrapes.append((url, search_info, content))
+                    successful_scrapes.append((final_url, search_info, content))
                 else:
                     # Ensure error string is present, provide default if None
                     error_msg = error if error is not None else "No content found or scrape failed"
-                    failed_scrapes.append((url, search_info, error_msg))
+                    failed_scrapes.append((final_url, search_info, error_msg))
 
         logger.debug(f"Scraping yielded {len(successful_scrapes)} successful scrapes and {len(failed_scrapes)} failed scrapes out of {len(urls_to_scrape)} attempted.")
 
