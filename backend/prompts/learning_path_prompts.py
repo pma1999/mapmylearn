@@ -509,12 +509,12 @@ Target Level: {target_level} (topic, module, or submodule)
 Topic: "{user_topic}"
 {additional_context}
 
+## SCRAPED SOURCE TABLE
+Each source below has an ID. Use the ID to reference the source in your output.
+{source_table}
+
 ## SEARCH RESULTS
 {search_results}
-
-## CITATION LINKS
-The following URLs were extracted from the search results and should be used as source links for your resource recommendations:
-{search_citations}
 
 ## RESOURCE CURATION REQUIREMENTS
 
@@ -536,16 +536,15 @@ Your selection MUST include a mix of resource types (do not select all of the sa
 
 ### Required Resource Information
 For each resource, provide:
-1. Title: Clear, descriptive title
-2. Description: 1-2 sentences explaining what value this resource provides
-3. URL: Direct link to the resource - IMPORTANT: Use the citation links provided above whenever possible
+1. ID: Numeric ID of the chosen source from the table above
+2. Title: Clear, descriptive title
+3. Description: 1-2 sentences explaining what value this resource provides
 4. Type: The resource type (article, video, book, course, documentation, etc.)
 
-## CITATION USAGE INSTRUCTIONS
-- ONLY use the exact URLs from the CITATION LINKS section above
-- Match resources mentioned in the search results with their corresponding citation link
-- DO NOT invent or make up any URLs. Never use generic URLs like "example.com" or similar placeholder formats
-- If a resource mentioned in the search results does not have a corresponding real URL in the citation links, DO NOT include that resource
+## SOURCE SELECTION INSTRUCTIONS
+- ONLY use IDs from the SCRAPED SOURCE TABLE above
+- Do NOT include URLs in your response
+- If a resource does not have a corresponding ID, do NOT include it
 
 ## OUTPUT FORMAT
 Provide exactly {resource_count} resources formatted according to the requirements.
