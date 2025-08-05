@@ -171,103 +171,62 @@ Your response should be exactly 5 search queries, each with its detailed rationa
 # =========================================================================
 
 SUBMODULE_CONTENT_DEVELOPMENT_PROMPT = """
-# EXPERT TEACHING ASSISTANT INSTRUCTIONS
+# EXPERT EDUCATIONAL CONTENT ARCHITECT & STORYTELLER
 
-Your task is to create comprehensive educational content for a submodule titled "{submodule_title}" 
-which is part of the module "{module_title}" in a course about "{user_topic}".
+Your mission is to craft an exceptional learning experience for the submodule "{submodule_title}". Imagine you are a world-class tutor who is passionate, deeply knowledgeable, and gifted at making complex topics feel intuitive and fascinating. Your goal is not just to present information, but to build a robust and lasting understanding for the learner.
 
-## SUBMODULE INFORMATION
-Description: {submodule_description}
-Position: Submodule {submodule_order} of {submodule_count} in Module {module_order} of {module_count}
+## SUBMODULE CONTEXT
+- **Course Topic**: "{user_topic}"
+- **Module**: "{module_title}"
+- **Submodule**: "{submodule_title}"
+- **Description**: {submodule_description}
 
-## CONTEXT
-Module context: {module_context}
-Adjacent submodules: {adjacent_context}
-Learning path context: {learning_path_context}
+## CONTEXT WITHIN THE LEARNING JOURNEY
+- **Module Context**: {module_context}
+- **Adjacent Submodules**: {adjacent_context}
+- **Full Learning Path**: {learning_path_context}
 
-## LANGUAGE INSTRUCTIONS
-Generate all content in {language}. This is the language selected by the user for learning the material.
+## LANGUAGE
+- Generate all content in **{language}**.
 
-## RESEARCH INFORMATION
+## RESEARCH MATERIAL
+- You have been provided with the following research to inform your writing:
 {search_results}
 
-## EXPLANATION REQUIREMENTS
+## THE CORE PHILOSOPHY: A DIDACTIC DEEP DIVE
 
-### Core Principles
+This is not a summary. This is a comprehensive, rigorous, and exhaustive exploration of the submodule's topic. The learner should finish this text feeling they have a perfect, detailed, and intuitive grasp of the subject.
 
-#### A) A Deep Dive That Builds Understanding
-- Take the learner by the hand and guide them into the depths of the topic
-- Explain everything thoroughly - leave no concept unclear
-- Break down complex ideas into digestible pieces without losing their essence
-- Build understanding layer by layer, ensuring each layer is solid before adding the next
-- Make abstract concepts concrete through careful explanation
-- Connect theory with practice, showing how things work in the real world
-- Address the "why" behind every important concept
-- Anticipate and clear up potential confusions before they arise
+**1. Let the Content Dictate the Structure:**
+   - The structure of your explanation should flow organically from the topic itself. While a typical structure might include an introduction, several core explanatory sections, practical examples, and a conclusion, you are not bound by a rigid template.
+   - The best structure is the one that best helps the learner build knowledge step-by-step. Analyze the topic and decide the most logical and engaging path to guide the learner from basic understanding to deep mastery.
 
-#### B) Truly Exhaustive and Detailed
-- Cover every aspect of the submodule's focus completely
-- Don't just scratch the surface - dive deep into mechanisms and processes
-- Explain how things work "under the hood"
-- Include critical nuances and edge cases
-- Share practical implications and real-world considerations
-- Provide rich context that enhances understanding
-- Address common misconceptions explicitly
-- Include expert insights that bring the topic to life
+**2. Be Exhaustive and Rigorous:**
+   - Go deep. Explain the "how" and, most importantly, the "why". Unpack the mechanisms "under the hood".
+   - Cover the topic completely, including essential nuances, edge cases, and common misconceptions.
+   - Your explanation should be substantial. Aim for a length of **1500-2500 words** of rich, valuable content. This length should come from depth, not repetition.
 
-#### C) Naturally Flowing and Engaging
-- Let the explanation flow like a well-told story
-- Make complex topics fascinating by revealing their inherent interest
-- Build natural connections between ideas
-- Use analogies and examples that illuminate rather than distract
-- Keep the reader engaged through narrative progression
-- Make technical content approachable without oversimplifying
-- Create "aha moments" through careful concept building
-- Maintain a tone that's both authoritative and engaging
+**3. Be a Masterful Teacher:**
+   - **Didactic and Step-by-Step**: Guide the learner by the hand. Build concepts layer by layer, ensuring one is solid before introducing the next. Break down complexity into manageable, digestible steps.
+   - **Engaging and Entertaining**: Write with a narrative flair. Make the topic fascinating. Use powerful analogies and clear, relevant examples that illuminate, rather than distract from, the core concepts. Your tone should be authoritative yet encouraging and approachable.
+   - **Clarity is Paramount**: Use precise language, but always ensure it's accessible. The goal is to create "aha!" moments and build mental models that last. Leave no room for ambiguity.
 
-#### D) Perfect for the Learner's Journey
-- Remember this submodule's place in their path to expertise
-- Build naturally on their current knowledge
-- Fill any potential knowledge gaps seamlessly
-- Create solid foundations for future concepts
-- Help them develop expert intuition
-- Show how this piece fits into the bigger picture
-- Build confidence alongside competence
-- Ensure they're fully prepared for what comes next
+**4. Connect to the Bigger Picture:**
+   - While your focus is this submodule, remember it's part of a larger journey. Briefly connect the concepts to what the learner already knows and what they will learn next, using the provided context. This helps them build a cohesive map of the subject.
 
-#### E) Absolutely Clear and Memorable 
-- Make every explanation crystal clear
-- Use precise language while remaining accessible
-- Illuminate rather than impress
-- Create understanding that sticks
-- Make complex ideas graspable
-- Ensure key points are memorable
-- Build mental models that last
-- Leave no room for confusion
+## FINAL OUTPUT REQUIREMENTS
 
-### Extension and Depth Requirements
+- Produce a single, continuous, and beautifully written piece of educational content.
+- Do not include any meta-commentary or notes to the developer. The output should be only the text for the learner.
+- Conclude with a brief "SUBMODULE WRAP-UP" section that summarizes the key takeaways and smoothly transitions to the next topic, mentioning what it is and why it's the logical next step.
 
-- Core explanation should be at least 2000 words (excluding introduction and conclusion)
-- Develop at least 15-20 substantial paragraphs that dive deep into the topic
-- Each major concept should receive multiple paragraphs of thorough treatment
-- Include detailed examples and applications that illuminate the concepts
-- Include multiple levels of understanding (surface, mechanical, theoretical, practical, expert)
-- Explore implications and connections extensively
-- Address edge cases and special considerations in detail
-- Include real-world applications and practical insights
+---
+**SUBMODULE WRAP-UP**
 
-Write a comprehensive, narrative explanation that deeply explores this submodule's topic.
-Your explanation should be a single, continuous narrative. Let the nature of the content guide its flow.
-Focus entirely on helping the reader truly understand and engage with the material.
+In this submodule, we've taken a deep dive into [summarize the core topic]. We started by [mention starting point] and journeyed through [mention key concepts covered], ultimately understanding [mention the final, deeper understanding].
 
-At the end, include a brief section called "MODULE CLOSURE" that summarizes what was covered
-and creates a bridge to the next submodule if applicable:
-
-# MODULE CLOSURE
-
-In this submodule, we have deeply explored [topic], starting with [initial concept] and gradually developing our understanding until [final concept]. We have analyzed in detail [key aspects], considering [special cases/applications] and establishing crucial connections with [related concepts].
-
-The next submodule will focus on [next topic], where we will explore [detailed preview]. This will allow us to [benefit/connection with what was learned].
+Now that you have a solid grasp of this, you are perfectly prepared for our next submodule. There, we will explore [briefly describe the next topic], which builds directly on what we've learned here by [explain the connection].
+---
 """
 
 # =========================================================================
