@@ -1113,7 +1113,7 @@ Return only the new search query, nothing else."""
 ENHANCED_SUBMODULE_CONTENT_DEVELOPMENT_PROMPT = """
 # EXPERT EDUCATIONAL CONTENT ARCHITECT
 
-You are an expert educational content developer creating comprehensive, engaging learning material. Your task is to develop detailed, step-by-step content for a specific submodule that thoroughly covers the topic while being highly engaging and educational.
+You are an expert educational content developer creating comprehensive, engaging learning material. Your task is to develop detailed, step-by-step content for a specific submodule. Your work must achieve a perfect balance between two critical goals: unyielding depth for the submodule's core topics and strategic, concise cross-referencing for topics covered elsewhere.
 
 ## SUBMODULE CONTEXT
 - **Topic**: {user_topic}
@@ -1136,46 +1136,48 @@ You are an expert educational content developer creating comprehensive, engaging
 
 ## CONTENT DEVELOPMENT REQUIREMENTS
 
-### 1. COMPREHENSIVE DEPTH & LENGTH
-- **Target Length**: Minimum 1500-2500 words of substantial educational content
-- **Deep Exploration**: Go beyond surface-level explanations
-- **Progressive Complexity**: Build understanding layer by layer
-- **Thorough Coverage**: Address all key components comprehensively
+### 1. PRIMARY GOAL: UNYIELDING DEPTH & EXHAUSTIVE DETAIL (FOR THIS SUBMODULE'S CORE TOPICS)
+Your foremost responsibility is to create a deeply comprehensive and engaging explanation of the concepts that are the **primary focus of THIS submodule**. For these topics, you must:
 
-### 2. ENGAGING & DIDACTIC APPROACH
-- **Narrative Flow**: Create a compelling learning journey
-- **Practical Examples**: Include relevant, illustrative examples throughout
-- **Interactive Elements**: Pose questions, scenarios, and thought experiments
-- **Real-World Applications**: Connect theory to practical applications
-- **Step-by-Step Guidance**: Break complex concepts into digestible steps
+- **Be Truly Exhaustive**: Cover every key component of this submodule completely. Dive deep into mechanisms, processes, nuances, and edge cases. Explain how things work "under the hood."
+- **Build Deep Understanding**: Take the learner by the hand and guide them into the depths of the topic. Explain everything thoroughly, breaking down complex ideas into digestible pieces. Address the "why" behind every important concept.
+- **Achieve Substantial Length**: The core explanation for this submodule's unique topics should be a minimum of **1500-2500 words**. This length should be achieved through rich, detailed explanations, not filler.
+- **Use an Engaging & Didactic Approach**:
+    - **Narrative Flow**: Create a compelling learning journey that flows like a well-told story.
+    - **Practical Examples**: Include relevant, illustrative examples throughout.
+    - **Real-World Applications**: Connect theory to practical applications and use cases.
+    - **Step-by-Step Guidance**: Break complex concepts into digestible steps.
 
-### 3. CONTEXTUAL AWARENESS
-- **Submodule Position**: Acknowledge where this fits in the learning path
-- **Prerequisites**: Reference necessary background knowledge appropriately
-- **Learning Progression**: Build on previous submodules, prepare for next ones
-- **Module Coherence**: Ensure alignment with overall module objectives
+### 2. SECONDARY GOAL: STRATEGIC CONTENT SCOPING & CROSS-REFERENCING
+To maintain focus and avoid redundancy, you must intelligently handle concepts that overlap with other submodules. Use the `COURSE STRUCTURE CONTEXT` to determine the primary home for every concept.
 
-### 4. STYLE ADAPTATION
+**Rule for Handling Overlapping Concepts:**
+- **IF a concept's main explanation belongs in ANOTHER submodule:**
+    - **DO NOT** provide a detailed explanation here.
+    - **DO** provide a brief, concise reference (1-2 sentences) to establish context.
+    - **DO** explicitly and clearly direct the learner to the correct submodule for the deep dive.
+
+- **IF a concept is the PRIMARY FOCUS of THIS submodule:**
+    - **DO** explain it with the comprehensive, exhaustive detail required by Goal #1.
+
+**Example of Correct Cross-Referencing:**
+- **Correct:** "Before we dive into advanced query optimization, it's important to have a solid grasp of database indexing. Indexing is a fundamental technique for improving database performance by enabling faster data retrieval. **This concept is covered in full detail in the submodule: 'Module 2: Database Fundamentals - Submodule 2.3: Understanding Database Indexes'.** We will now build on that knowledge to explore..."
+- **Incorrect:** (A multi-paragraph, detailed explanation of what database indexing is, how it works, B-trees, etc.)
+
+### 3. STYLE ADAPTATION
 {style_instructions}
 
-### 5. CONTENT STRUCTURE REQUIREMENTS
-- **Introduction** (150-200 words): Set context and preview what will be learned
-- **Core Content Sections** (1200-2000 words): 4-6 substantial sections covering key components
-- **Practical Applications** (200-300 words): Real-world examples and use cases
-- **Integration & Connections** (100-150 words): How this connects to other learning
-- **Summary & Next Steps** (100-150 words): Consolidate learning and preview progression
-
-### 6. EDUCATIONAL EFFECTIVENESS
-- **Clear Learning Outcomes**: Ensure content delivers on stated objectives
-- **Conceptual Scaffolding**: Build concepts systematically
-- **Multiple Perspectives**: Present different angles and approaches
-- **Critical Thinking**: Encourage analysis and evaluation
-- **Retention Aids**: Use analogies, mnemonics, and memorable frameworks
+### 4. CONTENT STRUCTURE REQUIREMENTS
+- **Introduction** (150-200 words): Set context and preview what will be learned.
+- **Core Content Sections** (1200-2000 words): 4-6 substantial sections covering this submodule's key components in great depth.
+- **Practical Applications** (200-300 words): Real-world examples and use cases for this submodule's concepts.
+- **Integration & Connections** (100-150 words): How this connects to other learning, using the cross-referencing rule.
+- **Summary & Next Steps** (100-150 words): Consolidate learning and preview progression.
 
 ## LANGUAGE REQUIREMENTS
 - **Content Language**: Write all content in {language}
-- **Technical Accuracy**: Ensure precise use of terminology
-- **Accessibility**: Make complex concepts understandable at the specified depth level
+- **Technical Accuracy**: Ensure precise use of terminology.
+- **Accessibility**: Make complex concepts understandable at the specified depth level.
 
 ## OUTPUT REQUIREMENTS
 Provide ONLY the comprehensive educational content. Do NOT include:
