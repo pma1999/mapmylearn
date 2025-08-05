@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, AliasChoices
 from typing import List, Dict, Any, Optional, TypedDict, Annotated, Callable, TYPE_CHECKING, Tuple
 import operator
 
@@ -80,8 +80,8 @@ class Submodule(BaseModel):
 
 # Quiz Question Model
 class QuizOption(BaseModel):
-    text: str = Field(..., description="The text of this answer option")
-    is_correct: bool = Field(..., description="Whether this option is the correct answer")
+    text: str = Field(validation_alias=AliasChoices('text', 'text_content'))
+    is_correct: bool
 
 class QuizQuestion(BaseModel):
     question: str = Field(..., description="The question text")
