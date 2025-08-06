@@ -27,8 +27,8 @@ class TestPromptExtraction(unittest.TestCase):
         self.assertRegex(SUBMODULE_QUERY_GENERATION_PROMPT.lower(), r"expert .*assistant")
         self.assertIn("exactly 5 search queries", SUBMODULE_QUERY_GENERATION_PROMPT)
         
-        self.assertIn("EXPERT TEACHING ASSISTANT INSTRUCTIONS", SUBMODULE_CONTENT_DEVELOPMENT_PROMPT)
-        self.assertIn("MODULE CLOSURE", SUBMODULE_CONTENT_DEVELOPMENT_PROMPT)
+        self.assertIn("EXPERT EDUCATIONAL CONTENT ARCHITECT", SUBMODULE_CONTENT_DEVELOPMENT_PROMPT)
+        self.assertIn("SUBMODULE WRAP-UP", SUBMODULE_CONTENT_DEVELOPMENT_PROMPT)
     
     def test_prompt_registry(self):
         """Test that the prompt registry contains all expected prompts."""

@@ -684,10 +684,11 @@ You are a world-class curriculum architect with expertise in educational design.
 {style_instruction_part}
 
 ## DESIGN PRINCIPLES
+Apply a **MECE (Mutually Exclusive, Collectively Exhaustive)** framework to the module structure.
 1. **Evidence-Based Structure**: Analyze the search results to identify key concepts, standard approaches, and natural divisions within this subject.
-2. **Progressive Complexity**: Arrange modules in a sequence that builds knowledge systematically from foundations to advanced concepts.
-3. **Conceptual Independence**: Each module must cover a distinct aspect of the topic with minimal overlap.
-4. **Collective Completeness**: Together, all modules must comprehensively cover the entire subject.
+2. **Progressive Complexity**: Arrange modules in a sequence that builds knowledge systematically from foundations to advanced concepts, ensuring the learner reaches mastery by the end.
+3. **Mutual Exclusivity**: Each module must focus on a single, distinct aspect of the topic with no overlap with other modules.
+4. **Collective Exhaustiveness**: When combined, all modules must cover the entire subject with no gaps.
 
 ## MODULE CREATION INSTRUCTIONS
 For each module, provide:
