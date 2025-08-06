@@ -30,24 +30,25 @@ Based on web searches about structuring "{module_title}":
 ## REQUIREMENTS
 - **Language**: Generate all content in {language}
 - **Quantity**: Create 3-5 distinct submodules
-- **Atomicity**: Each submodule must focus on ONE specific concept/skill
+- **MECE Structure**: Submodules must be mutually exclusive (each covers a single concept) and collectively exhaustive (together cover the entire module)
 
 ## DESIGN PRINCIPLES
-1. **Search-Optimized Atomicity**: Each submodule must address a single, distinct concept that would yield specific, relevant search results.
+1. **Mutual Exclusivity & Search-Optimized Atomicity**: Each submodule must address a single, distinct concept that would yield specific, relevant search results and must not overlap with other submodules.
 
 2. **Progressive Mastery Path**:
    - Begin with fundamental concepts essential for this module
    - Gradually increase complexity and depth
    - End with advanced application or integration
+   - Completing all submodules in sequence should result in expert-level mastery of the module topic
 
 3. **Conceptual Narrative Flow**:
    - Each submodule must build directly on knowledge from previous submodules
    - Create clear conceptual dependencies between successive submodules
    - Ensure smooth transitions between adjacent topics
 
-4. **Comprehensive Coverage**:
-   - The submodules must collectively cover ALL aspects of the module
-   - Eliminate critical knowledge gaps
+4. **Collective Exhaustiveness**:
+   - The submodules must collectively cover ALL aspects of the module without gaps
+   - Eliminate critical knowledge overlaps
    - Balance breadth and depth appropriately
 
 ## ANALYTICAL PROCESS
