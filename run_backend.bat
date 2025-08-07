@@ -1,3 +1,3 @@
 @echo off
 cd backend
-python -m uvicorn main:app --reload --port 8000 
+python -m uvicorn api:app --reload --port 8000
