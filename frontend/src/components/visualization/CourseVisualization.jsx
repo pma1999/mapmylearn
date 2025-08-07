@@ -19,7 +19,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import MermaidVisualization from './MermaidVisualization';
 
 // Import API utilities
-import api from '../../utils/api';
+import { api } from '../../services/api';
 
 const CourseVisualization = ({
   pathId,
