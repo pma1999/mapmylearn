@@ -157,33 +157,34 @@ Your mission is to create a sophisticated Mermaid.js diagram that reveals the TR
 
 ## DEEP ANALYSIS REQUIREMENTS:
 
-### 1. **Conceptual Relationship Mapping** (Most Critical)
-Before creating any diagram, perform deep analysis to identify:
-- **Knowledge Prerequisites**: Which concepts must be understood before others?
-- **Skill Dependencies**: What abilities enable advancement to new topics?
-- **Cross-Module Connections**: How do concepts from different modules reinforce each other?
-- **Conceptual Bridges**: Where do modules share foundational principles or build upon each other?
-- **Integration Points**: Where separate learning streams converge into unified understanding?
-- **Practical Applications**: How theoretical modules connect to applied/practical modules?
+### 1. **Selective Relationship Mapping** (Quality Over Quantity)
+Identify ONLY the most essential relationships to avoid visual clutter:
+- **Critical Prerequisites**: Only the most fundamental knowledge dependencies (limit to 2-3 per module)
+- **Key Skill Progressions**: The most important ability-building sequences
+- **Major Integration Points**: Where significant learning convergence occurs (1-2 per course)
+- **Essential Applications**: Only the clearest theory-to-practice connections
 
-### 2. **Learning Flow Discovery**
-Identify the REAL learning pathways:
-- **Parallel Tracks**: Can some modules be learned simultaneously?
-- **Convergence Points**: Where do different learning paths meet and integrate?
-- **Branching Opportunities**: Where can learners choose specialized directions?
-- **Reinforcement Loops**: How do advanced concepts reinforce earlier learning?
-- **Skills Transfer**: Where skills from one area enhance learning in another?
+### 2. **Strategic Connection Selection**
+Show the MOST IMPORTANT pathways while maintaining clarity:
+- **Primary Learning Flow**: The main sequential progression (always include)
+- **Critical Dependencies**: Only prerequisites that would block understanding
+- **Major Convergence**: Where multiple streams unite (maximum 2-3 points)
+- **Avoid Over-Connection**: Not every module needs to connect to every other module
 
-### 3. **Diagram Architecture Strategy**
-Create diagrams that show RELATIONSHIPS, not just sequence:
+### 3. **Balanced Diagram Architecture**
+Create clean, readable diagrams with strategic relationships:
 
-**MANDATORY RELATIONSHIP TYPES TO IDENTIFY:**
-- **Foundation Dependencies** (`A -.->|"builds on"| B`)
-- **Skill Enablement** (`A -->|"enables"| B`) 
-- **Conceptual Reinforcement** (`A <-->|"reinforces"| B`)
-- **Knowledge Integration** (`A -->|"integrates with"| B`)
-- **Practical Application** (`A -->|"applied in"| B`)
-- **Cross-Pollination** (`A -.->|"enriches"| B`)
+**CONNECTION PRIORITY SYSTEM:**
+1. **Essential Flow** (`A --> B`) - Core sequential progression (always show)
+2. **Critical Prerequisites** (`A -.-> B`) - Only blocking dependencies (limit to most important)
+3. **Major Integration** (`A -->|"synthesizes"| C`) - Significant convergence points only
+4. **Key Applications** (`A -->|"applied in"| B`) - Clear theory-to-practice (select best examples)
+
+**AVOID:**
+- Bidirectional connections unless truly essential
+- Cross-connections between every module
+- Multiple edge types between same nodes
+- Complex reinforcement loops that create visual chaos
 
 ### 4. **Advanced Diagram Types Selection**
 Choose based on course's TRUE structure:
@@ -198,136 +199,102 @@ Choose based on course's TRUE structure:
 **For Integrated Curricula:**
 - `graph LR` showing how theoretical and practical streams run parallel and intersect
 
-### 5. **Rich Labeling Strategy**
-**Course Core** (1 node): Central organizing principle
-**Knowledge Domains** (2-4 nodes): Major conceptual areas that may span multiple modules  
-**Module Clusters** (5-8 nodes): Related modules grouped by shared foundations
-**Integration Hubs** (2-3 nodes): Key points where learning streams converge
-**Application Zones** (2-4 nodes): Where theoretical knowledge becomes practical skill
+### 5. **Simplified Node Hierarchy** (Maximum Clarity)
+**Course Core** (1 node): Central topic
+**Main Learning Streams** (2-3 nodes): Primary knowledge areas
+**Key Modules** (4-7 nodes): Most important modules only
+**Integration Point** (1 node): Where streams converge (optional, only if clear)
 
-### 6. **Connection Semantics** (CRITICAL FOR NON-LINEAR VISUALIZATION)
-Use MEANINGFUL edge labels that explain WHY things connect:
-- `"requires foundation in"` - Prerequisites
-- `"enhances understanding of"` - Enrichment  
-- `"provides tools for"` - Skill enablement
-- `"synthesizes with"` - Knowledge integration
-- `"applied through"` - Theory-to-practice
-- `"exemplified by"` - Concept illustration
-- `"reinforced by"` - Learning reinforcement
-- `"bridges to"` - Conceptual connections
+### 6. **Selective Edge Labeling** (Clarity Over Completeness)
+Use ONLY the clearest, most important edge labels:
+- `"builds on"` - Clear prerequisites
+- `"leads to"` - Sequential progression  
+- `"enables"` - Skill development
+- `"synthesizes"` - Major integration
+- `"applied in"` - Theory-to-practice
 
-### 7. **Visual Hierarchy Design**
-**Tier 1 - Course Core** (Largest, most prominent)
-**Tier 2 - Knowledge Domains** (Large, distinctive colors)
-**Tier 3 - Module Clusters** (Medium, thematically colored)  
-**Tier 4 - Integration Points** (Medium, connecting colors)
-**Tier 5 - Applications** (Smaller, action-oriented colors)
+**SIMPLIFICATION RULES:**
+- Maximum 3-4 different edge label types per diagram
+- Only label edges where the relationship is not obvious from positioning
+- Prefer clear positioning over complex labeling
 
-### 8. **Multi-Dimensional Relationship Modeling**
-**Sequential Flow**: `A --> B` (temporal progression)
-**Prerequisite**: `A -.-> B` (foundational requirement)  
-**Bidirectional**: `A <--> B` (mutual reinforcement)
-**Enhancement**: `A -.->|"enriches"| B` (conceptual strengthening)
-**Application**: `A -->|"applied in"| B` (theory-to-practice)
+### 7. **Clean Visual Design** 
+**3-Tier Maximum System:**
+- **Tier 1 - Course Core** (Most prominent, unique color)
+- **Tier 2 - Learning Streams** (Distinctive, but not overwhelming)
+- **Tier 3 - Key Modules** (Clean, consistent styling)
 
-## ANALYSIS METHODOLOGY:
+## DESIGN PRINCIPLES FOR OPTIMAL READABILITY:
 
-### Phase 1: Structure Decomposition
-1. **Identify Core Concepts** in each module's description
-2. **Map Knowledge Prerequisites** - what must be known first?
-3. **Find Conceptual Overlaps** - where do modules share foundations?
-4. **Locate Integration Points** - where do separate streams unite?
+### **Complexity Management**
+1. **Maximum 15 nodes** for optimal readability
+2. **Maximum 20 connections** to avoid visual chaos
+3. **2-3 connection types maximum** (e.g., solid arrows, dotted prerequisites)
+4. **Group related modules** visually when possible
 
-### Phase 2: Relationship Discovery
-1. **Foundation Analysis**: Which modules provide groundwork for others?
-2. **Skill Progression**: How do abilities build and compound?
-3. **Cross-Fertilization**: Where do different areas enhance each other?
-4. **Practical Synthesis**: How does theory become application?
+### **Strategic Simplification**
+1. **Show essential flow first** - the main learning path
+2. **Add only critical dependencies** that would block understanding
+3. **Include one major integration point** if it exists and is clear
+4. **Skip minor cross-references** that don't add significant insight
 
-### Phase 3: Learning Architecture Design
-1. **Create Knowledge Clusters** around shared foundations
-2. **Show Skill Building Chains** that span modules
-3. **Highlight Integration Moments** where understanding unifies
-4. **Reveal Alternative Pathways** for different learning styles
+### **Layout Optimization**
+1. **Use clean, logical positioning** (top-to-bottom or left-to-right flow)
+2. **Minimize crossing lines** that create visual confusion
+3. **Group related concepts** spatially
+4. **Leave adequate white space** for readability
 
-## ADVANCED EXAMPLE PATTERNS:
+## OPTIMAL EXAMPLE PATTERNS:
 
-**Rich Interconnected Architecture:**
+**Clean Sequential Flow with Key Dependencies:**
 ```
 graph TD
-    CORE["Course Core Concept"]
+    CORE["Course Topic"]
     
-    %% Knowledge Domains
-    THEORY["Theoretical Foundation"]
-    METHODS["Methodological Framework"] 
-    PRACTICE["Applied Practice"]
+    FOUNDATION["Foundation Module"]
+    DEVELOPMENT["Development Module"]
+    APPLICATION["Application Module"]
+    INTEGRATION["Integration Module"]
     
-    %% Key Relationships
-    CORE --> THEORY
-    CORE --> METHODS
-    THEORY -.->|"provides basis for"| METHODS
-    THEORY -.->|"guides"| PRACTICE
-    METHODS -->|"enables"| PRACTICE
-    PRACTICE -->|"validates"| THEORY
+    CORE --> FOUNDATION
+    FOUNDATION --> DEVELOPMENT
+    DEVELOPMENT --> APPLICATION
+    FOUNDATION -.->|"builds on"| APPLICATION
+    APPLICATION --> INTEGRATION
+    DEVELOPMENT -.->|"synthesizes"| INTEGRATION
     
-    %% Module Integration
-    M1["Foundation Module"] --> THEORY
-    M2["Analysis Module"] --> METHODS  
-    M3["Application Module"] --> PRACTICE
-    M4["Synthesis Module"] 
-    
-    THEORY -.->|"reinforced by"| M4
-    METHODS -.->|"unified in"| M4  
-    PRACTICE -.->|"culminates in"| M4
-    
-    %% Cross-connections
-    M1 -.->|"enables"| M2
-    M1 -.->|"supports"| M3
-    M2 <-->|"informs"| M3
-    
-    classDef core fill:#ff6b6b,stroke:#d63031,stroke-width:4px,color:#fff
-    classDef domain fill:#4ecdc4,stroke:#00b894,stroke-width:3px,color:#fff  
-    classDef module fill:#45b7d1,stroke:#2d3436,stroke-width:2px
-    classDef synthesis fill:#f9ca24,stroke:#f0932b,stroke-width:3px
+    classDef core fill:#e74c3c,stroke:#c0392b,stroke-width:3px,color:#fff
+    classDef module fill:#3498db,stroke:#2980b9,stroke-width:2px
+    classDef integration fill:#f39c12,stroke:#e67e22,stroke-width:2px
     
     class CORE core
-    class THEORY,METHODS,PRACTICE domain
-    class M1,M2,M3 module
-    class M4 synthesis
+    class FOUNDATION,DEVELOPMENT,APPLICATION module
+    class INTEGRATION integration
 ```
 
-**Skill-Building Network:**
+**Balanced Learning Streams:**
 ```
 graph LR
-    FOUNDATION["Core Foundations"]
+    START["Course Start"]
     
-    %% Skill Streams  
-    ANALYTICAL["Analytical Skills"] 
-    CREATIVE["Creative Skills"]
-    TECHNICAL["Technical Skills"]
+    THEORY["Theory Stream"]
+    PRACTICE["Practice Stream"]
     
-    FOUNDATION -->|"enables"| ANALYTICAL
-    FOUNDATION -->|"enables"| CREATIVE  
-    FOUNDATION -->|"enables"| TECHNICAL
+    SYNTHESIS["Course Synthesis"]
     
-    %% Integration and Cross-Pollination
-    ANALYTICAL <-->|"enhances"| CREATIVE
-    CREATIVE <-->|"enriches"| TECHNICAL
-    TECHNICAL -->|"supports"| ANALYTICAL
+    START --> THEORY
+    START --> PRACTICE
+    THEORY --> SYNTHESIS
+    PRACTICE --> SYNTHESIS
+    THEORY -.->|"informs"| PRACTICE
     
-    %% Advanced Synthesis
-    INTEGRATION["Advanced Integration"]
-    ANALYTICAL -.->|"synthesizes in"| INTEGRATION
-    CREATIVE -.->|"culminates in"| INTEGRATION
-    TECHNICAL -.->|"applied through"| INTEGRATION
+    classDef start fill:#9b59b6,stroke:#8e44ad,stroke-width:3px,color:#fff
+    classDef stream fill:#27ae60,stroke:#229954,stroke-width:2px
+    classDef synthesis fill:#e67e22,stroke:#d35400,stroke-width:3px
     
-    classDef foundation fill:#6c5ce7,stroke:#5f3dc4,stroke-width:3px,color:#fff
-    classDef skills fill:#00b894,stroke:#00a085,stroke-width:2px,color:#fff
-    classDef integration fill:#e84393,stroke:#d63031,stroke-width:3px,color:#fff
-    
-    class FOUNDATION foundation
-    class ANALYTICAL,CREATIVE,TECHNICAL skills  
-    class INTEGRATION integration
+    class START start
+    class THEORY,PRACTICE stream
+    class SYNTHESIS synthesis
 ```
 
 ## CRITICAL OUTPUT REQUIREMENTS:
@@ -355,13 +322,13 @@ graph LR
    - Test all node IDs are referenced correctly
 
 4. **Analysis Process:**
-   - Study the course structure to identify true conceptual relationships
-   - Create diagrams that reveal learning architecture, not just sequence
-   - Show HOW modules connect and reinforce each other
-   - Use meaningful edge labels explaining WHY things relate
-   - Establish clear visual hierarchy with different node types
+   - Study the course structure to identify the MOST ESSENTIAL relationships only
+   - Prioritize clarity and readability over comprehensive connections
+   - Show the main learning flow plus 2-3 critical dependencies maximum
+   - Use minimal, clear edge labels only where necessary
+   - Create clean visual hierarchy with maximum 3 node types
 
-Generate a diagram that reveals the TRUE INTELLECTUAL STRUCTURE of the course, showing rich interconnections and knowledge dependencies.
+Generate a CLEAN, READABLE diagram that shows the essential learning structure without overwhelming complexity. Quality and clarity over comprehensive detail.
 
 ## Course Information:
 **Course Topic:** "{course_topic}"
