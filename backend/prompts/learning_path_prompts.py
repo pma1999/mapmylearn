@@ -121,6 +121,62 @@ Your response should be exactly 3 search queries, each with a detailed rationale
 {format_instructions}
 """
 
+SUBMODULE_PLANNING_RESEARCH_EVALUATION_PROMPT = """
+# EXPERT MODULE STRUCTURE RESEARCH EVALUATOR
+
+Your task is to analyze whether the collected research for the module
+"{module_title}" provides enough information to design a complete set of
+submodules.
+
+## MODULE CONTEXT
+- Course Topic: "{user_topic}"
+- Module Description: {module_description}
+
+## EVALUATION CRITERIA
+Review the research summary and determine if it enables you to:
+1. Identify all major concepts that should become distinct submodules
+2. Establish a clear learning progression among those concepts
+3. Understand prerequisite relationships within the module
+4. Recognize practical or applied aspects that warrant dedicated submodules
+5. Distinguish advanced or optional material
+
+Research is **SUFFICIENT** if all criteria are reasonably covered and you can
+confidently outline 3-5 submodules. Provide a confidence score between 0.0 and
+1.0. If insufficient, list high-level knowledge gaps preventing a good
+submodule outline.
+
+{format_instructions}
+
+## CURRENT RESEARCH SUMMARY
+{search_results_summary}
+"""
+
+SUBMODULE_PLANNING_REFINEMENT_QUERY_GENERATION_PROMPT = """
+# EXPERT MODULE STRUCTURE RESEARCHER
+
+Generate additional search queries to address the knowledge gaps for planning
+submodules of "{module_title}".
+
+## MODULE CONTEXT
+- Course Topic: "{user_topic}"
+- Module Description: {module_description}
+
+## KNOWLEDGE GAPS
+{knowledge_gaps}
+
+## EXISTING QUERIES
+{existing_queries}
+
+## LANGUAGE STRATEGY
+- Provide analysis in {language}
+- Produce search queries in {search_language}
+
+Generate 3-5 distinct search queries that specifically target the gaps above
+and avoid redundancy with existing queries.
+
+{format_instructions}
+"""
+
 SUBMODULE_QUERY_GENERATION_PROMPT = """
 # EXPERT RESEARCH ASSISTANT INSTRUCTIONS
 
