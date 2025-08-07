@@ -149,194 +149,128 @@ Generate a diagram that is impactful and perfect in conveying insights about the
 """
 
 COURSE_MERMAID_VISUALIZATION_PROMPT = """\
-You are an expert data visualizer and instructional designer specializing in educational course architecture and learning path design.
+You are an expert data visualizer and instructional designer, specializing in creating insightful diagrams of educational course architecture.
 
-CRITICAL: Your response must be ONLY pure Mermaid.js syntax OR a specific JSON message for unsuitable content. NO explanatory text, analysis, or commentary allowed.
+### MISSION
+Your mission is to transform a given course structure into a sophisticated Mermaid.js diagram. This diagram must reveal the course's underlying conceptual architecture—the web of dependencies, skill progressions, and integration points. Your guiding philosophy is **clarity and insight over comprehensive detail**.
 
-Your mission is to create a sophisticated Mermaid.js diagram that reveals the TRUE INTELLECTUAL ARCHITECTURE of the course - not just a linear sequence, but the rich web of conceptual relationships, knowledge dependencies, and skill-building pathways that make learning effective. All node labels and text should be written in {language}.
+### CRITICAL OUTPUT RULES
+This is the most important instruction. Your response MUST adhere to one of the following two formats and contain NOTHING else.
 
-## DEEP ANALYSIS REQUIREMENTS:
+1.  **SUCCESSFUL DIAGRAM:** If the course is suitable for a diagram, your response must be **ONLY the raw Mermaid.js syntax**.
+    *   **DO NOT** include any explanatory text, commentary, or greetings.
+    *   **DO NOT** use markdown code fences like ` ```mermaid ` or ` ``` `.
+    *   Your response must start *immediately* with `graph TD`, `graph LR`, or `flowchart TD`.
 
-### 1. **Selective Relationship Mapping** (Quality Over Quantity)
-Identify ONLY the most essential relationships to avoid visual clutter:
-- **Critical Prerequisites**: Only the most fundamental knowledge dependencies (limit to 2-3 per module)
-- **Key Skill Progressions**: The most important ability-building sequences
-- **Major Integration Points**: Where significant learning convergence occurs (1-2 per course)
-- **Essential Applications**: Only the clearest theory-to-practice connections
+2.  **UNSUITABLE COURSE:** If the course structure is too simple (e.g., a basic linear list) to create a meaningful network diagram, respond with **ONLY this exact JSON object**:
+    ```json
+    {{"message": "This course structure is not optimally suited for a Mermaid diagram representation. The course would be better understood through the module list view."}}
+    ```
 
-### 2. **Strategic Connection Selection**
-Show the MOST IMPORTANT pathways while maintaining clarity:
-- **Primary Learning Flow**: The main sequential progression (always include)
-- **Critical Dependencies**: Only prerequisites that would block understanding
-- **Major Convergence**: Where multiple streams unite (maximum 2-3 points)
-- **Avoid Over-Connection**: Not every module needs to connect to every other module
+---
 
-### 3. **Balanced Diagram Architecture**
-Create clean, readable diagrams with strategic relationships:
+### ANALYSIS WORKFLOW
+Follow these steps to generate your response:
 
-**CONNECTION PRIORITY SYSTEM:**
-1. **Essential Flow** (`A --> B`) - Core sequential progression (always show)
-2. **Critical Prerequisites** (`A -.-> B`) - Only blocking dependencies (limit to most important)
-3. **Major Integration** (`A -->|"synthesizes"| C`) - Significant convergence points only
-4. **Key Applications** (`A -->|"applied in"| B`) - Clear theory-to-practice (select best examples)
+1.  **Analyze & Assess:** Examine the course structure to understand its components and their relationships. Determine if it's complex enough for a meaningful network diagram. If not, immediately proceed to step 5.
+2.  **Select Diagram Type:** Choose the optimal Mermaid.js graph type based on the course's nature:
+    *   `graph TD/LR`: For courses with rich, interconnected concepts.
+    *   `flowchart TD/LR`: For courses with clear decision points or branching paths.
+3.  **Construct Diagram:** Build the diagram by applying the DESIGN HEURISTICS below.
+4.  **Translate Text:** Ensure all node labels and edge text are written in the specified language: {language}.
+5.  **Generate Output:** Produce the final output according to the CRITICAL OUTPUT RULES.
 
-**AVOID:**
-- Bidirectional connections unless truly essential
-- Cross-connections between every module
-- Multiple edge types between same nodes
-- Complex reinforcement loops that create visual chaos
+---
 
-### 4. **Advanced Diagram Types Selection**
-Choose based on course's TRUE structure:
+### DESIGN HEURISTICS
 
-**For Complex Interconnected Courses:**
-- `graph TD/LR` - Shows rich bi-directional relationships and cross-connections
-- `flowchart TD/LR` - For courses with clear decision points and multiple pathways
+**1. Radical Simplification & Focus:**
+*   **Node Limit:** Maximum **15 nodes** for readability.
+*   **Connection Limit:** Maximum **20 connections** to avoid a "spaghetti diagram."
+*   **Hierarchy:** Use a clear 3-tier visual hierarchy:
+    *   **Tier 1: Course Core (1 node):** The central theme. Style prominently.
+    *   **Tier 2: Learning Streams (2-4 nodes):** The main knowledge areas or pillars.
+    *   **Tier 3: Key Modules (4-8 nodes):** The most essential individual modules.
+*   **Principle:** Show the *story* of the course, not every single detail.
 
-**For Skill-Building Courses:**
-- `graph TD` with multiple connection types showing how skills compound and interact
+**2. Quality over Quantity in Connections:**
+*   **Primary Flow:** Always show the main sequential learning path.
+*   **Critical Dependencies:** Only map prerequisites that would fundamentally block a learner's understanding if missed. Use a distinct line style (e.g., dotted).
+*   **Major Integrations:** Highlight the 1-2 key points where multiple learning streams converge to create a new, synthesized understanding.
+*   **AVOID:** Do not connect every module to every other. Avoid minor cross-references that clutter the diagram without adding significant insight.
 
-**For Integrated Curricula:**
-- `graph LR` showing how theoretical and practical streams run parallel and intersect
+**3. Clarity in Labeling & Layout:**
+*   **Node Labels:** Keep them concise (2-4 words max). Do not use special characters (`()`, `[]`, etc.).
+*   **Edge Labels:** Use a minimal set of clear, semantic labels only where the relationship isn't obvious from the layout.
+    *   **Examples:** `"builds on"`, `"enables"`, `"applied in"`, `"synthesizes"`.
+*   **Layout:** Prioritize a clean top-to-bottom (`TD`) or left-to-right (`LR`) flow. Minimize crossing lines and use spatial grouping for related concepts.
 
-### 5. **Simplified Node Hierarchy** (Maximum Clarity)
-**Course Core** (1 node): Central topic
-**Main Learning Streams** (2-3 nodes): Primary knowledge areas
-**Key Modules** (4-7 nodes): Most important modules only
-**Integration Point** (1 node): Where streams converge (optional, only if clear)
+---
 
-### 6. **Selective Edge Labeling** (Clarity Over Completeness)
-Use ONLY the clearest, most important edge labels:
-- `"builds on"` - Clear prerequisites
-- `"leads to"` - Sequential progression  
-- `"enables"` - Skill development
-- `"synthesizes"` - Major integration
-- `"applied in"` - Theory-to-practice
+### EXAMPLES OF EXCELLENT OUTPUT
 
-**SIMPLIFICATION RULES:**
-- Maximum 3-4 different edge label types per diagram
-- Only label edges where the relationship is not obvious from positioning
-- Prefer clear positioning over complex labeling
-
-### 7. **Clean Visual Design** 
-**3-Tier Maximum System:**
-- **Tier 1 - Course Core** (Most prominent, unique color)
-- **Tier 2 - Learning Streams** (Distinctive, but not overwhelming)
-- **Tier 3 - Key Modules** (Clean, consistent styling)
-
-## DESIGN PRINCIPLES FOR OPTIMAL READABILITY:
-
-### **Complexity Management**
-1. **Maximum 15 nodes** for optimal readability
-2. **Maximum 20 connections** to avoid visual chaos
-3. **2-3 connection types maximum** (e.g., solid arrows, dotted prerequisites)
-4. **Group related modules** visually when possible
-
-### **Strategic Simplification**
-1. **Show essential flow first** - the main learning path
-2. **Add only critical dependencies** that would block understanding
-3. **Include one major integration point** if it exists and is clear
-4. **Skip minor cross-references** that don't add significant insight
-
-### **Layout Optimization**
-1. **Use clean, logical positioning** (top-to-bottom or left-to-right flow)
-2. **Minimize crossing lines** that create visual confusion
-3. **Group related concepts** spatially
-4. **Leave adequate white space** for readability
-
-## OPTIMAL EXAMPLE PATTERNS:
-
-**Clean Sequential Flow with Key Dependencies:**
-```
+**Example 1: Clean Sequential Flow with Key Dependencies**
+```mermaid
 graph TD
     CORE["Course Topic"]
-    
-    FOUNDATION["Foundation Module"]
-    DEVELOPMENT["Development Module"]
-    APPLICATION["Application Module"]
-    INTEGRATION["Integration Module"]
-    
-    CORE --> FOUNDATION
-    FOUNDATION --> DEVELOPMENT
-    DEVELOPMENT --> APPLICATION
-    FOUNDATION -.->|"builds on"| APPLICATION
-    APPLICATION --> INTEGRATION
-    DEVELOPMENT -.->|"synthesizes"| INTEGRATION
-    
-    classDef core fill:#e74c3c,stroke:#c0392b,stroke-width:3px,color:#fff
-    classDef module fill:#3498db,stroke:#2980b9,stroke-width:2px
-    classDef integration fill:#f39c12,stroke:#e67e22,stroke-width:2px
-    
-    class CORE core
-    class FOUNDATION,DEVELOPMENT,APPLICATION module
-    class INTEGRATION integration
+
+    subgraph Foundation
+        A["Module A"]
+    end
+    subgraph Development
+        B["Module B"]
+        C["Module C"]
+    end
+    subgraph Application
+        D["Module D"]
+    end
+
+    CORE --> A
+    A --> B
+    B --> C
+    C --> D
+    A -.->|"critical prerequisite"| C
+
+    classDef core fill:#e74c3c,stroke:#c0392b,color:#fff;
+    class CORE core;
 ```
 
-**Balanced Learning Streams:**
-```
+**Example 2: Balanced Parallel Streams**
+```mermaid
 graph LR
-    START["Course Start"]
-    
-    THEORY["Theory Stream"]
-    PRACTICE["Practice Stream"]
-    
-    SYNTHESIS["Course Synthesis"]
-    
-    START --> THEORY
-    START --> PRACTICE
-    THEORY --> SYNTHESIS
-    PRACTICE --> SYNTHESIS
-    THEORY -.->|"informs"| PRACTICE
-    
-    classDef start fill:#9b59b6,stroke:#8e44ad,stroke-width:3px,color:#fff
-    classDef stream fill:#27ae60,stroke:#229954,stroke-width:2px
-    classDef synthesis fill:#e67e22,stroke:#d35400,stroke-width:3px
-    
-    class START start
-    class THEORY,PRACTICE stream
-    class SYNTHESIS synthesis
+    CORE["Course Core"]
+
+    subgraph Theory Stream
+        T1["Theory 1"] --> T2["Theory 2"]
+    end
+    subgraph Practice Stream
+        P1["Practice 1"] --> P2["Practice 2"]
+    end
+    subgraph Synthesis
+        S["Final Project"]
+    end
+
+    CORE --> T1
+    CORE --> P1
+    T2 --> S
+    P2 --> S
+    T1 -.->|"informs"| P1
+
+    classDef core fill:#9b59b6,stroke:#8e44ad,color:#fff;
+    classDef synthesis fill:#e67e22,stroke:#d35400;
+    class CORE core;
+    class S synthesis;
 ```
 
-## CRITICAL OUTPUT REQUIREMENTS:
+---
 
-1. **Content Suitability Check:**
-   If the course structure is too simple or lacks clear interconnections for effective network visualization, respond with ONLY this exact JSON format:
-   {{"message": "This course structure is not optimally suited for a Mermaid diagram representation. The course would be better understood through the module list view."}}
+### TASK: GENERATE THE DIAGRAM
 
-2. **Pure Mermaid Output (CRITICAL):**
-   If a diagram is feasible, respond with ONLY the raw Mermaid.js syntax itself. Your response must:
-   - Start IMMEDIATELY with the diagram type declaration (graph TD, flowchart TD, etc.)
-   - Contain NO explanatory text before or after the diagram
-   - Contain NO markdown code blocks, backticks, or code fencing (```mermaid, ```, etc.)
-   - Contain NO meta-commentary, introductions, descriptions, or analysis
-   - Contain NO phrases like "Here is the diagram:", "Mermaid code:", "¡Excelente desafío!", etc.
-   - Be pure, raw Mermaid syntax that can be directly parsed by Mermaid.js
-   - Example of CORRECT output format: Start with "graph TD" or "flowchart TD" etc.
-   - Example of INCORRECT output: Any text before the diagram type declaration
-
-3. **Syntax Requirements:**
-   - Never use parentheses (), brackets [], or special characters in node labels
-   - Keep all labels concise (2-4 words maximum)
-   - Use semantic edge labels that explain relationships
-   - Ensure proper class definitions and assignments
-   - Test all node IDs are referenced correctly
-
-4. **Analysis Process:**
-   - Study the course structure to identify the MOST ESSENTIAL relationships only
-   - Prioritize clarity and readability over comprehensive connections
-   - Show the main learning flow plus 2-3 critical dependencies maximum
-   - Use minimal, clear edge labels only where necessary
-   - Create clean visual hierarchy with maximum 3 node types
-
-Generate a CLEAN, READABLE diagram that shows the essential learning structure without overwhelming complexity. Quality and clarity over comprehensive detail.
-
-## Course Information:
 **Course Topic:** "{course_topic}"
+**Language for Text:** {language}
 
-## Course Structure to Analyze:
+**Course Structure to Analyze:**
 ---
 {course_structure}
 ---
-
-FINAL REMINDER: Output ONLY pure Mermaid.js syntax starting with "graph" or "flowchart", OR the JSON message for unsuitable content. NO other text allowed.
 """
