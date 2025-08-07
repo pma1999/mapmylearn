@@ -123,6 +123,138 @@ async def generate_mermaid_visualization(
         return {"mermaid_syntax": None, "message": "An error occurred while generating the visualization. Please try again later."}
 
 
+async def generate_course_visualization(
+    course_topic: str,
+    course_modules: list,
+    language: str,
+    google_key_provider: Optional[Any] = None,
+    user: Optional[Any] = None
+) -> Dict[str, Optional[str]]:
+    """
+    Generates Mermaid.js syntax for a complete course overview using course structure.
+    
+    Args:
+        course_topic: The topic/title of the course
+        course_modules: List of modules with their structure and descriptions
+        language: Target language for diagram labels (ISO code)
+        google_key_provider: Optional key provider for Google API
+        user: Optional user parameter for model selection
+        
+    Returns:
+        Dictionary containing either:
+        - {"mermaid_syntax": str, "message": None} for successful generation
+        - {"mermaid_syntax": None, "message": str} for unsuitable content or errors
+    """
+    try:
+        # Get LLM instance
+        llm = await get_llm(google_key_provider, user=user)
+        
+        # Create course structure summary for the LLM
+        course_structure = {
+            "topic": course_topic,
+            "modules": []
+        }
+        
+        for i, module in enumerate(course_modules):
+            module_info = {
+                "index": i + 1,
+                "title": module.get("title", ""),
+                "description": module.get("description", ""),
+                "prerequisites": module.get("prerequisites", []),
+                "submodules": []
+            }
+            
+            # Add submodule information
+            for j, submodule in enumerate(module.get("submodules", [])):
+                submodule_info = {
+                    "index": j + 1,
+                    "title": submodule.get("title", ""),
+                    "description": submodule.get("description", "")
+                }
+                module_info["submodules"].append(submodule_info)
+            
+            course_structure["modules"].append(module_info)
+        
+        # Create prompt template for course visualization
+        from backend.prompts.visualization_prompts import COURSE_MERMAID_VISUALIZATION_PROMPT
+        prompt = ChatPromptTemplate.from_template(COURSE_MERMAID_VISUALIZATION_PROMPT)
+        
+        # Create processing chain
+        chain = prompt | llm | StrOutputParser()
+
+        logger.info(f"Requesting course Mermaid visualization from LLM for course: {course_topic}")
+        
+        # Generate response
+        from backend.utils.language_utils import get_full_language_name
+        language_name = get_full_language_name(language)
+        response_text = await chain.ainvoke({
+            "course_topic": course_topic,
+            "course_structure": json.dumps(course_structure, indent=2, ensure_ascii=False),
+            "language": language_name,
+        })
+
+        # Try to parse as JSON first (for "not suitable" message)
+        try:
+            json_response = json.loads(response_text.strip())
+            if "message" in json_response:
+                logger.info(f"LLM indicated course not suitable for Mermaid: {json_response['message']}")
+                return {"mermaid_syntax": None, "message": json_response["message"]}
+        except json.JSONDecodeError:
+            # Not JSON, assume it's Mermaid syntax
+            pass
+
+        # Clean and validate Mermaid syntax (using existing logic)
+        response_cleaned = response_text.strip()
+        
+        # Remove markdown code blocks if present
+        if response_cleaned.startswith("```mermaid"):
+            lines = response_cleaned.split('\n')
+            if len(lines) > 1:
+                start_index = 1
+                end_index = len(lines)
+                
+                if lines[-1].strip() == "```":
+                    end_index = -1
+                
+                mermaid_lines = lines[start_index:end_index]
+                response_cleaned = '\n'.join(mermaid_lines).strip()
+        elif response_cleaned.startswith("```"):
+            lines = response_cleaned.split('\n')
+            if len(lines) > 1:
+                start_index = 1
+                end_index = len(lines)
+                if lines[-1].strip() == "```":
+                    end_index = -1
+                mermaid_lines = lines[start_index:end_index]
+                response_cleaned = '\n'.join(mermaid_lines).strip()
+        
+        # Check if response starts with known Mermaid diagram types
+        mermaid_keywords = [
+            "graph", "flowchart", "sequenceDiagram", "classDiagram", 
+            "stateDiagram", "stateDiagram-v2", "gantt", "pie", 
+            "mindmap", "timeline", "gitgraph", "journey", "quadrantChart",
+            "subgraph"
+        ]
+        
+        if any(response_cleaned.startswith(keyword) for keyword in mermaid_keywords):
+            logger.info(f"LLM returned valid course Mermaid syntax for: {course_topic}")
+            return {"mermaid_syntax": response_cleaned, "message": None}
+        else:
+            logger.warning(f"LLM response for course {course_topic} doesn't start with recognized Mermaid syntax: {response_cleaned[:200]}...")
+            return {
+                "mermaid_syntax": None, 
+                "message": "Generated content doesn't appear to be valid Mermaid syntax. The course structure might be unsuitable for visualization."
+            }
+
+    except asyncio.TimeoutError:
+        logger.error(f"Timeout generating course Mermaid visualization for {course_topic}")
+        return {"mermaid_syntax": None, "message": "Course visualization generation timed out. Please try again."}
+    
+    except Exception as e:
+        logger.exception(f"Error generating course Mermaid visualization for {course_topic}: {e}")
+        return {"mermaid_syntax": None, "message": "An error occurred while generating the course visualization. Please try again later."}
+
+
 def validate_mermaid_syntax(mermaid_code: str) -> bool:
     """
     Basic validation of Mermaid syntax.

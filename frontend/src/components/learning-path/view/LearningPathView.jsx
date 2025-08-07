@@ -303,6 +303,8 @@ const LearningPathView = ({ source }) => {
                 isPublicView={isPublicView}
                 lastVisitedModuleIdx={lastVisitedModuleIdx}
                 lastVisitedSubmoduleIdx={lastVisitedSubmoduleIdx}
+                pathId={derivedPathId}
+                language={learningPath?.language || 'en'}
               />
             }
             focusComponent={

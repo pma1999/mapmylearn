@@ -25,7 +25,7 @@ from backend.utils.pdf_generator import generate_pdf, create_filename
 # Import the new audio generation service
 from backend.services.audio_service import generate_submodule_audio 
 # Import the new visualization generation service
-from backend.services.visualization_service import generate_mermaid_visualization
+from backend.services.visualization_service import generate_mermaid_visualization, generate_course_visualization
 from backend.services.credit_service import CreditService, InsufficientCreditsError # Import CreditService and specific errors
 from pydantic import BaseModel, ConfigDict
 
@@ -1223,4 +1223,274 @@ async def generate_submodule_visualization_endpoint(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
             detail=f"Visualization generation failed unexpectedly: {str(viz_exc)}"
+        )
+
+
+@router.post("/{path_id}/course-visualization", response_model=GenerateVisualizationResponse)
+async def generate_course_visualization_endpoint(
+    request_data: GenerateVisualizationRequest,
+    path_id: str = Path(..., description="ID of the course (can be temporary task ID or persistent UUID)"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    credit_service: CreditService = Depends()
+):
+    """
+    Generates an interactive course overview visualization (Mermaid.js syntax).
+    Shows the complete course structure with modules and key submodules.
+    Costs 1 credit for successful generation attempt.
+    """
+    logger.info(f"Course visualization request for path {path_id} by user {user.id}")
+
+    requested_language = request_data.language or DEFAULT_VISUALIZATION_LANGUAGE
+    if requested_language not in SUPPORTED_VISUALIZATION_LANGUAGES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported language '{requested_language}'. Supported languages are: {SUPPORTED_VISUALIZATION_LANGUAGES}"
+        )
+
+    # Try to get learning path from database first
+    learning_path = db.query(LearningPath).filter(
+        LearningPath.path_id == path_id,
+        LearningPath.user_id == user.id
+    ).first()
+
+    # If course already has a visualization, return it
+    if learning_path and learning_path.course_visualization_graph:
+        logger.info(f"Returning existing course visualization for path {path_id}")
+        return GenerateVisualizationResponse(mermaid_syntax=learning_path.course_visualization_graph)
+
+    # Check if it's a temporary generation task
+    path_data = None
+    course_topic = None
+    
+    if learning_path:
+        # Found permanent learning path
+        path_data = learning_path.path_data
+        course_topic = learning_path.topic
+        logger.info(f"Found permanent learning path for visualization: {path_id}")
+    else:
+        # Check if it's a temporary generation task
+        if request_data.path_data:
+            path_data = request_data.path_data
+            course_topic = path_data.get('topic', 'Course')
+            logger.info(f"Using provided path_data for temporary course: {path_id}")
+        else:
+            logger.warning(f"Learning path {path_id} not found for user {user.id}, and no path_data provided")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, 
+                detail=f"Learning path '{path_id}' not found for user {user.id}. For temporary courses, provide path_data in the request body."
+            )
+
+    # Extract course structure
+    modules = path_data.get('modules', [])
+    if not modules:
+        logger.warning(f"Course {path_id} has no modules. Cannot generate visualization.")
+        return GenerateVisualizationResponse(
+            mermaid_syntax=None,
+            message="Course has no modules to visualize."
+        )
+
+    # Charge credit for course visualization generation
+    try:
+        if db.in_transaction():
+            logger.debug(f"Existing transaction detected. Using SAVEPOINT for course visualization generation for path {path_id}.")
+            with db.begin_nested():  # Creates a SAVEPOINT
+                await credit_service.charge_credits(
+                    user_id=user.id,
+                    amount=1,
+                    transaction_type=TransactionType.VISUALIZATION_GENERATION_USE,
+                    notes=f"Course visualization for: {course_topic[:100]}"
+                )
+                logger.info(f"Credit charged (within SAVEPOINT) for course visualization generation (user: {user.id}, path: {path_id})")
+        else:
+            logger.debug(f"No existing transaction. Starting new transaction for course visualization generation for path {path_id}.")
+            with db.begin():  # Starts a new top-level transaction
+                await credit_service.charge_credits(
+                    user_id=user.id,
+                    amount=1,
+                    transaction_type=TransactionType.VISUALIZATION_GENERATION_USE,
+                    notes=f"Course visualization for: {course_topic[:100]}"
+                )
+                logger.info(f"Credit charged for course visualization generation (user: {user.id}, path: {path_id})")
+    except InsufficientCreditsError as credit_exc:
+        logger.warning(f"User {user.id} has insufficient credits for course visualization: {credit_exc}")
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED, 
+            detail=str(credit_exc)
+        )
+    except Exception as charge_exc:
+        logger.exception(f"Unexpected error charging credits for course visualization for path {path_id}: {charge_exc}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Credit transaction failed: {str(charge_exc)}"
+        )
+
+    # Initialize key provider
+    google_key_provider = GoogleKeyProvider()
+
+    # Generate course visualization
+    try:
+        viz_result = await generate_course_visualization(
+            course_topic=course_topic,
+            course_modules=modules,
+            language=requested_language,
+            google_key_provider=google_key_provider,
+            user=user
+        )
+
+        if viz_result.get("mermaid_syntax"):
+            logger.info(f"Successfully generated course visualization for: {course_topic}")
+            
+            # Save visualization to database if it's a permanent learning path
+            if learning_path:
+                learning_path.course_visualization_graph = viz_result["mermaid_syntax"]
+                db.commit()
+                logger.info(f"Saved course visualization to database for path {path_id}")
+            
+            return GenerateVisualizationResponse(mermaid_syntax=viz_result["mermaid_syntax"])
+        else:
+            # Generation failed or content not suitable
+            logger.info(f"Course visualization generation completed with message for {course_topic}: {viz_result.get('message')}")
+            return GenerateVisualizationResponse(
+                mermaid_syntax=None,
+                message=viz_result.get("message", "Failed to generate course visualization.")
+            )
+            
+    except Exception as viz_exc:
+        logger.exception(f"Unexpected error during course visualization generation for path {path_id}: {viz_exc}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Course visualization generation failed unexpectedly: {str(viz_exc)}"
+        )
+
+
+@router.put("/{path_id}/course-visualization/regenerate", response_model=GenerateVisualizationResponse)
+async def regenerate_course_visualization_endpoint(
+    request_data: GenerateVisualizationRequest,
+    path_id: str = Path(..., description="ID of the course (can be temporary task ID or persistent UUID)"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    credit_service: CreditService = Depends()
+):
+    """
+    Regenerates the course overview visualization, replacing any existing one.
+    Costs 1 credit for successful generation attempt.
+    """
+    logger.info(f"Course visualization regeneration request for path {path_id} by user {user.id}")
+
+    requested_language = request_data.language or DEFAULT_VISUALIZATION_LANGUAGE
+    if requested_language not in SUPPORTED_VISUALIZATION_LANGUAGES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported language '{requested_language}'. Supported languages are: {SUPPORTED_VISUALIZATION_LANGUAGES}"
+        )
+
+    # Try to get learning path from database first
+    learning_path = db.query(LearningPath).filter(
+        LearningPath.path_id == path_id,
+        LearningPath.user_id == user.id
+    ).first()
+
+    # Check if it's a temporary generation task
+    path_data = None
+    course_topic = None
+    
+    if learning_path:
+        # Found permanent learning path
+        path_data = learning_path.path_data
+        course_topic = learning_path.topic
+        logger.info(f"Found permanent learning path for regeneration: {path_id}")
+    else:
+        # Check if it's a temporary generation task
+        if request_data.path_data:
+            path_data = request_data.path_data
+            course_topic = path_data.get('topic', 'Course')
+            logger.info(f"Using provided path_data for temporary course regeneration: {path_id}")
+        else:
+            logger.warning(f"Learning path {path_id} not found for user {user.id}, and no path_data provided")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, 
+                detail=f"Learning path '{path_id}' not found for user {user.id}. For temporary courses, provide path_data in the request body."
+            )
+
+    # Extract course structure
+    modules = path_data.get('modules', [])
+    if not modules:
+        logger.warning(f"Course {path_id} has no modules. Cannot regenerate visualization.")
+        return GenerateVisualizationResponse(
+            mermaid_syntax=None,
+            message="Course has no modules to visualize."
+        )
+
+    # Charge credit for course visualization regeneration
+    try:
+        if db.in_transaction():
+            logger.debug(f"Existing transaction detected. Using SAVEPOINT for course visualization regeneration for path {path_id}.")
+            with db.begin_nested():  # Creates a SAVEPOINT
+                await credit_service.charge_credits(
+                    user_id=user.id,
+                    amount=1,
+                    transaction_type=TransactionType.VISUALIZATION_GENERATION_USE,
+                    notes=f"Course visualization regeneration for: {course_topic[:100]}"
+                )
+                logger.info(f"Credit charged (within SAVEPOINT) for course visualization regeneration (user: {user.id}, path: {path_id})")
+        else:
+            logger.debug(f"No existing transaction. Starting new transaction for course visualization regeneration for path {path_id}.")
+            with db.begin():  # Starts a new top-level transaction
+                await credit_service.charge_credits(
+                    user_id=user.id,
+                    amount=1,
+                    transaction_type=TransactionType.VISUALIZATION_GENERATION_USE,
+                    notes=f"Course visualization regeneration for: {course_topic[:100]}"
+                )
+                logger.info(f"Credit charged for course visualization regeneration (user: {user.id}, path: {path_id})")
+    except InsufficientCreditsError as credit_exc:
+        logger.warning(f"User {user.id} has insufficient credits for course visualization regeneration: {credit_exc}")
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED, 
+            detail=str(credit_exc)
+        )
+    except Exception as charge_exc:
+        logger.exception(f"Unexpected error charging credits for course visualization regeneration for path {path_id}: {charge_exc}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Credit transaction failed: {str(charge_exc)}"
+        )
+
+    # Initialize key provider
+    google_key_provider = GoogleKeyProvider()
+
+    # Generate course visualization (forcing regeneration)
+    try:
+        viz_result = await generate_course_visualization(
+            course_topic=course_topic,
+            course_modules=modules,
+            language=requested_language,
+            google_key_provider=google_key_provider,
+            user=user
+        )
+
+        if viz_result.get("mermaid_syntax"):
+            logger.info(f"Successfully regenerated course visualization for: {course_topic}")
+            
+            # Save visualization to database if it's a permanent learning path
+            if learning_path:
+                learning_path.course_visualization_graph = viz_result["mermaid_syntax"]
+                db.commit()
+                logger.info(f"Saved regenerated course visualization to database for path {path_id}")
+            
+            return GenerateVisualizationResponse(mermaid_syntax=viz_result["mermaid_syntax"])
+        else:
+            # Generation failed or content not suitable
+            logger.info(f"Course visualization regeneration completed with message for {course_topic}: {viz_result.get('message')}")
+            return GenerateVisualizationResponse(
+                mermaid_syntax=None,
+                message=viz_result.get("message", "Failed to regenerate course visualization.")
+            )
+            
+    except Exception as viz_exc:
+        logger.exception(f"Unexpected error during course visualization regeneration for path {path_id}: {viz_exc}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Course visualization regeneration failed unexpectedly: {str(viz_exc)}"
         ) 

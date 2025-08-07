@@ -77,3 +77,9 @@ backend/learni.db
 .roo/rules-senior-implementer/3_common_patterns.xml
 .roo/rules-senior-implementer/4_tool_usage.xml
 .roo/rules-senior-implementer/5_examples.xml
+🛡️ .roomodes
+.claude/settings.local.json
+.roo/rules-project-lead/1_workflow.xml
+.roo/rules-project-lead/2_best_practices.xml
+.roo/rules-project-lead/4_tool_usage.xml
+.roo/rules-project-lead/5_examples.xml

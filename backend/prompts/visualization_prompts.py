@@ -147,3 +147,135 @@ Generate a diagram that is impactful and perfect in conveying insights about the
 {submodule_content}
 ---
 """
+
+COURSE_MERMAID_VISUALIZATION_PROMPT = """\
+You are an expert data visualizer and instructional designer specializing in educational course overviews.
+
+Your task is to generate Mermaid.js syntax for an interactive course overview diagram that shows the complete learning path structure. Follow these guidelines closely. All node labels and text should be written in {language}.
+
+## Instructions:
+
+1. **Course Structure Analysis:** Analyze the provided course structure to create a comprehensive learning path visualization showing:
+   - Course topic/title as the central element
+   - Module progression and relationships
+   - Key submodules within each module
+   - Prerequisites and dependencies between modules
+   - Learning flow and pathways
+
+2. **Diagram Type Selection:** Choose the MOST SUITABLE Mermaid diagram type for course overview:
+   - `flowchart TD/LR` - For learning progression and pathways
+   - `graph TD/LR` - For module relationships and hierarchies
+   - `mindmap` - For conceptual course breakdown
+   - `timeline` - For sequential learning progression
+   - `gitgraph` - For branching learning paths
+
+3. **Complexity Guidelines:**
+   - Show the overall course structure (keep it high-level)
+   - Maximum 20-25 nodes for clarity
+   - Include main modules and select key submodules
+   - Show learning progression and dependencies
+   - Maintain visual balance and readability
+
+4. **Node and Label Guidelines:**
+   - **Node IDs**: Use simple alphanumeric IDs (COURSE, M1, M2, S1_1, etc.)
+   - **Course Title**: Central prominent node
+   - **Module Labels**: Keep concise (2-4 words max): "Module 1: Basics"
+   - **Submodule Labels**: Very short (1-3 words): "Introduction", "Practice"
+   - **Avoid Special Characters**: Do NOT use parentheses (), brackets [], or other special characters
+   - **Label Format**: Use quotes for multi-word labels: `M1["Module 1 Basics"]`
+
+5. **Course-Specific Guidelines:**
+   - **Start with Course Topic**: Central node representing the entire course
+   - **Show Module Progression**: Clear flow from one module to the next
+   - **Highlight Prerequisites**: Use different styling for prerequisite relationships
+   - **Include Key Submodules**: Select 1-3 most important submodules per module
+   - **Show Learning Paths**: Multiple routes through the course if applicable
+
+6. **Edge and Connection Guidelines:**
+   - **Learning Flow**: Use `A --> B` for sequential learning
+   - **Prerequisites**: Use `A -.-> B` for prerequisite relationships
+   - **Edge Labels**: Use descriptive labels like "requires", "builds on", "leads to"
+   - **Branching**: Show alternative learning paths where applicable
+
+7. **Styling Guidelines:**
+   - **Course Topic**: Distinctive styling (larger, different color)
+   - **Modules**: Consistent styling for main modules
+   - **Submodules**: Lighter styling, smaller nodes
+   - **Prerequisites**: Different line style (dotted/dashed)
+   - Use 3-4 different node classes maximum
+
+8. **Content Suitability Check:**
+   If the course structure is too simple or complex for effective visualization, respond with ONLY this JSON:
+   {{"message": "This course structure is not optimally suited for a Mermaid diagram representation. The course would be better understood through the module list view."}}
+
+9. **Output Format:**
+   If a diagram is feasible, respond with ONLY the Mermaid syntax itself, starting directly with the diagram type declaration.
+
+## Example Output Format:
+
+**For Sequential Course Structure:**
+```
+flowchart TD
+    COURSE["Course Topic"] --> M1["Module 1 Introduction"]
+    M1 --> S1_1["Basics"]
+    M1 --> S1_2["Concepts"]
+    S1_1 --> M2["Module 2 Intermediate"]
+    S1_2 --> M2
+    M2 --> S2_1["Practice"]
+    M2 --> S2_2["Applications"]
+    S2_1 --> M3["Module 3 Advanced"]
+    S2_2 --> M3
+    M3 --> S3_1["Projects"]
+    M3 --> S3_2["Mastery"]
+    
+    classDef course fill:#ff9800,stroke:#e65100,stroke-width:3px,color:#fff
+    classDef module fill:#2196f3,stroke:#1976d2,stroke-width:2px,color:#fff
+    classDef submodule fill:#4caf50,stroke:#388e3c,stroke-width:1px
+    
+    class COURSE course
+    class M1,M2,M3 module
+    class S1_1,S1_2,S2_1,S2_2,S3_1,S3_2 submodule
+```
+
+**For Branching Course Structure:**
+```
+graph TD
+    COURSE["Course Topic"] --> FOUNDATION["Foundation"]
+    FOUNDATION --> M1["Track A"]
+    FOUNDATION --> M2["Track B"]
+    M1 --> S1_1["Concepts A"]
+    M1 --> S1_2["Practice A"]
+    M2 --> S2_1["Concepts B"]
+    M2 --> S2_2["Practice B"]
+    S1_1 -.-> M3["Integration"]
+    S2_1 -.-> M3
+    M3 --> FINAL["Final Project"]
+    
+    classDef course fill:#ff5722,stroke:#d84315,stroke-width:3px,color:#fff
+    classDef foundation fill:#9c27b0,stroke:#7b1fa2,stroke-width:2px,color:#fff
+    classDef track fill:#2196f3,stroke:#1976d2,stroke-width:2px
+    classDef submodule fill:#4caf50,stroke:#388e3c,stroke-width:1px
+    
+    class COURSE course
+    class FOUNDATION foundation
+    class M1,M2,M3 track
+    class S1_1,S1_2,S2_1,S2_2,FINAL submodule
+```
+
+**CRITICAL RULES:**
+1. Never use parentheses () or brackets [] inside node labels
+2. Keep all labels simple and short
+3. Show clear learning progression
+4. Highlight the course structure and main learning path
+5. Include only the most essential submodules for clarity
+
+Generate a course overview diagram that effectively shows the learning journey and course structure.
+
+## Course Information:
+**Course Topic:** "{course_topic}"
+
+## Course Structure:
+---
+{course_structure}
+---
+"""

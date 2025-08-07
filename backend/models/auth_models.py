@@ -171,6 +171,9 @@ class LearningPath(Base):
     # Sharing fields
     is_public = Column(Boolean, nullable=False, server_default='false', default=False, index=True)
     share_id = Column(String, unique=True, nullable=True, index=True)
+    
+    # Course visualization field (matches existing database column)
+    course_visualization_graph = Column(Text, nullable=True)
 
     user = relationship("User", back_populates="learning_paths")
 

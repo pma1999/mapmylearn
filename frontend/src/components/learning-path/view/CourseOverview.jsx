@@ -41,6 +41,7 @@ import AutoStoriesIcon from '@mui/icons-material/AutoStories';
 
 // Shared components
 import ResourcesSection from '../../shared/ResourcesSection';
+import CourseVisualization from '../../visualization/CourseVisualization';
 
 const CourseOverview = ({ 
   actualPathData, 
@@ -52,7 +53,9 @@ const CourseOverview = ({
   onToggleProgress,
   isPublicView = false,
   lastVisitedModuleIdx = null,
-  lastVisitedSubmoduleIdx = null
+  lastVisitedSubmoduleIdx = null,
+  pathId = null,
+  language = 'en'
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -244,6 +247,21 @@ const CourseOverview = ({
               compact={false}
             />
           </Paper>
+        </motion.div>
+      )}
+
+      {/* Course Visualization */}
+      {pathId && (
+        <motion.div variants={cardVariants}>
+          <Box sx={{ mb: 4 }}>
+            <CourseVisualization
+              pathId={pathId}
+              pathData={actualPathData}
+              topic={topic}
+              language={language}
+              isPublicView={isPublicView}
+            />
+          </Box>
         </motion.div>
       )}
 
@@ -547,7 +565,9 @@ CourseOverview.propTypes = {
   onToggleProgress: PropTypes.func,
   isPublicView: PropTypes.bool,
   lastVisitedModuleIdx: PropTypes.number,
-  lastVisitedSubmoduleIdx: PropTypes.number
+  lastVisitedSubmoduleIdx: PropTypes.number,
+  pathId: PropTypes.string,
+  language: PropTypes.string
 };
 
 export default CourseOverview;
