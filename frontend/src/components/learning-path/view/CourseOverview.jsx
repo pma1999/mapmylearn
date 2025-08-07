@@ -60,6 +60,7 @@ const CourseOverview = ({
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [expandedModules, setExpandedModules] = React.useState({});
+  const [courseVisualizationExpanded, setCourseVisualizationExpanded] = React.useState(false);
 
   const modules = actualPathData?.modules || [];
 
@@ -253,15 +254,56 @@ const CourseOverview = ({
       {/* Course Visualization */}
       {pathId && (
         <motion.div variants={cardVariants}>
-          <Box sx={{ mb: 4 }}>
-            <CourseVisualization
-              pathId={pathId}
-              pathData={actualPathData}
-              topic={topic}
-              language={language}
-              isPublicView={isPublicView}
-            />
-          </Box>
+          <Paper
+            elevation={0}
+            sx={{
+              mb: 4,
+              border: `1px solid ${theme.palette.divider}`,
+              borderRadius: 2
+            }}
+          >
+            <Box 
+              sx={{ 
+                p: 2, 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                '&:hover': {
+                  backgroundColor: alpha(theme.palette.action.hover, 0.04)
+                }
+              }}
+              onClick={() => setCourseVisualizationExpanded(!courseVisualizationExpanded)}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <SchoolIcon 
+                  sx={{ 
+                    mr: 1, 
+                    color: theme.palette.primary.main,
+                    fontSize: 20
+                  }} 
+                />
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  Course Visualization
+                </Typography>
+              </Box>
+              <IconButton size="small">
+                {courseVisualizationExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              </IconButton>
+            </Box>
+            
+            <Collapse in={courseVisualizationExpanded} timeout="auto" unmountOnExit>
+              <Box sx={{ p: 2, pt: 0 }}>
+                <CourseVisualization
+                  pathId={pathId}
+                  pathData={actualPathData}
+                  topic={topic}
+                  language={language}
+                  isPublicView={isPublicView}
+                />
+              </Box>
+            </Collapse>
+          </Paper>
         </motion.div>
       )}
 
