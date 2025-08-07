@@ -151,6 +151,8 @@ Generate a diagram that is impactful and perfect in conveying insights about the
 COURSE_MERMAID_VISUALIZATION_PROMPT = """\
 You are an expert data visualizer and instructional designer specializing in educational course architecture and learning path design.
 
+CRITICAL: Your response must be ONLY pure Mermaid.js syntax OR a specific JSON message for unsuitable content. NO explanatory text, analysis, or commentary allowed.
+
 Your mission is to create a sophisticated Mermaid.js diagram that reveals the TRUE INTELLECTUAL ARCHITECTURE of the course - not just a linear sequence, but the rich web of conceptual relationships, knowledge dependencies, and skill-building pathways that make learning effective. All node labels and text should be written in {language}.
 
 ## DEEP ANALYSIS REQUIREMENTS:
@@ -328,14 +330,38 @@ graph LR
     class INTEGRATION integration
 ```
 
-## OUTPUT REQUIREMENTS:
-1. **Analyze FIRST**: Study the course structure deeply to identify true relationships
-2. **Design for INSIGHT**: Create diagrams that reveal the course's learning architecture
-3. **Show CONNECTIONS**: Emphasize how modules relate, don't just sequence them
-4. **Use SEMANTIC EDGES**: Every connection should explain WHY things relate
-5. **Create VISUAL HIERARCHY**: Different node types should be clearly distinguished
+## CRITICAL OUTPUT REQUIREMENTS:
 
-Generate a diagram that reveals the TRUE INTELLECTUAL STRUCTURE of the course, showing learners not just what to study when, but HOW everything connects to create deep, integrated understanding.
+1. **Content Suitability Check:**
+   If the course structure is too simple or lacks clear interconnections for effective network visualization, respond with ONLY this exact JSON format:
+   {{"message": "This course structure is not optimally suited for a Mermaid diagram representation. The course would be better understood through the module list view."}}
+
+2. **Pure Mermaid Output (CRITICAL):**
+   If a diagram is feasible, respond with ONLY the raw Mermaid.js syntax itself. Your response must:
+   - Start IMMEDIATELY with the diagram type declaration (graph TD, flowchart TD, etc.)
+   - Contain NO explanatory text before or after the diagram
+   - Contain NO markdown code blocks, backticks, or code fencing (```mermaid, ```, etc.)
+   - Contain NO meta-commentary, introductions, descriptions, or analysis
+   - Contain NO phrases like "Here is the diagram:", "Mermaid code:", "¡Excelente desafío!", etc.
+   - Be pure, raw Mermaid syntax that can be directly parsed by Mermaid.js
+   - Example of CORRECT output format: Start with "graph TD" or "flowchart TD" etc.
+   - Example of INCORRECT output: Any text before the diagram type declaration
+
+3. **Syntax Requirements:**
+   - Never use parentheses (), brackets [], or special characters in node labels
+   - Keep all labels concise (2-4 words maximum)
+   - Use semantic edge labels that explain relationships
+   - Ensure proper class definitions and assignments
+   - Test all node IDs are referenced correctly
+
+4. **Analysis Process:**
+   - Study the course structure to identify true conceptual relationships
+   - Create diagrams that reveal learning architecture, not just sequence
+   - Show HOW modules connect and reinforce each other
+   - Use meaningful edge labels explaining WHY things relate
+   - Establish clear visual hierarchy with different node types
+
+Generate a diagram that reveals the TRUE INTELLECTUAL STRUCTURE of the course, showing rich interconnections and knowledge dependencies.
 
 ## Course Information:
 **Course Topic:** "{course_topic}"
@@ -344,4 +370,6 @@ Generate a diagram that reveals the TRUE INTELLECTUAL STRUCTURE of the course, s
 ---
 {course_structure}
 ---
+
+FINAL REMINDER: Output ONLY pure Mermaid.js syntax starting with "graph" or "flowchart", OR the JSON message for unsuitable content. NO other text allowed.
 """
