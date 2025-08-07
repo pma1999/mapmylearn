@@ -1,7 +1,7 @@
 import os
 import asyncio
 import logging
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.output_parsers import PydanticOutputParser
@@ -12,13 +12,20 @@ from backend.models.models import (
     SearchQuery,
     SearchServiceResult,
 )
-from backend.services.services import get_llm
+from backend.services.services import get_llm, get_llm_for_evaluation
 from backend.core.graph_nodes.helpers import escape_curly_braces, run_chain
 from backend.core.graph_nodes.search_utils import execute_search_with_llm_retry
+from backend.core.submodules.context_builders import build_enhanced_search_context
 from backend.prompts.learning_path_prompts import (
     MODULE_SUBMODULE_PLANNING_QUERY_GENERATION_PROMPT,
+    SUBMODULE_PLANNING_RESEARCH_EVALUATION_PROMPT,
+    SUBMODULE_PLANNING_REFINEMENT_QUERY_GENERATION_PROMPT,
 )
-from backend.parsers.parsers import search_queries_parser
+from backend.parsers.parsers import (
+    search_queries_parser,
+    research_evaluation_parser,
+    refinement_query_parser,
+)
 
 
 async def generate_module_specific_planning_queries(
@@ -282,3 +289,126 @@ async def execute_module_specific_planning_searches(
                 search_provider_error=f"Failed to execute planning searches: {str(e)}",
             )
         ]
+
+
+async def evaluate_module_planning_research_sufficiency(
+    state: LearningPathState,
+    module_id: int,
+    module: EnhancedModule,
+    search_results: List[SearchServiceResult],
+):
+    """Evaluate if planning research for a module is sufficient to design submodules."""
+    logger = logging.getLogger("learning_path.submodule_planner")
+    from backend.utils.language_utils import get_full_language_name
+
+    search_summary = build_enhanced_search_context(search_results)
+    output_language = get_full_language_name(state.get("language", "en"))
+
+    prompt = ChatPromptTemplate.from_template(
+        SUBMODULE_PLANNING_RESEARCH_EVALUATION_PROMPT
+    )
+
+    result = await run_chain(
+        prompt,
+        lambda: get_llm_for_evaluation(
+            key_provider=state.get("google_key_provider"),
+            user=state.get("user"),
+        ),
+        research_evaluation_parser,
+        {
+            "user_topic": escape_curly_braces(state["user_topic"]),
+            "module_title": escape_curly_braces(module.title),
+            "module_description": escape_curly_braces(module.description),
+            "language": output_language,
+            "search_results_summary": search_summary,
+            "format_instructions": research_evaluation_parser.get_format_instructions(),
+        },
+    )
+
+    logger.info(
+        f"Module planning research evaluation for module {module_id+1}: sufficient={result.is_sufficient}, confidence={result.confidence_score:.2f}"
+    )
+    return result
+
+
+async def generate_module_planning_refinement_queries(
+    state: LearningPathState,
+    module_id: int,
+    module: EnhancedModule,
+    knowledge_gaps: List[str],
+    existing_queries: List[SearchQuery],
+) -> List[SearchQuery]:
+    """Generate follow-up queries to address planning research gaps."""
+    logger = logging.getLogger("learning_path.submodule_planner")
+    from backend.utils.language_utils import get_full_language_name
+
+    output_language = get_full_language_name(state.get("language", "en"))
+    search_language = get_full_language_name(state.get("search_language", "en"))
+
+    prompt = ChatPromptTemplate.from_template(
+        SUBMODULE_PLANNING_REFINEMENT_QUERY_GENERATION_PROMPT
+    )
+
+    result = await run_chain(
+        prompt,
+        lambda: get_llm_for_evaluation(
+            key_provider=state.get("google_key_provider"),
+            user=state.get("user"),
+        ),
+        refinement_query_parser,
+        {
+            "user_topic": escape_curly_braces(state["user_topic"]),
+            "module_title": escape_curly_braces(module.title),
+            "module_description": escape_curly_braces(module.description),
+            "knowledge_gaps": "\n".join([f"- {gap}" for gap in knowledge_gaps]),
+            "existing_queries": "\n".join([f"- {q.keywords}" for q in existing_queries]),
+            "language": output_language,
+            "search_language": search_language,
+            "format_instructions": refinement_query_parser.get_format_instructions(),
+        },
+    )
+
+    logger.info(
+        f"Generated {len(result.queries)} planning refinement queries for module {module_id+1}"
+    )
+    return result.queries
+
+
+async def gather_planning_research_until_sufficient(
+    state: LearningPathState,
+    module_id: int,
+    module: EnhancedModule,
+    initial_queries: List[SearchQuery],
+    initial_results: List[SearchServiceResult],
+) -> Tuple[List[SearchQuery], List[SearchServiceResult]]:
+    """Iteratively refine planning research until sufficient for submodule design."""
+    queries = list(initial_queries)
+    results = list(initial_results)
+
+    loop_count = 0
+    max_loops = 2
+
+    while loop_count < max_loops:
+        loop_count += 1
+        evaluation = await evaluate_module_planning_research_sufficiency(
+            state, module_id, module, results
+        )
+
+        if evaluation.is_sufficient:
+            break
+
+        follow_up = await generate_module_planning_refinement_queries(
+            state, module_id, module, evaluation.knowledge_gaps, queries
+        )
+
+        if not follow_up:
+            break
+
+        new_results = await execute_module_specific_planning_searches(
+            state, module_id, module, follow_up
+        )
+
+        queries.extend(follow_up)
+        results.extend(new_results)
+
+    return queries, results

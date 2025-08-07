@@ -12,6 +12,7 @@ from backend.prompts.learning_path_prompts import SUBMODULE_PLANNING_PROMPT
 from backend.core.submodules.planning_research import (
     generate_module_specific_planning_queries,
     execute_module_specific_planning_searches,
+    gather_planning_research_until_sufficient,
 )
 
 
@@ -27,8 +28,12 @@ async def plan_and_research_module_submodules(
         state, module_id, module
     )
 
-    planning_search_results = await execute_module_specific_planning_searches(
+    initial_planning_results = await execute_module_specific_planning_searches(
         state, module_id, module, planning_queries
+    )
+
+    planning_queries, planning_search_results = await gather_planning_research_until_sufficient(
+        state, module_id, module, planning_queries, initial_planning_results
     )
 
     planning_context_parts = []
