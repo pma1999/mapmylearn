@@ -288,6 +288,13 @@ async def process_single_submodule(
             submodule_search_queries,
             submodule_search_results,
         )
+        # Post-process: enrich with illustrative images
+        try:
+            from backend.core.submodules.content_enrichment import enrich_content_with_images
+            submodule_content = await enrich_content_with_images(state, module, submodule, submodule_content)
+        except Exception as _e:
+            # Non-fatal: keep original content if enrichment fails
+            pass
         content_time = time.time() - step_start
 
         step_start = time.time()

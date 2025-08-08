@@ -191,6 +191,9 @@ async def generate_learning_path(
         "language": language,
         "search_language": search_language,
         "explanation_style": explanation_style,
+        # Image enrichment defaults
+        "images_enrichment_enabled": True,
+        "images_per_submodule": 2,
     }
     
     # Configure and run the graph
