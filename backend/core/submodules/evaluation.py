@@ -8,6 +8,8 @@ from backend.services.services import get_llm_for_evaluation
 from backend.core.graph_nodes.helpers import run_chain, escape_curly_braces
 from backend.prompts.learning_path_prompts import CONTENT_EVALUATION_PROMPT, SUBMODULE_RESEARCH_EVALUATION_PROMPT, CONTENT_REFINEMENT_QUERY_GENERATION_PROMPT
 from backend.parsers.parsers import content_evaluation_parser, research_evaluation_parser, content_refinement_query_parser
+from backend.prompts.learning_path_prompts import MODULE_PLANNING_RESEARCH_EVALUATION_PROMPT
+from backend.parsers.parsers import planning_research_evaluation_parser
 
 
 async def evaluate_content_sufficiency(
@@ -282,3 +284,70 @@ async def generate_content_refinement_queries(
             ),
         ]
         return fallback_queries
+
+
+async def evaluate_module_planning_sufficiency(
+    state: LearningPathState,
+    module_id: int,
+    module: EnhancedModule,
+    planning_search_results: List[SearchServiceResult],
+):
+    """Evaluate if module-level planning research is sufficient to design submodules."""
+    from backend.utils.language_utils import get_full_language_name
+    logger = logging.getLogger("learning_path.module_planning_eval")
+
+    # Reuse the same summary builder as submodule eval for consistency
+    from backend.core.submodules.context_builders import build_enhanced_search_context
+
+    search_summary = build_enhanced_search_context(planning_search_results)
+    output_language = get_full_language_name(state.get("language", "en"))
+
+    prompt = ChatPromptTemplate.from_template(MODULE_PLANNING_RESEARCH_EVALUATION_PROMPT)
+
+    result = await run_chain(
+        prompt,
+        lambda: get_llm_for_evaluation(
+            key_provider=state.get("google_key_provider"), user=state.get("user")
+        ),
+        planning_research_evaluation_parser,
+        {
+            "user_topic": state["user_topic"],
+            "module_title": module.title,
+            "language": output_language,
+            "search_results_summary": search_summary,
+            "format_instructions": planning_research_evaluation_parser.get_format_instructions(),
+        },
+    )
+
+    logger.info(
+        f"Module planning research evaluation {module_id+1}: sufficient={result.is_sufficient}, confidence={result.confidence_score:.2f}"
+    )
+    return result
+
+
+def check_planning_adequacy_local(local_loop_state: dict, planning_evaluation: Any, state: LearningPathState) -> bool:
+    """Decision gate for planning loop based on evaluation result and thresholds in state."""
+    logger = logging.getLogger("learning_path.module_planning_adequacy")
+
+    is_sufficient = getattr(planning_evaluation, "is_sufficient", False)
+    confidence_score = getattr(planning_evaluation, "confidence_score", 0.0)
+    current_loop = local_loop_state["planning_loop_count"]
+    max_loops = local_loop_state["max_planning_loops"]
+
+    min_conf = state.get("planning_min_confidence", 0.75)
+
+    if is_sufficient and confidence_score >= min_conf:
+        logger.info(
+            f"Module planning research is sufficient (confidence: {confidence_score:.2f}) - finalizing"
+        )
+        return True
+    elif current_loop >= max_loops:
+        logger.info(
+            f"Maximum planning loops reached ({max_loops}) - proceeding with current planning research"
+        )
+        return True
+    else:
+        logger.info(
+            f"Module planning research insufficient (confidence: {confidence_score:.2f}, loop: {current_loop}/{max_loops}) - continuing"
+        )
+        return False

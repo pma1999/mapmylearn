@@ -232,6 +232,9 @@ class LearningPathState(TypedDict):
     content_gaps: Optional[List[str]]  # Identified content gaps and deficiencies
     content_confidence_score: Optional[float]  # Confidence in content quality (0.0-1.0)
     content_refinement_queries: Optional[List[SearchQuery]]  # Queries generated for content improvement
+    # Planning loop configuration (module-level iterative planning)
+    max_planning_loops: Optional[int]
+    planning_min_confidence: Optional[float]
     # Key provider references instead of direct API keys
     google_key_provider: Optional[Any]  # GoogleKeyProvider but avoiding import cycles
     pplx_key_provider: Optional[Any]    # PerplexityKeyProvider but avoiding import cycles

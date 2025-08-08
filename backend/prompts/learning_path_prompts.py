@@ -683,6 +683,59 @@ Summarize missing areas as **knowledge gaps** if the research is insufficient.
 {search_results_summary}
 """
 
+# NEW: Module-level Planning Research Evaluation Prompt
+MODULE_PLANNING_RESEARCH_EVALUATION_PROMPT = """
+# EXPERT MODULE STRUCTURE RESEARCH EVALUATOR
+
+You are evaluating whether the collected research is sufficient to DESIGN a high-quality set of submodules for the module "{module_title}" (within the course on "{user_topic}").
+
+## LANGUAGE INSTRUCTIONS
+Provide your analysis in {language}.
+
+## EVALUATION CRITERIA (MODULE-LEVEL STRUCTURING)
+1. Foundational coverage specific to this module
+2. Clear intra-module topic boundaries to define distinct submodules (MECE)
+3. Logical sequencing within the module (progression and dependencies)
+4. Practical/application anchors to justify at least one applied submodule
+5. Identification of advanced/specialized aspects relevant to this module
+
+## SUFFICIENCY STANDARD
+- Enough breadth and depth to confidently define 3-5 submodules with clear boundaries and order
+- Confidence score >= 0.75
+
+If INSUFFICIENT, list high-level structural knowledge gaps to target.
+
+{format_instructions}
+
+## CURRENT RESEARCH SUMMARY FOR THIS MODULE
+{search_results_summary}
+"""
+
+# NEW: Module-level Planning Refinement Query Generation Prompt
+MODULE_PLANNING_REFINEMENT_QUERY_GENERATION_PROMPT = """
+# MODULE PLANNING RESEARCH REFINEMENT
+
+Generate targeted search queries to address module-level structural knowledge gaps for "{module_title}" in the course on "{user_topic}".
+
+## LANGUAGE
+- Write your analysis in {language}
+- Formulate search queries in {search_language}
+
+## KNOWLEDGE GAPS
+{knowledge_gaps}
+
+## EXISTING QUERIES (Avoid redundancy)
+{existing_queries}
+
+Provide 2-4 gap-focused queries optimized to find curriculum structures, syllabi, standard breakdowns, and sequencing within the module. Follow rules:
+- NEVER more than ONE quoted phrase per query
+- Prefer terms like: curriculum structure, module breakdown, teaching sequence, syllabus example, learning objectives progression
+- Balance specificity with breadth to ensure results
+
+{format_instructions}
+"""
+
+# Restored: Submodule-level Research Refinement Prompt (used by submodule research loop)
 SUBMODULE_REFINEMENT_QUERY_GENERATION_PROMPT = """# SUBMODULE RESEARCH REFINEMENT
 
 Generate additional search queries to fill the knowledge gaps for the submodule

@@ -7,12 +7,13 @@ from langchain_core.prompts import ChatPromptTemplate
 from backend.models.models import LearningPathState, EnhancedModule
 from backend.parsers.parsers import submodule_parser
 from backend.services.services import get_llm_with_search
-from backend.core.graph_nodes.helpers import run_chain, escape_curly_braces
 from backend.prompts.learning_path_prompts import SUBMODULE_PLANNING_PROMPT
-from backend.core.submodules.planning_research import (
-    generate_module_specific_planning_queries,
-    execute_module_specific_planning_searches,
-)
+# Defer planning_research imports inside function to avoid circular import
+# from backend.core.submodules.planning_research import (
+#     generate_module_specific_planning_queries,
+#     execute_module_specific_planning_searches,
+#     gather_planning_research_until_sufficient,
+# )
 
 
 async def plan_and_research_module_submodules(
@@ -23,6 +24,15 @@ async def plan_and_research_module_submodules(
         f"Starting combined planning and research for module {module_id+1}: {module.title}"
     )
 
+    # Local import to avoid circular dependency
+    from backend.core.submodules.planning_research import (
+        generate_module_specific_planning_queries,
+        execute_module_specific_planning_searches,
+        gather_planning_research_until_sufficient,
+    )
+    # Import helpers locally to avoid importing graph_nodes package at module load
+    from backend.core.graph_nodes.helpers import escape_curly_braces
+
     planning_queries = await generate_module_specific_planning_queries(
         state, module_id, module
     )
@@ -31,11 +41,31 @@ async def plan_and_research_module_submodules(
         state, module_id, module, planning_queries
     )
 
+    # Iterative planning sufficiency loop
+    progress_callback = state.get("progress_callback")
+    if progress_callback:
+        await progress_callback(
+            f"Starting iterative planning research for module {module_id+1}: {module.title}",
+            phase="module_planning_research",
+            phase_progress=0.0,
+            overall_progress=0.56,
+            action="started",
+        )
+
+    final_queries, final_results, final_evaluation = await gather_planning_research_until_sufficient(
+        state,
+        module_id,
+        module,
+        planning_queries,
+        planning_search_results,
+        progress_callback,
+    )
+
     planning_context_parts = []
     MAX_CONTEXT_CHARS = 5000
     current_chars = 0
 
-    for report in planning_search_results:
+    for report in final_results:
         query = escape_curly_braces(report.query)
         planning_context_parts.append(
             f"\n## Research for Planning Query: \"{query}\"\n"
@@ -93,6 +123,8 @@ async def plan_module_submodules(
     planning_search_context: Optional[str] = None,
 ) -> EnhancedModule:
     logging.info(f"Planning submodules for module {idx+1}: {module.title}")
+    # Import helpers locally to avoid importing graph_nodes package at module load
+    from backend.core.graph_nodes.helpers import run_chain, escape_curly_braces
 
     progress_callback = state.get("progress_callback")
 

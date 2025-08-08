@@ -1,7 +1,7 @@
 import os
 import asyncio
 import logging
-from typing import List, Optional
+from typing import List, Optional, Any, Tuple
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.output_parsers import PydanticOutputParser
@@ -13,12 +13,17 @@ from backend.models.models import (
     SearchServiceResult,
 )
 from backend.services.services import get_llm
-from backend.core.graph_nodes.helpers import escape_curly_braces, run_chain
+# Deferred helper imports inside functions to avoid circular imports with graph_nodes package
 from backend.core.graph_nodes.search_utils import execute_search_with_llm_retry
 from backend.prompts.learning_path_prompts import (
     MODULE_SUBMODULE_PLANNING_QUERY_GENERATION_PROMPT,
 )
 from backend.parsers.parsers import search_queries_parser
+# NEW imports for planning sufficiency loop
+from backend.prompts.learning_path_prompts import MODULE_PLANNING_REFINEMENT_QUERY_GENERATION_PROMPT
+from backend.parsers.parsers import refinement_query_parser
+# Deferred import inside functions to avoid circular imports
+# from backend.core.submodules.evaluation import evaluate_module_planning_sufficiency, check_planning_adequacy_local
 
 
 async def generate_module_specific_planning_queries(
@@ -30,6 +35,7 @@ async def generate_module_specific_planning_queries(
     )
 
     from backend.utils.language_utils import get_full_language_name
+    from backend.core.graph_nodes.helpers import escape_curly_braces, run_chain
 
     google_key_provider = state.get("google_key_provider")
     output_language_code = state.get("language", "en")
@@ -100,6 +106,7 @@ async def regenerate_module_planning_query(
     )
 
     from backend.utils.language_utils import get_full_language_name
+    from backend.core.graph_nodes.helpers import escape_curly_braces
 
     output_language_code = state.get("language", "en")
     search_language_code = state.get("search_language", "en")
@@ -196,6 +203,7 @@ async def execute_module_specific_planning_searches(
 ) -> List[SearchServiceResult]:
     logger = logging.getLogger("learning_path.submodule_planner")
     logger.info(f"Executing web searches for module planning: {module.title}")
+    from backend.core.graph_nodes.helpers import escape_curly_braces
 
     if not planning_queries:
         logger.warning(f"No planning queries provided for module {module.title}")
@@ -282,3 +290,127 @@ async def execute_module_specific_planning_searches(
                 search_provider_error=f"Failed to execute planning searches: {str(e)}",
             )
         ]
+
+# NEW: Generate refinement queries for module planning based on knowledge gaps
+async def generate_module_planning_refinement_queries(
+    state: LearningPathState,
+    module_id: int,
+    module: EnhancedModule,
+    knowledge_gaps: List[str],
+    existing_queries: List[SearchQuery],
+) -> List[SearchQuery]:
+    from backend.utils.language_utils import get_full_language_name
+    logger = logging.getLogger("learning_path.submodule_planner")
+
+    google_key_provider = state.get("google_key_provider")
+    output_language = get_full_language_name(state.get("language", "en"))
+    search_language = get_full_language_name(state.get("search_language", "en"))
+
+    prompt = ChatPromptTemplate.from_template(MODULE_PLANNING_REFINEMENT_QUERY_GENERATION_PROMPT)
+
+    try:
+        from backend.core.graph_nodes.helpers import escape_curly_braces, run_chain
+        result = await run_chain(
+            prompt,
+            lambda: get_llm(
+                key_provider=google_key_provider, user=state.get("user")
+            ),
+            refinement_query_parser,
+            {
+                "user_topic": escape_curly_braces(state["user_topic"]),
+                "module_title": escape_curly_braces(module.title),
+                "language": output_language,
+                "search_language": search_language,
+                "knowledge_gaps": "\n".join([f"- {gap}" for gap in knowledge_gaps]) or "- Missing breadth and sequencing details",
+                "existing_queries": "\n".join([f"- {q.keywords}" for q in existing_queries]),
+                "format_instructions": refinement_query_parser.get_format_instructions(),
+            },
+        )
+        return result.queries
+    except Exception as e:
+        logger.exception(
+            f"Error generating module planning refinement queries for module {module_id+1}: {str(e)}"
+        )
+        # Fallback: simple broad queries based on module title
+        return [
+            SearchQuery(
+                keywords=f"{module.title} syllabus example curriculum structure",
+                rationale="Fallback refinement query"
+            )
+        ]
+
+# NEW: Iterative loop to gather planning research until sufficient
+async def gather_planning_research_until_sufficient(
+    state: LearningPathState,
+    module_id: int,
+    module: EnhancedModule,
+    initial_queries: List[SearchQuery],
+    initial_results: List[SearchServiceResult],
+    progress_callback=None,
+) -> Tuple[List[SearchQuery], List[SearchServiceResult], Any]:
+    logger = logging.getLogger("learning_path.module_planning_loop")
+
+    local_queries = list(initial_queries)
+    local_results = list(initial_results)
+
+    local_loop_state = {
+        "planning_loop_count": 0,
+        "max_planning_loops": state.get("max_planning_loops", 3),
+    }
+
+    while local_loop_state["planning_loop_count"] < local_loop_state["max_planning_loops"]:
+        current_loop = local_loop_state["planning_loop_count"] + 1
+        local_loop_state["planning_loop_count"] = current_loop
+
+        if progress_callback:
+            await progress_callback(
+                f"Evaluating module planning sufficiency for {module.title} (Loop {current_loop})",
+                phase="module_planning_research",
+                phase_progress=0.1 + (current_loop - 1) * 0.25,
+                overall_progress=0.56,
+                action="processing",
+            )
+
+        # Deferred import to avoid circular import at module load
+        from backend.core.submodules.evaluation import evaluate_module_planning_sufficiency, check_planning_adequacy_local
+        evaluation = await evaluate_module_planning_sufficiency(
+            state, module_id, module, local_results
+        )
+
+        if check_planning_adequacy_local(local_loop_state, evaluation, state):
+            break
+
+        if progress_callback:
+            await progress_callback(
+                f"Generating module planning refinement queries for {module.title}",
+                phase="module_planning_research",
+                phase_progress=0.4 + (current_loop - 1) * 0.25,
+                overall_progress=0.57,
+                action="processing",
+            )
+
+        follow_up = await generate_module_planning_refinement_queries(
+            state, module_id, module, getattr(evaluation, "knowledge_gaps", []), local_queries
+        )
+
+        if not follow_up:
+            logger.info("No follow-up planning queries generated; ending planning loop")
+            break
+
+        if progress_callback:
+            await progress_callback(
+                f"Executing {len(follow_up)} planning refinement searches for {module.title}",
+                phase="module_planning_research",
+                phase_progress=0.6 + (current_loop - 1) * 0.25,
+                overall_progress=0.58,
+                action="processing",
+            )
+
+        new_results = await execute_module_specific_planning_searches(
+            state, module_id, module, follow_up
+        )
+
+        local_queries.extend(follow_up)
+        local_results.extend(new_results)
+
+    return local_queries, local_results, locals().get("evaluation")
