@@ -44,7 +44,7 @@ def main():
     print(f"\n=== Submodule Title ===\n{title}")
 
     content = sub.get('content', '')
-    print(f"\n=== Content (first 1200 chars) ===\n{content[:1200]}")
+    print(f"\n=== Content ===\n{content}")
 
     # Quick check for image markdown presence
     has_image = '!["' in content or '![' in content

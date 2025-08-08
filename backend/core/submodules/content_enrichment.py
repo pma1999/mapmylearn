@@ -1,6 +1,6 @@
 import logging
 import re
-from typing import List, Optional, Dict, Any, Set
+from typing import List, Optional, Dict, Any, Set, Tuple
 
 from backend.models.models import EnhancedModule, Submodule, LearningPathState
 from backend.services.image_service import search_wikimedia_images
@@ -13,7 +13,8 @@ logger = logging.getLogger("content_enrichment.images")
 
 
 def _split_into_sections(markdown_text: str) -> List[str]:
-    parts = re.split(r"(\n##[^\n]*\n|\n###[^\n]*\n)", markdown_text)
+    # Split on H2/H3 markdown headings or standalone bold-line headings (**...**)
+    parts = re.split(r"(\n##[^\n]*\n|\n###[^\n]*\n|\n\*\*[^\n]+\*\*\n)", markdown_text)
     combined: List[str] = []
     i = 0
     while i < len(parts):
@@ -29,7 +30,14 @@ def _split_into_sections(markdown_text: str) -> List[str]:
 
 
 def _extract_heading_text(heading_token: str) -> str:
-    return re.sub(r'^#+\s*', '', heading_token.strip())
+    token = heading_token.strip()
+    if token.startswith("##"):
+        return re.sub(r'^#+\s*', '', token)
+    # Handle standalone bold heading lines: **Heading**
+    m = re.match(r'^\*\*([^\n*]+)\*\*$', token)
+    if m:
+        return m.group(1).strip()
+    return token
 
 
 def _determine_query_language(state: LearningPathState, text_pool: List[str]) -> str:
@@ -54,6 +62,7 @@ async def _generate_wikimedia_queries(
     module: EnhancedModule,
     submodule: Submodule,
     section_heading: Optional[str],
+    context_hint: Optional[str] = None,
 ) -> List[str]:
     """Use LLM to produce 3 short, image-friendly queries (2–4 words)."""
     try:
@@ -76,6 +85,7 @@ Context:
 - Module: {module_title}
 - Submodule: {submodule_title}
 - Section: {section_heading}
+ - Image topic hint: {context_hint}
 """
         prompt = ChatPromptTemplate.from_template(prompt_text)
         llm_getter = lambda: get_llm_for_evaluation(state.get("google_key_provider"), user=state.get("user"))
@@ -89,6 +99,7 @@ Context:
                 "module_title": module.title,
                 "submodule_title": submodule.title,
                 "section_heading": section_heading or "",
+                "context_hint": context_hint or "",
             },
             max_retries=2,
             initial_retry_delay=0.5,
@@ -199,9 +210,91 @@ Candidates (JSON):
         return []
 
 
-def _insert_image_markdown(image_url: str, file_page_url: str, alt_text: str) -> str:
+def _insert_image_markdown(image_url: str, file_page_url: str, alt_text: str, caption: Optional[str] = None) -> str:
     attribution = f"Fuente: [Wikimedia Commons]({file_page_url})"
+    if caption and caption.strip():
+        # Use italic caption line for readability
+        return f"\n\n![{alt_text}]({image_url})\n_{caption.strip()}_\n{attribution}\n\n"
     return f"\n\n![{alt_text}]({image_url})\n{attribution}\n\n"
+
+
+async def _select_image_and_caption_with_llm(
+    state: LearningPathState,
+    module: EnhancedModule,
+    submodule: Submodule,
+    section_heading: Optional[str],
+    candidates: List[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """Ask LLM to pick the best image and draft a short caption explaining relevance.
+
+    Returns a dict: {"index": int, "caption": str} or None.
+    """
+    if not candidates:
+        return None
+    try:
+        compact = []
+        for idx, c in enumerate(candidates[:10]):
+            compact.append({
+                "idx": idx,
+                "title": c.get("title", "")[:160],
+                "page": c.get("file_page_url", ""),
+                "url": c.get("url", ""),
+                "w": c.get("width", 0),
+                "h": c.get("height", 0),
+                "mime": c.get("mime", ""),
+            })
+        from json import dumps
+        prompt_text = """
+You select ONE Wikimedia image and write a helpful caption.
+Output strict JSON: {{"index": <number>, "caption": "<short caption>"}}
+Selection rules:
+- Only pick if clearly relevant to the submodule topic/section; else return an empty JSON object
+- Prefer photos that concretely illustrate the topic; favor width>=600 and landscape when possible
+Caption guidelines:
+- Language: {caption_lang}
+- 1 sentence, 12–28 words. Describe what the image shows and why it is relevant to the section.
+- Do not invent facts beyond title/obvious content. Be neutral and concise.
+Context:
+- Module: {module_title}
+- Submodule: {submodule_title}
+- Section: {section_heading}
+Candidates (JSON):
+{candidates_json}
+"""
+        prompt = ChatPromptTemplate.from_template(prompt_text)
+        llm_getter = lambda: get_llm_for_evaluation(state.get("google_key_provider"), user=state.get("user"))
+        raw = await run_chain(
+            prompt,
+            llm_getter,
+            StrOutputParser(),
+            {
+                "caption_lang": state.get("language", "es"),
+                "module_title": module.title,
+                "submodule_title": submodule.title,
+                "section_heading": section_heading or "",
+                "candidates_json": dumps(compact, ensure_ascii=False),
+            },
+            max_retries=1,
+            initial_retry_delay=0.5,
+        )
+        # Extract minimal JSON
+        import json
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            return None
+        data = json.loads(raw[start:end+1])
+        if not isinstance(data, dict):
+            return None
+        if "index" not in data:
+            return None
+        idx = int(data.get("index"))
+        caption = str(data.get("caption", "")).strip()
+        if idx < 0 or idx >= len(compact):
+            return None
+        return {"index": idx, "caption": caption}
+    except Exception as _e:
+        return None
 
 
 async def _find_relevant_image_for_anchor(
@@ -210,9 +303,10 @@ async def _find_relevant_image_for_anchor(
     submodule: Submodule,
     section_heading: Optional[str],
     exclude_urls: Optional[Set[str]] = None,
+    topic_hint: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     # Generate multiple short queries
-    queries = await _generate_wikimedia_queries(state, module, submodule, section_heading)
+    queries = await _generate_wikimedia_queries(state, module, submodule, section_heading, context_hint=topic_hint)
     # Fetch candidates per query and aggregate
     language = state.get("language", "en")
     all_candidates: List[Dict[str, Any]] = []
@@ -231,11 +325,111 @@ async def _find_relevant_image_for_anchor(
 
     if not all_candidates:
         return None
-    # Ask LLM to pick the best (or none)
-    sel = await _rank_images_with_llm(state, module, submodule, section_heading, all_candidates, max_select=1)
-    if not sel:
+    # Ask LLM to pick best and produce a caption
+    selection = await _select_image_and_caption_with_llm(state, module, submodule, section_heading, all_candidates)
+    if selection is None:
         return None
-    return all_candidates[sel[0]]
+    idx = selection["index"]
+    chosen = all_candidates[idx]
+    chosen["caption"] = selection.get("caption")
+    return chosen
+
+
+def _collect_heading_texts(markdown_text: str) -> List[str]:
+    headings_h = re.findall(r"^##\s+([^\n]+)$|^###\s+([^\n]+)$", markdown_text, flags=re.MULTILINE)
+    bold_headings = re.findall(r"^\*\*([^\n*]+)\*\*$", markdown_text, flags=re.MULTILINE)
+    result: List[str] = []
+    for h2, h3 in headings_h:
+        if h2:
+            result.append(h2.strip())
+        elif h3:
+            result.append(h3.strip())
+    for b in bold_headings:
+        text = b.strip()
+        if text and text not in result:
+            result.append(text)
+    return result
+
+
+async def _plan_image_anchors(
+    state: LearningPathState,
+    module: EnhancedModule,
+    submodule: Submodule,
+    content_markdown: str,
+    max_images: int,
+) -> List[Dict[str, str]]:
+    """Ask LLM to propose up to max_images anchors with hints.
+    Returns list of dicts with keys: type (intro|heading), heading (optional), hint (short query hint).
+    """
+    try:
+        headings = _collect_heading_texts(content_markdown)
+        prompt_text = """
+Plan up to {max_images} image insertion anchors for the submodule below.
+Rules:
+- Only choose anchors that clearly benefit from a contextual, illustrative image.
+- Prefer placing after H2/H3 headings; optionally include a single 'intro' image near the start.
+- Ensure each selected anchor is unique and relevant; choose fewer than {max_images} if needed.
+- For each anchor, provide a short 2–4 word topic hint suitable for finding a Wikimedia photo.
+Output strict JSON array, items like:
+  {{"type":"heading", "heading":"<exact heading text>", "hint":"<2-4 words>"}}
+  or {{"type":"intro", "hint":"<2-4 words>"}}
+Context:
+- Module: {module_title}
+- Submodule: {submodule_title}
+- Headings: {headings}
+ - Full content:
+ {content_full}
+"""
+        prompt = ChatPromptTemplate.from_template(prompt_text)
+        llm_getter = lambda: get_llm_for_evaluation(state.get("google_key_provider"), user=state.get("user"))
+        raw = await run_chain(
+            prompt,
+            llm_getter,
+            StrOutputParser(),
+            {
+                "max_images": max_images,
+                "module_title": module.title,
+                "submodule_title": submodule.title,
+                "headings": ", ".join(headings) if headings else "(none)",
+                "content_full": content_markdown,
+            },
+            max_retries=2,
+            initial_retry_delay=0.5,
+        )
+        # Attempt to extract JSON array
+        import json
+        start = raw.find("[")
+        end = raw.rfind("]")
+        if start != -1 and end != -1 and end > start:
+            raw_json = raw[start:end+1]
+            data = json.loads(raw_json)
+            anchors: List[Dict[str, str]] = []
+            seen: Set[Tuple[str, str]] = set()
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                a_type = str(item.get("type", "")).strip().lower()
+                if a_type not in {"intro", "heading"}:
+                    continue
+                hint = str(item.get("hint", "")).strip()
+                if not hint:
+                    continue
+                heading_text = ""
+                if a_type == "heading":
+                    heading_text = str(item.get("heading", "")).strip()
+                    if not heading_text:
+                        continue
+                key = (a_type, heading_text.lower())
+                if key in seen:
+                    continue
+                seen.add(key)
+                anchors.append({"type": a_type, "heading": heading_text, "hint": hint})
+                if len(anchors) >= max_images:
+                    break
+            return anchors
+        return []
+    except Exception as _e:
+        return []
 
 
 async def enrich_content_with_images(
@@ -249,35 +443,96 @@ async def enrich_content_with_images(
             return content_markdown
         if not state.get("images_enrichment_enabled", True):
             return content_markdown
-        max_images = int(state.get("images_per_submodule", 2) or 0)
+        max_images = int(state.get("images_per_submodule", 5) or 0)
         if max_images <= 0:
             return content_markdown
 
         sections = _split_into_sections(content_markdown)
         used_urls: Set[str] = set()
+        # Plan anchors with LLM
+        anchors = await _plan_image_anchors(state, module, submodule, content_markdown, max_images)
+
+        # Fallback: if no anchors proposed, keep previous heuristic (single or per-heading)
+        if not anchors:
+            anchors = []
+            if len(sections) <= 1:
+                anchors.append({"type": "intro", "heading": "", "hint": submodule.title})
+            else:
+                # Propose anchors for first few headings without LLM
+                for i in range(1, len(sections), 2):
+                    heading_text = _extract_heading_text(sections[i])
+                    anchors.append({"type": "heading", "heading": heading_text, "hint": heading_text})
+                    if len(anchors) >= max_images:
+                        break
+
+        # If no headings and single section
         if len(sections) <= 1:
-            img = await _find_relevant_image_for_anchor(state, module, submodule, None, exclude_urls=used_urls)
-            if img:
-                if img["url"] not in used_urls:
+            # For single-section content, insert at most one image after the first paragraph
+            out = content_markdown
+            chosen_anchor = None
+            # Prefer an intro-type anchor; fall back to first available
+            for a in anchors:
+                if a.get("type") == "intro":
+                    chosen_anchor = a
+                    break
+            if not chosen_anchor and anchors:
+                chosen_anchor = anchors[0]
+            if chosen_anchor:
+                hint = chosen_anchor.get("hint") or submodule.title
+                img = await _find_relevant_image_for_anchor(state, module, submodule, None, exclude_urls=used_urls, topic_hint=hint)
+                if img and img["url"] not in used_urls:
                     used_urls.add(img["url"])
-                    insertion = _insert_image_markdown(img["url"], img["file_page_url"], submodule.title)
-                    return re.sub(r"\n\n", f"\n\n{insertion}", content_markdown, count=1)
-            return content_markdown
+                    insertion = _insert_image_markdown(img["url"], img["file_page_url"], submodule.title, caption=img.get("caption"))
+                    # Insert after first paragraph boundary if present
+                    parts = re.split(r"(\n\n)", out, maxsplit=1)
+                    if len(parts) == 3:
+                        out = parts[0] + parts[1] + insertion + parts[2]
+                    else:
+                        out = out + insertion
+            return out
 
         images_inserted = 0
         out_parts: List[str] = []
+        # Index anchors by heading for quick lookup
+        anchors_by_heading: Dict[str, Dict[str, str]] = {
+            (a.get("heading") or "").strip(): a for a in anchors if a.get("type") == "heading" and a.get("heading")
+        }
+        intro_anchors = [a for a in anchors if a.get("type") == "intro"]
+        # Optionally handle one intro image before first heading
+        preface_inserted = False
         i = 0
         while i < len(sections) and images_inserted < max_images:
             part = sections[i]
             out_parts.append(part)
+            # After initial content before first heading, consider intro image
+            if i == 0 and intro_anchors and not preface_inserted:
+                hint = intro_anchors[0].get("hint") or submodule.title
+                img = await _find_relevant_image_for_anchor(state, module, submodule, None, exclude_urls=used_urls, topic_hint=hint)
+                if img and img.get("url") not in used_urls and images_inserted < max_images:
+                    out_parts.append(_insert_image_markdown(img["url"], img["file_page_url"], submodule.title, caption=img.get("caption")))
+                    used_urls.add(img["url"])
+                    images_inserted += 1
+                    preface_inserted = True
             if i + 1 < len(sections):
                 heading = sections[i + 1]
                 out_parts.append(heading)
                 heading_text = _extract_heading_text(heading)
-                img = await _find_relevant_image_for_anchor(state, module, submodule, heading_text, exclude_urls=used_urls)
-                if img and img.get("url") not in used_urls:
+                # If an anchor was planned for this heading, use its hint; otherwise skip
+                planned = anchors_by_heading.get(heading_text)
+                if planned and images_inserted < max_images:
+                    img = await _find_relevant_image_for_anchor(
+                        state,
+                        module,
+                        submodule,
+                        heading_text,
+                        exclude_urls=used_urls,
+                        topic_hint=(planned.get("hint") or heading_text),
+                    )
+                else:
+                    img = None
+                if img and img.get("url") not in used_urls and images_inserted < max_images:
                     alt_text = f"{submodule.title} – {heading_text}" if heading_text else submodule.title
-                    out_parts.append(_insert_image_markdown(img["url"], img["file_page_url"], alt_text))
+                    out_parts.append(_insert_image_markdown(img["url"], img["file_page_url"], alt_text, caption=img.get("caption")))
                     used_urls.add(img["url"])
                     images_inserted += 1
                 i += 2

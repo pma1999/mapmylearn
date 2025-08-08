@@ -193,7 +193,7 @@ async def generate_learning_path(
         "explanation_style": explanation_style,
         # Image enrichment defaults
         "images_enrichment_enabled": True,
-        "images_per_submodule": 2,
+        "images_per_submodule": 5,
     }
     
     # Configure and run the graph
