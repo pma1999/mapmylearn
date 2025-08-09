@@ -89,7 +89,7 @@ async def get_learning_paths(
     # Apply search filter on topic
     if search:
         search_term = f"%{search.lower()}%"
-        query = query.filter(LearningPath.topic.ilike(search_term))
+        query = query.filter(func.lower(LearningPath.topic).like(search_term))
     
     # Apply sorting
     if sort_by == "creation_date":
