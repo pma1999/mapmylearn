@@ -127,15 +127,20 @@ logger.info(f"Static files mounted from: {static_dir}")
 async def startup_db_and_limiter():
     logger.info("Creating database tables if they don't exist...")
     try:
-        # Create base tables
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables initialized successfully")
-        
-        # Apply migrations for schema updates
-        from backend.config.database import apply_migrations
-        logger.info("Applying database migrations...")
-        apply_migrations()
-        logger.info("Database migrations applied successfully")
+        # Only run automatic table creation and ad-hoc migrations in non-production environments
+        environment = os.getenv("ENVIRONMENT", "development")
+        if environment != "production":
+            # Create base tables
+            Base.metadata.create_all(bind=engine)
+            logger.info("Database tables initialized successfully")
+            
+            # Apply migrations for schema updates (SQLite/dev convenience only)
+            from backend.config.database import apply_migrations
+            logger.info("Applying database migrations...")
+            apply_migrations()
+            logger.info("Database migrations applied successfully")
+        else:
+            logger.info("Production environment detected: skipping automatic create_all/apply_migrations; rely on Alembic migrations.")
     except Exception as e:
         logger.error(f"Error initializing database: {str(e)}")
         # Don't raise the exception - we'll let the app start anyway and fail on actual db operations
