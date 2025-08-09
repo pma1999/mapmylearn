@@ -859,6 +859,29 @@ export const downloadLearningPathPDF = async (pathId) => {
   }
 };
 
+/**
+ * Downloads a course as Markdown
+ * @param {string} pathId - ID of the course to download
+ * @returns {Promise<Blob>} - Markdown data as a Blob
+ */
+export const downloadLearningPathMarkdown = async (pathId) => {
+  try {
+    const response = await api.get(
+      `/v1/learning-paths/${pathId}/markdown`,
+      {
+        responseType: 'blob',
+        headers: {
+          'Accept': 'text/markdown'
+        }
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error downloading Markdown:', error);
+    throw new Error(error.message || 'Failed to download Markdown');
+  }
+};
+
 // Get user credits
 export const getUserCredits = async () => {
   try {
@@ -1308,6 +1331,7 @@ export default {
   deleteLearningPath,
   checkAuthStatus,
   downloadLearningPathPDF,
+  downloadLearningPathMarkdown,
   getUserCredits,
   getUsers,
   getUser,

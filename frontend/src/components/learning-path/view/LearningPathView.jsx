@@ -107,6 +107,7 @@ const LearningPathView = ({ source }) => {
     setFavorite,
     handleHomeClick,
     handleNewLearningPathClick,
+    handleDownloadMarkdown,
 
     // Sharing actions
     handleTogglePublic,
@@ -271,6 +272,7 @@ const LearningPathView = ({ source }) => {
               isCopying={isCopying} 
               viewMode={viewMode}
               onBackToOverview={switchToOverview}
+              onDownloadMarkdown={handleDownloadMarkdown}
             />
 
             {/* Topic Resources Section */}

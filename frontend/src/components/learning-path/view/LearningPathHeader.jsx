@@ -34,6 +34,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import { motion } from 'framer-motion';
 import InfoTooltip from '../../shared/InfoTooltip';
 import { helpTexts } from '../../../constants/helpTexts';
+import ArticleIcon from '@mui/icons-material/Article';
 
 /**
  * Header component for course display
@@ -63,6 +64,7 @@ import { helpTexts } from '../../../constants/helpTexts';
  * @param {boolean} [props.isCopying=false] Loading state for the copy operation
  * @param {string} [props.viewMode='overview'] Current view mode ('overview' or 'focus')
  * @param {Function} [props.onBackToOverview] Handler to go back to overview mode
+ * @param {Function} [props.onDownloadMarkdown] Handler for Markdown download
  * @returns {JSX.Element} Header component
  */
 const LearningPathHeader = ({ 
@@ -89,7 +91,8 @@ const LearningPathHeader = ({
   onCopyToHistory,
   isCopying = false,
   viewMode = 'overview',
-  onBackToOverview
+  onBackToOverview,
+  onDownloadMarkdown
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -344,6 +347,20 @@ const LearningPathHeader = ({
                   </motion.div>
 
                   <motion.div variants={buttonVariants} sx={{ flex: 1 }}>
+                    <Tooltip title="Download as Markdown">
+                      <Button
+                        variant="outlined"
+                        fullWidth
+                        startIcon={<ArticleIcon />}
+                        onClick={onDownloadMarkdown}
+                        size={isMobile ? "small" : "medium"}
+                      >
+                        Markdown
+                      </Button>
+                    </Tooltip>
+                  </motion.div>
+
+                  <motion.div variants={buttonVariants} sx={{ flex: 1 }}>
                     <Tooltip title="Save for offline use">
                       <Button
                         variant="outlined"
@@ -440,6 +457,18 @@ const LearningPathHeader = ({
                       onClick={onDownload}
                     >
                       JSON
+                    </Button>
+                  </Tooltip>
+                </motion.div>
+
+                <motion.div variants={buttonVariants}>
+                  <Tooltip title="Download as Markdown">
+                    <Button
+                      variant="outlined"
+                      startIcon={<ArticleIcon />}
+                      onClick={onDownloadMarkdown}
+                    >
+                      Markdown
                     </Button>
                   </Tooltip>
                 </motion.div>
@@ -554,6 +583,7 @@ LearningPathHeader.propTypes = {
   isCopying: PropTypes.bool,
   viewMode: PropTypes.string,
   onBackToOverview: PropTypes.func,
+  onDownloadMarkdown: PropTypes.func,
 };
 
 export default LearningPathHeader;

@@ -269,6 +269,7 @@ const HistoryPage = () => {
     handleToggleFavorite,
     handleUpdateTags,
     handleDownloadPDF,
+    handleDownloadMarkdown,
     handleTogglePublic,
     handleCopyShareLink
   } = useHistoryActions(showNotification, refreshEntries);
@@ -300,6 +301,7 @@ const HistoryPage = () => {
     onToggleFavorite: handleToggleFavorite,
     onUpdateTags: handleUpdateTags,
     onDownloadPDF: handleDownloadPDF,
+    onDownloadMarkdown: handleDownloadMarkdown,
     onExport: handleExportEntry,
     onTogglePublic: handleTogglePublic,
     onCopyShareLink: handleCopyShareLink,
@@ -314,6 +316,7 @@ const HistoryPage = () => {
     handleToggleFavorite, 
     handleUpdateTags, 
     handleDownloadPDF, 
+    handleDownloadMarkdown, 
     handleExportEntry, 
     handleTogglePublic, 
     handleCopyShareLink,

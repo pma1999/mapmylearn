@@ -61,6 +61,7 @@ const generateShareLink = (shareId) => {
  * @param {Function} props.onUpdateTags - Handler for updating tags
  * @param {Function} props.onExport - Handler for exporting entry as JSON
  * @param {Function} props.onDownloadPDF - Handler for downloading entry as PDF
+ * @param {Function} props.onDownloadMarkdown - Handler for downloading entry as Markdown
  * @param {Function} props.onTogglePublic - Handler for toggling public status
  * @param {Function} props.onCopyShareLink - Handler for copying share link
  * @param {boolean} props.virtualized - Whether the card is being rendered in a virtualized list
@@ -74,6 +75,7 @@ const HistoryEntryCard = memo(({
   onUpdateTags, 
   onExport,
   onDownloadPDF,
+  onDownloadMarkdown,
   onTogglePublic,
   onCopyShareLink,
   virtualized = false
@@ -118,6 +120,11 @@ const HistoryEntryCard = memo(({
     handleCloseActionsMenu();
     onDownloadPDF(entry.path_id);
   }, [handleCloseActionsMenu, onDownloadPDF, entry.path_id]);
+  
+  const handleDownloadMarkdown = useCallback(() => {
+    handleCloseActionsMenu();
+    onDownloadMarkdown(entry.path_id);
+  }, [handleCloseActionsMenu, onDownloadMarkdown, entry.path_id]);
   
   const handleViewDetails = useCallback(() => {
     onView(entry.path_id);
@@ -311,6 +318,12 @@ const HistoryEntryCard = memo(({
           </ListItemIcon>
           <ListItemText primaryTypographyProps={{ variant: 'body2' }}>Download PDF</ListItemText>
         </MenuItem>
+        <MenuItem onClick={handleDownloadMarkdown}>
+          <ListItemIcon>
+            <DownloadIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primaryTypographyProps={{ variant: 'body2' }}>Download Markdown</ListItemText>
+        </MenuItem>
         <Divider />
         <MenuItem onClick={handleConfirmDelete} sx={{ color: 'error.main' }}>
           <ListItemIcon>
@@ -419,6 +432,7 @@ HistoryEntryCard.propTypes = {
   onUpdateTags: PropTypes.func.isRequired,
   onExport: PropTypes.func.isRequired,
   onDownloadPDF: PropTypes.func.isRequired,
+  onDownloadMarkdown: PropTypes.func.isRequired,
   onTogglePublic: PropTypes.func.isRequired,
   onCopyShareLink: PropTypes.func.isRequired,
   virtualized: PropTypes.bool

@@ -5,6 +5,7 @@ import {
   updateHistoryEntry,
   downloadLearningPathPDF,
   getHistoryEntry,
+  downloadLearningPathMarkdown,
 } from '../../../services/api';
 import { saveOfflinePath } from '../../../services/offlineService';
 
@@ -136,6 +137,177 @@ const useLearningPathActions = (
       showNotification('Failed to download PDF', 'error');
       return { savedToHistory: false };
     }
+  };
+
+  /**
+   * Downloads the course as Markdown.
+   * Uses backend for persisted entries; otherwise builds client-side from actualPathData.
+   */
+  const handleDownloadMarkdown = async () => {
+    if (!learningPath) return;
+
+    try {
+      showNotification('Preparing Markdown...', 'info');
+
+      // Prefer server export when we have a persisted entry
+      if (entryId) {
+        const mdBlob = await downloadLearningPathMarkdown(entryId);
+        const url = URL.createObjectURL(mdBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        const fileName = learningPath.topic
+          ? `course_${learningPath.topic.replace(/\s+/g, '_').substring(0, 30)}.md`
+          : 'course.md';
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showNotification('Markdown downloaded successfully', 'success');
+        return;
+      }
+
+      // Fallback: build client-side Markdown from the in-memory data
+      const md = buildClientMarkdown(learningPath);
+      const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const fileName = learningPath.topic
+        ? `course_${learningPath.topic.replace(/\s+/g, '_').substring(0, 30)}.md`
+        : 'course.md';
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showNotification('Markdown downloaded successfully', 'success');
+    } catch (err) {
+      console.error('Error downloading Markdown:', err);
+      showNotification('Failed to download Markdown', 'error');
+    }
+  };
+
+  // Lightweight client-side Markdown assembler mirroring backend structure
+  const buildClientMarkdown = (lp) => {
+    const topic = lp?.topic || 'Untitled Course';
+    const creationDate = (lp?.creation_date) ? new Date(lp.creation_date) : null;
+    const lastModified = (lp?.last_modified_date) ? new Date(lp.last_modified_date) : null;
+    const tags = lp?.tags || [];
+    const source = lp?.source || 'generated';
+
+    const fmt = (d) => (d && !isNaN(d.getTime())) ? d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A';
+
+    const preprocess = (text) => {
+      if (!text) return '';
+      let t = String(text);
+      if (t.startsWith('```markdown\n')) t = t.replace(/^```markdown\n/, '');
+      t = t.replace(/(^|\n)(\#{1,6})([^\s#])/g, '$1$2 $3');
+      return t;
+    };
+
+    const getModules = () => {
+      const pd = lp?.path_data || {};
+      let modules = Array.isArray(pd.modules) ? pd.modules : [];
+      if (!modules.length && pd.content && Array.isArray(pd.content.modules)) {
+        modules = pd.content.modules;
+      }
+      if (!modules.length) {
+        const firstList = Object.values(pd).find(v => Array.isArray(v) && v.every(it => typeof it === 'object'));
+        modules = Array.isArray(firstList) ? firstList : [];
+      }
+      return modules;
+    };
+
+    const lines = [];
+    lines.push(`# ${topic}`);
+    lines.push('');
+    lines.push(`- Created: ${fmt(creationDate)}`);
+    if (lastModified) lines.push(`- Last Modified: ${fmt(lastModified)}`);
+    if (tags.length) lines.push(`- Tags: ${tags.join(', ')}`);
+    lines.push(`- Source: ${source}`);
+    lines.push('');
+
+    const modules = getModules();
+    if (modules.length) {
+      lines.push('## Table of Contents');
+      modules.forEach((m, i) => {
+        const mt = m?.title || `Module ${i + 1}`;
+        lines.push(`- ${i + 1}. ${mt}`);
+        const sub = m?.submodules || m?.sub_modules || m?.subModules || m?.subjects || m?.topics || m?.subtopics || m?.lessons || [];
+        if (Array.isArray(sub) && sub.length) {
+          sub.forEach((s, j) => lines.push(`  - ${i + 1}.${j + 1} ${s?.title || `Subtopic ${j + 1}`}`));
+        }
+      });
+      lines.push('');
+    }
+
+    modules.forEach((m, i) => {
+      const mt = m?.title || `Module ${i + 1}`;
+      lines.push(`## ${mt}`);
+      lines.push('');
+      const mdesc = preprocess(m?.description || '');
+      if (mdesc) {
+        lines.push(mdesc.trim());
+        lines.push('');
+      }
+      const mres = Array.isArray(m?.resources) ? m.resources : [];
+      if (mres.length) {
+        lines.push('### Resources');
+        mres.forEach(r => {
+          const title = r?.title || 'Untitled';
+          const url = r?.url;
+          const t = r?.type;
+          const d = r?.description;
+          let bullet = url ? `- [${title}](${url})` : `- ${title}`;
+          const parts = [];
+          if (t) parts.push(t);
+          if (d) parts.push(d);
+          if (parts.length) bullet += ` — ${parts.join(' | ')}`;
+          lines.push(bullet);
+        });
+        lines.push('');
+      }
+      const sub = m?.submodules || m?.sub_modules || m?.subModules || m?.subjects || m?.topics || m?.subtopics || m?.lessons || [];
+      if (Array.isArray(sub)) {
+        sub.forEach((s, j) => {
+          const st = s?.title || `Subtopic ${j + 1}`;
+          lines.push(`### ${st}`);
+          lines.push('');
+          const sdesc = preprocess(s?.description || '');
+          const scontent = preprocess(s?.content || '');
+          if (sdesc) {
+            lines.push(sdesc.trim());
+            lines.push('');
+          }
+          if (scontent) {
+            lines.push(scontent.trim());
+            lines.push('');
+          }
+          const sres = Array.isArray(s?.resources) ? s.resources : [];
+          if (sres.length) {
+            lines.push('### Resources');
+            sres.forEach(r => {
+              const title = r?.title || 'Untitled';
+              const url = r?.url;
+              const t = r?.type;
+              const d = r?.description;
+              let bullet = url ? `- [${title}](${url})` : `- ${title}`;
+              const parts = [];
+              if (t) parts.push(t);
+              if (d) parts.push(d);
+              if (parts.length) bullet += ` — ${parts.join(' | ')}`;
+              lines.push(bullet);
+            });
+            lines.push('');
+          }
+        });
+      }
+    });
+
+    lines.push(`\n---\nGenerated on ${new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}`);
+
+    return lines.join('\n').trim() + '\n';
   };
 
   /**
@@ -303,6 +475,7 @@ const useLearningPathActions = (
     // Actions
     handleDownloadJSON,
     handleDownloadPDF,
+    handleDownloadMarkdown,
     handleHomeClick,
     handleNewLearningPathClick,
     handleSaveToHistory,

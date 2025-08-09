@@ -22,6 +22,7 @@ from backend.schemas.auth_schemas import (
 )
 from backend.utils.auth_middleware import get_current_user, get_optional_user
 from backend.utils.pdf_generator import generate_pdf, create_filename
+from backend.utils.markdown_exporter import generate_markdown, create_md_filename
 # Import the new audio generation service
 from backend.services.audio_service import generate_submodule_audio 
 # Import the new visualization generation service
@@ -558,6 +559,41 @@ async def download_learning_path_pdf(
             detail=f"Error generating PDF: {str(e)}"
         )
 
+
+@router.get("/{path_id}/markdown")
+async def download_learning_path_markdown(
+    path_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate and download a Markdown version of a specific course.
+    """
+    learning_path = db.query(LearningPath).filter(
+        LearningPath.path_id == path_id,
+        LearningPath.user_id == user.id
+    ).first()
+
+    if not learning_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Learning path not found"
+        )
+
+    try:
+        md_content = generate_markdown(learning_path.__dict__, user.full_name)
+        filename = create_md_filename(learning_path.topic)
+        from fastapi.responses import StreamingResponse
+        import io
+        buf = io.BytesIO(md_content.encode("utf-8"))
+        response = StreamingResponse(buf, media_type="text/markdown; charset=utf-8")
+        response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+        return response
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating Markdown: {str(e)}"
+        )
 
 # --- Updated Audio Generation Endpoint ---
 @router.post(

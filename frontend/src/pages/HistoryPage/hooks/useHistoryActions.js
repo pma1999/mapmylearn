@@ -105,6 +105,31 @@ const useHistoryActions = (showNotification, refreshEntries) => {
     }
   };
 
+  /**
+   * Download a single course as Markdown file
+   * @param {string} pathId - path_id of the entry to download as Markdown
+   */
+  const handleDownloadMarkdown = async (pathId) => {
+    try {
+      showNotification('Preparing Markdown...', 'info');
+      const response = await api.getHistoryEntry(pathId);
+      const topic = response.entry.topic;
+      const mdBlob = await api.downloadLearningPathMarkdown(pathId);
+      const url = URL.createObjectURL(mdBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `course_${topic.replace(/\s+/g, '_')}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showNotification('Markdown downloaded successfully', 'success');
+    } catch (error) {
+      console.error('Error downloading Markdown:', error);
+      showNotification('Failed to download Markdown: ' + (error.message || 'Unknown error'), 'error');
+    }
+  };
+
   // --- Use the shared hook for sharing actions ---
   // Pass refreshEntries as the onComplete callback
   const { handleTogglePublic, handleCopyShareLink } = usePathSharingActions(showNotification, refreshEntries);
@@ -116,6 +141,7 @@ const useHistoryActions = (showNotification, refreshEntries) => {
     handleToggleFavorite,
     handleUpdateTags,
     handleDownloadPDF,
+    handleDownloadMarkdown,
     // Add new actions from the shared hook
     handleTogglePublic,
     handleCopyShareLink
