@@ -4,7 +4,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import InfoIcon from '@mui/icons-material/Info';
 import SchoolIcon from '@mui/icons-material/School';
 import { Link as RouterLink } from 'react-router';
-import { getOfflinePaths, removeOfflinePath, estimateUsage, getOfflinePathsIndex } from '../../services/offlineService';
+import { getOfflinePaths, removeOfflinePath, estimateUsage } from '../../services/offlineService';
 import { usePwaIntro } from '../../contexts/PwaIntroContext';
 
 const OfflinePage = () => {
