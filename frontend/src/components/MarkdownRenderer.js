@@ -159,6 +159,14 @@ const MarkdownRenderer = ({ children }) => {
         display: 'block',
         my: theme.spacing(2.5),
         border: `1px solid ${theme.palette.divider}`,
+        marginLeft: 'auto',
+        marginRight: 'auto',
+        // Desktop: cap overly wide/tall images and keep them centered
+        [theme.breakpoints.up('md')]: {
+          maxWidth: 900, // px cap on desktop for better readability
+          maxHeight: 560, // avoid extremely tall portrait images
+          objectFit: 'contain',
+        },
       },
       '& table': {
         borderCollapse: 'separate',

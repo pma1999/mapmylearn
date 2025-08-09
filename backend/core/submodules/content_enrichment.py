@@ -11,9 +11,84 @@ from langchain_core.output_parsers import StrOutputParser
 
 logger = logging.getLogger("content_enrichment.images")
 
+# --- Module-level prompt templates (verbatim) ---
+PROMPT_WIKIMEDIA_QUERIES = """
+You generate concise Wikimedia Commons image search terms.
+Produce 3 lines, each ONE query. 2–4 words, no quotes, no punctuation.
+Guidelines:
+- Prefer concrete, visual subjects (people, places, institutions, events, objects, scenes)
+- Avoid abstract phrases like "economic policy changes" or generic words like "context"
+- Avoid years unless iconic (e.g., "Reagan 1981 inauguration")
+- Use {query_language} unless the concept is an English-only term
+- Keep it broad enough to likely have photos on Wikimedia
+Context:
+- Course topic: {user_topic}
+- Module: {module_title}
+- Submodule: {submodule_title}
+- Section: {section_heading}
+ - Image topic hint: {context_hint}
+"""
+
+PROMPT_IMAGE_RANKING = """
+You are selecting relevant Wikimedia images for a submodule.
+Return a JSON array of selected indices from the candidate list (e.g., [0] or [] or [1,2]), maximum {max_sel}.
+Selection rules:
+- Only select if clearly relevant to the submodule topic/section; otherwise return []
+- Prefer photos illustrating concrete entities/events/institutions related to the topic
+- Avoid generic cityscapes, random buildings, unrelated portraits
+- Prefer landscape orientation and width>=600 when possible
+Context:
+- Module: {module_title}
+- Submodule: {submodule_title}
+- Section: {section_heading}
+Candidates (JSON):
+{candidates_json}
+"""
+
+PROMPT_IMAGE_SELECTION_WITH_CAPTION = """
+You select ONE Wikimedia image and write a helpful caption.
+Output strict JSON: {{"index": <number>, "caption": "<short caption>"}}
+Selection rules:
+- Only pick if clearly relevant to the submodule topic/section; else return an empty JSON object
+- Prefer photos that concretely illustrate the topic; favor width>=600 and landscape when possible
+Caption guidelines:
+- Language: {caption_lang}
+- 1 sentence, 12–28 words. Describe what the image shows and why it is relevant to the section.
+- Do not invent facts beyond title/obvious content. Be neutral and concise.
+Context:
+- Module: {module_title}
+- Submodule: {submodule_title}
+- Section: {section_heading}
+Candidates (JSON):
+{candidates_json}
+"""
+
+PROMPT_PLAN_IMAGE_ANCHORS = """
+Plan up to {max_images} image insertion anchors for the submodule below.
+Rules:
+- Only choose anchors that clearly benefit from a contextual, illustrative image.
+- Prefer placing after H2/H3 headings; optionally include a single 'intro' image near the start.
+- Ensure each selected anchor is unique and relevant; choose fewer than {max_images} if needed.
+- For each anchor, provide a short 2–4 word topic hint suitable for finding a Wikimedia photo.
+Output strict JSON array, items like:
+  {{"type":"heading", "heading":"<exact heading text>", "hint":"<2-4 words>"}}
+  or {{"type":"intro", "hint":"<2-4 words>"}}
+Context:
+- Module: {module_title}
+- Submodule: {submodule_title}
+- Headings: {headings}
+ - Full content:
+ {content_full}
+"""
+
+# --- Text parsing helpers ---
 
 def _split_into_sections(markdown_text: str) -> List[str]:
-    # Split on H2/H3 markdown headings or standalone bold-line headings (**...**)
+    """Split markdown into alternating content and heading tokens.
+
+    Splits on H2/H3 markdown headings or standalone bold-line headings (**...**),
+    preserving separators so that insertion points can be located precisely.
+    """
     parts = re.split(r"(\n##[^\n]*\n|\n###[^\n]*\n|\n\*\*[^\n]+\*\*\n)", markdown_text)
     combined: List[str] = []
     i = 0
@@ -30,6 +105,11 @@ def _split_into_sections(markdown_text: str) -> List[str]:
 
 
 def _extract_heading_text(heading_token: str) -> str:
+    """Extract clean heading text from a heading token.
+
+    Supports '##' or '###' markdown headings and standalone bold headings (**Heading**).
+    If no known pattern matches, returns the token as-is (stripped).
+    """
     token = heading_token.strip()
     if token.startswith("##"):
         return re.sub(r'^#+\s*', '', token)
@@ -40,7 +120,30 @@ def _extract_heading_text(heading_token: str) -> str:
     return token
 
 
+def _collect_heading_texts(markdown_text: str) -> List[str]:
+    """Collect H2/H3 and bold-line headings as plain texts in encountered order."""
+    headings_h = re.findall(r"^##\s+([^\n]+)$|^###\s+([^\n]+)$", markdown_text, flags=re.MULTILINE)
+    bold_headings = re.findall(r"^\*\*([^\n*]+)\*\*$", markdown_text, flags=re.MULTILINE)
+    result: List[str] = []
+    for h2, h3 in headings_h:
+        if h2:
+            result.append(h2.strip())
+        elif h3:
+            result.append(h3.strip())
+    for b in bold_headings:
+        text = b.strip()
+        if text and text not in result:
+            result.append(text)
+    return result
+
+
+# --- Language heuristics ---
+
 def _determine_query_language(state: LearningPathState, text_pool: List[str]) -> str:
+    """Heuristically choose a language code based on country keywords in provided texts.
+
+    Returns 'en' if no match is found.
+    """
     joined = " ".join([t for t in text_pool if t])
     lower = joined.lower()
     country_to_lang = {
@@ -57,6 +160,8 @@ def _determine_query_language(state: LearningPathState, text_pool: List[str]) ->
     return "en"
 
 
+# --- Wikimedia integration and LLM helpers ---
+
 async def _generate_wikimedia_queries(
     state: LearningPathState,
     module: EnhancedModule,
@@ -64,30 +169,14 @@ async def _generate_wikimedia_queries(
     section_heading: Optional[str],
     context_hint: Optional[str] = None,
 ) -> List[str]:
-    """Use LLM to produce 3 short, image-friendly queries (2–4 words)."""
+    """Use LLM to produce up to 3 short, image-friendly queries (2–4 words)."""
     try:
         language_for_queries = _determine_query_language(
             state,
             [state.get("user_topic", ""), module.title, submodule.title, section_heading or ""]
         )
 
-        prompt_text = """
-You generate concise Wikimedia Commons image search terms.
-Produce 3 lines, each ONE query. 2–4 words, no quotes, no punctuation.
-Guidelines:
-- Prefer concrete, visual subjects (people, places, institutions, events, objects, scenes)
-- Avoid abstract phrases like "economic policy changes" or generic words like "context"
-- Avoid years unless iconic (e.g., "Reagan 1981 inauguration")
-- Use {query_language} unless the concept is an English-only term
-- Keep it broad enough to likely have photos on Wikimedia
-Context:
-- Course topic: {user_topic}
-- Module: {module_title}
-- Submodule: {submodule_title}
-- Section: {section_heading}
- - Image topic hint: {context_hint}
-"""
-        prompt = ChatPromptTemplate.from_template(prompt_text)
+        prompt = ChatPromptTemplate.from_template(PROMPT_WIKIMEDIA_QUERIES)
         llm_getter = lambda: get_llm_for_evaluation(state.get("google_key_provider"), user=state.get("user"))
         output = await run_chain(
             prompt,
@@ -151,7 +240,10 @@ async def _rank_images_with_llm(
     candidates: List[Dict[str, Any]],
     max_select: int = 1,
 ) -> List[int]:
-    """Ask LLM to select up to max_select relevant image indices from candidates, or none."""
+    """Ask LLM to select up to max_select relevant image indices from candidates, or none.
+
+    Note: Currently unused by the enrichment flow, retained for potential future use.
+    """
     if not candidates:
         return []
     try:
@@ -168,23 +260,8 @@ async def _rank_images_with_llm(
                 "mime": c.get("mime", ""),
             })
 
-        prompt_text = """
-You are selecting relevant Wikimedia images for a submodule.
-Return a JSON array of selected indices from the candidate list (e.g., [0] or [] or [1,2]), maximum {max_sel}.
-Selection rules:
-- Only select if clearly relevant to the submodule topic/section; otherwise return []
-- Prefer photos illustrating concrete entities/events/institutions related to the topic
-- Avoid generic cityscapes, random buildings, unrelated portraits
-- Prefer landscape orientation and width>=600 when possible
-Context:
-- Module: {module_title}
-- Submodule: {submodule_title}
-- Section: {section_heading}
-Candidates (JSON):
-{candidates_json}
-"""
         from json import dumps
-        prompt = ChatPromptTemplate.from_template(prompt_text)
+        prompt = ChatPromptTemplate.from_template(PROMPT_IMAGE_RANKING)
         llm_getter = lambda: get_llm_for_evaluation(state.get("google_key_provider"), user=state.get("user"))
         output = await run_chain(
             prompt,
@@ -211,6 +288,7 @@ Candidates (JSON):
 
 
 def _insert_image_markdown(image_url: str, file_page_url: str, alt_text: str, caption: Optional[str] = None) -> str:
+    """Create the markdown block for an image with optional caption and attribution in Spanish."""
     attribution = f"Fuente: [Wikimedia Commons]({file_page_url})"
     if caption and caption.strip():
         # Use italic caption line for readability
@@ -244,24 +322,7 @@ async def _select_image_and_caption_with_llm(
                 "mime": c.get("mime", ""),
             })
         from json import dumps
-        prompt_text = """
-You select ONE Wikimedia image and write a helpful caption.
-Output strict JSON: {{"index": <number>, "caption": "<short caption>"}}
-Selection rules:
-- Only pick if clearly relevant to the submodule topic/section; else return an empty JSON object
-- Prefer photos that concretely illustrate the topic; favor width>=600 and landscape when possible
-Caption guidelines:
-- Language: {caption_lang}
-- 1 sentence, 12–28 words. Describe what the image shows and why it is relevant to the section.
-- Do not invent facts beyond title/obvious content. Be neutral and concise.
-Context:
-- Module: {module_title}
-- Submodule: {submodule_title}
-- Section: {section_heading}
-Candidates (JSON):
-{candidates_json}
-"""
-        prompt = ChatPromptTemplate.from_template(prompt_text)
+        prompt = ChatPromptTemplate.from_template(PROMPT_IMAGE_SELECTION_WITH_CAPTION)
         llm_getter = lambda: get_llm_for_evaluation(state.get("google_key_provider"), user=state.get("user"))
         raw = await run_chain(
             prompt,
@@ -305,6 +366,7 @@ async def _find_relevant_image_for_anchor(
     exclude_urls: Optional[Set[str]] = None,
     topic_hint: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
+    """Generate queries, search Wikimedia, and select the best candidate with a caption."""
     # Generate multiple short queries
     queries = await _generate_wikimedia_queries(state, module, submodule, section_heading, context_hint=topic_hint)
     # Fetch candidates per query and aggregate
@@ -335,21 +397,7 @@ async def _find_relevant_image_for_anchor(
     return chosen
 
 
-def _collect_heading_texts(markdown_text: str) -> List[str]:
-    headings_h = re.findall(r"^##\s+([^\n]+)$|^###\s+([^\n]+)$", markdown_text, flags=re.MULTILINE)
-    bold_headings = re.findall(r"^\*\*([^\n*]+)\*\*$", markdown_text, flags=re.MULTILINE)
-    result: List[str] = []
-    for h2, h3 in headings_h:
-        if h2:
-            result.append(h2.strip())
-        elif h3:
-            result.append(h3.strip())
-    for b in bold_headings:
-        text = b.strip()
-        if text and text not in result:
-            result.append(text)
-    return result
-
+# --- Anchor planning via LLM ---
 
 async def _plan_image_anchors(
     state: LearningPathState,
@@ -359,28 +407,12 @@ async def _plan_image_anchors(
     max_images: int,
 ) -> List[Dict[str, str]]:
     """Ask LLM to propose up to max_images anchors with hints.
+
     Returns list of dicts with keys: type (intro|heading), heading (optional), hint (short query hint).
     """
     try:
         headings = _collect_heading_texts(content_markdown)
-        prompt_text = """
-Plan up to {max_images} image insertion anchors for the submodule below.
-Rules:
-- Only choose anchors that clearly benefit from a contextual, illustrative image.
-- Prefer placing after H2/H3 headings; optionally include a single 'intro' image near the start.
-- Ensure each selected anchor is unique and relevant; choose fewer than {max_images} if needed.
-- For each anchor, provide a short 2–4 word topic hint suitable for finding a Wikimedia photo.
-Output strict JSON array, items like:
-  {{"type":"heading", "heading":"<exact heading text>", "hint":"<2-4 words>"}}
-  or {{"type":"intro", "hint":"<2-4 words>"}}
-Context:
-- Module: {module_title}
-- Submodule: {submodule_title}
-- Headings: {headings}
- - Full content:
- {content_full}
-"""
-        prompt = ChatPromptTemplate.from_template(prompt_text)
+        prompt = ChatPromptTemplate.from_template(PROMPT_PLAN_IMAGE_ANCHORS)
         llm_getter = lambda: get_llm_for_evaluation(state.get("google_key_provider"), user=state.get("user"))
         raw = await run_chain(
             prompt,
@@ -432,12 +464,18 @@ Context:
         return []
 
 
+# --- Public API ---
+
 async def enrich_content_with_images(
     state: LearningPathState,
     module: EnhancedModule,
     submodule: Submodule,
     content_markdown: str,
 ) -> str:
+    """Enrich markdown content with contextual images from Wikimedia Commons.
+
+    Behavior-preserving refactor: identical logic, prompts, and outputs; improved organization and typing only.
+    """
     try:
         if not content_markdown or not content_markdown.strip():
             return content_markdown
