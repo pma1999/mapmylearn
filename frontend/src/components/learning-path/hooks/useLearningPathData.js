@@ -78,13 +78,14 @@ const useLearningPathData = (source = null) => {
       try {
         if (shouldLoadOffline) {
           console.log('useLearningPathData: Loading offline path...', offlineId);
-          const offlineData = getOfflinePath(offlineId);
+          const offlineData = await getOfflinePath(offlineId);
           if (!offlineData) {
             throw new Error('Offline learning path not found.');
           }
           setData(offlineData);
           setIsFromHistory(false);
-          setPersistentPathId(offlineId);
+          // Do not treat offlineId as persistent path id for server-backed features
+          setPersistentPathId(null);
           setInitialDetailsWereSet(true);
           setProgressMap(offlineData.progress_map || {});
           setLastVisitedModuleIdx(offlineData.last_visited_module_idx);

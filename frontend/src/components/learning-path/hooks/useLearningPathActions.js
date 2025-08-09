@@ -250,16 +250,22 @@ const useLearningPathActions = (
     }
   };
 
-  const handleSaveOffline = () => {
+  const handleSaveOffline = async () => {
     if (!learningPath) {
       showNotification('Learning path data is not available.', 'error');
       return;
     }
-    const id = saveOfflinePath(learningPath);
-    if (id) {
-      showNotification('Saved for offline use', 'success');
-    } else {
-      showNotification('Failed to save offline', 'error');
+    try {
+      showNotification('Saving for offline use...', 'info');
+      const id = await saveOfflinePath(learningPath);
+      if (id) {
+        showNotification('Saved for offline use', 'success');
+      } else {
+        showNotification('Failed to save offline. Please free up storage and try again.', 'error');
+      }
+    } catch (e) {
+      console.error('Offline save error:', e);
+      showNotification('Failed to save offline. Please free up storage and try again.', 'error');
     }
   };
   

@@ -4,40 +4,56 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import InfoIcon from '@mui/icons-material/Info';
 import SchoolIcon from '@mui/icons-material/School';
 import { Link as RouterLink } from 'react-router';
-import { getOfflinePaths, removeOfflinePath } from '../../services/offlineService';
+import { getOfflinePaths, removeOfflinePath, estimateUsage, getOfflinePathsIndex } from '../../services/offlineService';
 import { usePwaIntro } from '../../contexts/PwaIntroContext';
 
 const OfflinePage = () => {
   const [paths, setPaths] = useState([]);
+  const [storageInfo, setStorageInfo] = useState('Unknown');
   const { openPwaIntro, pwaCapabilities } = usePwaIntro();
 
   useEffect(() => {
-    const data = getOfflinePaths();
-    setPaths(Object.values(data));
+    const load = async () => {
+      try {
+        const data = await getOfflinePaths();
+        setPaths(Object.values(data));
+      } catch (e) {
+        console.warn('Failed to load offline paths:', e);
+        setPaths([]);
+      }
+      try {
+        const usage = await estimateUsage();
+        if (usage?.usedBytes != null) {
+          const sizeInKB = (usage.usedBytes / 1024).toFixed(1);
+          setStorageInfo(`${sizeInKB} KB${usage.quotaBytes ? ` of ${(usage.quotaBytes / (1024 * 1024)).toFixed(1)} MB` : ''}`);
+        } else {
+          setStorageInfo('Unknown');
+        }
+      } catch (e) {
+        setStorageInfo('Unknown');
+      }
+    };
+    load();
   }, []);
 
-  const handleDelete = (id) => {
-    removeOfflinePath(id);
-    const updated = getOfflinePaths();
-    setPaths(Object.values(updated));
+  const handleDelete = async (id) => {
+    try {
+      await removeOfflinePath(id);
+      const updated = await getOfflinePaths();
+      setPaths(Object.values(updated));
+      // refresh storage info
+      const usage = await estimateUsage();
+      if (usage?.usedBytes != null) {
+        const sizeInKB = (usage.usedBytes / 1024).toFixed(1);
+        setStorageInfo(`${sizeInKB} KB${usage.quotaBytes ? ` of ${(usage.quotaBytes / (1024 * 1024)).toFixed(1)} MB` : ''}`);
+      }
+    } catch (e) {
+      console.warn('Failed to remove offline path:', e);
+    }
   };
 
   const getTotalCoursesSize = () => {
     return paths.length;
-  };
-
-  const getStorageInfo = () => {
-    try {
-      const offlineData = localStorage.getItem('offlineLearningPaths');
-      if (offlineData) {
-        const sizeInBytes = new Blob([offlineData]).size;
-        const sizeInKB = (sizeInBytes / 1024).toFixed(1);
-        return `${sizeInKB} KB`;
-      }
-    } catch (error) {
-      console.warn('Could not calculate storage size:', error);
-    }
-    return 'Unknown';
   };
 
   return (
@@ -75,7 +91,7 @@ const OfflinePage = () => {
             size="small"
           />
           <Chip 
-            label={`Storage: ${getStorageInfo()}`} 
+            label={`Storage: ${storageInfo}`} 
             variant="outlined"
             size="small"
           />
