@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { Box, useMediaQuery, useTheme } from '@mui/material';
-import { Analytics } from "@vercel/analytics/react";
-import { SpeedInsights } from "@vercel/speed-insights/react";
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Import components
 import Navbar from './components/Navbar';
@@ -34,6 +34,15 @@ import theme from './theme/theme';
 // --- Import new GeneratingPage ---
 import GeneratingPage from './pages/GeneratingPage'; 
 // --- End import ---
+
+// Lazy-load analytics in production only (placed after all imports to satisfy ESLint import/first)
+let Analytics = () => null;
+let SpeedInsights = () => null;
+if (process.env.NODE_ENV === 'production') {
+  // Dynamic import without awaiting; components will render when ready
+  import('@vercel/analytics/react').then(mod => { Analytics = mod.Analytics; }).catch(() => {});
+  import('@vercel/speed-insights/react').then(mod => { SpeedInsights = mod.SpeedInsights; }).catch(() => {});
+}
 
 // Enhanced PWA tutorial version management
 const TUTORIAL_VERSION = 'v2.0';
@@ -113,47 +122,51 @@ const AppContent = () => {
       tutorialTracker
     }}>
       <Box sx={{ flexGrow: 1 }}>
-        <Routes>
-          {routesConfig.map((route, index) => {
-            const { path, component: Component, requiresAuth, adminOnly } = route;
-            
-            // Handle the LearningPathView specific props based on route path
-            let elementProps = {};
-            if (path === '/history/:entryId') {
-              elementProps = { source: 'history' };
-            } else if (path === '/public/:shareId') { 
-              elementProps = { source: 'public' };
-            }
-            const element = <Component {...elementProps} />;
+        <ErrorBoundary fallback={<Box sx={{ p: 3 }}>Something went wrong. Please reload.</Box>}>
+          <Suspense fallback={<Box sx={{ p: 3 }} />}> 
+            <Routes>
+              {routesConfig.map((route, index) => {
+                const { path, component: Component, requiresAuth, adminOnly } = route;
+                
+                // Handle the LearningPathView specific props based on route path
+                let elementProps = {};
+                if (path === '/history/:entryId') {
+                  elementProps = { source: 'history' };
+                } else if (path === '/public/:shareId') { 
+                  elementProps = { source: 'public' };
+                }
+                const element = <Component {...elementProps} />;
 
-            if (requiresAuth) {
-              return (
-                <Route 
-                  key={index} 
-                  path={path} 
-                  element={
-                    <ProtectedRoute adminOnly={!!adminOnly}>
-                      {element}
-                    </ProtectedRoute>
-                  } 
-                />
-              );
-            } else {
-              return <Route key={index} path={path} element={element} />;
-            }
-          })}
-          {/* Add Route for GeneratingPage */}
-          <Route 
-            path="/generating/:taskId" 
-            element={
-              <ProtectedRoute>
-                <GeneratingPage />
-              </ProtectedRoute>
-            }
-          />
-          {/* Fallback route */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+                if (requiresAuth) {
+                  return (
+                    <Route 
+                      key={index} 
+                      path={path} 
+                      element={
+                        <ProtectedRoute adminOnly={!!adminOnly}>
+                          {element}
+                        </ProtectedRoute>
+                      } 
+                    />
+                  );
+                } else {
+                  return <Route key={index} path={path} element={element} />;
+                }
+              })}
+              {/* Add Route for GeneratingPage */}
+              <Route 
+                path="/generating/:taskId" 
+                element={
+                  <ProtectedRoute>
+                    <GeneratingPage />
+                  </ProtectedRoute>
+                }
+              />
+              {/* Fallback route */}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
       </Box>
       <WelcomeModal open={showWelcomeModal} onClose={markWelcomeModalShown} />
       <PwaIntroModal open={showPwaIntro} onClose={handleClosePwaIntro} />

@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import PropTypes from 'prop-types';
-import Joyride from 'react-joyride';
+const Joyride = lazy(() => import('react-joyride'));
 
 /**
  * Tutorial component wrapper for Joyride
@@ -41,18 +41,20 @@ const TutorialComponent = ({
   };
 
   return (
-    <Joyride
-      steps={steps}
-      run={run}
-      stepIndex={stepIndex}
-      callback={callback}
-      continuous={true}
-      showProgress={true}
-      showSkipButton={true}
-      scrollToFirstStep={true}
-      styles={defaultStyles}
-      {...joyrideProps}
-    />
+    <Suspense fallback={null}>
+      <Joyride
+        steps={steps}
+        run={run}
+        stepIndex={stepIndex}
+        callback={callback}
+        continuous={true}
+        showProgress={true}
+        showSkipButton={true}
+        scrollToFirstStep={true}
+        styles={defaultStyles}
+        {...joyrideProps}
+      />
+    </Suspense>
   );
 };
 

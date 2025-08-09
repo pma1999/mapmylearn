@@ -1,22 +1,23 @@
 import routesData from './routesData'; // Use default import for CJS export
+import React, { lazy } from 'react';
 
-// Import components
-import HomePage from './pages/HomePage';
-import GeneratorPage from './pages/GeneratorPage';
-import ResultPage from './pages/ResultPage';
-import HistoryPage from './pages/HistoryPage';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import AdminPage from './pages/AdminPage';
-import VerifyEmailPage from './pages/VerifyEmailPage';
-import ForgotPasswordPage from './pages/ForgotPasswordPage';
-import ResetPasswordPage from './pages/ResetPasswordPage';
-import LearningPathView from './components/learning-path/view/LearningPathView';
-import TermsPage from './pages/TermsPage';
-import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
-import PurchaseResultPage from './pages/PurchaseResultPage';
-import OfflinePage from './pages/OfflinePage';
-import OfflinePathPage from './pages/OfflinePathPage';
+// Route components are lazy-loaded to reduce initial bundle size
+const HomePage = lazy(() => import('./pages/HomePage'));
+const GeneratorPage = lazy(() => import('./pages/GeneratorPage'));
+const ResultPage = lazy(() => import('./pages/ResultPage'));
+const HistoryPage = lazy(() => import('./pages/HistoryPage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const RegisterPage = lazy(() => import('./pages/RegisterPage'));
+const AdminPage = lazy(() => import('./pages/AdminPage'));
+const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
+const LearningPathView = lazy(() => import('./components/learning-path/view/LearningPathView'));
+const TermsPage = lazy(() => import('./pages/TermsPage'));
+const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'));
+const PurchaseResultPage = lazy(() => import('./pages/PurchaseResultPage'));
+const OfflinePage = lazy(() => import('./pages/OfflinePage'));
+const OfflinePathPage = lazy(() => import('./pages/OfflinePathPage'));
 
 /**
  * Centralized route configuration for the application.

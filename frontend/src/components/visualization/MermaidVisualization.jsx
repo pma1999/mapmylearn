@@ -20,14 +20,11 @@ import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline'; /
 import RestartAltIcon from '@mui/icons-material/RestartAlt'; // Reset
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 
-// Library to export DOM nodes as images
-import { toPng } from 'html-to-image';
-
-// Import pan and zoom library
-import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
-
-// Import mermaid package for diagram rendering
-import mermaid from 'mermaid';
+// Heavy libraries will be loaded dynamically to reduce initial bundle size
+let toPngDynamic = null;
+let TransformWrapperDynamic = null;
+let TransformComponentDynamic = null;
+let mermaidDynamic = null;
 
 const modalStyle = {
   position: 'absolute',
@@ -99,6 +96,7 @@ const MermaidVisualization = ({
   const [isRendering, setIsRendering] = useState(false);
   const [renderError, setRenderError] = useState(null);
   const [renderedSvgString, setRenderedSvgString] = useState('');
+  const [isLibsLoading, setIsLibsLoading] = useState(false);
 
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -142,7 +140,11 @@ const MermaidVisualization = ({
     }
 
     try {
-      const dataUrl = await toPng(target, {
+      if (!toPngDynamic) {
+        const mod = await import('html-to-image');
+        toPngDynamic = mod.toPng;
+      }
+      const dataUrl = await toPngDynamic(target, {
         cacheBust: true,
         pixelRatio: 2,
         backgroundColor: '#ffffff'
@@ -163,7 +165,8 @@ const MermaidVisualization = ({
 
   // Initialize Mermaid with configuration
   useEffect(() => {
-    mermaid.initialize({
+    if (!mermaidDynamic) return;
+    mermaidDynamic.initialize({
       startOnLoad: false,
       theme: 'neutral', 
       securityLevel: 'loose', 
@@ -178,27 +181,12 @@ const MermaidVisualization = ({
         secondaryColor: '#5fa8d3',
         tertiaryColor: '#adcbe3'
       },
-      flowchart: {
-        useMaxWidth: true,
-        htmlLabels: true,
-        curve: 'basis'
-      },
-      sequence: {
-        useMaxWidth: true,
-        wrap: true
-      },
-      journey: {
-        useMaxWidth: true
-      },
-      timeline: {
-        useMaxWidth: true
-      },
-      gitgraph: {
-        useMaxWidth: true
-      },
-      c4: {
-        useMaxWidth: true
-      }
+      flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' },
+      sequence: { useMaxWidth: true, wrap: true },
+      journey: { useMaxWidth: true },
+      timeline: { useMaxWidth: true },
+      gitgraph: { useMaxWidth: true },
+      c4: { useMaxWidth: true }
     });
   }, []);
 
@@ -209,19 +197,60 @@ const MermaidVisualization = ({
       return;
     }
 
+    const ensureLibs = async () => {
+      if (!mermaidDynamic || !TransformWrapperDynamic || !TransformComponentDynamic) {
+        setIsLibsLoading(true);
+        try {
+          const [mermaidMod, zoomMod] = await Promise.all([
+            import('mermaid'),
+            import('react-zoom-pan-pinch')
+          ]);
+          mermaidDynamic = mermaidMod.default || mermaidMod;
+          TransformWrapperDynamic = zoomMod.TransformWrapper;
+          TransformComponentDynamic = zoomMod.TransformComponent;
+          // Initialize once after load
+          mermaidDynamic.initialize({
+            startOnLoad: false,
+            theme: 'neutral',
+            securityLevel: 'loose',
+            themeVariables: {
+              primaryColor: '#333333',
+              primaryTextColor: '#ffffff',
+              primaryBorderColor: '#555555',
+              lineColor: '#777777',
+              sectionBkgColor: '#f0f0f0',
+              altSectionBkgColor: '#ffffff',
+              gridColor: '#e0e0e0',
+              secondaryColor: '#5fa8d3',
+              tertiaryColor: '#adcbe3'
+            },
+            flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' },
+            sequence: { useMaxWidth: true, wrap: true },
+            journey: { useMaxWidth: true },
+            timeline: { useMaxWidth: true },
+            gitgraph: { useMaxWidth: true },
+            c4: { useMaxWidth: true }
+          });
+        } finally {
+          setIsLibsLoading(false);
+        }
+      }
+    };
+
     setIsRendering(true);
     setRenderError(null);
     setRenderedSvgString('');
 
     const renderDiagram = async () => {
       try {
+        await ensureLibs();
         const newDiagramId = `mermaid-diagram-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
         const themedMermaidSyntax = `%%{init: {"theme": "neutral"}}%%
 ${mermaidSyntax}`;
         
         try {
-          const parseResult = await mermaid.parse(themedMermaidSyntax);
+          const parseResult = await mermaidDynamic.parse(themedMermaidSyntax);
           if (!(typeof parseResult === 'object' && parseResult !== null && parseResult.diagramType)) {
             console.error('❌ Mermaid.parse() invalid result. Result:', parseResult);
             throw new Error('Mermaid failed to parse the syntax.');
@@ -233,7 +262,7 @@ ${mermaidSyntax}`;
           return; 
         }
         
-        const { svg } = await mermaid.render(newDiagramId, themedMermaidSyntax);
+        const { svg } = await mermaidDynamic.render(newDiagramId, themedMermaidSyntax);
         
         if (!svg || svg.length === 0) {
           console.warn('⚠️ Rendered SVG is empty despite parsing success.');
@@ -283,10 +312,10 @@ ${mermaidSyntax}`;
         )}
       </Box>
       
-      {isRendering && (
+      {(isRendering || isLibsLoading) && (
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', p: 3, minHeight: '200px' }}>
           <CircularProgress />
-          <Typography sx={{ ml: 2 }}>Rendering Diagram...</Typography>
+          <Typography sx={{ ml: 2 }}>{isLibsLoading ? 'Loading visualization...' : 'Rendering Diagram...'}</Typography>
         </Box>
       )}
       
@@ -320,7 +349,8 @@ ${mermaidSyntax}`;
             aspectRatio: '16/9' // Force an aspect ratio for the container, e.g., 16:9 or similar
           }}
         >
-          <TransformWrapper
+          {TransformWrapperDynamic && TransformComponentDynamic && (
+          <TransformWrapperDynamic
             initialScale={1} 
             minScale={0.1} 
             maxScale={10}  
@@ -330,7 +360,7 @@ ${mermaidSyntax}`;
             wheel={{ step: 0.2 }} 
             pinch={{ step: 5 }} 
           >
-            <TransformComponent 
+            <TransformComponentDynamic 
               wrapperStyle={{ width: "100%", height: "100%" }} 
               contentStyle={{ display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "100%" }}
             >
@@ -339,8 +369,9 @@ ${mermaidSyntax}`;
                 dangerouslySetInnerHTML={{ __html: renderedSvgString }}
                 style={{ display: 'inline-block', maxWidth: '100%', maxHeight: '100%' }} // Ensure SVG inside also tries to respect bounds
               />
-            </TransformComponent>
-          </TransformWrapper>
+            </TransformComponentDynamic>
+          </TransformWrapperDynamic>
+          )}
         </Paper>
       )}
 
@@ -371,7 +402,8 @@ ${mermaidSyntax}`;
               </Box>
             </Box>
             <Box sx={modalContentWrapperStyle}>
-              <TransformWrapper
+              {TransformWrapperDynamic && TransformComponentDynamic && (
+              <TransformWrapperDynamic
                 initialScale={1}
                 minScale={0.1}
                 maxScale={30} // Significantly increased maxScale for modal
@@ -396,25 +428,20 @@ ${mermaidSyntax}`;
                         </Tooltip>
                       </Stack>
                     </Box>
-                    <TransformComponent 
+                    <TransformComponentDynamic 
                         wrapperStyle={{ width: "100%", height: "100%" }} 
-                        contentStyle={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}
+                        contentStyle={{ display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "100%" }}
                     >
                       <div
                         ref={modalElementRef}
                         dangerouslySetInnerHTML={{ __html: renderedSvgString }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          width: '100%',
-                          height: '100%'
-                        }}
+                        style={{ display: 'inline-block', maxWidth: '100%', maxHeight: '100%' }}
                       />
-                    </TransformComponent>
+                    </TransformComponentDynamic>
                   </>
                 )}
-              </TransformWrapper>
+              </TransformWrapperDynamic>
+              )}
             </Box>
           </Box>
         </Fade>

@@ -1,8 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Box, useTheme } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
 import { sanitizeContent } from '../utils/sanitizer';
 
@@ -12,6 +10,8 @@ import { sanitizeContent } from '../utils/sanitizer';
  */
 const MarkdownRenderer = ({ children }) => {
   const theme = useTheme();
+  const [Highlighter, setHighlighter] = useState(null);
+  const [highlighterStyle, setHighlighterStyle] = useState(null);
 
   // Process the content to handle "```markdown\n" at the beginning
   // and sanitize the content to prevent XSS attacks
@@ -29,6 +29,33 @@ const MarkdownRenderer = ({ children }) => {
     
     // Sanitize the content with our custom sanitizer
     return sanitizeContent(processed);
+  }, [children]);
+
+  // Detect if there are fenced code blocks and lazy-load highlighter only then
+  useEffect(() => {
+    const content = String(children || '');
+    const hasCodeBlock = /```[a-zA-Z0-9_-]*\n[\s\S]*?```/.test(content);
+    if (!hasCodeBlock) {
+      setHighlighter(null);
+      setHighlighterStyle(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const [{ Prism }, styleMod] = await Promise.all([
+          import('react-syntax-highlighter'),
+          import('react-syntax-highlighter/dist/esm/styles/prism')
+        ]);
+        if (!cancelled) {
+          setHighlighter(() => Prism);
+          setHighlighterStyle(styleMod.oneLight || styleMod.default || styleMod);
+        }
+      } catch (e) {
+        // If loading fails, skip highlighting silently
+      }
+    })();
+    return () => { cancelled = true; };
   }, [children]);
 
   return (
@@ -215,21 +242,21 @@ const MarkdownRenderer = ({ children }) => {
         components={{
           code({ node, inline, className, children, ...props }) {
             const match = /language-(\w+)/.exec(className || '');
-            return !inline && match ? (
-              <SyntaxHighlighter
-                style={oneLight}
+            return !inline && match && Highlighter && highlighterStyle ? (
+              <Highlighter
+                style={highlighterStyle}
                 language={match[1]}
                 PreTag="div"
                 {...props}
               >
                 {String(children).replace(/\n$/, '')}
-              </SyntaxHighlighter>
+              </Highlighter>
             ) : (
               <code className={className} {...props}>
                 {children}
               </code>
             );
-          }
+          },
         }}
       >
         {processedContent}

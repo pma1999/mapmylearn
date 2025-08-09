@@ -6,6 +6,7 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build && node ./scripts/generate-sitemap.js",
+    "analyze": "npx source-map-explorer 'build/static/js/*.js' --html build/report.html | cat",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
@@ -49,6 +50,7 @@
   "devDependencies": {
     "eslint-plugin-react-hooks": "^5.2.0",
     "http-proxy-middleware": "^3.0.5",
+    "source-map-explorer": "^2.5.3",
     "react-router-sitemap": "^1.2.0",
     "react-scripts": "^5.0.1"
   },
@@ -67,5 +69,6 @@
   "resolutions": {
     "prismjs": "^1.30.0",
     "refractor/prismjs": "^1.30.0"
-  }
+  },
+  "homepage": "https://mapmylearn.com/"
 }

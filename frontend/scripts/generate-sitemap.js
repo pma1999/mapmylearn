@@ -27,11 +27,11 @@ const sitemapPathsConfig = publicPaths.map(p => ({ path: p }));
 const baseUrl = process.env.PUBLIC_URL;
 if (!baseUrl) {
   console.warn(
-    'Warning: PUBLIC_URL environment variable not set. Falling back to \'https://mapmylearn.app\'.' + 
+    'Warning: PUBLIC_URL environment variable not set. Falling back to \'https://mapmylearn.com/\'.' + 
     ' Ensure PUBLIC_URL is set in your build environment for correct sitemap URLs.'
   );
 }
-const domain = baseUrl || 'https://mapmylearn.app'; // Fallback domain
+const domain = baseUrl || 'https://mapmylearn.com/'; // Fallback domain
 
 // We don't have any public dynamic routes requiring paramsConfig
 // const paramsConfig = {};
