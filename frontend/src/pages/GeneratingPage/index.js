@@ -33,78 +33,14 @@ import SearchIcon from '@mui/icons-material/Search';
 import DnsIcon from '@mui/icons-material/Dns';
 import TocIcon from '@mui/icons-material/Toc';
 import FolderZipIcon from '@mui/icons-material/FolderZip';
-import LightbulbIcon from '@mui/icons-material/Lightbulb';
-import ReportProblemIcon from '@mui/icons-material/ReportProblem';
-import TipsAndUpdatesIcon from '@mui/icons-material/TipsAndUpdates';
-import PsychologyIcon from '@mui/icons-material/Psychology';
-import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
-import ScienceIcon from '@mui/icons-material/Science';
 import HistoryIcon from '@mui/icons-material/History';
 
 import useProgressTracking from '../../components/learning-path/hooks/useProgressTracking';
 import { useAuth } from '../../services/authContext';
 import { useTheme } from '@mui/material/styles';
 
-// --- Simple Curiosity Ticker Component ---
-const categoryIconMap = {
-  fun_fact: <LightbulbIcon fontSize="small" />,
-  key_insight: <PsychologyIcon fontSize="small" />,
-  best_practice: <TipsAndUpdatesIcon fontSize="small" />,
-  common_pitfall: <ReportProblemIcon fontSize="small" />,
-  myth_buster: <PsychologyIcon fontSize="small" />,
-  historical_context: <HistoryEduIcon fontSize="small" />,
-  practical_tip: <TipsAndUpdatesIcon fontSize="small" />,
-  advanced_nugget: <ScienceIcon fontSize="small" />,
-};
-
-const CuriosityTicker = ({ items = [], running = true }) => {
-  const [index, setIndex] = React.useState(0);
-  const theme = useTheme();
-  const timerRef = React.useRef(null);
-  const pauseRef = React.useRef(false);
-
-  React.useEffect(() => {
-    if (!running || !items.length) return;
-    const cycle = () => {
-      const delay = 7000 + Math.floor(Math.random() * 2500); // 7-9.5s
-      timerRef.current = setTimeout(() => {
-        if (!pauseRef.current) {
-          setIndex((prev) => (prev + 1) % items.length);
-        }
-        cycle();
-      }, delay);
-    };
-    cycle();
-    return () => timerRef.current && clearTimeout(timerRef.current);
-  }, [items, running]);
-
-  if (!items || !items.length) return null;
-  const current = items[index] || items[0];
-
-  return (
-    <Paper 
-      elevation={2} 
-      sx={{ p: { xs: 1.5, sm: 2 }, borderRadius: 2, mb: 2, background: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)' }}
-      onMouseEnter={() => { pauseRef.current = true; }}
-      onMouseLeave={() => { pauseRef.current = false; }}
-    >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Chip 
-          icon={categoryIconMap[current.category] || <LightbulbIcon fontSize="small" />} 
-          label={current.category?.replace('_', ' ') || 'insight'} 
-          size="small"
-          color="primary"
-          variant="outlined"
-          sx={{ textTransform: 'capitalize' }}
-        />
-        <Typography variant="body2" sx={{ fontWeight: 500 }}>
-          {current.text}
-        </Typography>
-      </Box>
-    </Paper>
-  );
-};
-
+// --- Curiosities Components ---
+import { CuriosityCarousel } from './components/Curiosities';
 // --- Refined Blueprint View Components ---
 
 const StatusIndicator = ({ status, size = 12 }) => {
@@ -428,7 +364,8 @@ const GeneratingPage = () => {
         user={user}
         onHistoryClick={() => navigate('/history')}
       />
-      <CuriosityTicker items={curiosities} running={(overallProgress || 0) < 1} />
+      {/* Curiosities Carousel */}
+      <CuriosityCarousel items={curiosities} autoplay={(overallProgress || 0) < 1} />
       <BlueprintView liveBuildData={liveBuildData} />
     </Container>
   );

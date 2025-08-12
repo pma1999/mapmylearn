@@ -43,6 +43,17 @@ const palette = {
     disabled: 'rgba(4, 38, 69, 0.26)', // Derived from text.primary
     disabledBackground: 'rgba(4, 38, 69, 0.12)', // Derived from text.primary
     focus: 'rgba(4, 38, 69, 0.12)' // Derived from text.primary
+  },
+  // Curiosity category colors
+  curiosityCategories: {
+    fun_fact: { main: '#7C4DFF', bg: '#7C4DFF14' },
+    key_insight: { main: '#1976D2', bg: '#1976D214' },
+    best_practice: { main: '#2E7D32', bg: '#2E7D3214' },
+    common_pitfall: { main: '#D32F2F', bg: '#D32F2F14' },
+    myth_buster: { main: '#6A1B9A', bg: '#6A1B9A14' },
+    historical_context: { main: '#8D6E63', bg: '#8D6E6314' },
+    practical_tip: { main: '#0288D1', bg: '#0288D114' },
+    advanced_nugget: { main: '#00897B', bg: '#00897B14' },
   }
 };
 
@@ -223,6 +234,16 @@ const theme = createTheme({
         }
         // Add other variants as needed
       },
+      variants: [
+        {
+          props: { variant: 'soft' },
+          style: {
+            border: 'none',
+            backgroundColor: palette.action.hover,
+            color: palette.text.primary,
+          }
+        }
+      ]
     },
     MuiTab: {
       styleOverrides: {
