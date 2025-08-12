@@ -63,6 +63,11 @@ const routesData = [
     isPublic: false,
   },
   {
+    path: '/generating/:taskId',
+    requiresAuth: true,
+    isPublic: false,
+  },
+  {
     path: '/history/:entryId',
     requiresAuth: true,
     isPublic: false,

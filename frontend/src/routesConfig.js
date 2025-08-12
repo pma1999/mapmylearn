@@ -18,6 +18,7 @@ const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'));
 const PurchaseResultPage = lazy(() => import('./pages/PurchaseResultPage'));
 const OfflinePage = lazy(() => import('./pages/OfflinePage'));
 const OfflinePathPage = lazy(() => import('./pages/OfflinePathPage'));
+const GeneratingPage = lazy(() => import('./pages/GeneratingPage'));
 
 /**
  * Centralized route configuration for the application.
@@ -38,6 +39,7 @@ const componentMap = {
   '/reset-password/:token': ResetPasswordPage,
   '/admin': AdminPage,
   '/result/:taskId': ResultPage,
+  '/generating/:taskId': GeneratingPage,
   '/history/:entryId': LearningPathView,
   '/offline': OfflinePage,
   '/offline/:offlineId': OfflinePathPage,

@@ -33,7 +33,7 @@ const ActiveGenerationCard = ({ entry, virtualized = false }) => {
   const theme = useTheme();
 
   const handleViewProgress = () => {
-    navigate(`/result/${entry.task_id}`);
+    navigate(`/generating/${entry.task_id}`);
   };
 
   const getStatusChip = () => {

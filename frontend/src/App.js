@@ -31,9 +31,6 @@ import { detectPWACapabilities, createTutorialTracker } from './utils/pwaDetecti
 // Import the theme
 import theme from './theme/theme';
 
-// --- Import new GeneratingPage ---
-import GeneratingPage from './pages/GeneratingPage'; 
-// --- End import ---
 
 // Lazy-load analytics in production only (placed after all imports to satisfy ESLint import/first)
 let Analytics = () => null;
@@ -153,15 +150,7 @@ const AppContent = () => {
                   return <Route key={index} path={path} element={element} />;
                 }
               })}
-              {/* Add Route for GeneratingPage */}
-              <Route 
-                path="/generating/:taskId" 
-                element={
-                  <ProtectedRoute>
-                    <GeneratingPage />
-                  </ProtectedRoute>
-                }
-              />
+              {/* generating route is now declared via routesConfig */}
               {/* Fallback route */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
