@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { Box, useTheme } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -9,12 +10,12 @@ import { generateHeaderId } from './learning-path/utils/markdownParser';
  * StyledMarkdown component for rendering markdown content with proper styling
  * and syntax highlighting for code blocks using the application theme.
  */
-const MarkdownRenderer = ({ children, enableTocIds = true }) => {
+const MarkdownRenderer = ({ children, enableTocIds = true, headerIdMap = null }) => {
   const theme = useTheme();
   const [Highlighter, setHighlighter] = useState(null);
   const [highlighterStyle, setHighlighterStyle] = useState(null);
 
-  // Track used header IDs to ensure uniqueness
+  // Track used header IDs to ensure uniqueness (fallback when no headerIdMap provided)
   const usedIds = useMemo(() => new Set(), []);
 
   // Process the content to handle "```markdown\n" at the beginning
@@ -264,32 +265,50 @@ const MarkdownRenderer = ({ children, enableTocIds = true }) => {
           // Custom heading components that generate TOC-compatible IDs
           h1({ node, children, ...props }) {
             const text = String(children);
-            const id = enableTocIds ? generateHeaderId(text, usedIds) : undefined;
+            const id = enableTocIds ? (headerIdMap?.get(text) || generateHeaderId(text, usedIds)) : undefined;
+            if (enableTocIds) {
+              console.log(`H1 Rendered: text="${text}", id="${id}", from map=${!!headerIdMap?.get(text)}`);
+            }
             return <h1 id={id} {...props}>{children}</h1>;
           },
           h2({ node, children, ...props }) {
             const text = String(children);
-            const id = enableTocIds ? generateHeaderId(text, usedIds) : undefined;
+            const id = enableTocIds ? (headerIdMap?.get(text) || generateHeaderId(text, usedIds)) : undefined;
+            if (enableTocIds) {
+              console.log(`H2 Rendered: text="${text}", id="${id}", from map=${!!headerIdMap?.get(text)}`);
+            }
             return <h2 id={id} {...props}>{children}</h2>;
           },
           h3({ node, children, ...props }) {
             const text = String(children);
-            const id = enableTocIds ? generateHeaderId(text, usedIds) : undefined;
+            const id = enableTocIds ? (headerIdMap?.get(text) || generateHeaderId(text, usedIds)) : undefined;
+            if (enableTocIds) {
+              console.log(`H3 Rendered: text="${text}", id="${id}", from map=${!!headerIdMap?.get(text)}`);
+            }
             return <h3 id={id} {...props}>{children}</h3>;
           },
           h4({ node, children, ...props }) {
             const text = String(children);
-            const id = enableTocIds ? generateHeaderId(text, usedIds) : undefined;
+            const id = enableTocIds ? (headerIdMap?.get(text) || generateHeaderId(text, usedIds)) : undefined;
+            if (enableTocIds) {
+              console.log(`H4 Rendered: text="${text}", id="${id}", from map=${!!headerIdMap?.get(text)}`);
+            }
             return <h4 id={id} {...props}>{children}</h4>;
           },
           h5({ node, children, ...props }) {
             const text = String(children);
-            const id = enableTocIds ? generateHeaderId(text, usedIds) : undefined;
+            const id = enableTocIds ? (headerIdMap?.get(text) || generateHeaderId(text, usedIds)) : undefined;
+            if (enableTocIds) {
+              console.log(`H5 Rendered: text="${text}", id="${id}", from map=${!!headerIdMap?.get(text)}`);
+            }
             return <h5 id={id} {...props}>{children}</h5>;
           },
           h6({ node, children, ...props }) {
             const text = String(children);
-            const id = enableTocIds ? generateHeaderId(text, usedIds) : undefined;
+            const id = enableTocIds ? (headerIdMap?.get(text) || generateHeaderId(text, usedIds)) : undefined;
+            if (enableTocIds) {
+              console.log(`H6 Rendered: text="${text}", id="${id}", from map=${!!headerIdMap?.get(text)}`);
+            }
             return <h6 id={id} {...props}>{children}</h6>;
           },
         }}
@@ -298,6 +317,12 @@ const MarkdownRenderer = ({ children, enableTocIds = true }) => {
       </ReactMarkdown>
     </Box>
   );
+};
+
+MarkdownRenderer.propTypes = {
+  children: PropTypes.node,
+  enableTocIds: PropTypes.bool,
+  headerIdMap: PropTypes.instanceOf(Map)
 };
 
 export default MarkdownRenderer;

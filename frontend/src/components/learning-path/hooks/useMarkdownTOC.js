@@ -21,10 +21,19 @@ const useMarkdownTOC = (markdownContent, options = {}) => {
   const [isScrolling, setIsScrolling] = useState(false);
   const [tocVisible, setTocVisible] = useState(false);
 
-  // Parse headers from markdown content
-  const headers = useMemo(() => {
-    if (!markdownContent) return [];
-    return parseMarkdownHeaders(markdownContent);
+  // Parse headers from markdown content and create ID mapping
+  const { headers, headerIdMap } = useMemo(() => {
+    if (!markdownContent) return { headers: [], headerIdMap: new Map() };
+    
+    const parsedHeaders = parseMarkdownHeaders(markdownContent);
+    const idMap = new Map();
+    
+    // Create mapping of header text to ID for MarkdownRenderer
+    parsedHeaders.forEach(header => {
+      idMap.set(header.title, header.id);
+    });
+    
+    return { headers: parsedHeaders, headerIdMap: idMap };
   }, [markdownContent]);
 
   // Check if content has headers
@@ -42,6 +51,11 @@ const useMarkdownTOC = (markdownContent, options = {}) => {
   // Scroll to specific header section
   const scrollToHeader = useCallback((headerId) => {
     if (!headerId) return;
+
+    // Add debug info
+    console.log(`Attempting to scroll to header with ID: "${headerId}"`);
+    console.log('Available elements with IDs starting with "heading":', 
+      Array.from(document.querySelectorAll('[id^="heading"]')).map(el => el.id));
 
     const element = document.getElementById(headerId);
     if (!element) {
@@ -175,6 +189,7 @@ const useMarkdownTOC = (markdownContent, options = {}) => {
     headers,
     hasHeaders,
     activeHeaderId,
+    headerIdMap, // Map of header text to ID for MarkdownRenderer
     
     // State
     isScrolling,
