@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, HttpUrl, AliasChoices
 from typing import List, Dict, Any, Optional, TypedDict, Annotated, Callable, TYPE_CHECKING, Tuple
 import operator
+from typing import Literal
 
 # Import the key provider types but only for type checking
 if TYPE_CHECKING:  
@@ -184,6 +185,23 @@ class ContentRefinementQueryList(BaseModel):
     targeting_strategy: str = Field(..., description="Strategy for addressing identified content gaps")
     focus_areas: List[str] = Field(..., description="Specific content areas being targeted for enhancement")
 
+# Curiosity Items for Loading Screen
+class CuriosityItem(BaseModel):
+    text: str = Field(..., description="Concise, high-signal curiosity text in the output language")
+    category: Literal[
+        "fun_fact",
+        "key_insight",
+        "best_practice",
+        "common_pitfall",
+        "myth_buster",
+        "historical_context",
+        "practical_tip",
+        "advanced_nugget"
+    ] = Field(..., description="Category of the curiosity item")
+
+class CuriosityItemList(BaseModel):
+    items: List[CuriosityItem] = Field(default_factory=list, description="List of curiosity items for the loading screen")
+
 # Global State for the Graph (TypedDict)
 class LearningPathState(TypedDict):
     user_topic: str
@@ -257,6 +275,8 @@ class LearningPathState(TypedDict):
     topic_resource_search_results: Optional[List[Dict[str, Any]]] # TODO: Refactor if topic resource search changes
     module_resources_in_process: Optional[Dict[int, Dict[str, Any]]]  # Tracking module resource generation
     submodule_resources_in_process: Optional[Dict[str, Dict[str, Any]]]  # Tracking submodule resource generation
+    # Curiosities generation tracking
+    curiosities_generation_started: Optional[bool]
     
 # Enable forward references for EnhancedModule.submodules
 # Pydantic <2 uses `update_forward_refs` while >=2 uses `model_rebuild`

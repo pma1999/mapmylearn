@@ -12,7 +12,8 @@ from backend.models.models import (
     ResearchEvaluation,
     RefinementQueryList,
     ContentEvaluation,
-    ContentRefinementQueryList
+    ContentRefinementQueryList,
+    CuriosityItemList
 )
 import re
 import logging
@@ -37,6 +38,8 @@ content_evaluation_parser = PydanticOutputParser(pydantic_object=ContentEvaluati
 content_refinement_query_parser = PydanticOutputParser(pydantic_object=ContentRefinementQueryList)
 # NEW: Alias for planning evaluation (reuse ResearchEvaluation schema)
 planning_research_evaluation_parser = PydanticOutputParser(pydantic_object=ResearchEvaluation)
+# NEW: Curiosity items parser
+curiosity_item_list_parser = PydanticOutputParser(pydantic_object=CuriosityItemList)
 
 def parse_initial_flow_response(response_text: str) -> Optional[EnhancedModuleList]:
     """

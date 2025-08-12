@@ -289,6 +289,53 @@ async def get_llm_for_evaluation(key_provider=None, user=None):
         logger.error(f"Error initializing ChatGoogleGenerativeAI for evaluation: {str(e)}")
         raise
 
+async def get_llm_flash_lite(key_provider=None, user=None):
+    """
+    Initialize the Google Gemini LLM specifically for lightweight, fast generation of curiosity items.
+    Forces the model to gemini-2.0-flash-lite regardless of user for speed and cost efficiency.
+
+    Args:
+        key_provider: KeyProvider object for Google API key (or direct API key as string)
+        user: Optional user (unused for model selection here)
+
+    Returns:
+        ChatGoogleGenerativeAI configured with gemini-2.0-flash-lite
+    """
+    google_api_key = None
+    if hasattr(key_provider, 'get_key') and callable(key_provider.get_key):
+        try:
+            google_api_key = await key_provider.get_key()
+            logger.debug("Retrieved Google API key from provider for flash-lite")
+        except Exception as e:
+            logger.error(f"Error retrieving Google API key from provider: {str(e)}")
+            raise
+    elif isinstance(key_provider, str):
+        google_api_key = key_provider
+        logger.debug("Using provided Google API key directly for flash-lite")
+    else:
+        google_api_key = os.environ.get("GOOGLE_API_KEY")
+        if not google_api_key:
+            logger.warning("GOOGLE_API_KEY not set in environment")
+        else:
+            logger.debug("Using Google API key from environment for flash-lite")
+
+    if not google_api_key:
+        raise ValueError("No Google API key available from any source")
+
+    model = "gemini-2.0-flash-lite"
+    logger.info(f"Using {model} for curiosity generation (user: {getattr(user, 'email', 'unknown')})")
+
+    try:
+        return ChatGoogleGenerativeAI(
+            model=model,
+            temperature=0.3,
+            google_api_key=google_api_key,
+            max_output_tokens=4096,
+        )
+    except Exception as e:
+        logger.error(f"Error initializing ChatGoogleGenerativeAI for flash-lite: {str(e)}")
+        raise
+
 def _get_model_for_user(user):
     """
     Determine the appropriate Gemini model based on user.

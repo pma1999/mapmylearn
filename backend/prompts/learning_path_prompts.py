@@ -1205,3 +1205,33 @@ The following research materials and scraped content provide additional context 
 
 {search_results_context}
 """
+
+# =========================================================================
+# Curiosity Tips Prompt for Loading Screen (Gemini Flash Lite)
+# =========================================================================
+CURIOSITY_TIPS_PROMPT = """
+You are generating brief, high-value curiosities to display during a course creation loading screen.
+
+Topic: {user_topic}
+Language: {language}
+
+Research Summary (evidence basis):
+{search_results_summary}
+
+Instructions:
+- Produce EXACTLY {desired_count} distinct items.
+- Each item must be concise (140-220 characters), in {language}, and deliver real value (no filler, no generic study advice, no emojis).
+- Vary categories across this set to ensure diversity and interest.
+- Categories allowed (use exactly one per item):
+  ["fun_fact", "key_insight", "best_practice", "common_pitfall", "myth_buster", "historical_context", "practical_tip", "advanced_nugget"]
+- Content must be grounded in the topic and generally reliable knowledge; avoid unsafe or harmful content.
+- Do NOT include URLs, citations, or markdown—plain text only.
+- No hallucinated claims about specific statistics unless obviously common knowledge.
+
+Output JSON ONLY in this exact schema:
+{{
+  "items": [
+    {{ "text": "...", "category": "..." }}
+  ]
+}}
+"""

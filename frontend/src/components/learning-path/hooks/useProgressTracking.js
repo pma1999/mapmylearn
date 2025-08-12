@@ -14,6 +14,12 @@ const initialLiveBuildData = {
   },
   modules: [], // Array of module objects, see structure in plan
   error: null, // To store any general error object from SSE
+  // Curiosity feed for loading screen
+  curiosityFeed: {
+    status: 'pending', // pending | ready
+    items: [],
+    index: 0,
+  },
 };
 
 // --- Reducer function for liveBuildData ---
@@ -33,6 +39,7 @@ function liveBuildDataReducer(state, action) {
         topicResources: initialLiveBuildData.topicResources,
         modules: [],
         error: null,
+        curiosityFeed: { status: 'pending', items: [], index: 0 },
       };
     case 'SET_TOPIC':
       return { ...state, topic: payload.topic };
@@ -63,6 +70,17 @@ function liveBuildDataReducer(state, action) {
           submodules: [] 
         })) : [],
         overallStatusMessage: `Defined ${payload.modules?.length || 0} modules.`
+      };
+    // --- NEW: Curiosities ready ---
+    case 'curiosities_ready':
+      return {
+        ...state,
+        curiosityFeed: {
+          status: 'ready',
+          items: Array.isArray(payload.items) ? payload.items : [],
+          index: 0,
+        },
+        overallStatusMessage: state.overallStatusMessage,
       };
     case 'module_submodules_planned':
       return {
