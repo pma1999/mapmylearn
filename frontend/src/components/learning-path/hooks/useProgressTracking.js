@@ -82,6 +82,37 @@ function liveBuildDataReducer(state, action) {
         },
         overallStatusMessage: state.overallStatusMessage,
       };
+    // --- NEW: Research loop diagnostics (no-op storage to avoid warnings) ---
+    case 'research_evaluation':
+      return {
+        ...state,
+        researchDiagnostics: {
+          iteration: payload.iteration,
+          is_sufficient: payload.is_sufficient,
+          confidence: payload.confidence_score,
+          gap_count: payload.gap_count,
+        },
+        overallStatusMessage: state.overallStatusMessage,
+      };
+    case 'refinement_queries':
+      return {
+        ...state,
+        refinementPreview: {
+          count: payload.query_count,
+          queries: payload.queries || [],
+        },
+        overallStatusMessage: state.overallStatusMessage,
+      };
+    case 'refinement_search_results':
+      return {
+        ...state,
+        refinementResultsSummary: {
+          successful: payload.successful_searches,
+          total: payload.total_searches,
+          errors: payload.error_count,
+        },
+        overallStatusMessage: state.overallStatusMessage,
+      };
     case 'module_submodules_planned':
       return {
         ...state,
