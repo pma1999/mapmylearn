@@ -370,10 +370,6 @@ const ContentPanel = forwardRef(({
 
   // TOC handlers
   const handleTocHeaderClick = useCallback((headerId) => {
-    console.log('TOC header clicked:', headerId);
-    console.log('Available headers in TOC:', tocHook.headers.map(h => ({ title: h.title, id: h.id })));
-    console.log('HeaderIdMap:', Array.from(tocHook.headerIdMap.entries()));
-    
     tocHook.scrollToHeader(headerId);
     // Close mobile drawer after navigation
     if (isMobileLayout) {

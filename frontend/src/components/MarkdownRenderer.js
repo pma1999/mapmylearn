@@ -266,49 +266,31 @@ const MarkdownRenderer = ({ children, enableTocIds = true, headerIdMap = null })
           h1({ node, children, ...props }) {
             const text = String(children);
             const id = enableTocIds ? (headerIdMap?.get(text) || generateHeaderId(text, usedIds)) : undefined;
-            if (enableTocIds) {
-              console.log(`H1 Rendered: text="${text}", id="${id}", from map=${!!headerIdMap?.get(text)}`);
-            }
             return <h1 id={id} {...props}>{children}</h1>;
           },
           h2({ node, children, ...props }) {
             const text = String(children);
             const id = enableTocIds ? (headerIdMap?.get(text) || generateHeaderId(text, usedIds)) : undefined;
-            if (enableTocIds) {
-              console.log(`H2 Rendered: text="${text}", id="${id}", from map=${!!headerIdMap?.get(text)}`);
-            }
             return <h2 id={id} {...props}>{children}</h2>;
           },
           h3({ node, children, ...props }) {
             const text = String(children);
             const id = enableTocIds ? (headerIdMap?.get(text) || generateHeaderId(text, usedIds)) : undefined;
-            if (enableTocIds) {
-              console.log(`H3 Rendered: text="${text}", id="${id}", from map=${!!headerIdMap?.get(text)}`);
-            }
             return <h3 id={id} {...props}>{children}</h3>;
           },
           h4({ node, children, ...props }) {
             const text = String(children);
             const id = enableTocIds ? (headerIdMap?.get(text) || generateHeaderId(text, usedIds)) : undefined;
-            if (enableTocIds) {
-              console.log(`H4 Rendered: text="${text}", id="${id}", from map=${!!headerIdMap?.get(text)}`);
-            }
             return <h4 id={id} {...props}>{children}</h4>;
           },
           h5({ node, children, ...props }) {
             const text = String(children);
             const id = enableTocIds ? (headerIdMap?.get(text) || generateHeaderId(text, usedIds)) : undefined;
-            if (enableTocIds) {
-              console.log(`H5 Rendered: text="${text}", id="${id}", from map=${!!headerIdMap?.get(text)}`);
-            }
             return <h5 id={id} {...props}>{children}</h5>;
           },
           h6({ node, children, ...props }) {
             const text = String(children);
             const id = enableTocIds ? (headerIdMap?.get(text) || generateHeaderId(text, usedIds)) : undefined;
-            if (enableTocIds) {
-              console.log(`H6 Rendered: text="${text}", id="${id}", from map=${!!headerIdMap?.get(text)}`);
-            }
             return <h6 id={id} {...props}>{children}</h6>;
           },
         }}

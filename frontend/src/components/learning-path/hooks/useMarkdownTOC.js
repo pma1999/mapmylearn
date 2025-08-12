@@ -52,11 +52,6 @@ const useMarkdownTOC = (markdownContent, options = {}) => {
   const scrollToHeader = useCallback((headerId) => {
     if (!headerId) return;
 
-    // Add debug info
-    console.log(`Attempting to scroll to header with ID: "${headerId}"`);
-    console.log('Available elements with IDs starting with "heading":', 
-      Array.from(document.querySelectorAll('[id^="heading"]')).map(el => el.id));
-
     const element = document.getElementById(headerId);
     if (!element) {
       console.warn(`Header element with ID "${headerId}" not found`);
