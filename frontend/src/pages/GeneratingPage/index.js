@@ -39,6 +39,7 @@ import TipsAndUpdatesIcon from '@mui/icons-material/TipsAndUpdates';
 import PsychologyIcon from '@mui/icons-material/Psychology';
 import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
 import ScienceIcon from '@mui/icons-material/Science';
+import HistoryIcon from '@mui/icons-material/History';
 
 import useProgressTracking from '../../components/learning-path/hooks/useProgressTracking';
 import { useAuth } from '../../services/authContext';
@@ -313,6 +314,46 @@ const OverallProgressDisplay = ({ overallProgress, overallStatusMessage, topic }
   )
 }
 
+const LeavePageNotice = ({ taskId, overallProgress, user, onHistoryClick }) => {
+  const [dismissed, setDismissed] = React.useState(false);
+  const storageKey = React.useMemo(() => `mml_leave_notice_dismissed_${user?.id || 'anon'}_${taskId}`, [user?.id, taskId]);
+
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved === 'true') setDismissed(true);
+    } catch {}
+  }, [storageKey]);
+
+  if ((overallProgress || 0) >= 1 || dismissed) return null;
+
+  const handleDismiss = () => {
+    try { localStorage.setItem(storageKey, 'true'); } catch {}
+    setDismissed(true);
+  };
+
+  const text = 'You can leave now — your course will keep generating in the background. Check its status anytime in History.';
+  const historyLabel = 'Open History';
+  const dismissLabel = 'Dismiss';
+
+  return (
+    <Alert
+      severity="info"
+      variant="outlined"
+      icon={<HistoryIcon />}
+      sx={{ mb: 2, borderRadius: 2 }}
+      action={
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button color="primary" size="small" onClick={onHistoryClick}>{historyLabel}</Button>
+          <Button size="small" onClick={handleDismiss}>{dismissLabel}</Button>
+        </Box>
+      }
+    >
+      <Typography variant="body2">{text}</Typography>
+    </Alert>
+  );
+};
+
 const GeneratingPage = () => {
   const { taskId } = useParams();
   const navigate = useNavigate();
@@ -380,6 +421,12 @@ const GeneratingPage = () => {
         overallProgress={overallProgress || (liveBuildData?.overallProgress || 0)} 
         overallStatusMessage={currentOverallStatusMessage}
         topic={currentTopic}
+      />
+      <LeavePageNotice 
+        taskId={taskId}
+        overallProgress={overallProgress || (liveBuildData?.overallProgress || 0)}
+        user={user}
+        onHistoryClick={() => navigate('/history')}
       />
       <CuriosityTicker items={curiosities} running={(overallProgress || 0) < 1} />
       <BlueprintView liveBuildData={liveBuildData} />
