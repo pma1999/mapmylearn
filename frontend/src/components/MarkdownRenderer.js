@@ -15,7 +15,7 @@ const MarkdownRenderer = ({ children, enableTocIds = true }) => {
   const [highlighterStyle, setHighlighterStyle] = useState(null);
 
   // Track used header IDs to ensure uniqueness
-  const usedIds = useMemo(() => new Set(), [children]);
+  const usedIds = useMemo(() => new Set(), []);
 
   // Process the content to handle "```markdown\n" at the beginning
   // and sanitize the content to prevent XSS attacks

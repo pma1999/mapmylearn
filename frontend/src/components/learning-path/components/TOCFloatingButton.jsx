@@ -131,12 +131,7 @@ const TOCFloatingButton = ({
               backdropFilter: 'blur(10px)',
               backgroundColor: variant === 'primary' 
                 ? theme.palette.primary.main 
-                : theme.palette.secondary.main,
-              '&:hover': {
-                backgroundColor: variant === 'primary' 
-                  ? theme.palette.primary.dark 
-                  : theme.palette.secondary.dark,
-              }
+                : theme.palette.secondary.main
             }}
             aria-label={`Open table of contents with ${headerCount} sections`}
           >
