@@ -21,7 +21,9 @@ import {
   Divider,
   Checkbox,
   FormControlLabel,
-  FormHelperText
+  FormHelperText,
+  Drawer,
+  IconButton
 } from '@mui/material';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
@@ -38,12 +40,18 @@ import CampaignIcon from '@mui/icons-material/Campaign'; // Engaging
 import MicNoneIcon from '@mui/icons-material/MicNone'; // Calm Narrator
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline'; // Conversational
 import PsychologyAltIcon from '@mui/icons-material/PsychologyAlt';
+import CloseIcon from '@mui/icons-material/Close';
 
 // Shared components
 import MarkdownRenderer from '../../MarkdownRenderer';
 import ResourcesSection from '../../shared/ResourcesSection';
 import SubmoduleChat from '../../chat/SubmoduleChat';
 import { QuizContainer } from '../../quiz';
+
+// TOC components
+import useMarkdownTOC from '../hooks/useMarkdownTOC';
+import SubmoduleTableOfContents from '../components/SubmoduleTableOfContents';
+import TOCFloatingButton from '../components/TOCFloatingButton';
 
 // Visualization component for interactive diagrams
 import MermaidVisualization from '../../visualization/MermaidVisualization';
@@ -164,6 +172,10 @@ const ContentPanel = forwardRef(({
   const [mermaidSyntax, setMermaidSyntax] = useState(null);
   const [visualizationMessage, setVisualizationMessage] = useState(null);
 
+  // TOC state
+  const [tocCollapsed, setTocCollapsed] = useState(false);
+  const [tocDrawerOpen, setTocDrawerOpen] = useState(false);
+
   const getInitialLanguage = useCallback(() => {
     const pathLang = actualPathData?.language;
     if (pathLang && supportedLanguages.some(l => l.code === pathLang)) {
@@ -174,6 +186,16 @@ const ContentPanel = forwardRef(({
 
   const [selectedLanguage, setSelectedLanguage] = useState(getInitialLanguage);
   const [selectedVizLanguage, setSelectedVizLanguage] = useState(getInitialLanguage);
+
+  // Initialize TOC hook for current submodule content
+  const tocHook = useMarkdownTOC(
+    displayType === 'submodule' && submodule ? submodule.content : '',
+    {
+      enableActiveDetection: true,
+      scrollOffset: 100,
+      debounceDelay: 150
+    }
+  );
 
   useEffect(() => {
     if (displayType === 'submodule' && submodule) {
@@ -345,6 +367,27 @@ const ContentPanel = forwardRef(({
     if (reason === 'clickaway') return;
     setNotification({ ...notification, open: false });
   };
+
+  // TOC handlers
+  const handleTocHeaderClick = useCallback((headerId) => {
+    tocHook.scrollToHeader(headerId);
+    // Close mobile drawer after navigation
+    if (isMobileLayout) {
+      setTocDrawerOpen(false);
+    }
+  }, [tocHook, isMobileLayout]);
+
+  const handleTocToggleCollapse = useCallback(() => {
+    setTocCollapsed(prev => !prev);
+  }, []);
+
+  const handleTocDrawerOpen = useCallback(() => {
+    setTocDrawerOpen(true);
+  }, []);
+
+  const handleTocDrawerClose = useCallback(() => {
+    setTocDrawerOpen(false);
+  }, []);
 
   if (displayType === 'module_resources' && module && module.resources && module.resources.length > 0) {
     return (
@@ -546,31 +589,85 @@ const ContentPanel = forwardRef(({
                   <TabPanel key={tab.index} value={activeTab} index={tab.index} sx={tabContentSx} >
                      {tab.component === 'Content' && (
                          <Box data-tut="content-panel-tab-content">
-                             <MarkdownRenderer>{submodule.content || "No content available."}</MarkdownRenderer>
-                             <Divider sx={{ my: 2 }} />
-                             <Box 
-                               sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }} 
-                               data-tut="content-panel-progress-checkbox-container"
-                             >
-                               <Tooltip title={isPublicView ? "Progress tracking disabled for public view" : (isCompleted ? "Mark as Incomplete" : "Mark as Complete")}>
-                                 <span> 
-                                   <FormControlLabel
-                                     control={
-                                       <Checkbox
-                                         checked={isCompleted}
-                                         onChange={handleCheckboxToggle}
-                                         disabled={isPublicView} 
-                                         inputProps={{ 'aria-label': isCompleted ? 'Mark as incomplete' : 'Mark as complete' }}
-                                         size="small"
+                             {/* TOC and Content Layout */}
+                             <Box sx={{ 
+                               display: 'flex', 
+                               gap: 2, 
+                               flexDirection: isMobileLayout ? 'column' : 'row',
+                               height: '100%'
+                             }}>
+                               {/* Main Content Area */}
+                               <Box sx={{ 
+                                 flex: 1,
+                                 minWidth: 0,
+                                 position: 'relative'
+                               }}>
+                                 <MarkdownRenderer enableTocIds={true}>
+                                   {submodule.content || "No content available."}
+                                 </MarkdownRenderer>
+                                 
+                                 <Divider sx={{ my: 2 }} />
+                                 <Box 
+                                   sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }} 
+                                   data-tut="content-panel-progress-checkbox-container"
+                                 >
+                                   <Tooltip title={isPublicView ? "Progress tracking disabled for public view" : (isCompleted ? "Mark as Incomplete" : "Mark as Complete")}>
+                                     <span> 
+                                       <FormControlLabel
+                                         control={
+                                           <Checkbox
+                                             checked={isCompleted}
+                                             onChange={handleCheckboxToggle}
+                                             disabled={isPublicView} 
+                                             inputProps={{ 'aria-label': isCompleted ? 'Mark as incomplete' : 'Mark as complete' }}
+                                             size="small"
+                                           />
+                                         }
+                                         label={<Typography variant="body2" sx={{ fontSize: '0.8rem' }}>Complete</Typography>}
+                                         sx={{ ml: 0 }}
+                                         data-tut={`progress-checkbox-${moduleIndex}-${submoduleIndex}`}
                                        />
-                                     }
-                                     label={<Typography variant="body2" sx={{ fontSize: '0.8rem' }}>Complete</Typography>}
-                                     sx={{ ml: 0 }}
-                                     data-tut={`progress-checkbox-${moduleIndex}-${submoduleIndex}`}
+                                     </span>
+                                   </Tooltip>
+                                 </Box>
+                               </Box>
+
+                               {/* Desktop TOC Sidebar */}
+                               {!isMobileLayout && tocHook.hasHeaders && (
+                                 <Box sx={{ 
+                                   width: tocCollapsed ? '60px' : '280px',
+                                   flexShrink: 0,
+                                   transition: 'width 0.3s ease-in-out',
+                                   position: 'sticky',
+                                   top: theme.spacing(2),
+                                   alignSelf: 'flex-start',
+                                   maxHeight: 'calc(100vh - 200px)',
+                                   overflow: 'hidden'
+                                 }}>
+                                   <SubmoduleTableOfContents
+                                     headers={tocHook.headers}
+                                     activeHeaderId={tocHook.activeHeaderId}
+                                     onHeaderClick={handleTocHeaderClick}
+                                     isMobile={false}
+                                     isCollapsed={tocCollapsed}
+                                     onToggleCollapse={handleTocToggleCollapse}
+                                     title="Content Outline"
+                                     maxHeight="100%"
                                    />
-                                 </span>
-                               </Tooltip>
+                                 </Box>
+                               )}
                              </Box>
+
+                             {/* Mobile TOC Floating Button */}
+                             {isMobileLayout && tocHook.hasHeaders && (
+                               <TOCFloatingButton
+                                 onOpen={handleTocDrawerOpen}
+                                 hasHeaders={tocHook.hasHeaders}
+                                 headerCount={tocHook.headers.length}
+                                 isVisible={true}
+                                 position="bottom-right"
+                               />
+                             )}
                          </Box>
                      )}
                      {tab.component === 'Quiz' && hasQuiz && (
@@ -723,6 +820,48 @@ const ContentPanel = forwardRef(({
                );
            })}
         </Box>
+
+        {/* Mobile TOC Drawer */}
+        {isMobileLayout && tocHook.hasHeaders && (
+          <Drawer
+            anchor="right"
+            open={tocDrawerOpen}
+            onClose={handleTocDrawerClose}
+            ModalProps={{ keepMounted: true }}
+            PaperProps={{ 
+              sx: { 
+                width: '85%',
+                maxWidth: '400px',
+                borderTopLeftRadius: theme.spacing(2),
+                borderBottomLeftRadius: theme.spacing(2)
+              } 
+            }}
+          >
+            <Box sx={{ 
+              p: 2, 
+              borderBottom: `1px solid ${theme.palette.divider}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <Typography variant="h6" sx={{ fontWeight: theme.typography.fontWeightMedium }}>
+                Content Outline
+              </Typography>
+              <IconButton onClick={handleTocDrawerClose} size="small">
+                <CloseIcon />
+              </IconButton>
+            </Box>
+            <Box sx={{ overflow: 'auto', flex: 1 }}>
+              <SubmoduleTableOfContents
+                headers={tocHook.headers}
+                activeHeaderId={tocHook.activeHeaderId}
+                onHeaderClick={handleTocHeaderClick}
+                isMobile={true}
+                title=""
+              />
+            </Box>
+          </Drawer>
+        )}
         
         <Snackbar 
           open={notification.open} 

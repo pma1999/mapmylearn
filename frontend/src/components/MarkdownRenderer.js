@@ -3,15 +3,19 @@ import { Box, useTheme } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { sanitizeContent } from '../utils/sanitizer';
+import { generateHeaderId } from './learning-path/utils/markdownParser';
 
 /**
  * StyledMarkdown component for rendering markdown content with proper styling
  * and syntax highlighting for code blocks using the application theme.
  */
-const MarkdownRenderer = ({ children }) => {
+const MarkdownRenderer = ({ children, enableTocIds = true }) => {
   const theme = useTheme();
   const [Highlighter, setHighlighter] = useState(null);
   const [highlighterStyle, setHighlighterStyle] = useState(null);
+
+  // Track used header IDs to ensure uniqueness
+  const usedIds = useMemo(() => new Set(), [children]);
 
   // Process the content to handle "```markdown\n" at the beginning
   // and sanitize the content to prevent XSS attacks
@@ -256,6 +260,37 @@ const MarkdownRenderer = ({ children }) => {
                 {children}
               </code>
             );
+          },
+          // Custom heading components that generate TOC-compatible IDs
+          h1({ node, children, ...props }) {
+            const text = String(children);
+            const id = enableTocIds ? generateHeaderId(text, usedIds) : undefined;
+            return <h1 id={id} {...props}>{children}</h1>;
+          },
+          h2({ node, children, ...props }) {
+            const text = String(children);
+            const id = enableTocIds ? generateHeaderId(text, usedIds) : undefined;
+            return <h2 id={id} {...props}>{children}</h2>;
+          },
+          h3({ node, children, ...props }) {
+            const text = String(children);
+            const id = enableTocIds ? generateHeaderId(text, usedIds) : undefined;
+            return <h3 id={id} {...props}>{children}</h3>;
+          },
+          h4({ node, children, ...props }) {
+            const text = String(children);
+            const id = enableTocIds ? generateHeaderId(text, usedIds) : undefined;
+            return <h4 id={id} {...props}>{children}</h4>;
+          },
+          h5({ node, children, ...props }) {
+            const text = String(children);
+            const id = enableTocIds ? generateHeaderId(text, usedIds) : undefined;
+            return <h5 id={id} {...props}>{children}</h5>;
+          },
+          h6({ node, children, ...props }) {
+            const text = String(children);
+            const id = enableTocIds ? generateHeaderId(text, usedIds) : undefined;
+            return <h6 id={id} {...props}>{children}</h6>;
           },
         }}
       >
