@@ -81,27 +81,29 @@ You evaluate Wikimedia images for a submodule and either select one OR suggest a
 **ATTEMPT STRATEGY**: This is attempt {attempt_number} of {max_attempts}. {attempt_context}
 
 Output strict JSON in ONE of these formats:
-1. If you find a clearly relevant image: {{"index": <number>, "caption": "<short caption>"}}
+1. If you find a relevant image: {{"index": <number>, "caption": "<short caption>"}}
 2. If NO images are relevant AND we haven't reached max attempts: {{"alternative_queries": ["query1", "query2", "query3"], "reason": "<brief explanation why current images aren't suitable>"}}
 3. If NO images are relevant AND we've reached max attempts: {{}}
 
-**IMAGE SELECTION RULES:**
-- Only select if clearly relevant to the submodule topic/section
-- Prefer photos that concretely illustrate the topic; favor width>=600 and landscape when possible
-- Prioritize documentary/historical photos over generic illustrations
+**FLEXIBLE IMAGE SELECTION RULES:**
+- PRIORITIZE CONTENT RELEVANCE over format preferences
+- For conceptual topics (models, theories, processes): Diagrams, illustrations, and visualizations are EXCELLENT choices
+- For biographical topics: Photos of people are ideal
+- For historical topics: Period photos, documents, artifacts are perfect
+- For geographic topics: Maps, photos of places work well
+- FINAL ATTEMPT RULE: If this is attempt 3/3, be MUCH more lenient - select anything reasonably related rather than returning empty
 
-**ALTERNATIVE QUERY STRATEGY - MAXIMIZE SUCCESS PROBABILITY:**
+**CONTENT-TYPE VISUAL MATCHING:**
+- **Models/Theories/Concepts**: Diagrams, flowcharts, illustrations, concept maps = PERFECT MATCH
+- **Historical Figures**: Portrait photos, biographical images = PERFECT MATCH  
+- **Events/Periods**: Historical photos, documents, artifacts = PERFECT MATCH
+- **Places/Geography**: Maps, location photos, landmarks = PERFECT MATCH
+- **Objects/Technology**: Photos of actual items, technical diagrams = PERFECT MATCH
 
-**VISUAL CONTENT PRIORITIZATION (Generate queries likely to have photos on Wikimedia):**
-- PRIORITY 1: Named people, specific places, historical events, institutions
-- PRIORITY 2: Concrete objects, buildings, artifacts, monuments, documents
-- PRIORITY 3: Specific time periods with visual documentation, cultural movements
-- PRIORITY 4: Geographic locations, universities, government buildings, museums
-
-**PROGRESSIVE SPECIFICITY STRATEGY:**
-- Attempt 1: Broad but concrete visual concepts (e.g., "Einstein physics" → "Albert Einstein portrait")
-- Attempt 2: Add named entities, locations, dates (e.g., "relativity theory" → "Princeton University Einstein")  
-- Attempt 3: Maximum specificity with proper names, years, events (e.g., "physics concepts" → "1905 Einstein papers Nobel")
+**PROGRESSIVE SEARCH STRATEGY:**
+- Attempt 1: Direct conceptual search (for "Einstein theory" → "relativity diagram" OR "Einstein portrait")
+- Attempt 2: Add specificity and alternatives (for "memory model" → "Baddeley model diagram" OR "working memory illustration")  
+- Attempt 3: Maximum flexibility - accept ANY reasonably related content rather than failing
 
 **CURRENT ATTEMPT GUIDANCE:**
 {attempt_specific_guidance}
@@ -110,25 +112,25 @@ Output strict JSON in ONE of these formats:
 Previous unsuccessful queries: {previous_queries}
 {rejection_history}
 
-**STRATEGIC PIVOTING when abstractions fail:**
-- If concept is too abstract → Focus on people associated with it
-- If topic lacks visuals → Find related geographic locations or institutions  
-- If too general → Add specific historical periods, events, or biographical elements
-- If wrong domain → Pivot to related concrete manifestations
+**STRATEGIC ALTERNATIVES (when current images insufficient):**
+- For ABSTRACT concepts → Try: 1) Key figures/creators, 2) Related institutions, 3) Historical periods, 4) Geographic origins
+- For TECHNICAL topics → Try: 1) Diagrams/illustrations, 2) Inventors/scientists, 3) Applications/examples, 4) Historical development
+- For THEORETICAL topics → Try: 1) Theory visualizations, 2) Theory originators, 3) Famous applications, 4) Academic institutions
 
-**WIKIMEDIA OPTIMIZATION (Target content likely available):**
-- Biographical subjects (politicians, scientists, artists, historical figures)
-- Geographic locations (cities, landmarks, countries, natural features)
-- Historical events (wars, treaties, discoveries, cultural movements)
-- Institutional subjects (universities, governments, museums, organizations)
-- Documented periods (specific decades, historical eras with photo coverage)
+**WIKIMEDIA SUCCESS PATTERNS (Target content with high availability):**
+- Biographical subjects (scientists, philosophers, authors, historical figures)
+- Academic diagrams and illustrations (especially for scientific/technical topics)
+- Geographic locations (cities, countries, universities, landmarks)
+- Historical events and periods (wars, movements, discoveries)
+- Institutional subjects (universities, governments, organizations)
+- Technical illustrations and concept diagrams
 
 **ALTERNATIVE QUERY GENERATION RULES:**
-- Generate 2-3 strategically different queries (not variations of same concept)
-- Each query should target different visual angle of the topic
-- Use 2-4 words focusing on concrete, photographable elements
-- Include proper names, specific places, or historical periods when possible
-- Ensure queries are distinct from previous failed attempts
+- Generate 2-3 strategically different approaches (not just variations)
+- Balance between: 1) Conceptual diagrams, 2) Biographical content, 3) Historical/geographic context
+- Use specific terminology that matches Wikimedia naming conventions
+- Include proper names, institutions, or documented visual concepts
+- Ensure queries target different visual angles of the topic
 
 **Caption guidelines (if selecting):**
 - Language: {caption_lang}  
@@ -689,23 +691,27 @@ async def _select_image_with_alternatives_llm(
         # Generate attempt-specific guidance for enhanced success probability
         attempt_specific_guidance = ""
         if attempt_state.attempt_number == 1:
-            attempt_specific_guidance = """ATTEMPT 1 STRATEGY - Broad but Concrete:
-- Focus on main subject with clear visual potential (people, places, events)
-- Avoid abstract repetition of original topic
-- Target concrete manifestations: Who? Where? When?
-- Examples: "Einstein theory" → "Albert Einstein portrait", "Cold War" → "Berlin Wall construction" """
+            attempt_specific_guidance = """ATTEMPT 1 STRATEGY - Balanced Approach:
+- For conceptual topics: Look for BOTH diagrams/illustrations AND biographical content
+- For models/theories: Scientific diagrams, flowcharts, or concept visualizations are IDEAL
+- For historical topics: Photos of people, events, or documents work well
+- For geographic topics: Maps, location photos, or institutional buildings
+- Examples: "memory model" → Select memory model diagram OR Baddeley portrait"""
         elif attempt_state.attempt_number == 2:
-            attempt_specific_guidance = """ATTEMPT 2 STRATEGY - Add Specificity:
-- Include named entities, specific locations, historical periods
-- Add geographic or temporal context to broaden visual options
-- Target specific institutions, universities, or government entities
-- Examples: "physics concepts" → "Princeton University physics", "economic theory" → "Wall Street 1929" """
+            attempt_specific_guidance = """ATTEMPT 2 STRATEGY - Expanded Targeting:
+- Add geographic, temporal, or institutional context for broader options
+- For abstract concepts: Target key figures, universities, historical periods
+- For technical topics: Look for technical illustrations, inventor photos, or application examples
+- Include specific names, places, or documented visual elements
+- Examples: "economic theory" → "Keynes portrait" OR "Cambridge University economics" """
         elif attempt_state.attempt_number >= 3:
-            attempt_specific_guidance = """ATTEMPT 3 STRATEGY - Maximum Specificity:
-- Use proper names, specific years, documented historical moments
-- Target famous events, notable figures, specific institutions with known photography
-- Focus on well-documented subjects with extensive visual records
-- Examples: "literature concepts" → "Ernest Hemingway 1954 Nobel", "art movement" → "Pablo Picasso Guernica 1937" """
+            attempt_specific_guidance = """ATTEMPT 3 STRATEGY - MAXIMUM FLEXIBILITY (Final Attempt):
+- **CRITICAL**: Be MUCH more lenient - select ANY reasonably related image rather than returning empty
+- If there's a diagram of the topic: SELECT IT (diagrams are often perfect for conceptual content)
+- If there's a photo of a related person: SELECT IT (biographical context is valuable)
+- If there's any relevant visual: SELECT IT (something is better than nothing for student engagement)
+- Final attempt rule: Lower the threshold significantly - relevance > perfection. But if there is NOT relevant visual, return empty JSON {{}}.
+- Examples: For "Baddeley model" → SELECT the Baddeley model diagram even if not perfect quality"""
 
         rejection_history = ""
         if attempt_state.previous_rejection_reasons:

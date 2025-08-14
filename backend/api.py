@@ -33,6 +33,8 @@ from backend.routes.payments import router as payments_router
 from backend.models.auth_models import User, CreditTransaction, TransactionType, GenerationTask, GenerationTaskStatus, LearningPath
 from backend.models.models import Resource, EnhancedModule, Submodule, QuizQuestion, LearningPathState, SearchQuery, SearchServiceResult, ScrapedResult
 from backend.utils.auth import decode_access_token
+# Import Progress Orchestrator
+from backend.core.progress.orchestrator import ProgressOrchestrator
 
 # Import rate limiter and backend
 from backend.utils.auth_middleware import get_optional_user, get_current_user
@@ -644,6 +646,9 @@ async def generate_learning_path_task(
     result = None
     current_overall_progress = 0.0 # Track current overall progress
 
+    # Initialize orchestrator per task
+    progress_orchestrator = ProgressOrchestrator()
+
     redis_client = await get_redis_client()
     if redis_client:
         await redis_client.expire(f"progress:{task_id}", 60 * 60 * 24)
@@ -658,33 +663,53 @@ async def generate_learning_path_task(
                                          action: Optional[str] = None):
         nonlocal current_overall_progress # Allow modification of the outer scope variable
         timestamp = datetime.now().isoformat()
-        
+
+        # Compute monotonic overall via orchestrator; ignore incoming overall_progress
+        try:
+            current_overall_progress = progress_orchestrator.update_event(
+                message=message,
+                phase=phase,
+                phase_progress=phase_progress,
+                preview_data=preview_data,
+                action=action,
+            )
+        except Exception as _e:
+            # Fallback to last known or provided, but clamp monotonic
+            val = overall_progress if overall_progress is not None else current_overall_progress
+            current_overall_progress = max(current_overall_progress, float(val or 0.0))
+
+        # If preview_data includes totals, declare to orchestrator (additional safety)
+        try:
+            if preview_data and isinstance(preview_data, dict):
+                data = preview_data.get("data") if isinstance(preview_data.get("data"), dict) else None
+                if isinstance(data, dict):
+                    # From modules_defined
+                    if preview_data.get("type") == "modules_defined" and isinstance(data.get("modules"), list):
+                        progress_orchestrator.declare_totals(total_modules=len(data.get("modules")))
+                    # From all_submodules_planned
+                    if preview_data.get("type") == "all_submodules_planned" and isinstance(data.get("total_submodules_planned"), int):
+                        progress_orchestrator.declare_totals(total_submodules=int(data.get("total_submodules_planned")))
+        except Exception:
+            pass
+
         # Construct a log message. Preview_data can be verbose, so just indicate its presence.
         log_message_parts = [
             f"Task {task_id}: {message}",
             f"Phase: {phase}" if phase else None,
             f"PhaseProgress: {phase_progress:.2f}" if phase_progress is not None else None,
-            f"OverallProgress: {overall_progress:.2f}" if overall_progress is not None else None,
+            f"OverallProgress: {current_overall_progress:.2f}",
             f"Action: {action}" if action else None,
             "PreviewData: Present" if preview_data else None
         ]
         full_log_message = " | ".join(filter(None, log_message_parts))
         logging.info(full_log_message)
-        
-        # For debugging, optionally log the preview_data structure if needed, but be mindful of log size
-        # if preview_data:
-        #    logging.debug(f"Task {task_id} Preview Data: {json.dumps(preview_data, default=str)[:500]}...")
 
-        # Update current_overall_progress if a new value is provided
-        if overall_progress is not None:
-            current_overall_progress = overall_progress
-        
         progress_update_obj = ProgressUpdate(
             message=message,
             timestamp=timestamp,
             phase=phase,
             phase_progress=phase_progress,
-            overall_progress=current_overall_progress, # Use the tracked overall_progress
+            overall_progress=current_overall_progress, # Use orchestrator-computed overall
             preview_data=preview_data,
             action=action
         )

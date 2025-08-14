@@ -602,7 +602,7 @@ const useProgressTracking = (taskId, onTaskComplete) => {
 
             // Update overall progress if present in the event
             if (eventData.overall_progress !== undefined && eventData.overall_progress !== null) {
-                setOverallProgress(eventData.overall_progress);
+                setOverallProgress(prev => Math.max(prev || 0, eventData.overall_progress));
                 // Also update it in liveBuildData for consistency if needed by BlueprintView
                 dispatchLiveBuildDataUpdate({ type: 'OVERALL_PROGRESS_UPDATE', payload: eventData });
             } else if (eventData.phase_progress !== undefined && eventData.overall_progress === undefined) {
