@@ -25,20 +25,49 @@ class AttemptState:
 
 # --- Module-level prompt templates (verbatim) ---
 PROMPT_WIKIMEDIA_QUERIES = """
-You generate concise Wikimedia Commons image search terms.
+You generate concise Wikimedia Commons image search terms that maximize success probability.
 Produce 3 lines, each ONE query. 2–4 words, no quotes, no punctuation.
-Guidelines:
-- Prefer concrete, visual subjects (people, places, institutions, events, objects, scenes)
-- Avoid abstract phrases like "economic policy changes" or generic words like "context"
-- Avoid years unless iconic (e.g., "Reagan 1981 inauguration")
-- Use {query_language} unless the concept is an English-only term
-- Keep it broad enough to likely have photos on Wikimedia
+
+**EVIDENCE-BASED SUCCESS STRATEGIES:**
+
+**LANGUAGE OPTIMIZATION (Critical for success):**
+- SCIENTIFIC/MATHEMATICAL topics: ALWAYS use English (Wikimedia Commons is primarily English)
+  - Mathematics: "Stokes theorem", "differential topology", "vector calculus"
+  - Science: "quantum mechanics", "DNA structure", "photosynthesis"
+  - NOT: "Teoremas de Stokes", "topología diferencial" (these fail)
+- BIOGRAPHICAL content: Use full English names
+  - "Theodor Adorno portrait", "Jacques Derrida biography", "Einstein relativity"
+  - NOT: "Adorno filósofo", "Derrida pensador"
+- OTHER topics: Use {query_language} if culturally specific, otherwise prefer English
+
+**PROVEN SUCCESSFUL PATTERNS:**
+1. **Scientific Models/Theories**: "[Scientist Name] [concept]" or "[concept] diagram"
+   - SUCCESS: "Baddeley Hitch model" → Found perfect diagram
+   - SUCCESS: "Stokes theorem illustration" → Found mathematical content
+2. **Biographical**: "[Full Name] portrait" or "[Full Name] biography"
+   - SUCCESS: "Theodor Adorno portrait" → Found biographical photo
+   - SUCCESS: "Jacques Derrida portrait" → Found biographical content
+3. **Technical Diagrams**: "[concept] diagram", "[model] illustration", "[theory] visualization"
+
+**CONTENT-TYPE DETECTION & STRATEGY:**
+- If topic contains: mathematics, theorem, equation, formula, calculus, topology, geometry → Use English scientific terms
+- If topic contains: model, theory, concept, diagram, process → Target diagrams + key figures
+- If topic contains: person names, philosophers, scientists, authors → Biographical approach
+- If topic contains: historical events, periods, movements → Geographic + temporal approach
+
+**OPTIMIZATION RULES:**
+- Prefer concrete, visual subjects (people, places, institutions, diagrams, objects)
+- Scientific terms: Use universally recognized English terminology
+- Avoid abstract phrases or overly specific technical jargon
+- Target content likely to exist on Wikimedia Commons
+- Balance between: 1) Key figures/biography, 2) Conceptual diagrams, 3) Related institutions
+
 Context:
 - Course topic: {user_topic}
 - Module: {module_title}
 - Submodule: {submodule_title}
 - Section: {section_heading}
- - Image topic hint: {context_hint}
+- Image topic hint: {context_hint}
 """
 
 PROMPT_IMAGE_RANKING = """
@@ -85,25 +114,30 @@ Output strict JSON in ONE of these formats:
 2. If NO images are relevant AND we haven't reached max attempts: {{"alternative_queries": ["query1", "query2", "query3"], "reason": "<brief explanation why current images aren't suitable>"}}
 3. If NO images are relevant AND we've reached max attempts: {{}}
 
+**CRITICAL LANGUAGE CONSISTENCY RULE:**
+- MAINTAIN THE SAME LANGUAGE STRATEGY across all attempts for this topic
+- For SCIENTIFIC/MATHEMATICAL topics: ALWAYS use English terms in alternative queries
+  - Mathematics: "Stokes theorem", "differential topology", "manifold geometry"
+  - Science: "quantum mechanics", "DNA structure", "working memory model"
+  - Computer Science: "NP complete", "algorithm complexity", "Cook Levin theorem"
+- For BIOGRAPHICAL topics: ALWAYS use English names: "Vladimir Propp portrait", "Einstein biography"
+- For OTHER topics: Use English for better Wikimedia results unless culturally specific
+
+**EVIDENCE-BASED QUERY PATTERNS (Use these proven successful patterns):**
+1. **Simple Biographical**: "[Full Name] portrait" or "[Full Name] biography"
+   - PROVEN SUCCESS: "Vladimir Propp portrait", "Theodor Adorno portrait"
+   - AVOID: Complex queries like "Vladimir Propp functions" (these fail)
+2. **Scientific Diagrams**: "[concept] diagram" or "[theory] illustration"
+   - PROVEN SUCCESS: "Baddeley Hitch model", "Stokes theorem illustration"
+3. **Technical Terms**: Use universally recognized English scientific terminology
+   - PROVEN SUCCESS: "NP complete diagram", "differential topology"
+
 **FLEXIBLE IMAGE SELECTION RULES:**
 - PRIORITIZE CONTENT RELEVANCE over format preferences
-- For conceptual topics (models, theories, processes): Diagrams, illustrations, and visualizations are EXCELLENT choices
+- For conceptual topics: Diagrams, illustrations, and visualizations are EXCELLENT choices
 - For biographical topics: Photos of people are ideal
-- For historical topics: Period photos, documents, artifacts are perfect
-- For geographic topics: Maps, photos of places work well
-- FINAL ATTEMPT RULE: If this is attempt 3/3, be MUCH more lenient - select anything reasonably related rather than returning empty
-
-**CONTENT-TYPE VISUAL MATCHING:**
-- **Models/Theories/Concepts**: Diagrams, flowcharts, illustrations, concept maps = PERFECT MATCH
-- **Historical Figures**: Portrait photos, biographical images = PERFECT MATCH  
-- **Events/Periods**: Historical photos, documents, artifacts = PERFECT MATCH
-- **Places/Geography**: Maps, location photos, landmarks = PERFECT MATCH
-- **Objects/Technology**: Photos of actual items, technical diagrams = PERFECT MATCH
-
-**PROGRESSIVE SEARCH STRATEGY:**
-- Attempt 1: Direct conceptual search (for "Einstein theory" → "relativity diagram" OR "Einstein portrait")
-- Attempt 2: Add specificity and alternatives (for "memory model" → "Baddeley model diagram" OR "working memory illustration")  
-- Attempt 3: Maximum flexibility - accept ANY reasonably related content rather than failing
+- For scientific topics: ANY related diagram, even if abstract, is valuable
+- FINAL ATTEMPT RULE: If this is attempt 3/3, be EXTREMELY lenient - select anything with ANY connection to topic
 
 **CURRENT ATTEMPT GUIDANCE:**
 {attempt_specific_guidance}
@@ -112,25 +146,12 @@ Output strict JSON in ONE of these formats:
 Previous unsuccessful queries: {previous_queries}
 {rejection_history}
 
-**STRATEGIC ALTERNATIVES (when current images insufficient):**
-- For ABSTRACT concepts → Try: 1) Key figures/creators, 2) Related institutions, 3) Historical periods, 4) Geographic origins
-- For TECHNICAL topics → Try: 1) Diagrams/illustrations, 2) Inventors/scientists, 3) Applications/examples, 4) Historical development
-- For THEORETICAL topics → Try: 1) Theory visualizations, 2) Theory originators, 3) Famous applications, 4) Academic institutions
-
-**WIKIMEDIA SUCCESS PATTERNS (Target content with high availability):**
-- Biographical subjects (scientists, philosophers, authors, historical figures)
-- Academic diagrams and illustrations (especially for scientific/technical topics)
-- Geographic locations (cities, countries, universities, landmarks)
-- Historical events and periods (wars, movements, discoveries)
-- Institutional subjects (universities, governments, organizations)
-- Technical illustrations and concept diagrams
-
-**ALTERNATIVE QUERY GENERATION RULES:**
-- Generate 2-3 strategically different approaches (not just variations)
-- Balance between: 1) Conceptual diagrams, 2) Biographical content, 3) Historical/geographic context
-- Use specific terminology that matches Wikimedia naming conventions
-- Include proper names, institutions, or documented visual concepts
-- Ensure queries target different visual angles of the topic
+**ALTERNATIVE QUERY GENERATION (when current images insufficient):**
+- **PRIORITY 1**: Simple biographical queries: "[Key Figure] portrait", "[Scientist] biography"
+- **PRIORITY 2**: Basic concept diagrams: "[theory] diagram", "[model] illustration"
+- **PRIORITY 3**: Institution + topic: "[University] [subject]", "[Place] [concept]"
+- **LANGUAGE RULE**: Keep same language strategy as initial queries (usually English for academic topics)
+- **SIMPLICITY RULE**: Prefer simple 2-3 word queries over complex phrases
 
 **Caption guidelines (if selecting):**
 - Language: {caption_lang}  
@@ -706,12 +727,21 @@ async def _select_image_with_alternatives_llm(
 - Examples: "economic theory" → "Keynes portrait" OR "Cambridge University economics" """
         elif attempt_state.attempt_number >= 3:
             attempt_specific_guidance = """ATTEMPT 3 STRATEGY - MAXIMUM FLEXIBILITY (Final Attempt):
-- **CRITICAL**: Be MUCH more lenient - select ANY reasonably related image rather than returning empty
-- If there's a diagram of the topic: SELECT IT (diagrams are often perfect for conceptual content)
-- If there's a photo of a related person: SELECT IT (biographical context is valuable)
-- If there's any relevant visual: SELECT IT (something is better than nothing for student engagement)
-- Final attempt rule: Lower the threshold significantly - relevance > perfection. But if there is NOT relevant visual, return empty JSON {{}}.
-- Examples: For "Baddeley model" → SELECT the Baddeley model diagram even if not perfect quality"""
+- **CRITICAL**: This is the last chance - be EXTREMELY lenient and select ANY reasonably related content
+- **SELECTION PRIORITY** (any of these should trigger selection):
+  1. ANY diagram/illustration related to the topic concept
+  2. ANY photograph of people mentioned in the topic
+  3. ANY technical drawing, mathematical illustration, or scientific visualization
+  4. ANY geographical location, institution, or building related to the topic
+  5. ANY historical document, artifact, or period image connected to the topic
+- **EVIDENCE-BASED SUCCESS PATTERNS**:
+  - Mathematical topics: Select ANY mathematical diagrams, even if abstract
+  - Scientific topics: Select ANY related scientific illustrations or Nobel Prize winners
+  - Theoretical topics: Select ANY related theorist's photograph or conceptual diagram
+  - Economic topics: Select ANY economist's photo or economic graph/chart
+- **FINAL ATTEMPT RULE**: If there's ANY visual connection to the topic, SELECT IT
+- **STUDENT ENGAGEMENT**: Something relevant is infinitely better than nothing
+- Examples: "Stokes theorem" + any mathematical diagram → SELECT; "Keynes theory" + any economist photo → SELECT"""
 
         rejection_history = ""
         if attempt_state.previous_rejection_reasons:
