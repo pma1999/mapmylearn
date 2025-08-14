@@ -6,14 +6,14 @@ from langchain_core.messages import HumanMessage
 import os
 
 from backend.models.models import SearchQuery, LearningPathState, SearchServiceResult, ScrapedResult, ResourceQuery
-from backend.parsers.parsers import search_queries_parser, enhanced_modules_parser, parse_initial_flow_response, parse_search_queries, parse_resource_queries, curiosity_item_list_parser
+from backend.parsers.parsers import search_queries_parser, enhanced_modules_parser, parse_initial_flow_response, parse_search_queries, parse_resource_queries, curiosity_item_list_parser, engagement_question_list_parser
 from backend.services.services import get_llm, execute_search_with_router, get_llm_with_search, get_llm_flash_lite
 from langchain_core.prompts import ChatPromptTemplate
 
 from backend.core.graph_nodes.helpers import run_chain, batch_items, format_search_results, escape_curly_braces, MAX_CHARS_PER_SCRAPED_RESULT_CONTEXT, extract_json_from_markdown, handle_llm_generation_with_retry, handle_llm_generation_with_retry_no_parse
 from backend.core.graph_nodes.search_utils import execute_search_with_llm_retry
 from backend.prompts.learning_path_prompts import (
-    INITIAL_FLOW_PROMPT, REGENERATE_SEARCH_QUERY_PROMPT, TOPIC_RESOURCE_SEARCH_PROMPT, REGENERATE_RESOURCE_QUERY_PROMPT, CURIOSITY_TIPS_PROMPT
+    INITIAL_FLOW_PROMPT, REGENERATE_SEARCH_QUERY_PROMPT, TOPIC_RESOURCE_SEARCH_PROMPT, REGENERATE_RESOURCE_QUERY_PROMPT, CURIOSITY_TIPS_PROMPT, ENGAGEMENT_QUESTIONS_PROMPT
 )
 from backend.core.graph_nodes.research_evaluation import format_search_results_for_evaluation
 
@@ -557,6 +557,15 @@ async def create_learning_path(state: LearningPathState) -> Dict[str, Any]:
     except Exception:
         # Never block course creation if curiosity task setup fails
         logger.exception("Failed to start curiosity generation task; continuing without it")
+
+    # Spawn engagement questions generation in parallel if not started and we have results
+    try:
+        if search_service_results and not state.get("engagement_questions_generation_started"):
+            state["engagement_questions_generation_started"] = True
+            asyncio.create_task(_generate_engagement_questions_parallel(state, search_service_results))
+    except Exception:
+        # Never block course creation if engagement questions task setup fails
+        logger.exception("Failed to start engagement questions generation task; continuing without it")
 
     if not search_service_results or len(search_service_results) == 0:
         logging.info("No search results available to create course")
@@ -1314,6 +1323,99 @@ async def _generate_curiosity_items_parallel(state: LearningPathState, search_se
                 await progress_callback(
                     "Curiosity feed unavailable due to a minor issue.",
                     phase="curiosities",
+                    action="completed"
+                )
+            except Exception:
+                pass
+
+async def _generate_engagement_questions_parallel(state: LearningPathState, search_service_results: List[SearchServiceResult]):
+    """
+    Generate a batch of interactive engagement questions from accumulated search results
+    using gemini-2.0-flash-lite. Runs in parallel with course structuring and streams
+    questions to the frontend via progress_callback for immediate user engagement.
+    """
+    try:
+        # Build concise research summary context (reusing evaluation formatter)
+        summary = format_search_results_for_evaluation(search_service_results)
+        # Cap overall summary length to keep prompt efficient
+        max_chars = int(os.environ.get("CURIOSITY_CONTEXT_MAX_CHARS", 30000))
+        if isinstance(summary, str) and len(summary) > max_chars:
+            summary = summary[:max_chars] + "..."
+
+        # Language and topic
+        from backend.utils.language_utils import get_full_language_name
+        output_language = get_full_language_name(state.get('language', 'en'))
+        escaped_topic = escape_curly_braces(state["user_topic"])
+
+        # Desired count bounds (fewer questions than curiosities)
+        desired_count_env = os.environ.get("ENGAGEMENT_QUESTIONS_COUNT", "4")
+        try:
+            desired_count = max(3, min(6, int(desired_count_env)))
+        except ValueError:
+            desired_count = 4
+
+        # Prepare prompt template and params
+        prompt = ChatPromptTemplate.from_template(ENGAGEMENT_QUESTIONS_PROMPT)
+        params = {
+            "user_topic": escaped_topic,
+            "language": output_language,
+            "search_results_summary": summary,
+            "desired_count": desired_count,
+        }
+
+        # Execute with flash-lite and parse with Pydantic parser
+        result = await run_chain(
+            prompt,
+            lambda: get_llm_flash_lite(key_provider=state.get("google_key_provider"), user=state.get('user')),
+            engagement_question_list_parser,
+            params,
+            max_retries=3,
+            retry_parsing_errors=True,
+            max_parsing_retries=2,
+        )
+
+        items = getattr(result, 'items', []) if result else []
+        # Prepare SSE payload
+        progress_callback = state.get('progress_callback')
+        if progress_callback and items:
+            payload_items = []
+            for it in items:
+                if getattr(it, 'question', None) and getattr(it, 'options', None):
+                    payload_items.append({
+                        "question": it.question,
+                        "options": it.options,
+                        "correct_option_index": it.correct_option_index,
+                        "explanation": it.explanation,
+                        "category": it.category
+                    })
+            
+            if payload_items:
+                await progress_callback(
+                    f"Generated {len(payload_items)} interactive questions about '{state['user_topic']}'.",
+                    phase="engagement_questions",
+                    phase_progress=1.0,
+                    preview_data={
+                        "type": "engagement_questions_ready",
+                        "data": {"items": payload_items}
+                    },
+                    action="ready"
+                )
+        elif progress_callback:
+            # Optional soft notification; do not mark as error
+            await progress_callback(
+                "No engagement questions available at this time.",
+                phase="engagement_questions",
+                action="completed"
+            )
+    except Exception as e:
+        logger.exception(f"Engagement questions generation failed: {e}")
+        # Never impact the main flow; optionally notify quietly
+        progress_callback = state.get('progress_callback')
+        if progress_callback:
+            try:
+                await progress_callback(
+                    "Interactive questions unavailable due to a minor issue.",
+                    phase="engagement_questions",
                     action="completed"
                 )
             except Exception:

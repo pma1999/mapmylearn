@@ -1235,3 +1235,42 @@ Output JSON ONLY in this exact schema:
   ]
 }}
 """
+
+# =========================================================================
+# Interactive Questions Prompt for Loading Screen Engagement (Gemini Flash Lite)
+# =========================================================================
+ENGAGEMENT_QUESTIONS_PROMPT = """
+You are generating brief, engaging interactive questions to display during a course creation loading screen.
+
+Topic: {user_topic}
+Language: {language}
+
+Research Summary (evidence basis):
+{search_results_summary}
+
+Instructions:
+- Produce EXACTLY {desired_count} distinct interactive questions.
+- Each question must be concise but engaging (60-180 characters), in {language}, and relevant to the topic.
+- Provide 2-4 answer options per question, with exactly one correct answer.
+- Include a brief explanation (50-250 characters) for the correct answer.
+- Vary categories across this set to ensure diversity and engagement.
+- Categories allowed (use exactly one per question):
+  ["knowledge_check", "opinion_poll", "quick_quiz", "fact_or_fiction"]
+- Content must be grounded in the topic and generally reliable knowledge; avoid controversial or sensitive topics.
+- Questions should be answerable by someone with basic knowledge of the topic.
+- Do NOT include URLs, citations, or markdown in any field—plain text only.
+- Keep explanations educational but concise.
+
+Output JSON ONLY in this exact schema:
+{{
+  "items": [
+    {{
+      "question": "...",
+      "options": ["option1", "option2", "option3"],
+      "correct_option_index": 0,
+      "explanation": "...",
+      "category": "..."
+    }}
+  ]
+}}
+"""

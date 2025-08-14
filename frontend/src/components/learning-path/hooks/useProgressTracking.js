@@ -20,6 +20,56 @@ const initialLiveBuildData = {
     items: [],
     index: 0,
   },
+  // Engagement questions for loading screen
+  engagementQuestions: {
+    status: 'pending', // pending | ready
+    items: [],
+    index: 0,
+  },
+  // Combined engagement feed (curiosities + questions)
+  engagementFeed: {
+    status: 'pending', // pending | ready
+    items: [], // Mixed array of curiosities and questions
+    index: 0,
+  },
+};
+
+// Helper function to merge curiosities and questions into balanced engagement feed
+const mergeEngagementContent = (curiosities, questions) => {
+  const curiosityItems = Array.isArray(curiosities) ? curiosities.map(item => ({
+    type: 'curiosity',
+    data: item
+  })) : [];
+  
+  const questionItems = Array.isArray(questions) ? questions.map(item => ({
+    type: 'question', 
+    data: { ...item, userAnswer: null, showFeedback: false }
+  })) : [];
+
+  // If we have both types, create a balanced mix (roughly 60% curiosities, 40% questions)
+  if (curiosityItems.length > 0 && questionItems.length > 0) {
+    const totalItems = curiosityItems.length + questionItems.length;
+    const merged = [];
+    let cIndex = 0, qIndex = 0;
+    
+    // Interleave items with preference for curiosities
+    for (let i = 0; i < totalItems; i++) {
+      if ((i % 5 < 3 || qIndex >= questionItems.length) && cIndex < curiosityItems.length) {
+        merged.push(curiosityItems[cIndex++]);
+      } else if (qIndex < questionItems.length) {
+        merged.push(questionItems[qIndex++]);
+      }
+    }
+    
+    // Add any remaining items
+    while (cIndex < curiosityItems.length) merged.push(curiosityItems[cIndex++]);
+    while (qIndex < questionItems.length) merged.push(questionItems[qIndex++]);
+    
+    return merged;
+  }
+  
+  // If only one type is available, return that
+  return [...curiosityItems, ...questionItems];
 };
 
 // --- Reducer function for liveBuildData ---
@@ -40,6 +90,8 @@ function liveBuildDataReducer(state, action) {
         modules: [],
         error: null,
         curiosityFeed: { status: 'pending', items: [], index: 0 },
+        engagementQuestions: { status: 'pending', items: [], index: 0 },
+        engagementFeed: { status: 'pending', items: [], index: 0 },
       };
     case 'SET_TOPIC':
       return { ...state, topic: payload.topic };
@@ -73,7 +125,7 @@ function liveBuildDataReducer(state, action) {
       };
     // --- NEW: Curiosities ready ---
     case 'curiosities_ready':
-      return {
+      const updatedStateWithCuriosities = {
         ...state,
         curiosityFeed: {
           status: 'ready',
@@ -82,6 +134,35 @@ function liveBuildDataReducer(state, action) {
         },
         overallStatusMessage: state.overallStatusMessage,
       };
+      // Update combined engagement feed
+      const curiosities = Array.isArray(payload.items) ? payload.items : [];
+      const existingQuestions = state.engagementQuestions?.items || [];
+      updatedStateWithCuriosities.engagementFeed = {
+        status: 'ready',
+        items: mergeEngagementContent(curiosities, existingQuestions),
+        index: 0,
+      };
+      return updatedStateWithCuriosities;
+    // --- NEW: Engagement questions ready ---
+    case 'engagement_questions_ready':
+      const updatedStateWithQuestions = {
+        ...state,
+        engagementQuestions: {
+          status: 'ready',
+          items: Array.isArray(payload.items) ? payload.items : [],
+          index: 0,
+        },
+        overallStatusMessage: state.overallStatusMessage,
+      };
+      // Update combined engagement feed
+      const questions = Array.isArray(payload.items) ? payload.items : [];
+      const existingCuriosities = state.curiosityFeed?.items || [];
+      updatedStateWithQuestions.engagementFeed = {
+        status: 'ready',
+        items: mergeEngagementContent(existingCuriosities, questions),
+        index: 0,
+      };
+      return updatedStateWithQuestions;
     // --- NEW: Research loop diagnostics (no-op storage to avoid warnings) ---
     case 'research_evaluation':
       return {

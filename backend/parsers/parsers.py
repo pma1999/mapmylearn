@@ -13,7 +13,8 @@ from backend.models.models import (
     RefinementQueryList,
     ContentEvaluation,
     ContentRefinementQueryList,
-    CuriosityItemList
+    CuriosityItemList,
+    EngagementQuestionList
 )
 import re
 import logging
@@ -40,6 +41,8 @@ content_refinement_query_parser = PydanticOutputParser(pydantic_object=ContentRe
 planning_research_evaluation_parser = PydanticOutputParser(pydantic_object=ResearchEvaluation)
 # NEW: Curiosity items parser
 curiosity_item_list_parser = PydanticOutputParser(pydantic_object=CuriosityItemList)
+# NEW: Engagement questions parser
+engagement_question_list_parser = PydanticOutputParser(pydantic_object=EngagementQuestionList)
 
 def parse_initial_flow_response(response_text: str) -> Optional[EnhancedModuleList]:
     """

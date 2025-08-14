@@ -10,6 +10,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CircleIcon from '@mui/icons-material/Circle';
 import CuriosityCard from './CuriosityCard';
 import CuriositySkeleton from './CuriositySkeleton';
+import EngagementContent from './EngagementContent';
 
 const CarouselContainer = styled(Box)(({ theme }) => ({
   position: 'relative',
@@ -58,7 +59,8 @@ const CuriosityCarousel = ({
   initialIndex = 0,
   onIndexChange,
   onInteract,
-  ariaLabel = 'Curiosity carousel',
+  onCopy,
+  ariaLabel = 'Engagement content carousel',
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -182,7 +184,19 @@ const CuriosityCarousel = ({
               }
             }}
           >
-            <CuriosityCard text={current.text} category={current.category} />
+            <EngagementContent 
+              item={current} 
+              onCopy={onCopy}
+              onInteract={(interactionData) => {
+                if (onInteract) {
+                  onInteract({ 
+                    ...interactionData, 
+                    index, 
+                    contentType: current?.type || 'unknown' 
+                  });
+                }
+              }}
+            />
           </motion.div>
         </AnimatePresence>
 
@@ -238,6 +252,7 @@ CuriosityCarousel.propTypes = {
   initialIndex: PropTypes.number,
   onIndexChange: PropTypes.func,
   onInteract: PropTypes.func,
+  onCopy: PropTypes.func,
   ariaLabel: PropTypes.string,
 };
 

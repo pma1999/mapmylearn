@@ -349,8 +349,6 @@ const GeneratingPage = () => {
       );
   }
 
-  const curiosities = liveBuildData?.curiosityFeed?.status === 'ready' ? (liveBuildData.curiosityFeed.items || []) : [];
-
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 2, sm: 3 } }}>
       <OverallProgressDisplay 
@@ -364,8 +362,51 @@ const GeneratingPage = () => {
         user={user}
         onHistoryClick={() => navigate('/history')}
       />
-      {/* Curiosities Carousel */}
-      <CuriosityCarousel items={curiosities} autoplay={(overallProgress || 0) < 1} />
+      {/* Enhanced Engagement Carousel */}
+      <CuriosityCarousel 
+        items={(() => {
+          try {
+            // Primary: Use combined engagement feed if available
+            if (liveBuildData?.engagementFeed?.status === 'ready' && liveBuildData.engagementFeed.items?.length > 0) {
+              return liveBuildData.engagementFeed.items;
+            }
+            // Fallback: Use curiosities only if available
+            if (liveBuildData?.curiosityFeed?.status === 'ready' && liveBuildData.curiosityFeed.items?.length > 0) {
+              return liveBuildData.curiosityFeed.items.map(item => ({
+                type: 'curiosity',
+                data: item
+              }));
+            }
+            // Empty state
+            return [];
+          } catch (error) {
+            console.error('Error processing engagement content:', error);
+            return [];
+          }
+        })()} 
+        autoplay={(overallProgress || 0) < 1}
+        onInteract={(interactionData) => {
+          try {
+            // Handle interaction analytics and feedback
+            console.log('Engagement interaction:', interactionData);
+            // Future: Send analytics event to track user engagement
+            if (interactionData.type === 'answer_submitted') {
+              console.log(`Question answered: ${interactionData.correct ? 'correct' : 'incorrect'}`);
+            }
+          } catch (error) {
+            console.error('Error handling interaction:', error);
+          }
+        }}
+        onCopy={() => {
+          try {
+            // Handle copy analytics
+            console.log('Content copied');
+            // Future: Send analytics event to track content sharing
+          } catch (error) {
+            console.error('Error handling copy:', error);
+          }
+        }}
+      />
       <BlueprintView liveBuildData={liveBuildData} />
     </Container>
   );

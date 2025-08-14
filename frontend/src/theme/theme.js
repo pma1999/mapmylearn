@@ -54,6 +54,13 @@ const palette = {
     historical_context: { main: '#8D6E63', bg: '#8D6E6314' },
     practical_tip: { main: '#0288D1', bg: '#0288D114' },
     advanced_nugget: { main: '#00897B', bg: '#00897B14' },
+  },
+  // Question category colors
+  questionCategories: {
+    knowledge_check: { main: '#FF5722', bg: '#FF572214' },
+    opinion_poll: { main: '#9C27B0', bg: '#9C27B014' },
+    quick_quiz: { main: '#FF9800', bg: '#FF980014' },
+    fact_or_fiction: { main: '#607D8B', bg: '#607D8B14' },
   }
 };
 

@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field, HttpUrl, AliasChoices
 from typing import List, Dict, Any, Optional, TypedDict, Annotated, Callable, TYPE_CHECKING, Tuple
 import operator
 from typing import Literal
+from pydantic import validator
 
 # Import the key provider types but only for type checking
 if TYPE_CHECKING:  
@@ -201,6 +202,28 @@ class CuriosityItem(BaseModel):
 
 class CuriosityItemList(BaseModel):
     items: List[CuriosityItem] = Field(default_factory=list, description="List of curiosity items for the loading screen")
+
+# Interactive Questions for Loading Screen Engagement
+class InteractiveQuestion(BaseModel):
+    question: str = Field(..., description="Brief engaging question text in the output language", max_length=200)
+    options: List[str] = Field(..., min_items=2, max_items=4, description="Answer options")
+    correct_option_index: int = Field(..., ge=0, description="Index of correct answer (0-based)")
+    explanation: str = Field(..., description="Brief explanation of correct answer", max_length=300)
+    category: Literal[
+        "knowledge_check",
+        "opinion_poll", 
+        "quick_quiz",
+        "fact_or_fiction"
+    ] = Field(..., description="Category of the interactive question")
+
+    @validator('correct_option_index')
+    def validate_correct_option_index(cls, v, values):
+        if 'options' in values and v >= len(values['options']):
+            raise ValueError('correct_option_index must be within options array bounds')
+        return v
+
+class EngagementQuestionList(BaseModel):
+    items: List[InteractiveQuestion] = Field(default_factory=list, description="List of interactive questions for loading screen engagement")
 
 # Global State for the Graph (TypedDict)
 class LearningPathState(TypedDict):
