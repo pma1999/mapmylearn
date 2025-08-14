@@ -1,6 +1,7 @@
 import React from 'react';
 import PropTypes from 'prop-types';
 import { Chip, Tooltip } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import TipsAndUpdatesIcon from '@mui/icons-material/TipsAndUpdates';
 import PsychologyIcon from '@mui/icons-material/Psychology';
@@ -22,9 +23,14 @@ const categoryIconMap = {
 const normalizeCategory = (cat) => (cat || '').toLowerCase();
 
 const CuriosityCategoryChip = ({ category, size = 'small', variant = 'soft' }) => {
+  const theme = useTheme();
   const normalized = normalizeCategory(category);
   const icon = categoryIconMap[normalized] || <LightbulbIcon fontSize="inherit" />;
   const label = (normalized || 'insight').replace('_', ' ');
+
+  const catPalette = theme.palette?.curiosityCategories?.[normalized];
+  const bg = catPalette?.bg || theme.palette.action.hover;
+  const fg = catPalette?.main || theme.palette.text.primary;
 
   return (
     <Tooltip title={`Category: ${label}`}> 
@@ -33,7 +39,7 @@ const CuriosityCategoryChip = ({ category, size = 'small', variant = 'soft' }) =
         label={label}
         size={size}
         variant={variant}
-        sx={{ textTransform: 'capitalize' }}
+        sx={{ textTransform: 'capitalize', backgroundColor: bg, color: fg, '& .MuiChip-icon': { color: fg } }}
       />
     </Tooltip>
   );

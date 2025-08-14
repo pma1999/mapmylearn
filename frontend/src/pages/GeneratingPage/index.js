@@ -37,7 +37,7 @@ import HistoryIcon from '@mui/icons-material/History';
 
 import useProgressTracking from '../../components/learning-path/hooks/useProgressTracking';
 import { useAuth } from '../../services/authContext';
-import { useTheme } from '@mui/material/styles';
+import { useTheme } from '@mui/material/styles'; // keep for other components if needed
 
 // --- Curiosities Components ---
 import { CuriosityCarousel } from './components/Curiosities';
