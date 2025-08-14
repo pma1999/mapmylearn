@@ -194,6 +194,9 @@ async def generate_learning_path(
         # Image enrichment defaults
         "images_enrichment_enabled": True,
         "images_per_submodule": 5,
+        # Enhanced image search with retry functionality
+        "enhanced_image_search_enabled": True,
+        "max_image_search_attempts": 3,
     }
     
     # Configure and run the graph

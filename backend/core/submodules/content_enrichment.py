@@ -1,6 +1,7 @@
 import logging
 import re
 from typing import List, Optional, Dict, Any, Set, Tuple
+from dataclasses import dataclass
 
 from backend.models.models import EnhancedModule, Submodule, LearningPathState
 from backend.services.image_service import search_wikimedia_images
@@ -10,6 +11,17 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
 logger = logging.getLogger("content_enrichment.images")
+
+# --- Data structures for retry logic ---
+
+@dataclass
+class AttemptState:
+    """State tracking for multi-attempt image search process."""
+    attempt_number: int
+    used_urls: Set[str]
+    all_candidates_history: List[Dict[str, Any]]
+    query_history: List[List[str]]
+    previous_rejection_reasons: List[str]
 
 # --- Module-level prompt templates (verbatim) ---
 PROMPT_WIKIMEDIA_QUERIES = """
@@ -60,6 +72,75 @@ Context:
 - Submodule: {submodule_title}
 - Section: {section_heading}
 Candidates (JSON):
+{candidates_json}
+"""
+
+PROMPT_IMAGE_SELECTION_WITH_ALTERNATIVES = """
+You evaluate Wikimedia images for a submodule and either select one OR suggest alternative search queries with HIGH SUCCESS PROBABILITY.
+
+**ATTEMPT STRATEGY**: This is attempt {attempt_number} of {max_attempts}. {attempt_context}
+
+Output strict JSON in ONE of these formats:
+1. If you find a clearly relevant image: {{"index": <number>, "caption": "<short caption>"}}
+2. If NO images are relevant AND we haven't reached max attempts: {{"alternative_queries": ["query1", "query2", "query3"], "reason": "<brief explanation why current images aren't suitable>"}}
+3. If NO images are relevant AND we've reached max attempts: {{}}
+
+**IMAGE SELECTION RULES:**
+- Only select if clearly relevant to the submodule topic/section
+- Prefer photos that concretely illustrate the topic; favor width>=600 and landscape when possible
+- Prioritize documentary/historical photos over generic illustrations
+
+**ALTERNATIVE QUERY STRATEGY - MAXIMIZE SUCCESS PROBABILITY:**
+
+**VISUAL CONTENT PRIORITIZATION (Generate queries likely to have photos on Wikimedia):**
+- PRIORITY 1: Named people, specific places, historical events, institutions
+- PRIORITY 2: Concrete objects, buildings, artifacts, monuments, documents
+- PRIORITY 3: Specific time periods with visual documentation, cultural movements
+- PRIORITY 4: Geographic locations, universities, government buildings, museums
+
+**PROGRESSIVE SPECIFICITY STRATEGY:**
+- Attempt 1: Broad but concrete visual concepts (e.g., "Einstein physics" → "Albert Einstein portrait")
+- Attempt 2: Add named entities, locations, dates (e.g., "relativity theory" → "Princeton University Einstein")  
+- Attempt 3: Maximum specificity with proper names, years, events (e.g., "physics concepts" → "1905 Einstein papers Nobel")
+
+**CURRENT ATTEMPT GUIDANCE:**
+{attempt_specific_guidance}
+
+**REJECTION LEARNING - AVOID FAILED PATTERNS:**
+Previous unsuccessful queries: {previous_queries}
+{rejection_history}
+
+**STRATEGIC PIVOTING when abstractions fail:**
+- If concept is too abstract → Focus on people associated with it
+- If topic lacks visuals → Find related geographic locations or institutions  
+- If too general → Add specific historical periods, events, or biographical elements
+- If wrong domain → Pivot to related concrete manifestations
+
+**WIKIMEDIA OPTIMIZATION (Target content likely available):**
+- Biographical subjects (politicians, scientists, artists, historical figures)
+- Geographic locations (cities, landmarks, countries, natural features)
+- Historical events (wars, treaties, discoveries, cultural movements)
+- Institutional subjects (universities, governments, museums, organizations)
+- Documented periods (specific decades, historical eras with photo coverage)
+
+**ALTERNATIVE QUERY GENERATION RULES:**
+- Generate 2-3 strategically different queries (not variations of same concept)
+- Each query should target different visual angle of the topic
+- Use 2-4 words focusing on concrete, photographable elements
+- Include proper names, specific places, or historical periods when possible
+- Ensure queries are distinct from previous failed attempts
+
+**Caption guidelines (if selecting):**
+- Language: {caption_lang}  
+- 1 sentence, 12–28 words. Describe what the image shows and why it is relevant to the section.
+- Do not invent facts beyond title/obvious content. Be neutral and concise.
+
+**Context:**
+- Module: {module_title}
+- Submodule: {submodule_title}
+- Section: {section_heading}
+
+**Candidates (JSON):**
 {candidates_json}
 """
 
@@ -232,6 +313,210 @@ async def _generate_wikimedia_queries(
         return [q for q in base if q][:2]
 
 
+async def _generate_alternative_queries(
+    state: LearningPathState,
+    module: EnhancedModule,
+    submodule: Submodule,
+    section_heading: Optional[str],
+    context_hint: Optional[str],
+    suggested_queries: List[str],
+    attempt_state: AttemptState,
+) -> List[str]:
+    """Generate alternative queries combining LLM suggestions with enhanced fallback logic.
+    
+    Returns a list of new queries to try, avoiding previous queries and duplicates.
+    """
+    language_for_queries = _determine_query_language(
+        state,
+        [state.get("user_topic", ""), module.title, submodule.title, section_heading or ""]
+    )
+    
+    # Start with LLM suggested queries - enhanced cleaning and validation
+    alternative_queries = []
+    if suggested_queries:
+        for q in suggested_queries:
+            if isinstance(q, str) and q.strip():
+                # Enhanced cleaning - extract words and validate for visual potential
+                words = re.findall(r"[\w\-]+", q.strip())
+                if words:
+                    cleaned = " ".join(words[:4])  # Limit to 4 words
+                    
+                    # Enhanced validation - prioritize queries with high visual potential
+                    visual_score = 0
+                    cleaned_lower = cleaned.lower()
+                    
+                    # Boost score for visual content indicators
+                    visual_indicators = ["portrait", "photo", "image", "building", "statue", "monument", "university", "museum", "palace", "church", "square", "street", "city", "country"]
+                    biographical_indicators = ["biography", "life", "born", "death", "president", "minister", "scientist", "artist", "writer", "inventor"]
+                    geographic_indicators = ["america", "europe", "germany", "france", "london", "paris", "new york", "washington", "moscow", "beijing"]
+                    
+                    for indicator in visual_indicators:
+                        if indicator in cleaned_lower:
+                            visual_score += 3
+                    for indicator in biographical_indicators:
+                        if indicator in cleaned_lower:
+                            visual_score += 2
+                    for indicator in geographic_indicators:
+                        if indicator in cleaned_lower:
+                            visual_score += 2
+                    
+                    # Penalize abstract terms that are less likely to have images
+                    abstract_penalties = ["theory", "concept", "idea", "principle", "methodology", "framework", "paradigm", "philosophy", "ideology"]
+                    for penalty in abstract_penalties:
+                        if penalty in cleaned_lower:
+                            visual_score -= 1
+                    
+                    # Only include queries with positive visual potential or if we have few alternatives
+                    if visual_score > 0 or len(alternative_queries) < 1:
+                        if cleaned and cleaned not in [existing.lower() for existing in alternative_queries]:
+                            alternative_queries.append(cleaned)
+    
+    # Get all previously used queries (flattened)
+    used_queries_lower = set()
+    for queries in attempt_state.query_history:
+        for q in queries:
+            used_queries_lower.add(q.lower())
+    
+    # Filter out previously used queries
+    alternative_queries = [q for q in alternative_queries if q.lower() not in used_queries_lower]
+    
+    # If we don't have enough alternatives, generate additional fallback queries
+    if len(alternative_queries) < 2:
+        fallback_queries = await _generate_fallback_alternative_queries(
+            state, module, submodule, section_heading, context_hint, attempt_state, language_for_queries
+        )
+        
+        for q in fallback_queries:
+            if q.lower() not in used_queries_lower and q not in alternative_queries:
+                alternative_queries.append(q)
+                if len(alternative_queries) >= 3:
+                    break
+    
+    # Final deduplication and validation
+    final_queries = []
+    for q in alternative_queries:
+        if q and len(q) >= 2 and q not in final_queries:
+            final_queries.append(q)
+        if len(final_queries) >= 3:
+            break
+    
+    logger.debug(f"Generated {len(final_queries)} alternative queries for attempt {attempt_state.attempt_number}")
+    return final_queries
+
+
+async def _generate_fallback_alternative_queries(
+    state: LearningPathState,
+    module: EnhancedModule,
+    submodule: Submodule,
+    section_heading: Optional[str],
+    context_hint: Optional[str],
+    attempt_state: AttemptState,
+    language_for_queries: str,
+) -> List[str]:
+    """Generate fallback alternative queries using enhanced success-oriented strategies."""
+    
+    fallback_queries = []
+    
+    # Enhanced Strategy 1: Visual-first approach - Target people, places, institutions
+    topic_words = re.findall(r"[\w\-]+", state.get("user_topic", ""))
+    module_words = re.findall(r"[\w\-]+", module.title)
+    submodule_words = re.findall(r"[\w\-]+", submodule.title)
+    
+    # Progressive specificity based on attempt number
+    if attempt_state.attempt_number == 1:
+        # Attempt 1: Broad but concrete - focus on main concepts with visual potential
+        if module_words and submodule_words:
+            # Combine for concrete visual concepts
+            visual_query = " ".join((module_words[:2] + submodule_words[:2]))
+            if visual_query:
+                fallback_queries.append(visual_query)
+    
+    elif attempt_state.attempt_number == 2:
+        # Attempt 2: Add specificity - geographic, institutional, biographical angles
+        
+        # Geographic strategy: Look for country/region references
+        geographic_terms = []
+        all_words = topic_words + module_words + submodule_words
+        for word in all_words:
+            if word.lower() in ["america", "europe", "asia", "africa", "germany", "france", "britain", "russia", "china", "japan", "spain", "italy", "united", "states", "kingdom"]:
+                geographic_terms.append(word)
+        
+        if geographic_terms:
+            geo_query = " ".join(geographic_terms[:2] + submodule_words[:2])
+            if geo_query:
+                fallback_queries.append(geo_query)
+        
+        # Institutional strategy: Add university, government, organization terms
+        if any(word.lower() in ["science", "research", "study", "theory", "development"] for word in all_words):
+            institutional_query = " ".join(submodule_words[:2] + ["university", "research"])
+            fallback_queries.append(institutional_query)
+    
+    else:
+        # Attempt 3: Maximum specificity - historical periods, famous figures
+        
+        # Historical period strategy
+        historical_periods = ["1900s", "1920s", "1930s", "1940s", "1950s", "1960s", "1970s", "1980s", "1990s", "2000s"]
+        period_query = " ".join(submodule_words[:2] + ["20th", "century"])
+        fallback_queries.append(period_query)
+        
+        # Famous figures strategy - add common surname patterns
+        if submodule_words:
+            biographical_query = " ".join(submodule_words[:2] + ["biography", "portrait"])
+            fallback_queries.append(biographical_query)
+    
+    # Enhanced Strategy 2: Context-aware section targeting
+    if section_heading:
+        section_words = re.findall(r"[\w\-]+", section_heading)
+        
+        # Focus on concrete elements from section heading
+        concrete_section_words = [w for w in section_words if len(w) > 3 and w.lower() not in 
+                                {"theory", "concept", "analysis", "overview", "introduction", "conclusion", "summary"}]
+        
+        if concrete_section_words:
+            specific_query = " ".join(concrete_section_words[:3])
+            if specific_query:
+                fallback_queries.append(specific_query)
+    
+    # Enhanced Strategy 3: Visual manifestation pivoting
+    abstract_to_concrete_mapping = {
+        "theory": ["scientist", "laboratory", "university"],
+        "concept": ["diagram", "illustration", "museum"],
+        "analysis": ["document", "research", "institution"],
+        "development": ["building", "construction", "progress"],
+        "movement": ["people", "demonstration", "gathering"],
+        "revolution": ["conflict", "leaders", "historical"],
+        "culture": ["art", "architecture", "tradition"],
+        "economy": ["market", "business", "industry"],
+        "politics": ["government", "parliament", "leaders"],
+        "philosophy": ["philosopher", "university", "manuscript"]
+    }
+    
+    # Apply concrete mapping based on detected abstract terms
+    all_text = f"{module.title} {submodule.title} {section_heading or ''} {context_hint or ''}".lower()
+    for abstract_term, concrete_alternatives in abstract_to_concrete_mapping.items():
+        if abstract_term in all_text:
+            concrete_query = " ".join(submodule_words[:2] + [concrete_alternatives[0]])
+            fallback_queries.append(concrete_query)
+            break
+    
+    # Enhanced Strategy 4: High-probability Wikimedia content targeting
+    if context_hint:
+        hint_words = re.findall(r"[\w\-]+", context_hint)
+        # Enhance hint with biographical/geographic elements likely to have photos
+        if hint_words:
+            enhanced_hint = " ".join(hint_words[:2] + ["biography"])
+            fallback_queries.append(enhanced_hint)
+    
+    # Remove duplicates and ensure quality
+    unique_queries = []
+    for query in fallback_queries:
+        if query and len(query) > 4 and query not in unique_queries:
+            unique_queries.append(query)
+    
+    logger.debug(f"Generated {len(unique_queries)} enhanced fallback queries for attempt {attempt_state.attempt_number}")
+    return unique_queries[:5]  # Limit fallback queries
+
+
 async def _rank_images_with_llm(
     state: LearningPathState,
     module: EnhancedModule,
@@ -358,6 +643,281 @@ async def _select_image_and_caption_with_llm(
         return None
 
 
+async def _select_image_with_alternatives_llm(
+    state: LearningPathState,
+    module: EnhancedModule,
+    submodule: Submodule,
+    section_heading: Optional[str],
+    candidates: List[Dict[str, Any]],
+    attempt_state: AttemptState,
+    max_attempts: int = 3,
+) -> Dict[str, Any]:
+    """Enhanced LLM selection that provides alternative queries when no images are relevant.
+
+    Returns a dict with one of:
+    - {"success": True, "index": int, "caption": str} - successful selection
+    - {"success": False, "alternative_queries": List[str], "reason": str} - needs retry with new queries
+    - {"success": False} - no more options (terminal)
+    """
+    if not candidates:
+        return {"success": False}
+    
+    try:
+        compact = []
+        for idx, c in enumerate(candidates[:10]):
+            compact.append({
+                "idx": idx,
+                "title": c.get("title", "")[:160],
+                "page": c.get("file_page_url", ""),
+                "url": c.get("url", ""),
+                "w": c.get("width", 0),
+                "h": c.get("height", 0),
+                "mime": c.get("mime", ""),
+            })
+
+        # Build context for the prompt
+        previous_queries_str = ", ".join([f'"{q}"' for queries in attempt_state.query_history for q in queries])
+        
+        attempt_context = ""
+        if attempt_state.attempt_number == 1:
+            attempt_context = "This is the first attempt."
+        elif attempt_state.attempt_number < max_attempts:
+            attempt_context = f"Previous attempts found images but they weren't relevant."
+        else:
+            attempt_context = "This is the final attempt - if no images are relevant, return empty JSON {{}}."
+
+        # Generate attempt-specific guidance for enhanced success probability
+        attempt_specific_guidance = ""
+        if attempt_state.attempt_number == 1:
+            attempt_specific_guidance = """ATTEMPT 1 STRATEGY - Broad but Concrete:
+- Focus on main subject with clear visual potential (people, places, events)
+- Avoid abstract repetition of original topic
+- Target concrete manifestations: Who? Where? When?
+- Examples: "Einstein theory" → "Albert Einstein portrait", "Cold War" → "Berlin Wall construction" """
+        elif attempt_state.attempt_number == 2:
+            attempt_specific_guidance = """ATTEMPT 2 STRATEGY - Add Specificity:
+- Include named entities, specific locations, historical periods
+- Add geographic or temporal context to broaden visual options
+- Target specific institutions, universities, or government entities
+- Examples: "physics concepts" → "Princeton University physics", "economic theory" → "Wall Street 1929" """
+        elif attempt_state.attempt_number >= 3:
+            attempt_specific_guidance = """ATTEMPT 3 STRATEGY - Maximum Specificity:
+- Use proper names, specific years, documented historical moments
+- Target famous events, notable figures, specific institutions with known photography
+- Focus on well-documented subjects with extensive visual records
+- Examples: "literature concepts" → "Ernest Hemingway 1954 Nobel", "art movement" → "Pablo Picasso Guernica 1937" """
+
+        rejection_history = ""
+        if attempt_state.previous_rejection_reasons:
+            rejection_history = f"Previous rejection reasons: {'; '.join(attempt_state.previous_rejection_reasons)}"
+
+        from json import dumps
+        prompt = ChatPromptTemplate.from_template(PROMPT_IMAGE_SELECTION_WITH_ALTERNATIVES)
+        llm_getter = lambda: get_llm_for_evaluation(state.get("google_key_provider"), user=state.get("user"))
+        
+        raw = await run_chain(
+            prompt,
+            llm_getter,
+            StrOutputParser(),
+            {
+                "attempt_number": attempt_state.attempt_number,
+                "max_attempts": max_attempts,
+                "attempt_context": attempt_context,
+                "attempt_specific_guidance": attempt_specific_guidance,
+                "previous_queries": previous_queries_str,
+                "rejection_history": rejection_history,
+                "caption_lang": state.get("language", "es"),
+                "module_title": module.title,
+                "submodule_title": submodule.title,
+                "section_heading": section_heading or "",
+                "candidates_json": dumps(compact, ensure_ascii=False),
+            },
+            max_retries=1,
+            initial_retry_delay=0.5,
+        )
+
+        # Parse the enhanced JSON response
+        import json
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            return {"success": False}
+        
+        data = json.loads(raw[start:end+1])
+        if not isinstance(data, dict):
+            return {"success": False}
+
+        # Check for successful selection
+        if "index" in data:
+            idx = int(data.get("index"))
+            caption = str(data.get("caption", "")).strip()
+            if 0 <= idx < len(compact):
+                return {"success": True, "index": idx, "caption": caption}
+            else:
+                return {"success": False}
+
+        # Check for alternative queries
+        if "alternative_queries" in data and attempt_state.attempt_number < max_attempts:
+            alternative_queries = data.get("alternative_queries", [])
+            reason = data.get("reason", "Images not relevant")
+            if isinstance(alternative_queries, list) and alternative_queries:
+                # Clean and validate queries
+                cleaned_queries = []
+                for q in alternative_queries:
+                    if isinstance(q, str) and q.strip():
+                        cleaned_queries.append(q.strip()[:50])  # Limit query length
+                if cleaned_queries:
+                    return {
+                        "success": False,
+                        "alternative_queries": cleaned_queries[:3],  # Limit to 3 queries
+                        "reason": reason[:200]  # Limit reason length
+                    }
+
+        # Empty response or no valid alternatives
+        return {"success": False}
+
+    except Exception as e:
+        logger.debug(f"Enhanced LLM selection failed: {e}")
+        return {"success": False}
+
+
+async def _find_relevant_image_with_retry(
+    state: LearningPathState,
+    module: EnhancedModule,
+    submodule: Submodule,
+    section_heading: Optional[str],
+    exclude_urls: Optional[Set[str]] = None,
+    topic_hint: Optional[str] = None,
+    max_attempts: int = 3,
+) -> Optional[Dict[str, Any]]:
+    """Main retry orchestrator for finding relevant images with progressive query refinement."""
+    
+    # Get configuration for max attempts
+    configured_max_attempts = state.get("max_image_search_attempts", max_attempts)
+    max_attempts = min(max(configured_max_attempts, 1), 5)  # Clamp between 1 and 5
+    
+    # Initialize attempt state
+    attempt_state = AttemptState(
+        attempt_number=1,
+        used_urls=exclude_urls.copy() if exclude_urls else set(),
+        all_candidates_history=[],
+        query_history=[],
+        previous_rejection_reasons=[]
+    )
+    
+    language = state.get("language", "en")
+    
+    for attempt in range(1, max_attempts + 1):
+        attempt_state.attempt_number = attempt
+        
+        logger.debug(f"Image search attempt {attempt}/{max_attempts} for {submodule.title}")
+        
+        try:
+            # Generate queries for this attempt
+            if attempt == 1:
+                # First attempt: use original query generation
+                queries = await _generate_wikimedia_queries(
+                    state, module, submodule, section_heading, context_hint=topic_hint
+                )
+            else:
+                # Subsequent attempts: use alternative queries if available
+                # (alternative queries will be set by previous attempt)
+                if not hasattr(attempt_state, 'next_queries') or not attempt_state.next_queries:
+                    logger.debug(f"No alternative queries available for attempt {attempt}, stopping")
+                    break
+                queries = attempt_state.next_queries
+                delattr(attempt_state, 'next_queries')  # Clean up
+            
+            if not queries:
+                logger.debug(f"No queries generated for attempt {attempt}, stopping")
+                break
+            
+            # Add current queries to history
+            attempt_state.query_history.append(queries)
+            
+            # Search for candidates
+            all_candidates: List[Dict[str, Any]] = []
+            seen_urls = set()
+            
+            for q in queries:
+                results = await search_wikimedia_images(q, count=5, language=language, timeout_seconds=3.0)
+                for r in results:
+                    url = r.get("url")
+                    if not url or url in seen_urls:
+                        continue
+                    seen_urls.add(url)
+                    all_candidates.append(r)
+            
+            # Exclude URLs already used
+            all_candidates = [c for c in all_candidates if c.get("url") not in attempt_state.used_urls]
+            
+            if not all_candidates:
+                logger.debug(f"No candidates found for attempt {attempt}")
+                if attempt < max_attempts:
+                    # Try to generate fallback queries for next attempt
+                    fallback_queries = await _generate_fallback_alternative_queries(
+                        state, module, submodule, section_heading, topic_hint, attempt_state, 
+                        _determine_query_language(state, [state.get("user_topic", ""), module.title, submodule.title, section_heading or ""])
+                    )
+                    if fallback_queries:
+                        attempt_state.next_queries = fallback_queries
+                        continue
+                break
+            
+            # Add candidates to history
+            attempt_state.all_candidates_history.extend(all_candidates)
+            
+            # Try enhanced selection with alternative query generation
+            selection_result = await _select_image_with_alternatives_llm(
+                state, module, submodule, section_heading, all_candidates, attempt_state, max_attempts
+            )
+            
+            if selection_result.get("success"):
+                # Success! Return the selected image
+                idx = selection_result["index"]
+                chosen = all_candidates[idx]
+                chosen["caption"] = selection_result.get("caption")
+                
+                logger.debug(f"Image found on attempt {attempt}/{max_attempts}")
+                return chosen
+            
+            elif "alternative_queries" in selection_result and attempt < max_attempts:
+                # LLM provided alternative queries for next attempt
+                alternative_queries = selection_result["alternative_queries"]
+                reason = selection_result.get("reason", "Images not relevant")
+                
+                # Store rejection reason
+                attempt_state.previous_rejection_reasons.append(reason)
+                
+                # Generate enhanced alternative queries
+                enhanced_alternatives = await _generate_alternative_queries(
+                    state, module, submodule, section_heading, topic_hint,
+                    alternative_queries, attempt_state
+                )
+                
+                if enhanced_alternatives:
+                    attempt_state.next_queries = enhanced_alternatives
+                    logger.debug(f"Attempt {attempt} failed, trying {len(enhanced_alternatives)} alternative queries")
+                    continue
+                else:
+                    logger.debug(f"No valid alternative queries for attempt {attempt}")
+                    break
+            else:
+                # No alternatives or max attempts reached
+                logger.debug(f"No alternatives available or max attempts reached at attempt {attempt}")
+                break
+                
+        except Exception as e:
+            logger.debug(f"Error in attempt {attempt}: {e}")
+            if attempt >= max_attempts:
+                break
+            # Try to continue with next attempt if we have more tries
+            continue
+    
+    logger.debug(f"Image search failed after {max_attempts} attempts for {submodule.title}")
+    return None
+
+
 async def _find_relevant_image_for_anchor(
     state: LearningPathState,
     module: EnhancedModule,
@@ -366,35 +926,46 @@ async def _find_relevant_image_for_anchor(
     exclude_urls: Optional[Set[str]] = None,
     topic_hint: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Generate queries, search Wikimedia, and select the best candidate with a caption."""
-    # Generate multiple short queries
-    queries = await _generate_wikimedia_queries(state, module, submodule, section_heading, context_hint=topic_hint)
-    # Fetch candidates per query and aggregate
-    language = state.get("language", "en")
-    all_candidates: List[Dict[str, Any]] = []
-    seen_urls = set()
-    for q in queries:
-        results = await search_wikimedia_images(q, count=5, language=language, timeout_seconds=3.0)
-        for r in results:
-            url = r.get("url")
-            if not url or url in seen_urls:
-                continue
-            seen_urls.add(url)
-            all_candidates.append(r)
-    # Exclude URLs already used if provided
-    if exclude_urls:
-        all_candidates = [c for c in all_candidates if c.get("url") not in exclude_urls]
+    """Generate queries, search Wikimedia, and select the best candidate with a caption.
+    
+    This function now uses the enhanced retry mechanism if enabled, otherwise falls back
+    to the original single-attempt behavior for backward compatibility.
+    """
+    # Check if enhanced retry is enabled (default: True)
+    use_retry = state.get("enhanced_image_search_enabled", True)
+    
+    if use_retry:
+        return await _find_relevant_image_with_retry(
+            state, module, submodule, section_heading, exclude_urls, topic_hint
+        )
+    else:
+        # Original single-attempt logic for backward compatibility
+        queries = await _generate_wikimedia_queries(state, module, submodule, section_heading, context_hint=topic_hint)
+        language = state.get("language", "en")
+        all_candidates: List[Dict[str, Any]] = []
+        seen_urls = set()
+        for q in queries:
+            results = await search_wikimedia_images(q, count=5, language=language, timeout_seconds=3.0)
+            for r in results:
+                url = r.get("url")
+                if not url or url in seen_urls:
+                    continue
+                seen_urls.add(url)
+                all_candidates.append(r)
+        # Exclude URLs already used if provided
+        if exclude_urls:
+            all_candidates = [c for c in all_candidates if c.get("url") not in exclude_urls]
 
-    if not all_candidates:
-        return None
-    # Ask LLM to pick best and produce a caption
-    selection = await _select_image_and_caption_with_llm(state, module, submodule, section_heading, all_candidates)
-    if selection is None:
-        return None
-    idx = selection["index"]
-    chosen = all_candidates[idx]
-    chosen["caption"] = selection.get("caption")
-    return chosen
+        if not all_candidates:
+            return None
+        # Use original selection method for backward compatibility
+        selection = await _select_image_and_caption_with_llm(state, module, submodule, section_heading, all_candidates)
+        if selection is None:
+            return None
+        idx = selection["index"]
+        chosen = all_candidates[idx]
+        chosen["caption"] = selection.get("caption")
+        return chosen
 
 
 # --- Anchor planning via LLM ---
