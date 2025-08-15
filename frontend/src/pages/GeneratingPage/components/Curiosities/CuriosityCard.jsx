@@ -6,10 +6,7 @@ import { styled } from '@mui/material/styles';
 import CuriosityCategoryChip from './CuriosityCategoryChip';
 
 const Text = styled(Typography)(({ theme }) => ({
-  display: '-webkit-box',
-  WebkitLineClamp: 3,
-  WebkitBoxOrient: 'vertical',
-  overflow: 'hidden',
+  // Removed text truncation to always show full content
 }));
 
 const Container = styled(Paper)(({ theme }) => ({
