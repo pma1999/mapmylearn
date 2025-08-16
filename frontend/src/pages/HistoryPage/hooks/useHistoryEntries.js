@@ -11,6 +11,12 @@ const createLoadingState = () => ({
 });
 
 /**
+ * Global cache that persists across component re-renders
+ * This survives auth context re-initializations and component unmounting
+ */
+const globalHistoryCache = {};
+
+/**
  * Smart merge function for combining history entries and active generations
  * Ensures consistent sorting and duplicate handling
  * @param {Array} historyEntries - Array of history entries from API
@@ -55,7 +61,6 @@ const mergeEntriesWithActiveGenerations = (historyEntries, activeGenerations, so
  * @returns {Object} History entries state, pagination info, and loading status
  */
 const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, showNotification) => {
-  console.log('🔄 useHistoryEntries hook initializing/re-rendering');
   
   const [entries, setEntries] = useState([]);
   const [loadingState, setLoadingState] = useState(createLoadingState);
@@ -65,8 +70,8 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
   const [pagination, setPagination] = useState({ total: 0, page: 1, perPage: 10 });
   const [stats, setStats] = useState({ loadTime: 0 });
   
-  // Cache previous results for stale-while-revalidate pattern
-  const previousEntriesRef = useRef({});
+  // Use global cache that survives re-renders instead of useRef
+  // const previousEntriesRef = useRef({}); // Replaced with globalHistoryCache
   const abortControllerRef = useRef(null);
   const lastLoadTimeRef = useRef(0);
   const loadCountRef = useRef(0);
@@ -93,7 +98,7 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
     
     // Check for cached data first
     const cacheKey = getCacheKey();
-    const cachedData = previousEntriesRef.current[cacheKey];
+    const cachedData = globalHistoryCache[cacheKey];
     
     // If we have fresh cache (less than 30 seconds old) and it's not a forced refresh, use cache only
     if (cachedData && !forceRefresh && cachedData.timestamp && (now - cachedData.timestamp) < 30000) {
@@ -166,9 +171,7 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
     // Increment load counter for this session (used for stale request detection)
     const currentLoadCount = ++loadCountRef.current;
     
-    console.log(`Loading history data: cache=${!!cachedData}, forceRefresh=${forceRefresh}, key=${cacheKey}`);
-    console.log('Cache contents:', Object.keys(previousEntriesRef.current));
-    console.log('Current cached data:', cachedData);
+    console.log(`🚀 Loading history data: cache=${!!cachedData}, forceRefresh=${forceRefresh}, key=${cacheKey}`);
     
     try {
       // Cancel any in-flight requests
@@ -199,8 +202,10 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
         }
       }
       
-      // Check auth status first to handle invalid tokens
-      await api.checkAuthStatus();
+      // Check auth status first to handle invalid tokens (only if no valid cache)
+      if (!cachedData) {
+        await api.checkAuthStatus();
+      }
       
       // Use parallel loading with deduplication and abort signal
       const parallelResult = await api.loadHistoryDataParallelDeduped(
@@ -272,10 +277,8 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
           entries: mergedEntries, // Store merged entries for consistency
           timestamp: now // Add timestamp for freshness check
         };
-        console.log('Storing in cache with key:', cacheKey);
-        console.log('Cache entry:', cacheEntry);
-        previousEntriesRef.current[cacheKey] = cacheEntry;
-        console.log('Cache after storing:', Object.keys(previousEntriesRef.current));
+        console.log('✅ Storing in cache with key:', cacheKey);
+        globalHistoryCache[cacheKey] = cacheEntry;
       }
       
       // Only update state if data has actually changed or this is a forced refresh
@@ -358,7 +361,7 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
         abortControllerRef.current.abort();
       }
     };
-  }, [sortBy, filterSource, searchTerm, page, perPage, loadHistoryAndGenerations]);
+  }, [sortBy, filterSource, searchTerm, page, perPage]); // Removed loadHistoryAndGenerations to prevent infinite loop
   
   /**
    * Force reload the history entries
