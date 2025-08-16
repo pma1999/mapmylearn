@@ -85,12 +85,85 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
     // Prevent too frequent refreshes (throttle to at most once per second)
     const now = Date.now();
     if (!forceRefresh && now - lastLoadTimeRef.current < 1000) {
+      console.log('Throttling: Skipping load, too recent');
       return;
     }
+    
+    // Check for cached data first
+    const cacheKey = getCacheKey();
+    const cachedData = previousEntriesRef.current[cacheKey];
+    
+    // If we have fresh cache (less than 30 seconds old) and it's not a forced refresh, use cache only
+    if (cachedData && !forceRefresh && cachedData.timestamp && (now - cachedData.timestamp) < 30000) {
+      console.log('Using fresh cache, skipping API call');
+      setEntries(cachedData.entries);
+      setPagination({ 
+        total: cachedData.total || 0, 
+        page: cachedData.page || page, 
+        perPage: cachedData.perPage || perPage 
+      });
+      setStats({
+        loadTime: 0,
+        fromCache: true,
+        initialLoad: !initialLoadComplete,
+        serverTime: cachedData.serverTime
+      });
+      setLoadingState({
+        initialLoading: false,
+        backgroundRefreshing: false,
+        showingCache: true
+      });
+      if (!initialLoadComplete) {
+        setInitialLoadComplete(true);
+      }
+    }
+    
+    // For stale cache (>30 seconds), show it immediately but refresh in background
+    if (cachedData && !forceRefresh) {
+      console.log('Using stale cache, will refresh in background');
+      setEntries(cachedData.entries);
+      setPagination({ 
+        total: cachedData.total || 0, 
+        page: cachedData.page || page, 
+        perPage: cachedData.perPage || perPage 
+      });
+      setStats({
+        loadTime: 0,
+        fromCache: true,
+        initialLoad: !initialLoadComplete,
+        serverTime: cachedData.serverTime
+      });
+      setLoadingState({
+        initialLoading: false,
+        backgroundRefreshing: true,
+        showingCache: true
+      });
+      if (!initialLoadComplete) {
+        setInitialLoadComplete(true);
+      }
+    }
+    
+    // Show initial loading state for first load without cache
+    if (!initialLoadComplete) {
+      setLoadingState({
+        initialLoading: true,
+        backgroundRefreshing: false,
+        showingCache: false
+      });
+    } else {
+      // For subsequent loads without cache, show background refresh
+      setLoadingState(prev => ({
+        ...prev,
+        backgroundRefreshing: true
+      }));
+    }
+    
     lastLoadTimeRef.current = now;
     
     // Increment load counter for this session (used for stale request detection)
     const currentLoadCount = ++loadCountRef.current;
+    
+    console.log(`Loading history data: cache=${!!cachedData}, forceRefresh=${forceRefresh}, key=${cacheKey}`);
     
     try {
       // Cancel any in-flight requests
@@ -106,40 +179,10 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
       const startTime = performance.now();
       
       // Check for cached data and display immediately if available
-      const cacheKey = getCacheKey();
-      const cachedData = previousEntriesRef.current[cacheKey];
+      // This block is now handled by the new logic above
       
-      if (cachedData && !forceRefresh) {
-        // Immediately show cached data (stale-while-revalidate pattern)
-        if (!initialLoadComplete) {
-          setEntries(cachedData.entries);
-          setPagination({ 
-            total: cachedData.total || 0, 
-            page: cachedData.page || page, 
-            perPage: cachedData.perPage || perPage 
-          });
-          setStats({
-            loadTime: 0,
-            fromCache: true,
-            initialLoad: true,
-            serverTime: cachedData.serverTime
-          });
-          setInitialLoadComplete(true);
-          // Set loading state to show cache immediately
-          setLoadingState({
-            initialLoading: false,
-            backgroundRefreshing: true,
-            showingCache: true
-          });
-        } else {
-          // For subsequent loads, show background refresh state
-          setLoadingState(prev => ({
-            ...prev,
-            backgroundRefreshing: true
-          }));
-        }
-      } else if (!initialLoadComplete) {
-        // Show initial loading state for first load without cache
+      // Show initial loading state for first load without cache
+      if (!initialLoadComplete) {
         setLoadingState({
           initialLoading: true,
           backgroundRefreshing: false,
@@ -165,6 +208,8 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
         perPage, 
         signal
       );
+      
+      console.log(`API call completed in ${(performance.now() - startTime).toFixed(1)}ms`);
       
       // If this is a stale request (a newer one has started), ignore the results
       if (currentLoadCount < loadCountRef.current) {
@@ -221,7 +266,8 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
       if (historyResult) {
         const cacheEntry = {
           ...historyResult,
-          entries: mergedEntries // Store merged entries for consistency
+          entries: mergedEntries, // Store merged entries for consistency
+          timestamp: now // Add timestamp for freshness check
         };
         previousEntriesRef.current[cacheKey] = cacheEntry;
       }
