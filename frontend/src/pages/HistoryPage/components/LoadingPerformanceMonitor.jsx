@@ -21,7 +21,7 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import SpeedIcon from '@mui/icons-material/Speed';
-import CacheIcon from '@mui/icons-material/Cache';
+import MemoryIcon from '@mui/icons-material/Memory';
 import NetworkCheckIcon from '@mui/icons-material/NetworkCheck';
 import ErrorIcon from '@mui/icons-material/Error';
 
@@ -153,7 +153,7 @@ const LoadingPerformanceMonitor = ({
                 Cache Status
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
-                <CacheIcon fontSize="small" />
+                <MemoryIcon fontSize="small" />
                 <Typography variant="h6">
                   {stats.fromCache ? 'Hit' : 'Miss'}
                 </Typography>
@@ -251,7 +251,7 @@ const LoadingPerformanceMonitor = ({
                         <TableCell>Cache Source</TableCell>
                         <TableCell>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <CacheIcon fontSize="small" />
+                            <MemoryIcon fontSize="small" />
                             {stats.fromCache ? 'Cache Hit' : 'Network'}
                           </Box>
                         </TableCell>
