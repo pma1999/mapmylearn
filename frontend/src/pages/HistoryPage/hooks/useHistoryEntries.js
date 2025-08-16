@@ -55,6 +55,8 @@ const mergeEntriesWithActiveGenerations = (historyEntries, activeGenerations, so
  * @returns {Object} History entries state, pagination info, and loading status
  */
 const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, showNotification) => {
+  console.log('🔄 useHistoryEntries hook initializing/re-rendering');
+  
   const [entries, setEntries] = useState([]);
   const [loadingState, setLoadingState] = useState(createLoadingState);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
@@ -165,6 +167,8 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
     const currentLoadCount = ++loadCountRef.current;
     
     console.log(`Loading history data: cache=${!!cachedData}, forceRefresh=${forceRefresh}, key=${cacheKey}`);
+    console.log('Cache contents:', Object.keys(previousEntriesRef.current));
+    console.log('Current cached data:', cachedData);
     
     try {
       // Cancel any in-flight requests
@@ -268,7 +272,10 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
           entries: mergedEntries, // Store merged entries for consistency
           timestamp: now // Add timestamp for freshness check
         };
+        console.log('Storing in cache with key:', cacheKey);
+        console.log('Cache entry:', cacheEntry);
         previousEntriesRef.current[cacheKey] = cacheEntry;
+        console.log('Cache after storing:', Object.keys(previousEntriesRef.current));
       }
       
       // Only update state if data has actually changed or this is a forced refresh
@@ -351,7 +358,7 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
         abortControllerRef.current.abort();
       }
     };
-  }, [sortBy, filterSource, searchTerm, page, perPage]);
+  }, [sortBy, filterSource, searchTerm, page, perPage, loadHistoryAndGenerations]);
   
   /**
    * Force reload the history entries

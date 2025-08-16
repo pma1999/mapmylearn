@@ -614,6 +614,7 @@ export const getHistoryPreview = async (sortBy = 'creation_date', filterSource =
       signal: signal // Support request cancellation
     });
     
+    console.log('Full API response:', response.data);
     const requestTime = response.data?.request_time_ms || 'unknown';
     console.log(`History Preview API Request completed in ${requestTime}ms`);
     
