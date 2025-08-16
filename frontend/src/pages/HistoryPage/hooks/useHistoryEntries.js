@@ -116,6 +116,7 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
       if (!initialLoadComplete) {
         setInitialLoadComplete(true);
       }
+      return; // CRITICAL: Return early to skip API call
     }
     
     // For stale cache (>30 seconds), show it immediately but refresh in background
@@ -178,22 +179,20 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
       // Start measuring load time
       const startTime = performance.now();
       
-      // Check for cached data and display immediately if available
-      // This block is now handled by the new logic above
-      
-      // Show initial loading state for first load without cache
-      if (!initialLoadComplete) {
-        setLoadingState({
-          initialLoading: true,
-          backgroundRefreshing: false,
-          showingCache: false
-        });
-      } else {
-        // For subsequent loads without cache, show background refresh
-        setLoadingState(prev => ({
-          ...prev,
-          backgroundRefreshing: true
-        }));
+      // Set loading state if no cache was used
+      if (!cachedData) {
+        if (!initialLoadComplete) {
+          setLoadingState({
+            initialLoading: true,
+            backgroundRefreshing: false,
+            showingCache: false
+          });
+        } else {
+          setLoadingState(prev => ({
+            ...prev,
+            backgroundRefreshing: true
+          }));
+        }
       }
       
       // Check auth status first to handle invalid tokens
@@ -340,7 +339,7 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
         showNotification('Error loading history: ' + (error.message || 'Unknown error'), 'error');
       }
     }
-  }, [sortBy, filterSource, searchTerm, page, perPage, initialLoadComplete, getCacheKey, showNotification, entries, pagination]);
+  }, [sortBy, filterSource, searchTerm, page, perPage, getCacheKey, showNotification]);
   
   // Load history when filter or pagination options change
   useEffect(() => {
