@@ -228,8 +228,31 @@ class ProgressOrchestrator:
 		return self.current_overall
 
 	def _compute_absolute_overall(self) -> float:
-		vals = []
-		for phase, (start, end) in self.phase_ranges.items():
-			p = max(0.0, min(1.0, self.phase_progress.get(phase, 0.0)))
-			vals.append(start + (end - start) * p)
-		return max(vals) if vals else 0.0
+		# Compute overall as the highest phase range end that has been "entered"
+		# A phase is "entered" if it has any progress > 0
+		# Return the start of current active phase + its internal progress
+		
+		current_overall = 0.0
+		
+		# Process phases in order (since ranges are sequential)
+		phase_order = [
+			"initialization", "search", "research_evaluation", "module_creation",
+			"submodule_planning", "topic_resources", "submodules", "module_resources", "final_assembly"
+		]
+		
+		for phase in phase_order:
+			start, end = self.phase_ranges[phase]
+			phase_prog = max(0.0, min(1.0, self.phase_progress.get(phase, 0.0)))
+			
+			if phase_prog > 0.0:
+				# This phase has started, so overall is at least its start + internal progress
+				current_overall = start + (end - start) * phase_prog
+			elif current_overall >= start:
+				# We've passed this phase's start but it has no progress
+				# This shouldn't happen with proper sequencing, but handle gracefully
+				continue
+			else:
+				# We haven't reached this phase yet
+				break
+		
+		return current_overall
