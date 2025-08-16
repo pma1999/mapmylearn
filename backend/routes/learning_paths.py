@@ -11,6 +11,7 @@ from sqlalchemy import update, select, insert, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert # For UPSERT
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert # For UPSERT
 import asyncio # Add this import
+from sqlalchemy import and_ # Added for preview endpoint
 
 from backend.config.database import get_db
 from backend.models.auth_models import User, LearningPath, LearningPathProgress, TransactionType, GenerationTask, GenerationTaskStatus
@@ -139,6 +140,144 @@ async def get_learning_paths(
     
     end_time = datetime.utcnow()
     duration_ms = (end_time - start_time).total_seconds() * 1000
+    
+    return {
+        "entries": processed_learning_paths,
+        "total": total_count,
+        "page": page,
+        "per_page": per_page,
+        "request_time_ms": int(duration_ms)
+    }
+
+
+@router.get("/preview", response_model=LearningPathList)
+async def get_learning_paths_preview(
+    sort_by: str = Query("creation_date", description="Field to sort by"),
+    source: Optional[str] = Query(None, description="Filter by source type"),
+    search: Optional[str] = Query(None, description="Search term for topic or tags"),
+    page: int = Query(1, ge=1, description="Page number"),
+    per_page: int = Query(10, ge=1, le=100, description="Items per page"),
+    favorite_only: bool = Query(False, description="Only return favorite courses"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all courses for the current user with filtering and pagination.
+    Optimized version that doesn't load full path_data for better performance.
+    Uses PostgreSQL JSON functions to calculate modules_count efficiently.
+    """
+    # Start timing the request for performance monitoring
+    start_time = datetime.utcnow()
+    
+    # Build optimized query that calculates modules_count without loading full path_data
+    # Use PostgreSQL jsonb_array_length function for efficient module counting
+    from sqlalchemy import text, case
+    
+    modules_count_expr = case(
+        (
+            # Check if path_data exists and has modules key that is an array
+            and_(
+                LearningPath.path_data.isnot(None),
+                text("jsonb_typeof(path_data->'modules') = 'array'")
+            ),
+            # Calculate array length using PostgreSQL function
+            text("jsonb_array_length(path_data->'modules')")
+        ),
+        else_=0  # Default to 0 if path_data is null or modules is not an array
+    )
+    
+    # Select only the fields we need, avoiding path_data
+    query = db.query(
+        LearningPath.id,
+        LearningPath.path_id,
+        LearningPath.user_id,
+        LearningPath.topic,
+        LearningPath.language,
+        LearningPath.favorite,
+        LearningPath.tags,
+        LearningPath.source,
+        LearningPath.creation_date,
+        LearningPath.last_modified_date,
+        LearningPath.is_public,
+        LearningPath.share_id,
+        LearningPath.last_visited_module_idx,
+        LearningPath.last_visited_submodule_idx,
+        modules_count_expr.label('modules_count')
+    )
+    
+    # Apply user filter
+    query = query.filter(LearningPath.user_id == user.id)
+    
+    # Apply favorite filter
+    if favorite_only:
+        query = query.filter(LearningPath.favorite == True)
+    
+    # Apply source filter
+    if source:
+        query = query.filter(LearningPath.source == source)
+    
+    # Apply search filter on topic
+    if search:
+        search_term = f"%{search.lower()}%"
+        query = query.filter(func.lower(LearningPath.topic).like(search_term))
+    
+    # Apply sorting
+    if sort_by == "creation_date":
+        query = query.order_by(LearningPath.creation_date.desc())
+    elif sort_by == "last_modified_date":
+        query = query.order_by(LearningPath.last_modified_date.desc().nullslast())
+    elif sort_by == "topic":
+        query = query.order_by(LearningPath.topic)
+    elif sort_by == "favorite":
+        query = query.order_by(LearningPath.favorite.desc(), LearningPath.creation_date.desc())
+    else:
+        query = query.order_by(LearningPath.creation_date.desc())
+    
+    # Get total count using a separate optimized query
+    count_query = db.query(LearningPath).filter(LearningPath.user_id == user.id)
+    
+    if favorite_only:
+        count_query = count_query.filter(LearningPath.favorite == True)
+    if source:
+        count_query = count_query.filter(LearningPath.source == source)
+    if search:
+        search_term = f"%{search.lower()}%"
+        count_query = count_query.filter(func.lower(LearningPath.topic).like(search_term))
+    
+    total_count = count_query.count()
+    
+    # Apply pagination
+    offset = (page - 1) * per_page
+    db_results = query.offset(offset).limit(per_page).all()
+    
+    # Build response objects
+    processed_learning_paths = []
+    for result in db_results:
+        lp_dict = {
+            "id": result.id,
+            "path_id": result.path_id,
+            "user_id": result.user_id,
+            "topic": result.topic,
+            "language": result.language,
+            "path_data": {},  # Always empty for preview endpoint
+            "favorite": result.favorite,
+            "tags": result.tags,
+            "source": result.source,
+            "creation_date": result.creation_date,
+            "last_modified_date": result.last_modified_date,
+            "is_public": result.is_public,
+            "share_id": result.share_id,
+            "modules_count": result.modules_count or 0,  # Ensure we always have a number
+            "progress_map": None, 
+            "last_visited_module_idx": result.last_visited_module_idx,
+            "last_visited_submodule_idx": result.last_visited_submodule_idx
+        }
+        processed_learning_paths.append(LearningPathResponse(**lp_dict))
+    
+    end_time = datetime.utcnow()
+    duration_ms = (end_time - start_time).total_seconds() * 1000
+    
+    logger.info(f"Preview endpoint served {len(processed_learning_paths)} entries for user {user.id} in {duration_ms:.2f}ms")
     
     return {
         "entries": processed_learning_paths,

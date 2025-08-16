@@ -595,46 +595,45 @@ export const getHistoryPreview = async (sortBy = 'creation_date', filterSource =
   }
   
   try {
-    // Prepare request with optimized parameters
+    // Prepare request with optimized parameters for preview endpoint
     const params = new URLSearchParams();
     params.append('sort_by', sortBy);
-    params.append('include_full_data', 'false'); // Use lightweight endpoint
     params.append('page', page.toString());
     params.append('per_page', perPage.toString());
-    if (filterSource) params.append('source', filterSource);
-    if (searchTerm) params.append('search', searchTerm);
     
-    console.time('History API Request');
-    // Add /v1 prefix and pass abort signal
-    const response = await api.get(`/v1/learning-paths?${params.toString()}`, {
+    if (filterSource && filterSource !== 'all') {
+      params.append('source', filterSource);
+    }
+    
+    if (searchTerm && searchTerm.trim()) {
+      params.append('search', searchTerm.trim());
+    }
+    
+    // Use the optimized preview endpoint for faster loading
+    const response = await api.get(`/v1/learning-paths/preview?${params.toString()}`, {
       signal: signal // Support request cancellation
-    }); 
-    console.timeEnd('History API Request');
+    });
     
-    if (response.data?.request_time_ms) {
-      console.log(`Server processing time: ${response.data.request_time_ms}ms`);
-    }
+    console.log(`History Preview API Request completed in ${response.data.request_time_ms}ms`);
     
-    // Ensure response.data has valid entries property
-    if (!response.data || !response.data.entries || !Array.isArray(response.data.entries)) {
-      console.warn('API response missing or invalid entries property, returning empty array.');
-      return { entries: [], total: response.data?.total || 0, page: response.data?.page || page, per_page: response.data?.per_page || perPage };
-    }
-    
-    // Map backend response (path_id) to frontend expectation (id) if needed by hooks/UI
-    // The backend LearningPathList already contains LearningPathResponse which has path_id
-    // Let's ensure the hooks handle 'path_id' correctly instead of transforming here.
-    
-    return response.data; // Returns { entries: [], total: 0, page: 1, per_page: 10 }
-
+    return response.data;
   } catch (error) {
-    // Don't log abort errors as they are expected during request cancellation
-    if (error.name !== 'AbortError') {
-      console.error('Server error fetching history preview:', error);
+    // Handle aborted requests gracefully
+    if (error.name === 'AbortError' || error.code === 'ERR_CANCELED') {
+      console.log('History preview request was cancelled');
+      throw error; // Re-throw to be handled by caller
     }
-    // Re-throw the error for the hook to handle (display message, etc.)
-    // No fallback to local storage
-    throw error; 
+    
+    console.error('getHistoryPreview Error:', error);
+    
+    // Return empty result structure on error to prevent crashes
+    return { 
+      entries: [], 
+      total: 0, 
+      page: page, 
+      per_page: perPage,
+      request_time_ms: 0
+    };
   }
 };
 
@@ -1206,7 +1205,7 @@ export const getActiveGenerations = async (signal = null) => {
 };
 
 /**
- * Parallel loading function for history and active generations
+ * Loads history data and active generations in parallel for better performance
  * Executes both API calls concurrently for faster loading
  * @param {string} sortBy - Sort criteria for history
  * @param {string|null} filterSource - Filter by source
