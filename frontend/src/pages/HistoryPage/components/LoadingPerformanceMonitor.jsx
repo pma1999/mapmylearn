@@ -49,11 +49,6 @@ const LoadingPerformanceMonitor = ({
   const [loadingHistory, setLoadingHistory] = useState([]);
   const [lastUpdateTime, setLastUpdateTime] = useState(Date.now());
 
-  // Only render in development
-  if (process.env.NODE_ENV !== 'development') {
-    return null;
-  }
-
   // Track loading events for performance analysis
   useEffect(() => {
     const timestamp = Date.now();
@@ -73,6 +68,11 @@ const LoadingPerformanceMonitor = ({
       return [...prev.slice(-9), newEntry];
     });
   }, [loadingState, stats, entriesCount, error]);
+
+  // Only render in development
+  if (process.env.NODE_ENV !== 'development') {
+    return null;
+  }
 
   const getLoadingStateColor = () => {
     if (loadingState.initialLoading) return 'primary';
