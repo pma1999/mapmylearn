@@ -2,8 +2,49 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import * as api from '../../../services/api';
 
 /**
+ * Enhanced loading state interface for granular UI control
+ */
+const createLoadingState = () => ({
+  initialLoading: false,      // True only on first load with no cache
+  backgroundRefreshing: false, // True when fetching fresh data with cache available
+  showingCache: false         // True when displaying cached data
+});
+
+/**
+ * Smart merge function for combining history entries and active generations
+ * Ensures consistent sorting and duplicate handling
+ * @param {Array} historyEntries - Array of history entries from API
+ * @param {Array} activeGenerations - Array of active generation tasks
+ * @param {string} sortBy - Current sort criteria
+ * @returns {Array} Merged and sorted array of entries
+ */
+const mergeEntriesWithActiveGenerations = (historyEntries, activeGenerations, sortBy) => {
+  // Map active generations to consistent format
+  const mappedActiveGenerations = activeGenerations.map(task => ({
+    ...task,
+    topic: task.request_topic, // Map request_topic to topic
+    isActive: true // Mark active tasks
+  }));
+
+  // For most sort orders, we want active generations at the top
+  // Exception: alphabetical sorting should sort everything together
+  if (sortBy === 'topic') {
+    // Merge all entries and sort alphabetically
+    const allEntries = [...mappedActiveGenerations, ...historyEntries];
+    return allEntries.sort((a, b) => {
+      const topicA = (a.topic || '').toLowerCase();
+      const topicB = (b.topic || '').toLowerCase();
+      return topicA.localeCompare(topicB);
+    });
+  } else {
+    // For date-based and favorite sorting, put active generations first
+    return [...mappedActiveGenerations, ...historyEntries];
+  }
+};
+
+/**
  * Custom hook for managing history entries data with optimized loading and pagination
- * Now fetches both active generations and completed history entries.
+ * Now fetches both active generations and completed history entries with immediate cache display.
  * @param {Object} filterOptions - Options for filtering history entries
  * @param {string} filterOptions.sortBy - Sort criteria
  * @param {string|null} filterOptions.filterSource - Filter by source
@@ -15,16 +56,15 @@ import * as api from '../../../services/api';
  */
 const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, showNotification) => {
   const [entries, setEntries] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingState, setLoadingState] = useState(createLoadingState);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [error, setError] = useState(null);
   // Store full pagination state
   const [pagination, setPagination] = useState({ total: 0, page: 1, perPage: 10 });
-  const [stats, setStats] = useState({ loadTime: 0 }); // Remove total from here
+  const [stats, setStats] = useState({ loadTime: 0 });
   
   // Cache previous results for stale-while-revalidate pattern
   const previousEntriesRef = useRef({});
-  const requestRef = useRef(null);
   const abortControllerRef = useRef(null);
   const lastLoadTimeRef = useRef(0);
   const loadCountRef = useRef(0);
@@ -38,8 +78,8 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
   }, [sortBy, filterSource, searchTerm, page, perPage]);
   
   /**
-   * Load history entries and active generations from API
-   * Implements stale-while-revalidate pattern and aborts ongoing requests
+   * Load history entries and active generations from API with parallel loading and immediate cache display
+   * Implements stale-while-revalidate pattern with parallel loading and smart data merging
    */
   const loadHistoryAndGenerations = useCallback(async (forceRefresh = false) => {
     // Prevent too frequent refreshes (throttle to at most once per second)
@@ -49,7 +89,7 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
     }
     lastLoadTimeRef.current = now;
     
-    // Increment load counter for this session
+    // Increment load counter for this session (used for stale request detection)
     const currentLoadCount = ++loadCountRef.current;
     
     try {
@@ -60,15 +100,12 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
       
       // Create a new abort controller for this request
       abortControllerRef.current = new AbortController();
-      
-      // Set loading state immediately before potentially showing cache or fetching
-      setLoading(true);
+      const signal = abortControllerRef.current.signal;
       
       // Start measuring load time
       const startTime = performance.now();
       
-      // If we already have a cached entry for these filters and not forcing refresh,
-      // immediately show it without waiting for network
+      // Check for cached data and display immediately if available
       const cacheKey = getCacheKey();
       const cachedData = previousEntriesRef.current[cacheKey];
       
@@ -88,39 +125,46 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
             serverTime: cachedData.serverTime
           });
           setInitialLoadComplete(true);
-          // setLoading(false); // Remove: Loading remains true for background fetch
+          // Set loading state to show cache immediately
+          setLoadingState({
+            initialLoading: false,
+            backgroundRefreshing: true,
+            showingCache: true
+          });
+        } else {
+          // For subsequent loads, show background refresh state
+          setLoadingState(prev => ({
+            ...prev,
+            backgroundRefreshing: true
+          }));
         }
       } else if (!initialLoadComplete) {
-        // Show loading state for first load (already handled by setLoading(true) above)
-        // setLoading(true); // Remove duplicate
+        // Show initial loading state for first load without cache
+        setLoadingState({
+          initialLoading: true,
+          backgroundRefreshing: false,
+          showingCache: false
+        });
+      } else {
+        // For subsequent loads without cache, show background refresh
+        setLoadingState(prev => ({
+          ...prev,
+          backgroundRefreshing: true
+        }));
       }
       
       // Check auth status first to handle invalid tokens
       await api.checkAuthStatus();
       
-      // Make the API call with pagination
-      requestRef.current = api.getHistoryPreview(sortBy, filterSource, searchTerm, page, perPage);
-      const response = await requestRef.current;
-      
-      // Fetch active generations in parallel
-      let activeGenerations = [];
-      let activeGenerationsError = null;
-      try {
-        // We don't need to cache active generations as aggressively, fetch them fresh
-        const activeResponse = await api.getActiveGenerations();
-        activeGenerations = activeResponse.map(task => ({ ...task, isActive: true })); // Mark active tasks
-        // Normalize the topic field: rename request_topic to topic
-        activeGenerations = activeResponse.map(task => ({
-          ...task,
-          topic: task.request_topic, // Map request_topic to topic
-          isActive: true // Mark active tasks
-        }));
-      } catch (genError) {
-        console.error("Error fetching active generations:", genError);
-        activeGenerationsError = genError; // Store error to potentially show later
-        // Don't block showing history if active generations fail
-        showNotification('Could not load active generations: ' + (genError.message || 'Unknown error'), 'warning');
-      }
+      // Use parallel loading with deduplication and abort signal
+      const parallelResult = await api.loadHistoryDataParallelDeduped(
+        sortBy, 
+        filterSource, 
+        searchTerm, 
+        page, 
+        perPage, 
+        signal
+      );
       
       // If this is a stale request (a newer one has started), ignore the results
       if (currentLoadCount < loadCountRef.current) {
@@ -131,49 +175,95 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
       // Calculate load time
       const loadTime = performance.now() - startTime;
       
-      // Update cache with full response including pagination
-      previousEntriesRef.current[cacheKey] = response;
+      // Process the parallel loading results
+      const { historyResult, activeGenerationsResult, errors } = parallelResult;
       
-      // Ensure response format is valid
-      if (!response || !response.entries || !Array.isArray(response.entries)) {
-        console.warn('History response missing or invalid entries array, using empty array');
-        setEntries([]);
-        setPagination({ total: 0, page: 1, perPage: perPage }); // Reset pagination
-        setStats({ 
-          loadTime, 
-          fromCache: false,
-          initialLoad: !initialLoadComplete,
-          total: response.total // Add total count to stats
-        });
-      } else {
-        // Only update state if the data has actually changed
-        const mergedEntries = [
-          ...activeGenerations, // Prepend active generations
-          ...(response.entries || []) // Append history entries
-        ];
-        const entriesChanged = JSON.stringify(entries) !== JSON.stringify(mergedEntries);
-        const paginationChanged = pagination.total !== response.total || pagination.page !== response.page || pagination.perPage !== response.perPage;
-
-        if (entriesChanged || paginationChanged || forceRefresh) {
-          setEntries(mergedEntries);
-          setPagination({ 
-            total: response.total || 0, // Pagination info still comes from history preview
-            page: response.page || page, 
-            perPage: response.perPage || perPage 
+      // Handle errors gracefully - show what we can and notify about failures
+      if (errors.history && errors.activeGenerations) {
+        // Both requests failed
+        if (entries.length > 0) {
+          // Keep showing cached data if available
+          setLoadingState({
+            initialLoading: false,
+            backgroundRefreshing: false,
+            showingCache: true
           });
-          setStats({
-            loadTime, 
-            fromCache: false,
-            serverTime: response.request_time_ms,
-            initialLoad: !initialLoadComplete,
-            total: response.total // Add total count to stats
+          showNotification('Failed to refresh data from server', 'warning');
+        } else {
+          // No cached data, show error state
+          setEntries([]);
+          setPagination({ total: 0, page: 1, perPage: perPage });
+          setLoadingState({
+            initialLoading: false,
+            backgroundRefreshing: false,
+            showingCache: false
+          });
+          setError('Failed to load history data');
+          showNotification('Error loading history: ' + (errors.history?.message || 'Unknown error'), 'error');
+        }
+        return;
+      }
+      
+      // Handle partial failures with notifications
+      if (errors.activeGenerations) {
+        showNotification('Could not load active generations: ' + (errors.activeGenerations?.message || 'Unknown error'), 'warning');
+      }
+      if (errors.history) {
+        showNotification('Could not load history: ' + (errors.history?.message || 'Unknown error'), 'warning');
+      }
+      
+      // Merge the results using smart merging
+      const historyEntries = historyResult?.entries || [];
+      const activeGenerations = activeGenerationsResult || [];
+      const mergedEntries = mergeEntriesWithActiveGenerations(historyEntries, activeGenerations, sortBy);
+      
+      // Update cache with the history result (for future cache hits)
+      if (historyResult) {
+        const cacheEntry = {
+          ...historyResult,
+          entries: mergedEntries // Store merged entries for consistency
+        };
+        previousEntriesRef.current[cacheKey] = cacheEntry;
+      }
+      
+      // Only update state if data has actually changed or this is a forced refresh
+      const entriesChanged = JSON.stringify(entries) !== JSON.stringify(mergedEntries);
+      const paginationChanged = historyResult && (
+        pagination.total !== historyResult.total || 
+        pagination.page !== historyResult.page || 
+        pagination.perPage !== historyResult.perPage
+      );
+
+      if (entriesChanged || paginationChanged || forceRefresh) {
+        setEntries(mergedEntries);
+        
+        if (historyResult) {
+          setPagination({ 
+            total: historyResult.total || 0, // Pagination info comes from history preview
+            page: historyResult.page || page, 
+            perPage: historyResult.perPage || perPage 
           });
         }
+        
+        setStats({
+          loadTime, 
+          fromCache: false,
+          serverTime: historyResult?.request_time_ms,
+          initialLoad: !initialLoadComplete,
+          total: historyResult?.total || 0,
+          parallelLoad: true // Indicate this was a parallel load
+        });
       }
       
       setInitialLoadComplete(true);
-      setLoading(false);
+      // Set final loading state - no longer loading or refreshing
+      setLoadingState({
+        initialLoading: false,
+        backgroundRefreshing: false,
+        showingCache: false
+      });
       setError(null);
+      
     } catch (error) {
       // Ignore aborted requests
       if (error.name === 'AbortError') {
@@ -183,12 +273,26 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
       
       console.error('Error loading history:', error);
       
-      // Only set error state if no cached data is available
-      setEntries([]); // Ensure we set an empty array on error
-      setPagination({ total: 0, page: 1, perPage: perPage }); // Reset pagination
-      setLoading(false);
-      setError(error.message || 'Unknown error');
-      showNotification('Error loading history: ' + (error.message || 'Unknown error'), 'error');
+      // If we have cached data, keep showing it and just show error for refresh
+      if (entries.length > 0) {
+        setLoadingState({
+          initialLoading: false,
+          backgroundRefreshing: false,
+          showingCache: true
+        });
+        showNotification('Failed to refresh data: ' + (error.message || 'Unknown error'), 'warning');
+      } else {
+        // Only set error state if no cached data is available
+        setEntries([]); // Ensure we set an empty array on error
+        setPagination({ total: 0, page: 1, perPage: perPage }); // Reset pagination
+        setLoadingState({
+          initialLoading: false,
+          backgroundRefreshing: false,
+          showingCache: false
+        });
+        setError(error.message || 'Unknown error');
+        showNotification('Error loading history: ' + (error.message || 'Unknown error'), 'error');
+      }
     }
   }, [sortBy, filterSource, searchTerm, page, perPage, initialLoadComplete, getCacheKey, showNotification, entries, pagination]);
   
@@ -196,37 +300,33 @@ const useHistoryEntries = ({ sortBy, filterSource, searchTerm, page, perPage }, 
   useEffect(() => {
     loadHistoryAndGenerations();
     
-    // Remove polling logic - refresh should be triggered explicitly or by cache invalidation
-    /*
-    const pollingInterval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        loadHistory(false);
-      }
-    }, 30000);
-    */
-    
     // Cleanup function
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
-      // clearInterval(pollingInterval);
     };
   }, [sortBy, filterSource, searchTerm, page, perPage]);
   
   /**
-   * Force reload the history entries (resets to page 1 potentially, or current page?)
-   * Let's keep it simple: reloads current view.
+   * Force reload the history entries
    */
   const refreshEntries = useCallback(() => {
-    setLoading(true);
+    setLoadingState(prev => ({
+      ...prev,
+      backgroundRefreshing: true
+    }));
     loadHistoryAndGenerations(true);
   }, [loadHistoryAndGenerations]);
+
+  // Backward compatibility: provide legacy 'loading' property
+  const legacyLoading = loadingState.initialLoading;
   
   return {
     entries,
-    pagination, // Return pagination state
-    loading,
+    pagination,
+    loading: legacyLoading, // Legacy compatibility
+    loadingState, // New enhanced loading state
     error,
     stats,
     initialLoadComplete,

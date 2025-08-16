@@ -586,7 +586,7 @@ export const getLearningPath = async (taskId) => {
 };
 
 // History API functions (Refactored to use ONLY server-side API)
-export const getHistoryPreview = async (sortBy = 'creation_date', filterSource = null, searchTerm = null, page = 1, perPage = 10) => {
+export const getHistoryPreview = async (sortBy = 'creation_date', filterSource = null, searchTerm = null, page = 1, perPage = 10, signal = null) => {
   // Ensure user is authenticated
   if (!authToken) {
     console.error('getHistoryPreview Error: Authentication required.');
@@ -605,8 +605,10 @@ export const getHistoryPreview = async (sortBy = 'creation_date', filterSource =
     if (searchTerm) params.append('search', searchTerm);
     
     console.time('History API Request');
-    // Add /v1 prefix
-    const response = await api.get(`/v1/learning-paths?${params.toString()}`); 
+    // Add /v1 prefix and pass abort signal
+    const response = await api.get(`/v1/learning-paths?${params.toString()}`, {
+      signal: signal // Support request cancellation
+    }); 
     console.timeEnd('History API Request');
     
     if (response.data?.request_time_ms) {
@@ -626,7 +628,10 @@ export const getHistoryPreview = async (sortBy = 'creation_date', filterSource =
     return response.data; // Returns { entries: [], total: 0, page: 1, per_page: 10 }
 
   } catch (error) {
-    console.error('Server error fetching history preview:', error);
+    // Don't log abort errors as they are expected during request cancellation
+    if (error.name !== 'AbortError') {
+      console.error('Server error fetching history preview:', error);
+    }
     // Re-throw the error for the hook to handle (display message, etc.)
     // No fallback to local storage
     throw error; 
@@ -1185,14 +1190,122 @@ export const getCheckoutSession = async (sessionId) => {
 };
 
 // Fetch active (PENDING or RUNNING) generations for the current user
-export const getActiveGenerations = async () => {
+export const getActiveGenerations = async (signal = null) => {
   try {
-    const response = await api.get('/v1/learning-paths/generations/active');
+    const response = await api.get('/v1/learning-paths/generations/active', {
+      signal: signal // Support request cancellation
+    });
     return response.data;
   } catch (error) {
-    console.error('Error fetching active generations:', error);
+    // Don't log abort errors as they are expected during request cancellation
+    if (error.name !== 'AbortError') {
+      console.error('Error fetching active generations:', error);
+    }
     throw error; // Re-throw to be handled by calling component/hook
   }
+};
+
+/**
+ * Parallel loading function for history and active generations
+ * Executes both API calls concurrently for faster loading
+ * @param {string} sortBy - Sort criteria for history
+ * @param {string|null} filterSource - Filter by source
+ * @param {string|null} searchTerm - Search term
+ * @param {number} page - Page number
+ * @param {number} perPage - Items per page
+ * @param {AbortSignal} signal - Abort signal for request cancellation
+ * @returns {Promise<{historyResult: Object, activeGenerationsResult: Array, errors: Object}>}
+ */
+export const loadHistoryDataParallel = async (sortBy, filterSource, searchTerm, page, perPage, signal) => {
+  console.time('Parallel API Loading');
+  
+  try {
+    // Execute both API calls in parallel using Promise.allSettled
+    // This ensures that if one fails, the other can still succeed
+    const [historySettled, activeGenerationsSettled] = await Promise.allSettled([
+      getHistoryPreview(sortBy, filterSource, searchTerm, page, perPage, signal),
+      getActiveGenerations(signal)
+    ]);
+    
+    console.timeEnd('Parallel API Loading');
+    
+    // Process results and errors
+    const result = {
+      historyResult: null,
+      activeGenerationsResult: [],
+      errors: {}
+    };
+    
+    // Handle history result
+    if (historySettled.status === 'fulfilled') {
+      result.historyResult = historySettled.value;
+    } else {
+      result.errors.history = historySettled.reason;
+      console.error('History loading failed:', historySettled.reason);
+    }
+    
+    // Handle active generations result
+    if (activeGenerationsSettled.status === 'fulfilled') {
+      result.activeGenerationsResult = activeGenerationsSettled.value || [];
+    } else {
+      result.errors.activeGenerations = activeGenerationsSettled.reason;
+      console.error('Active generations loading failed:', activeGenerationsSettled.reason);
+    }
+    
+    return result;
+    
+  } catch (error) {
+    console.timeEnd('Parallel API Loading');
+    // This catch block handles any unexpected errors in Promise.allSettled
+    console.error('Unexpected error in parallel loading:', error);
+    
+    return {
+      historyResult: null,
+      activeGenerationsResult: [],
+      errors: {
+        parallel: error
+      }
+    };
+  }
+};
+
+/**
+ * Enhanced request deduplication cache
+ * Prevents multiple identical requests from executing simultaneously
+ */
+const requestCache = new Map();
+
+/**
+ * Deduplicated version of loadHistoryDataParallel
+ * Ensures the same request parameters don't execute multiple times concurrently
+ * @param {string} sortBy - Sort criteria
+ * @param {string|null} filterSource - Filter by source
+ * @param {string|null} searchTerm - Search term
+ * @param {number} page - Page number
+ * @param {number} perPage - Items per page
+ * @param {AbortSignal} signal - Abort signal for request cancellation
+ * @returns {Promise<Object>} Promise that resolves to the API result
+ */
+export const loadHistoryDataParallelDeduped = async (sortBy, filterSource, searchTerm, page, perPage, signal) => {
+  // Create a cache key based on request parameters
+  const cacheKey = `${sortBy}:${filterSource || 'all'}:${searchTerm || 'none'}:${page}:${perPage}`;
+  
+  // Check if an identical request is already in progress
+  if (requestCache.has(cacheKey)) {
+    console.log('Deduplicating identical request:', cacheKey);
+    return requestCache.get(cacheKey);
+  }
+  
+  // Start the request and cache the promise
+  const requestPromise = loadHistoryDataParallel(sortBy, filterSource, searchTerm, page, perPage, signal)
+    .finally(() => {
+      // Remove from cache when request completes (success or failure)
+      requestCache.delete(cacheKey);
+    });
+  
+  requestCache.set(cacheKey, requestPromise);
+  
+  return requestPromise;
 };
 
 // --- NEW: Update course publicity ---
@@ -1359,6 +1472,8 @@ export default {
   copyPublicPath,
   streamProgressUpdates,
   generateSubmoduleVisualization,
+  loadHistoryDataParallel,
+  loadHistoryDataParallelDeduped,
 };
 
     
