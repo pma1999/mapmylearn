@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { useAuth } from '../services/authContext';
+import { getReturnUrlFromLocation, getDefaultReturnUrl, navigateToReturnUrl } from '../utils/returnUrlUtils';
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -43,8 +44,8 @@ const LoginPage = () => {
     }
   }, [location]);
 
-  // Get return path from state if available
-  const from = location.state?.from?.pathname || '/generator';
+  // Get return URL using enhanced validation
+  const returnUrl = getReturnUrlFromLocation(location) || getDefaultReturnUrl();
 
   // Redirect to generator page if already authenticated
   useEffect(() => {
@@ -59,10 +60,10 @@ const LoginPage = () => {
       //   // For now, just navigate to dashboard after check
       // }
       
-      // Navigate to the intended destination or dashboard
-      navigate(from, { replace: true });
+      // Navigate to the validated return URL
+      navigateToReturnUrl(navigate, returnUrl);
     }
-  }, [isAuthenticated, navigate, from]); // Removed checkPendingMigration from dependencies
+  }, [isAuthenticated, navigate, returnUrl]); // Updated to use returnUrl instead of from
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -226,4 +227,4 @@ const LoginPage = () => {
   );
 };
 
-export default LoginPage; 
+export default LoginPage;

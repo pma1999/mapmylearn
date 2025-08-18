@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { Navigate, useLocation } from 'react-router';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { useAuth } from '../services/authContext';
+import { createReturnUrlParams } from '../utils/returnUrlUtils';
 
 /**
  * A wrapper component for routes that require authentication.
@@ -37,7 +38,16 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
     // If isLoggingOut is true, the user is effectively not authenticated for accessing protected routes.
     // The redirect to login is appropriate.
     console.log('ProtectedRoute: Not authenticated, redirecting to login.', { isAuthenticated, loading, isLoggingOut, user: !!user });
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    
+    // Create return URL from current location
+    const currentUrl = location.pathname + location.search + location.hash;
+    const returnUrlParams = createReturnUrlParams(currentUrl);
+    
+    return <Navigate 
+      to={`/login${returnUrlParams}`} 
+      state={{ from: currentUrl }} 
+      replace 
+    />;
   }
 
   // Check admin access if required
@@ -50,4 +60,4 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
   return children;
 };
 
-export default ProtectedRoute; 
+export default ProtectedRoute;
