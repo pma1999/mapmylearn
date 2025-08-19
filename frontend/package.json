@@ -74,5 +74,10 @@
     "prismjs": "^1.30.0",
     "refractor/prismjs": "^1.30.0"
   },
+  "jest": {
+    "transformIgnorePatterns": [
+      "node_modules/(?!(axios)/)"
+    ]
+  },
   "homepage": "https://mapmylearn.com/"
 }
