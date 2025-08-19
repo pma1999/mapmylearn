@@ -330,68 +330,77 @@ const LearningPathHeader = ({
           >
             {isMedium ? (
               <Stack direction="column" spacing={1.5} sx={{ width: '100%' }}>
-                <Box sx={{ display: 'flex', flexDirection: 'row', gap: 1 }}>
-                  <motion.div variants={buttonVariants} sx={{ flex: 1 }}>
-                    <Tooltip title="Download as JSON">
-                      <Button
-                        data-tut="download-json-button"
-                        variant="outlined"
-                        fullWidth
-                        startIcon={<DownloadIcon />}
-                        onClick={onDownload}
-                        size={isMobile ? "small" : "medium"}
-                      >
-                        JSON
-                      </Button>
-                    </Tooltip>
-                  </motion.div>
-
-                  <motion.div variants={buttonVariants} sx={{ flex: 1 }}>
-                    <Tooltip title="Download as Markdown">
-                      <Button
-                        variant="outlined"
-                        fullWidth
-                        startIcon={<ArticleIcon />}
-                        onClick={onDownloadMarkdown}
-                        size={isMobile ? "small" : "medium"}
-                      >
-                        Markdown
-                      </Button>
-                    </Tooltip>
-                  </motion.div>
-
-                  <motion.div variants={buttonVariants} sx={{ flex: 1 }}>
-                    <Tooltip title="Save for offline use">
-                      <Button
-                        variant="outlined"
-                        fullWidth
-                        startIcon={<DownloadForOfflineIcon />}
-                        onClick={onSaveOffline}
-                        size={isMobile ? "small" : "medium"}
-                      >
-                        Offline
-                      </Button>
-                    </Tooltip>
-                  </motion.div>
-                  
-                  <motion.div variants={buttonVariants} sx={{ flex: 1 }}>
-                    <Tooltip title={!isPdfReady ? "PDF download available after generation completes" : "Download as PDF"}>
-                      <span>
-                        <Button
-                          data-tut="download-pdf-button"
-                          variant="outlined"
-                          fullWidth
-                          startIcon={<PictureAsPdfIcon />}
-                          onClick={onDownloadPDF}
-                          size={isMobile ? "small" : "medium"}
-                          disabled={!isPdfReady}
-                        >
-                          PDF
-                        </Button>
-                      </span>
-                    </Tooltip>
-                  </motion.div>
-                </Box>
+                <Grid container spacing={1}>
+                  <Grid container item xs={12} spacing={1}>
+                    <Grid item xs={6}>
+                      <motion.div variants={buttonVariants}>
+                        <Tooltip title="Download as JSON">
+                          <Button
+                            data-tut="download-json-button"
+                            variant="outlined"
+                            fullWidth
+                            startIcon={<DownloadIcon />}
+                            onClick={onDownload}
+                            size={isMobile ? "small" : "medium"}
+                          >
+                            JSON
+                          </Button>
+                        </Tooltip>
+                      </motion.div>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <motion.div variants={buttonVariants}>
+                        <Tooltip title="Download as Markdown">
+                          <Button
+                            variant="outlined"
+                            fullWidth
+                            startIcon={<ArticleIcon />}
+                            onClick={onDownloadMarkdown}
+                            size={isMobile ? "small" : "medium"}
+                          >
+                            Markdown
+                          </Button>
+                        </Tooltip>
+                      </motion.div>
+                    </Grid>
+                  </Grid>
+                  <Grid container item xs={12} spacing={1}>
+                    <Grid item xs={6}>
+                      <motion.div variants={buttonVariants}>
+                        <Tooltip title="Save for offline use">
+                          <Button
+                            variant="outlined"
+                            fullWidth
+                            startIcon={<DownloadForOfflineIcon />}
+                            onClick={onSaveOffline}
+                            size={isMobile ? "small" : "medium"}
+                          >
+                            Offline
+                          </Button>
+                        </Tooltip>
+                      </motion.div>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <motion.div variants={buttonVariants}>
+                        <Tooltip title={!isPdfReady ? "PDF download available after generation completes" : "Download as PDF"}>
+                          <span>
+                            <Button
+                              data-tut="download-pdf-button"
+                              variant="outlined"
+                              fullWidth
+                              startIcon={<PictureAsPdfIcon />}
+                              onClick={onDownloadPDF}
+                              size={isMobile ? "small" : "medium"}
+                              disabled={!isPdfReady}
+                            >
+                              PDF
+                            </Button>
+                          </span>
+                        </Tooltip>
+                      </motion.div>
+                    </Grid>
+                  </Grid>
+                </Grid>
                 
                 {!isPublicView && (
                   <motion.div variants={buttonVariants}>
