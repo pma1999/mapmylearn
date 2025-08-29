@@ -39,8 +39,9 @@ import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import SchoolIcon from '@mui/icons-material/School';
 import AutoStoriesIcon from '@mui/icons-material/AutoStories';
 
-// Shared components
+ // Shared components
 import ResourcesSection from '../../shared/ResourcesSection';
+import MarkdownInline from '../../MarkdownInline';
 import CourseVisualization from '../../visualization/CourseVisualization';
 
 const CourseOverview = ({ 
@@ -355,13 +356,11 @@ const CourseOverview = ({
                         >
                           Module {moduleIndex + 1}: {module.title}
                         </Typography>
-                        <Typography 
-                          variant="body2" 
-                          color="text.secondary"
-                          sx={{ mb: 2 }}
-                        >
-                          {module.description}
-                        </Typography>
+                        {module.description && (
+                          <MarkdownInline variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
+                            {module.description}
+                          </MarkdownInline>
+                        )}
                       </Box>
                     </Box>
 
@@ -501,7 +500,11 @@ const CourseOverview = ({
                                   </ListItemIcon>
                                   <ListItemText
                                     primary={`${moduleIndex + 1}.${submoduleIndex + 1} ${submodule.title}`}
-                                    secondary={submodule.description}
+                                    secondary={submodule.description ? (
+                                      <MarkdownInline variant="caption" sx={{ color: isCompleted ? theme.palette.text.disabled : theme.palette.text.secondary }}>
+                                        {submodule.description}
+                                      </MarkdownInline>
+                                    ) : null}
                                     primaryTypographyProps={{
                                       variant: 'body2',
                                       fontWeight: 500,

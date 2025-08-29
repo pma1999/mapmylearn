@@ -6,6 +6,8 @@ import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
 
+import MarkdownInline from '../../MarkdownInline';
+
 const ModuleNavigationColumn = ({ 
   modules, 
   activeModuleIndex, 
@@ -104,9 +106,11 @@ const ModuleNavigationColumn = ({
                 </ListItemButton>
                 <Collapse in={isActiveModule} timeout="auto" unmountOnExit>
                   <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
-                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                        {module.description}
-                     </Typography>
+                     {module.description && (
+                       <MarkdownInline variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
+                         {module.description}
+                       </MarkdownInline>
+                     )}
                      
                      {module.prerequisites && module.prerequisites.length > 0 && (
                        <Box sx={{ mb: 2 }}>

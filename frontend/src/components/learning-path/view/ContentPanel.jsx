@@ -42,8 +42,9 @@ import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline'; // Co
 import PsychologyAltIcon from '@mui/icons-material/PsychologyAlt';
 import CloseIcon from '@mui/icons-material/Close';
 
-// Shared components
+ // Shared components
 import MarkdownRenderer from '../../MarkdownRenderer';
+import MarkdownInline from '../../MarkdownInline';
 import ResourcesSection from '../../shared/ResourcesSection';
 import SubmoduleChat from '../../chat/SubmoduleChat';
 import { QuizContainer } from '../../quiz';
@@ -454,9 +455,9 @@ const ContentPanel = forwardRef(({
                 Module Resources: {module.title} (Module {moduleIndex + 1})
             </Typography>
             {module.description && (
-              <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', mt: 0.5 }}>
+              <MarkdownInline variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic', mt: 0.5 }}>
                   {module.description}
-              </Typography>
+              </MarkdownInline>
             )}
         </Box>
         {/* Content area for module resources - allow natural height, Paper handles scroll */}
@@ -541,9 +542,9 @@ const ContentPanel = forwardRef(({
                 {moduleIndex + 1}.{submoduleIndex + 1}: {submodule.title}
             </Typography>
             {submodule.description && (
-                <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                <MarkdownInline variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
                     {submodule.description}
-                </Typography>
+                </MarkdownInline>
             )}
         </Box>
 
