@@ -16,13 +16,18 @@ export const generateHeaderId = (text, usedIds = new Set()) => {
   let baseId = text
     .toLowerCase()
     .trim()
-    .replace(/[^\w\s-]/g, '') // Remove special characters except hyphens
+    // Normalize Unicode characters (e.g., converts accented characters to base form)
+    .normalize('NFD')
+    // Remove diacritical marks but preserve letters
+    .replace(/[\u0300-\u036f]/g, '')
+    // Keep Unicode letters, digits, spaces, and hyphens only
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
     .replace(/\s+/g, '-') // Replace spaces with hyphens
     .replace(/-+/g, '-') // Replace multiple hyphens with single
     .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
   
   // Ensure it starts with a letter (HTML ID requirement)
-  if (!/^[a-z]/.test(baseId)) {
+  if (!/^[a-z\p{L}]/u.test(baseId)) {
     baseId = `heading-${baseId}`;
   }
   

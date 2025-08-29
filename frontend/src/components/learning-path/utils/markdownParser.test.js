@@ -187,3 +187,68 @@ describe('Integration with existing functionality', () => {
     expect(headers[5].title).toBe('Advanced Configuration Options');
   });
 });
+
+describe('Unicode character handling', () => {
+  test('should handle the specific problematic header correctly', () => {
+    const text = '# La Interdependencia: La *Virtù* se Muestra de Manera Efectiva Solo en Medio de la *Fortuna*';
+    const headers = parseMarkdownHeaders(text);
+    
+    expect(headers).toHaveLength(1);
+    expect(headers[0].title).toBe('La Interdependencia: La Virtù se Muestra de Manera Efectiva Solo en Medio de la Fortuna');
+    expect(headers[0].id).toBe('la-interdependencia-la-virtu-se-muestra-de-manera-efectiva-solo-en-medio-de-la-fortuna');
+  });
+
+  test('should handle accented characters properly', () => {
+    const text = '# La Interdependencia: La *Virtù* se Muestra';
+    const headers = parseMarkdownHeaders(text);
+    
+    expect(headers).toHaveLength(1);
+    expect(headers[0].title).toBe('La Interdependencia: La Virtù se Muestra');
+    expect(headers[0].id).toBe('la-interdependencia-la-virtu-se-muestra');
+  });
+
+  test('should handle Spanish characters', () => {
+    const text = '## Diseño y **Configuración** del Sistema';
+    const headers = parseMarkdownHeaders(text);
+    
+    expect(headers).toHaveLength(1);
+    expect(headers[0].title).toBe('Diseño y Configuración del Sistema');
+    expect(headers[0].id).toBe('diseno-y-configuracion-del-sistema');
+  });
+
+  test('should handle French characters', () => {
+    const text = '### Les *Éléments* de la **Création**';
+    const headers = parseMarkdownHeaders(text);
+    
+    expect(headers).toHaveLength(1);
+    expect(headers[0].title).toBe('Les Éléments de la Création');
+    expect(headers[0].id).toBe('les-elements-de-la-creation');
+  });
+
+  test('should handle German characters', () => {
+    const text = '#### Das **Überblick** der *Lösungen*';
+    const headers = parseMarkdownHeaders(text);
+    
+    expect(headers).toHaveLength(1);
+    expect(headers[0].title).toBe('Das Überblick der Lösungen');
+    expect(headers[0].id).toBe('das-uberblick-der-losungen');
+  });
+
+  test('should handle mixed Unicode and ASCII', () => {
+    const text = '##### Café **Münchën** and ~~American~~ Style';
+    const headers = parseMarkdownHeaders(text);
+    
+    expect(headers).toHaveLength(1);
+    expect(headers[0].title).toBe('Café Münchën and American Style');
+    expect(headers[0].id).toBe('cafe-munchen-and-american-style');
+  });
+
+  test('should handle emoji and special Unicode (removed but gracefully)', () => {
+    const text = '# Testing 📚 **Bold** with 💻 *Italic*';
+    const headers = parseMarkdownHeaders(text);
+    
+    expect(headers).toHaveLength(1);
+    expect(headers[0].title).toBe('Testing 📚 Bold with 💻 Italic');
+    expect(headers[0].id).toBe('testing-bold-with-italic');
+  });
+});
