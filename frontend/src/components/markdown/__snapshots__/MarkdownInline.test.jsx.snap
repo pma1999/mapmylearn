@@ -1,0 +1,33 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`MarkdownInline renders emphasis and links and does not generate header ids 1`] = `
+<DocumentFragment>
+  <div
+    class="MuiTypography-root MuiTypography-body1 css-ahj2mt-MuiTypography-root"
+  >
+    <div
+      class="MuiBox-root css-16n26id"
+      data-tut="markdown-content"
+    >
+      <div>
+        This is 
+        <em>
+          italic
+        </em>
+         and 
+        <a
+          href="https://example.com"
+        >
+          link
+        </a>
+        
+
+
+        <h1>
+          Heading
+        </h1>
+      </div>
+    </div>
+  </div>
+</DocumentFragment>
+`;

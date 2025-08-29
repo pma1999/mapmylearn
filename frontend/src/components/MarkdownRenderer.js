@@ -33,7 +33,7 @@ const extractPlainText = (children) => {
  * StyledMarkdown component for rendering markdown content with proper styling
  * and syntax highlighting for code blocks using the application theme.
  */
-const MarkdownRenderer = ({ children, enableTocIds = true, headerIdMap = null }) => {
+const MarkdownRenderer = ({ children, enableTocIds = true, headerIdMap = null, inheritFont = false }) => {
   const theme = useTheme();
   const [Highlighter, setHighlighter] = useState(null);
   const [highlighterStyle, setHighlighterStyle] = useState(null);
@@ -91,8 +91,10 @@ const MarkdownRenderer = ({ children, enableTocIds = true, headerIdMap = null })
       data-tut="markdown-content"
       sx={{
       color: theme.palette.text.primary,
-      fontSize: theme.typography.body1.fontSize,
-      lineHeight: theme.typography.body1.lineHeight,
+      ...(inheritFont ? {} : {
+        fontSize: theme.typography.body1.fontSize,
+        lineHeight: theme.typography.body1.lineHeight,
+      }),
       wordWrap: 'break-word',
 
       '& h1, & h2, & h3, & h4, & h5, & h6': {
@@ -333,7 +335,8 @@ const MarkdownRenderer = ({ children, enableTocIds = true, headerIdMap = null })
 MarkdownRenderer.propTypes = {
   children: PropTypes.node,
   enableTocIds: PropTypes.bool,
-  headerIdMap: PropTypes.instanceOf(Map)
+  headerIdMap: PropTypes.instanceOf(Map),
+  inheritFont: PropTypes.bool,
 };
 
 export default MarkdownRenderer;

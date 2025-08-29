@@ -19,7 +19,7 @@ const MarkdownInline = ({ children, variant = 'body1', className = '', sx = {}, 
 
   return (
     <Typography variant={variant} component="div" className={className} sx={sx}>
-      <MarkdownRenderer enableTocIds={false} {...rest}>
+      <MarkdownRenderer enableTocIds={false} inheritFont={true} {...rest}>
         {children}
       </MarkdownRenderer>
     </Typography>

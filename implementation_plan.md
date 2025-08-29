@@ -1,88 +1,172 @@
 # Implementation Plan
 
 [Overview]
-Implement a comprehensive return URL mechanism to redirect users to their intended destination after authentication, replacing the current hardcoded redirect to the course generation page.
+Actualizar la renderización de descripciones de módulos y submódulos para soportar Markdown completo (énfasis, listas, enlaces, código) con sanitización robusta en ContentPanel, CourseOverview y ModuleNavigationColumn.
 
-This implementation addresses the user experience issue where users who are logged out due to session expiration are always redirected to `/generate` after re-authentication, regardless of which page they were originally trying to access. The solution provides a secure, robust return URL system that preserves the user's intended destination while preventing security vulnerabilities like open redirects.
+El objetivo es que todas las descripciones visibles en la UI (encabezados de submódulos, descripciones de módulos y texto secundario en listados) se muestren usando un renderer Markdown consistente y seguro. Reutilizaremos el componente existente `MarkdownRenderer` que ya incorpora remark-gfm y saneamiento, y añadiremos un pequeño wrapper `MarkdownInline` para controlar variantes tipográficas (variant/color/sx) y desactivar generación de IDs en textos cortos. Las modificaciones serán mínimas y localizadas para evitar romper otras funcionalidades (TOC, generación de ids, y resaltado de código). Se documentarán cambios y se añadirá cobertura de pruebas (unitarias y de snapshot/visual) y pasos de validación manual.
 
-[Types]
-Create utility functions and validation logic for URL handling and security checks.
+[Types]  
+No se introducen cambios de TypeScript; se definen PropTypes y contratos claros para los nuevos wrappers/componentes.
 
-```typescript
-// URL validation and security utilities
-interface ReturnUrlValidation {
-  isValid: boolean;
-  sanitizedUrl: string;
-  reason?: string;
-}
+- MarkdownInline (props):
+  - children: PropTypes.node.isRequired — contenido Markdown (string o React node).
+  - variant: PropTypes.string (default: 'body2') — MUI typography variant a aplicar visualmente.
+  - color: PropTypes.string — color CSS o token de MUI para el texto.
+  - enableTocIds: PropTypes.bool (default: false) — si true, permite generar ids para headers (no recomendado en descripciones pequeñas).
+  - headerIdMap: PropTypes.instanceOf(Map) (opcional) — si se desea mapear ids del TOC.
+  - sx: PropTypes.object (opcional) — estilos MUI sx aplicados al wrapper.
+  - className: PropTypes.string (opcional) — para pruebas o overrides.
 
-// Return URL utility functions
-type ValidateReturnUrl = (url: string) => ReturnUrlValidation;
-type GetReturnUrl = (location: Location) => string | null;
-type SetReturnUrl = (returnUrl: string) => string;
-```
+Validaciones:
+- children -> si es null/undefined se renderiza null (o un Box vacío según el contexto).
+- variant debe ser un variant válido de MUI; si no, fallback a 'body2'.
+- enableTocIds por defecto false para evitar colisiones de ids en lugares repetidos.
 
 [Files]
-Create one new utility file and modify two existing components to implement the return URL functionality.
+Single sentence describing file modifications.
+Se crearán y modificarán archivos en frontend con rutas y cambios concretos listados a continuación.
 
-**New files to create:**
-- `frontend/src/utils/returnUrlUtils.js` - Utility functions for return URL validation, sanitization, and security checks
+- Nuevos archivos a crear:
+  - frontend/src/components/MarkdownInline.jsx
+    - Propósito: wrapper compacto que aplica `MarkdownRenderer` y envuelve el resultado en un Box/ Typography con soporte `variant`, `color` y `sx`. Evita generar ids de TOC por defecto.
+    - Contenido: componente React con PropTypes documentadas.
 
-**Existing files to modify:**
-- `frontend/src/components/ProtectedRoute.js` - Update redirect logic to properly encode and pass return URL
-- `frontend/src/pages/LoginPage.js` - Enhanced return URL extraction, validation, and post-login redirection logic
+- Archivos existentes a modificar:
+  - frontend/src/components/learning-path/view/ContentPanel.jsx
+    - Cambios:
+      - Importar `MarkdownInline` (o `MarkdownRenderer` directamente).
+      - Reemplazar renderizado de `submodule.description` en la cabecera del panel por:
+         <MarkdownInline variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }} enableTocIds={false}>
+           {submodule.description}
+         </MarkdownInline>
+      - Reemplazar `module.description` en la vista `module_resources` por equivalente `MarkdownInline`.
+      - Asegurar que, si description es null/empty, no renderice elemento vacío o renderice fallback (null).
+  - frontend/src/components/learning-path/view/CourseOverview.jsx
+    - Cambios:
+      - Importar `MarkdownInline`.
+      - Reemplazar `<Typography variant="body2" color="text.secondary">{module.description}</Typography>` por `<MarkdownInline variant="body2" color="text.secondary">{module.description}</MarkdownInline>`.
+      - Reemplazar `ListItemText secondary={submodule.description}` por `secondary={<MarkdownInline variant="caption" color="text.secondary">{submodule.description}</MarkdownInline>}` (asegurando que el componente acepta nodo React en `secondary`).
+  - frontend/src/components/learning-path/view/ModuleNavigationColumn.jsx
+    - Cambios:
+      - Importar `MarkdownInline`.
+      - Reemplazar `Typography` que muestra `module.description` por `<MarkdownInline variant="body2" color="text.secondary">{module.description}</MarkdownInline>`.
+      - Revisar si se deben aplicar límites de longitud (opcional): mostrar solo primera línea en nav si texto excesivamente largo; añadir CSS `overflow: hidden` y `textOverflow: ellipsis` si procede.
+- Archivos a auditar (sin cambios planificados):
+  - frontend/src/components/MarkdownRenderer.js — se reutiliza tal cual; verificar export y props.
+  - frontend/src/components/learning-path/hooks/useMarkdownTOC.js — sigue usando parseMarkdownHeaders/generateHeaderId.
+  - frontend/src/components/learning-path/utils/markdownParser.js — sin cambios.
+  - frontend/src/components/learning-path/components/SubmoduleTableOfContents.jsx — verificar compatibilidad si se genera id en lugares nuevos.
+
+- Archivos a eliminar o mover: ninguno.
+
+- Configuración:
+  - No se requieren cambios en package.json. Recomendación opcional: si se desea mayor seguridad, añadir rehype-sanitize (rehype-sanitize + rehype-raw) y ajustar `ReactMarkdown` configuración, pero esto es opcional ya que existe `sanitizeContent` utilitario.
 
 [Functions]
-Add URL validation utilities and enhance existing authentication flow functions.
+Single sentence describing function modifications.
+Se introducirán un nuevo componente funcional `MarkdownInline` y se actualizarán render functions en componentes de vista para delegar a `MarkdownRenderer`.
 
-**New functions in `frontend/src/utils/returnUrlUtils.js`:**
-- `validateReturnUrl(url)` - Validates and sanitizes return URLs to prevent open redirects
-- `getReturnUrlFromLocation(location)` - Extracts return URL from React Router state or URL parameters  
-- `createReturnUrlParams(returnUrl)` - Creates URL parameters for return URL with fallback mechanisms
-- `isAllowedReturnUrl(pathname)` - Checks if a pathname is in the allowed internal routes whitelist
+- Nuevas funciones / componentes:
+  - MarkdownInline (functional component)
+    - Nombre: MarkdownInline
+    - Ruta: frontend/src/components/MarkdownInline.jsx
+    - Firma: ({ children, variant = 'body2', color = 'text.secondary', enableTocIds = false, headerIdMap = null, sx = {}, className }) => JSX.Element
+    - Propósito: aplicar `MarkdownRenderer` a `children`, envolver en MUI Box/typography y exponer props de estilo.
+    - Implementación clave:
+      - Si `!children` -> return null.
+      - Render:
+        <Box component="div" sx={{ ...sx }} className={className}>
+          <Typography component="div" variant={variant} color={color} sx={{ display: 'block' }}>
+            <MarkdownRenderer enableTocIds={enableTocIds} headerIdMap={headerIdMap}>
+              {children}
+            </MarkdownRenderer>
+          </Typography>
+        </Box>
+      - Nota: usar `component="div"` en Typography para evitar etiquetas semánticas no deseadas (p dentro de p).
 
-**Modified functions in `frontend/src/components/ProtectedRoute.js`:**
-- Update redirect logic in main component body to encode current location as return URL parameter
+- Funciones modificadas:
+  - ContentPanel (component)
+    - Archivo: frontend/src/components/learning-path/view/ContentPanel.jsx
+    - Cambios exactos:
+      - Reemplazar los 2-3 lugares donde `submodule.description` o `module.description` se renderiza con `Typography` por `MarkdownInline` (ver [Files] para ubicaciones).
+      - Asegurar `enableTocIds={false}` para evitar ids en descripciones cortas.
+  - CourseOverview (component)
+    - Archivo: frontend/src/components/learning-path/view/CourseOverview.jsx
+    - Cambios:
+      - Reemplazar `Typography` y `ListItemText secondary` que muestran descripciones por `MarkdownInline`.
+      - En `ListItemText` el prop `secondary` puede aceptar nodo React; utilizar `<MarkdownInline variant="caption">`.
+  - ModuleNavigationColumn (component)
+    - Archivo: frontend/src/components/learning-path/view/ModuleNavigationColumn.jsx
+    - Cambios:
+      - Reemplazar `Typography` con `MarkdownInline`.
+      - Aplicar `sx` para truncado si es necesario.
 
-**Modified functions in `frontend/src/pages/LoginPage.js`:**
-- Enhance return URL extraction logic in component setup
-- Add URL validation before navigation in `useEffect` dependency
-- Update error handling for invalid return URLs
+- Funciones removidas:
+  - Ninguna.
 
 [Classes]
-No new classes required - implementation uses functional components and utility functions.
+Single sentence describing class modifications.
+No clases ES6/React class components se añaden ni se eliminan; el trabajo se basa en componentes funcionales.
 
-All existing React functional components (`ProtectedRoute` and `LoginPage`) will be enhanced with additional logic but retain their current structure and component patterns.
+- Nuevas clases: ninguna (solo componentes funcionales).
+- Modificaciones a clases existentes: ninguna.
+- Eliminaciones de clases: ninguna.
 
 [Dependencies]
-No new external dependencies required - implementation uses existing React Router and browser APIs.
+Single sentence describing dependency modifications.
+No dependencias nuevas obligatorias; opción optativa para rehype-sanitize se documenta para mayor seguridad.
 
-The implementation leverages:
-- `react-router` - Already available for location and navigation handling
-- Native browser `URLSearchParams` and `URL` APIs for URL manipulation and validation
-- Existing project utilities and patterns
+- Recomendaciones:
+  - Ninguna dependencia obligatoria nueva.
+  - Opcional: instalar `rehype-sanitize` y `rehype-raw` si se decide mejorar la sanitización a nivel de rehype:
+    - npm install rehype-sanitize rehype-raw
+    - Ajustes en MarkdownRenderer: usar rehypePlugins={[rehypeRaw, [rehypeSanitize, schema]]} y ajustar skipHtml.
+  - Si se desea mejorar coherencia de estilos de código, asegurar `react-syntax-highlighter` está en dependencies (ya está siendo importado de manera dinámica; auditar package.json solo por si faltara).
 
 [Testing]
-Create comprehensive test coverage for URL validation and authentication flow scenarios.
+Single sentence describing testing approach.
+Agregar pruebas unitarias y manuales: snapshots para renderizado Markdown en los tres componentes y pruebas end-to-end/manual para verificar cursiva, listas, enlaces y código, además de pruebas de seguridad (XSS sanitization).
 
-**Test files to create/update:**
-- `frontend/src/utils/__tests__/returnUrlUtils.test.js` - Unit tests for URL validation utilities
-- Add test cases to existing component tests for `ProtectedRoute` and `LoginPage`
-
-**Test scenarios to cover:**
-- Valid internal return URLs (courses, history, admin pages)
-- Invalid return URLs (external sites, malicious payloads)
-- Edge cases (missing return URLs, malformed URLs, special characters)
-- Authentication flow with various return URL scenarios
-- Security validation (XSS prevention, open redirect prevention)
+- Test files to add/modify:
+  - frontend/test/markdown/MarkdownInline.test.jsx
+    - Tests:
+      - Render simple inline emphasis: "*italica*" => <em> rendered.
+      - Render bold, links, inline code, fenced code block.
+      - Ensure empty children returns null.
+  - frontend/test/components/ContentPanel.markdown.snap.jsx (snapshot)
+    - Snapshot with a sample `submodule.description` containing emphasis and list.
+  - frontend/test/components/CourseOverview.markdown.snap.jsx
+    - Snapshot verifying `module.description` and submodule `secondary` rendering with markdown.
+  - frontend/test/components/ModuleNavigationColumn.markdown.snap.jsx
+    - Snapshot verifying module description rendering.
+- Integration/manual tests:
+  - Run local dev server, open a course with descriptions containing `*italica*`, `_italic_`, `**bold**`, lists and code blocks, ensure correct rendering in:
+    - ContentPanel (submodule view)
+    - CourseOverview (module card & submodule list secondary)
+    - ModuleNavigationColumn (module expanded view)
+  - Verify that generated TOC and header ids are unchanged for actual headers inside `submodule.content`, not for short descriptions (enableTocIds=false).
+  - Security test: try a description containing `<script>alert(1)</script>` and `onerror` handlers in images — ensure nothing executes and script tags are removed.
+- CI:
+  - Add tests to test suite; run `npm test` or existing test harness to include new tests.
 
 [Implementation Order]
-Sequential implementation to ensure stable functionality and proper testing at each stage.
+Single sentence describing the implementation sequence.
+Aplicar cambios en pequeñas etapas: añadir wrapper, actualizar tres componentes (ContentPanel, CourseOverview, ModuleNavigationColumn), añadir pruebas y realizar validaciones manuales; desplegar después de revisión.
 
-1. **Create URL utilities** - Implement `frontend/src/utils/returnUrlUtils.js` with validation and security functions
-2. **Update ProtectedRoute** - Modify `frontend/src/components/ProtectedRoute.js` to capture and encode return URLs
-3. **Update LoginPage** - Enhance `frontend/src/pages/LoginPage.js` with improved return URL handling
-4. **Add comprehensive testing** - Create test suites for utilities and component functionality  
-5. **Security validation** - Review and test security measures against common attack vectors
-6. **Integration testing** - Test complete authentication flow with various scenarios
-7. **Documentation** - Document the new return URL system for future maintenance
+Paso a paso:
+1. Crear `frontend/src/components/MarkdownInline.jsx` (componente y PropTypes) — commit separado.
+2. Ejecutar tests unitarios básicos (si existen) y añadir tests para MarkdownInline.
+3. Modificar `ContentPanel.jsx`:
+   - Importar `MarkdownInline`.
+   - Reemplazar `submodule.description` y `module.description` en las ubicaciones indicadas.
+   - Ejecutar tests/snapshots.
+4. Modificar `CourseOverview.jsx`:
+   - Importar `MarkdownInline`.
+   - Reemplazar `Typography` y `ListItemText secondary` con `MarkdownInline`.
+   - Actualizar/crear snapshots de componente.
+5. Modificar `ModuleNavigationColumn.jsx`:
+   - Importar `MarkdownInline` y reemplazar `module.description`.
+   - Añadir CSS `sx` para truncado (opcional).
+6. Ejecutar cobertura manual y pruebas de XSS/sanitización.
+7. Revisar UI en servidor de desarrollo (npm start), verificar casos edge: null descriptions, muy largas, markdown mixto con HTML.
+8. Commit final y PR con descripción detallada del cambio y checklist de pruebas manuales realizadas.
