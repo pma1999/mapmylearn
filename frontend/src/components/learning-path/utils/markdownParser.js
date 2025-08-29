@@ -44,6 +44,32 @@ export const generateHeaderId = (text, usedIds = new Set()) => {
 };
 
 /**
+ * Strips markdown formatting characters from text while preserving readability
+ * @param {string} text - Text that may contain markdown formatting
+ * @returns {string} Clean text without markdown formatting characters
+ */
+export const stripMarkdownFormatting = (text) => {
+  if (!text || typeof text !== 'string') {
+    return '';
+  }
+
+  return text
+    // Remove bold formatting (**text** and __text__) - only match complete pairs
+    .replace(/\*\*([^\*]*?)\*\*/g, '$1')
+    .replace(/__([^_]*?)__/g, '$1')
+    // Remove strikethrough formatting (~~text~~) - only match complete pairs
+    .replace(/~~([^~]*?)~~/g, '$1')
+    // Remove inline code formatting (`text`) - only match complete pairs
+    .replace(/`([^`]*?)`/g, '$1')
+    // Remove italic formatting (*text* and _text_) - only match complete pairs
+    // This is done after bold to avoid interfering with ** patterns
+    .replace(/\*([^\*]*?)\*/g, '$1')
+    .replace(/_([^_]*?)_/g, '$1')
+    // Clean up any remaining whitespace
+    .trim();
+};
+
+/**
  * Extracts headers from markdown content
  * @param {string} markdownContent - Raw markdown content
  * @returns {Array} - Array of header objects with id, level, title, and position
@@ -63,7 +89,8 @@ export const parseMarkdownHeaders = (markdownContent) => {
   
   while ((match = headerRegex.exec(markdownContent)) !== null) {
     const level = match[1].length; // Number of # characters
-    const title = match[2].trim();
+    const rawTitle = match[2].trim();
+    const title = stripMarkdownFormatting(rawTitle);
     const position = match.index;
     
     // Skip empty titles
