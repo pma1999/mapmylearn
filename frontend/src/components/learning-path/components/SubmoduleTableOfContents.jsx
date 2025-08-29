@@ -115,28 +115,38 @@ const SubmoduleTableOfContents = ({
             bgcolor: isMobile ? 'transparent' : theme.palette.background.default,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between'
+            justifyContent: isCollapsed ? 'center' : 'space-between',
+            minHeight: isCollapsed ? '48px' : 'auto'
           }}
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <TocIcon sx={{ color: theme.palette.primary.main, fontSize: '1.2rem' }} />
-            <Typography 
-              variant={isMobile ? "h6" : "subtitle2"} 
-              sx={{ 
-                fontWeight: theme.typography.fontWeightMedium,
-                color: theme.palette.text.primary
-              }}
-            >
-              {title}
-            </Typography>
-          </Box>
+          {!isCollapsed && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <TocIcon sx={{ color: theme.palette.primary.main, fontSize: '1.2rem' }} />
+              <Typography 
+                variant={isMobile ? "h6" : "subtitle2"} 
+                sx={{ 
+                  fontWeight: theme.typography.fontWeightMedium,
+                  color: theme.palette.text.primary
+                }}
+              >
+                {title}
+              </Typography>
+            </Box>
+          )}
           
           {!isMobile && onToggleCollapse && (
             <Tooltip title={isCollapsed ? "Expand Table of Contents" : "Collapse Table of Contents"}>
               <IconButton
                 size="small"
                 onClick={onToggleCollapse}
-                sx={{ p: 0.5 }}
+                sx={{ 
+                  p: 0.5,
+                  ...(isCollapsed && {
+                    position: 'absolute',
+                    left: '50%',
+                    transform: 'translateX(-50%)'
+                  })
+                }}
               >
                 {isCollapsed ? <ExpandMoreIcon /> : <ExpandLessIcon />}
               </IconButton>

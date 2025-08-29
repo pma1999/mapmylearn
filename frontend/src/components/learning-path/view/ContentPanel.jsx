@@ -638,14 +638,15 @@ const ContentPanel = forwardRef(({
                                {/* Desktop TOC Sidebar */}
                                {!isMobileLayout && tocHook.hasHeaders && (
                                  <Box sx={{ 
-                                   width: tocCollapsed ? '60px' : '280px',
+                                   width: tocCollapsed ? '80px' : '280px',
                                    flexShrink: 0,
                                    transition: 'width 0.3s ease-in-out',
                                    position: 'sticky',
                                    top: theme.spacing(2),
                                    alignSelf: 'flex-start',
                                    maxHeight: 'calc(100vh - 200px)',
-                                   overflow: 'hidden'
+                                   overflow: 'hidden',
+                                   minWidth: { xs: '60px', sm: '80px' }
                                  }}>
                                    <SubmoduleTableOfContents
                                      headers={tocHook.headers}
@@ -910,4 +911,4 @@ ContentPanel.propTypes = {
 
 ContentPanel.displayName = 'ContentPanel';
 
-export default ContentPanel; 
+export default ContentPanel;
