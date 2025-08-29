@@ -12,8 +12,10 @@
 export const generateHeaderId = (text, usedIds = new Set()) => {
   if (!text || typeof text !== 'string') return 'heading';
   
+  const strippedText = stripMarkdownFormatting(text);
+
   // Convert to lowercase, replace spaces and special chars with hyphens
-  let baseId = text
+  let baseId = strippedText
     .toLowerCase()
     .trim()
     // Normalize Unicode characters (e.g., converts accented characters to base form)
@@ -59,17 +61,26 @@ export const stripMarkdownFormatting = (text) => {
   }
 
   return text
-    // Remove bold formatting (**text** and __text__) - only match complete pairs
-    .replace(/\*\*([^\*]*?)\*\*/g, '$1')
-    .replace(/__([^_]*?)__/g, '$1')
-    // Remove strikethrough formatting (~~text~~) - only match complete pairs
-    .replace(/~~([^~]*?)~~/g, '$1')
-    // Remove inline code formatting (`text`) - only match complete pairs
-    .replace(/`([^`]*?)`/g, '$1')
-    // Remove italic formatting (*text* and _text_) - only match complete pairs
-    // This is done after bold to avoid interfering with ** patterns
-    .replace(/\*([^\*]*?)\*/g, '$1')
-    .replace(/_([^_]*?)_/g, '$1')
+    // Remove inline code formatting (`text`)
+    .replace(/`([^`]+)`/g, '$1')
+    // Images: ![alt](url) -> alt
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+    // Links: [text](url) -> text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Remove HTML tags
+    .replace(/<[^>]+>/g, '')
+    // Remove bold and italic (***text*** or ___text___)
+    .replace(/(\*\*\*|___)(.+?)\1/g, '$2')
+    // Remove bold (**text** or __text__)
+    .replace(/(\*\*|__)(.+?)\1/g, '$2')
+    // Remove italic (*text* or _text_)
+    .replace(/(\*|_)(.+?)\1/g, '$2')
+    // Remove strikethrough (~~text~~)
+    .replace(/~~(.+?)~~/g, '$1')
+    // Unescape escaped markdown characters (e.g., \* \_ \#)
+    .replace(/\\([\\`*_{}\[\]()#+\-.!])/g, '$1')
+    // Collapse whitespace
+    .replace(/\s+/g, ' ')
     // Clean up any remaining whitespace
     .trim();
 };
@@ -102,7 +113,7 @@ export const parseMarkdownHeaders = (markdownContent) => {
     if (!title) continue;
     
     // Generate unique ID
-    const id = generateHeaderId(title, usedIds);
+    const id = generateHeaderId(rawTitle, usedIds);
     
     headers.push({
       id,

@@ -4,7 +4,30 @@ import { Box, useTheme } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { sanitizeContent } from '../utils/sanitizer';
-import { generateHeaderId } from './learning-path/utils/markdownParser';
+import { generateHeaderId, stripMarkdownFormatting } from './learning-path/utils/markdownParser';
+
+/**
+ * Extract plain text from React children recursively, including alt text for images.
+ */
+const extractPlainText = (children) => {
+  let result = '';
+  React.Children.forEach(children, (child) => {
+    if (child == null) return;
+    if (typeof child === 'string' || typeof child === 'number') {
+      result += String(child);
+    } else if (Array.isArray(child)) {
+      result += extractPlainText(child);
+    } else if (React.isValidElement(child)) {
+      // Handle images inside headings: use alt text if present
+      if (child.type === 'img' && child.props && typeof child.props.alt === 'string') {
+        result += child.props.alt;
+      } else if (child.props && child.props.children != null) {
+        result += extractPlainText(child.props.children);
+      }
+    }
+  });
+  return result;
+};
 
 /**
  * StyledMarkdown component for rendering markdown content with proper styling
@@ -264,33 +287,39 @@ const MarkdownRenderer = ({ children, enableTocIds = true, headerIdMap = null })
           },
           // Custom heading components that generate TOC-compatible IDs
           h1({ node, children, ...props }) {
-            const text = String(children);
-            const id = enableTocIds ? (headerIdMap?.get(text) || generateHeaderId(text, usedIds)) : undefined;
+            const rawText = extractPlainText(children);
+            const key = stripMarkdownFormatting(rawText);
+            const id = enableTocIds ? (headerIdMap?.get(key) || generateHeaderId(rawText, usedIds)) : undefined;
             return <h1 id={id} {...props}>{children}</h1>;
           },
           h2({ node, children, ...props }) {
-            const text = String(children);
-            const id = enableTocIds ? (headerIdMap?.get(text) || generateHeaderId(text, usedIds)) : undefined;
+            const rawText = extractPlainText(children);
+            const key = stripMarkdownFormatting(rawText);
+            const id = enableTocIds ? (headerIdMap?.get(key) || generateHeaderId(rawText, usedIds)) : undefined;
             return <h2 id={id} {...props}>{children}</h2>;
           },
           h3({ node, children, ...props }) {
-            const text = String(children);
-            const id = enableTocIds ? (headerIdMap?.get(text) || generateHeaderId(text, usedIds)) : undefined;
+            const rawText = extractPlainText(children);
+            const key = stripMarkdownFormatting(rawText);
+            const id = enableTocIds ? (headerIdMap?.get(key) || generateHeaderId(rawText, usedIds)) : undefined;
             return <h3 id={id} {...props}>{children}</h3>;
           },
           h4({ node, children, ...props }) {
-            const text = String(children);
-            const id = enableTocIds ? (headerIdMap?.get(text) || generateHeaderId(text, usedIds)) : undefined;
+            const rawText = extractPlainText(children);
+            const key = stripMarkdownFormatting(rawText);
+            const id = enableTocIds ? (headerIdMap?.get(key) || generateHeaderId(rawText, usedIds)) : undefined;
             return <h4 id={id} {...props}>{children}</h4>;
           },
           h5({ node, children, ...props }) {
-            const text = String(children);
-            const id = enableTocIds ? (headerIdMap?.get(text) || generateHeaderId(text, usedIds)) : undefined;
+            const rawText = extractPlainText(children);
+            const key = stripMarkdownFormatting(rawText);
+            const id = enableTocIds ? (headerIdMap?.get(key) || generateHeaderId(rawText, usedIds)) : undefined;
             return <h5 id={id} {...props}>{children}</h5>;
           },
           h6({ node, children, ...props }) {
-            const text = String(children);
-            const id = enableTocIds ? (headerIdMap?.get(text) || generateHeaderId(text, usedIds)) : undefined;
+            const rawText = extractPlainText(children);
+            const key = stripMarkdownFormatting(rawText);
+            const id = enableTocIds ? (headerIdMap?.get(key) || generateHeaderId(rawText, usedIds)) : undefined;
             return <h6 id={id} {...props}>{children}</h6>;
           },
         }}
