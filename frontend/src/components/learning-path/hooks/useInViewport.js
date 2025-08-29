@@ -55,7 +55,7 @@ export default function useInViewport(targetRef, options = {}) {
       observer.disconnect();
     };
     // Re-run when the element or observing parameters change
-  }, [targetRef?.current, options.root, options.rootMargin, options.threshold]);
+  }, [targetRef, options]);
 
   return inView;
 }

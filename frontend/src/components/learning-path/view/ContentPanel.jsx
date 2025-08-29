@@ -202,11 +202,44 @@ const ContentPanel = forwardRef(({
   const contentScrollContainerRef = useRef(null);
   const desktopTocRef = useRef(null);
 
-  // Determine if desktop TOC sidebar is visible within the scroll container
+  // Helper: find nearest scrollable ancestor (vertical)
+  const getScrollParent = (node) => {
+    if (!node) return null;
+    let el = node.parentElement;
+    while (el) {
+      const style = window.getComputedStyle(el);
+      const overflowY = style.overflowY;
+      const canScrollY = (overflowY === 'auto' || overflowY === 'scroll');
+      if (canScrollY && el.scrollHeight > el.clientHeight) {
+        return el;
+      }
+      el = el.parentElement;
+    }
+    return null;
+  };
+
+  // Determine actual scroll root (Paper vs inner Box) for accurate IntersectionObserver root
+  const [scrollRoot, setScrollRoot] = useState(null);
+  useEffect(() => {
+    // Prefer the desktop TOC's ancestor for precise context; fall back to content scroll Box if it scrolls
+    const target = desktopTocRef.current ?? contentScrollContainerRef.current;
+    const rootEl = target ? getScrollParent(target) : null;
+
+    let fallbackRoot = null;
+    if (contentScrollContainerRef.current && (contentScrollContainerRef.current.scrollHeight > contentScrollContainerRef.current.clientHeight)) {
+      fallbackRoot = contentScrollContainerRef.current;
+    }
+
+    setScrollRoot(rootEl || fallbackRoot || null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desktopTocRef, contentScrollContainerRef]);
+
+  // Determine if desktop TOC sidebar is visible within the REAL scroll container
   const isDesktopTocInView = useInViewport(desktopTocRef, {
-    root: contentScrollContainerRef.current,
-    rootMargin: '0px 0px 0px 0px',
-    threshold: 0.01
+    root: scrollRoot ?? null,
+    // Negative bottom margin makes the "visible" zone slightly smaller to avoid flicker at edges
+    rootMargin: '0px 0px -40% 0px',
+    threshold: 0
   });
 
   useEffect(() => {
