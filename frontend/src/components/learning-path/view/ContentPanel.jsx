@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, forwardRef } from 'react';
+import React, { useState, useEffect, useCallback, forwardRef, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { 
   Box, 
@@ -52,6 +52,7 @@ import { QuizContainer } from '../../quiz';
 import useMarkdownTOC from '../hooks/useMarkdownTOC';
 import SubmoduleTableOfContents from '../components/SubmoduleTableOfContents';
 import TOCFloatingButton from '../components/TOCFloatingButton';
+import useInViewport from '../hooks/useInViewport';
 
 // Visualization component for interactive diagrams
 import MermaidVisualization from '../../visualization/MermaidVisualization';
@@ -196,6 +197,17 @@ const ContentPanel = forwardRef(({
       debounceDelay: 150
     }
   );
+
+  // Refs for viewport detection of desktop TOC and scroll container
+  const contentScrollContainerRef = useRef(null);
+  const desktopTocRef = useRef(null);
+
+  // Determine if desktop TOC sidebar is visible within the scroll container
+  const isDesktopTocInView = useInViewport(desktopTocRef, {
+    root: contentScrollContainerRef.current,
+    rootMargin: '0px 0px 0px 0px',
+    threshold: 0.01
+  });
 
   useEffect(() => {
     if (displayType === 'submodule' && submodule) {
@@ -582,7 +594,7 @@ const ContentPanel = forwardRef(({
           </Box>
         )}
 
-        <Box sx={{ flexGrow: 1, overflowY: 'auto' }} >
+        <Box sx={{ flexGrow: 1, overflowY: 'auto' }} ref={contentScrollContainerRef} >
            {tabsConfig.map((tab) => {
                const tabContentSx = tab.component === 'Chat' ? { p: 0, height: '100%' } : {}; 
                return (
@@ -637,7 +649,7 @@ const ContentPanel = forwardRef(({
 
                                {/* Desktop TOC Sidebar */}
                                {!isMobileLayout && tocHook.hasHeaders && (
-                                 <Box sx={{ 
+                                 <Box ref={desktopTocRef} sx={{ 
                                    width: tocCollapsed ? '80px' : '280px',
                                    flexShrink: 0,
                                    transition: 'width 0.3s ease-in-out',
@@ -670,6 +682,18 @@ const ContentPanel = forwardRef(({
                                  headerCount={tocHook.headers.length}
                                  isVisible={true}
                                  position="bottom-right"
+                               />
+                             )}
+                             {/* Desktop TOC Floating Button (appears when sidebar TOC is not visible) */}
+                             {!isMobileLayout && tocHook.hasHeaders && !isDesktopTocInView && (
+                               <TOCFloatingButton
+                                 onOpen={handleTocDrawerOpen}
+                                 hasHeaders={tocHook.hasHeaders}
+                                 headerCount={tocHook.headers.length}
+                                 isVisible={true}
+                                 variant="secondary"
+                                 size="small"
+                                 position="top-right"
                                />
                              )}
                          </Box>
@@ -825,24 +849,24 @@ const ContentPanel = forwardRef(({
            })}
         </Box>
 
-        {/* Mobile TOC Drawer */}
-        {isMobileLayout && tocHook.hasHeaders && (
+        {/* TOC Drawer (mobile and desktop) */}
+        {tocHook.hasHeaders && (
           <Drawer
             anchor="right"
             open={tocDrawerOpen}
             onClose={handleTocDrawerClose}
             ModalProps={{ keepMounted: true }}
-            PaperProps={{ 
-              sx: { 
-                width: '85%',
-                maxWidth: '400px',
+            PaperProps={{
+              sx: {
+                width: isMobileLayout ? '85%' : 360,
+                maxWidth: isMobileLayout ? '400px' : 'unset',
                 borderTopLeftRadius: theme.spacing(2),
                 borderBottomLeftRadius: theme.spacing(2)
-              } 
+              }
             }}
           >
-            <Box sx={{ 
-              p: 2, 
+            <Box sx={{
+              p: 2,
               borderBottom: `1px solid ${theme.palette.divider}`,
               display: 'flex',
               alignItems: 'center',
@@ -859,8 +883,8 @@ const ContentPanel = forwardRef(({
               <SubmoduleTableOfContents
                 headers={tocHook.headers}
                 activeHeaderId={tocHook.activeHeaderId}
-                onHeaderClick={handleTocHeaderClick}
-                isMobile={true}
+                onHeaderClick={(id) => { handleTocHeaderClick(id); handleTocDrawerClose(); }}
+                isMobile={isMobileLayout}
                 title=""
               />
             </Box>
