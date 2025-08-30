@@ -154,7 +154,10 @@ const SelectiveExportDialog = ({
             return null; // Module not selected
           }
 
-          const filteredModule = { ...module };
+          const filteredModule = { 
+            ...module,
+            originalIndex: moduleIndex // Preserve original index for proper key matching
+          };
 
           // Filter submodules
           if (module.submodules) {

@@ -131,32 +131,41 @@ export const buildSelectiveMarkdown = (pathData, options = {}) => {
     lines.push(`## ${t.tableOfContents}`);
     lines.push('');
     
+    let displayModuleNumber = 1;
     modules.forEach((module, moduleIndex) => {
-      const moduleKey = `module_${moduleIndex}`;
+      // Use original module index from metadata if available, otherwise use current index
+      const originalModuleIndex = module?.originalIndex !== undefined ? module.originalIndex : moduleIndex;
+      const moduleKey = `module_${originalModuleIndex}`;
       if (!selectedItems[moduleKey]) return;
 
-      const moduleTitle = module?.title || `Módulo ${moduleIndex + 1}`;
-      lines.push(`${moduleIndex + 1}. [${moduleTitle}](#${sanitizeString(moduleTitle).toLowerCase()})`);
+      const moduleTitle = module?.title || `Módulo ${displayModuleNumber}`;
+      lines.push(`${displayModuleNumber}. [${moduleTitle}](#${sanitizeString(moduleTitle).toLowerCase()})`);
       
       // Add submodules to TOC
       const submodules = module?.submodules || [];
+      let displaySubmoduleNumber = 1;
       submodules.forEach((submodule, submoduleIndex) => {
-        const submoduleKey = `module_${moduleIndex}_sub_${submoduleIndex}`;
+        const submoduleKey = `module_${originalModuleIndex}_sub_${submoduleIndex}`;
         if (selectedItems[submoduleKey]) {
-          const submoduleTitle = submodule?.title || `Submódulo ${submoduleIndex + 1}`;
-          lines.push(`   ${moduleIndex + 1}.${submoduleIndex + 1}. [${submoduleTitle}](#${sanitizeString(submoduleTitle).toLowerCase()})`);
+          const submoduleTitle = submodule?.title || `Submódulo ${displaySubmoduleNumber}`;
+          lines.push(`   ${displayModuleNumber}.${displaySubmoduleNumber}. [${submoduleTitle}](#${sanitizeString(submoduleTitle).toLowerCase()})`);
+          displaySubmoduleNumber++;
         }
       });
+      displayModuleNumber++;
     });
     lines.push('');
   }
 
   // 5. Module Content
+  let displayModuleNumber = 1;
   modules.forEach((module, moduleIndex) => {
-    const moduleKey = `module_${moduleIndex}`;
+    // Use original module index from metadata if available, otherwise use current index
+    const originalModuleIndex = module?.originalIndex !== undefined ? module.originalIndex : moduleIndex;
+    const moduleKey = `module_${originalModuleIndex}`;
     if (!selectedItems[moduleKey]) return;
 
-    const moduleTitle = module?.title || `Módulo ${moduleIndex + 1}`;
+    const moduleTitle = module?.title || `Módulo ${displayModuleNumber}`;
     
     // Module Header
     lines.push(`## ${moduleTitle}`);
@@ -196,11 +205,12 @@ export const buildSelectiveMarkdown = (pathData, options = {}) => {
 
     // Submodules
     const submodules = module?.submodules || [];
+    let displaySubmoduleNumber = 1;
     submodules.forEach((submodule, submoduleIndex) => {
-      const submoduleKey = `module_${moduleIndex}_sub_${submoduleIndex}`;
+      const submoduleKey = `module_${originalModuleIndex}_sub_${submoduleIndex}`;
       if (!selectedItems[submoduleKey]) return;
 
-      const submoduleTitle = submodule?.title || `Submódulo ${submoduleIndex + 1}`;
+      const submoduleTitle = submodule?.title || `Submódulo ${displaySubmoduleNumber}`;
       
       // Submodule Header
       lines.push(`### ${submoduleTitle}`);
@@ -244,7 +254,9 @@ export const buildSelectiveMarkdown = (pathData, options = {}) => {
         });
         lines.push('');
       }
+      displaySubmoduleNumber++;
     });
+    displayModuleNumber++;
   });
 
   // 6. Footer
@@ -291,9 +303,10 @@ export const validateSelection = (selectedItems, modules) => {
     key.includes('sub_') && selectedItems[key]
   );
 
-  const selectedModuleCount = modules.filter((_, index) => 
-    selectedItems[`module_${index}`]
-  ).length;
+  const selectedModuleCount = modules.filter((module, index) => {
+    const originalIndex = module?.originalIndex !== undefined ? module.originalIndex : index;
+    return selectedItems[`module_${originalIndex}`];
+  }).length;
 
   return {
     isValid: hasSelectedModules || hasSelectedSubmodules,
