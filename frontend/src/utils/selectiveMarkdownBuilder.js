@@ -138,7 +138,9 @@ export const buildSelectiveMarkdown = (pathData, options = {}) => {
       const moduleKey = `module_${originalModuleIndex}`;
       if (!selectedItems[moduleKey]) return;
 
-      const moduleTitle = module?.title || `Módulo ${displayModuleNumber}`;
+      // Use original module number (1-based) for display
+      const originalModuleNumber = originalModuleIndex + 1;
+      const moduleTitle = module?.title || `Módulo ${originalModuleNumber}`;
       lines.push(`${displayModuleNumber}. [${moduleTitle}](#${sanitizeString(moduleTitle).toLowerCase()})`);
       
       // Add submodules to TOC
@@ -147,7 +149,8 @@ export const buildSelectiveMarkdown = (pathData, options = {}) => {
       submodules.forEach((submodule, submoduleIndex) => {
         const submoduleKey = `module_${originalModuleIndex}_sub_${submoduleIndex}`;
         if (selectedItems[submoduleKey]) {
-          const submoduleTitle = submodule?.title || `Submódulo ${displaySubmoduleNumber}`;
+          const originalSubmoduleNumber = submoduleIndex + 1;
+          const submoduleTitle = submodule?.title || `Submódulo ${originalSubmoduleNumber}`;
           lines.push(`   ${displayModuleNumber}.${displaySubmoduleNumber}. [${submoduleTitle}](#${sanitizeString(submoduleTitle).toLowerCase()})`);
           displaySubmoduleNumber++;
         }
@@ -165,7 +168,9 @@ export const buildSelectiveMarkdown = (pathData, options = {}) => {
     const moduleKey = `module_${originalModuleIndex}`;
     if (!selectedItems[moduleKey]) return;
 
-    const moduleTitle = module?.title || `Módulo ${displayModuleNumber}`;
+    // Use original module number (1-based) for display
+    const originalModuleNumber = originalModuleIndex + 1;
+    const moduleTitle = module?.title || `Módulo ${originalModuleNumber}`;
     
     // Module Header
     lines.push(`## ${moduleTitle}`);
@@ -210,7 +215,9 @@ export const buildSelectiveMarkdown = (pathData, options = {}) => {
       const submoduleKey = `module_${originalModuleIndex}_sub_${submoduleIndex}`;
       if (!selectedItems[submoduleKey]) return;
 
-      const submoduleTitle = submodule?.title || `Submódulo ${displaySubmoduleNumber}`;
+      // Use original submodule number (1-based) for display
+      const originalSubmoduleNumber = submoduleIndex + 1;
+      const submoduleTitle = submodule?.title || `Submódulo ${originalSubmoduleNumber}`;
       
       // Submodule Header
       lines.push(`### ${submoduleTitle}`);
