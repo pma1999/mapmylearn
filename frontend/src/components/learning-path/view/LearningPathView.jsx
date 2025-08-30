@@ -18,6 +18,7 @@ import ModuleNavigationColumn from './ModuleNavigationColumn';
 import ContentPanel from './ContentPanel';
 import MobileBottomNavigation from './MobileBottomNavigation.jsx';
 import CourseOverview from './CourseOverview';
+import SelectiveExportDialog from './SelectiveExportDialog';
 
 // Layout components
 import ResponsiveLayout from '../components/ResponsiveLayout';
@@ -90,6 +91,7 @@ const LearningPathView = ({ source }) => {
 
     // Actions from useLearningPathActions
     saveDialogOpen,
+    selectiveExportDialogOpen,
     tags,
     newTag,
     favorite,
@@ -108,6 +110,9 @@ const LearningPathView = ({ source }) => {
     handleHomeClick,
     handleNewLearningPathClick,
     handleDownloadMarkdown,
+    handleSelectiveMarkdownExport,
+    handleSelectiveExport,
+    handleSelectiveExportClose,
 
     // Sharing actions
     handleTogglePublic,
@@ -273,6 +278,7 @@ const LearningPathView = ({ source }) => {
               viewMode={viewMode}
               onBackToOverview={switchToOverview}
               onDownloadMarkdown={handleDownloadMarkdown}
+              onSelectiveMarkdownExport={handleSelectiveMarkdownExport}
             />
 
             {/* Topic Resources Section */}
@@ -400,6 +406,16 @@ const LearningPathView = ({ source }) => {
           isMobile={isMobile} 
         />
       )}
+
+      {/* Selective Export Dialog */}
+      <SelectiveExportDialog
+        open={selectiveExportDialogOpen}
+        onClose={handleSelectiveExportClose}
+        onExport={handleSelectiveExport}
+        pathData={actualPathData}
+        topic={topic}
+        language={learningPath?.language || 'es'}
+      />
 
       {/* Notifications */}
       {notification && notification.open && (

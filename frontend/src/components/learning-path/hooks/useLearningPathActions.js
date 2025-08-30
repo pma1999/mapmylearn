@@ -8,6 +8,7 @@ import {
   downloadLearningPathMarkdown,
 } from '../../../services/api';
 import { saveOfflinePath } from '../../../services/offlineService';
+import { buildSelectiveMarkdown, createSelectiveFilename, validateSelection } from '../../../utils/selectiveMarkdownBuilder';
 
 /**
  * Custom hook for managing actions related to a course
@@ -34,6 +35,7 @@ const useLearningPathActions = (
   
   // States
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [selectiveExportDialogOpen, setSelectiveExportDialogOpen] = useState(false);
   const [tags, setTags] = useState([]);
   const [newTag, setNewTag] = useState('');
   const [favorite, setFavorite] = useState(false);
@@ -186,6 +188,68 @@ const useLearningPathActions = (
       console.error('Error downloading Markdown:', err);
       showNotification('Failed to download Markdown', 'error');
     }
+  };
+
+  /**
+   * Opens the selective export dialog
+   */
+  const handleSelectiveMarkdownExport = () => {
+    if (!learningPath) {
+      showNotification('No course data available for export', 'error');
+      return;
+    }
+    setSelectiveExportDialogOpen(true);
+  };
+
+  /**
+   * Handles the selective export with user choices
+   */
+  const handleSelectiveExport = async (filteredData, options) => {
+    try {
+      showNotification('Generating selective export...', 'info');
+
+      // Build the selective markdown
+      const markdownContent = buildSelectiveMarkdown(filteredData, {
+        ...options,
+        language: learningPath?.language || 'es'
+      });
+
+      // Create filename
+      const filename = createSelectiveFilename(
+        learningPath.topic || 'course',
+        options.selectionStats,
+        learningPath?.language || 'es'
+      );
+
+      // Create and download the file
+      const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      const { selectedModules, selectedSubmodules } = options.selectionStats;
+      showNotification(
+        `Selective export completed: ${selectedModules} modules, ${selectedSubmodules} submodules`,
+        'success'
+      );
+
+      setSelectiveExportDialogOpen(false);
+    } catch (error) {
+      console.error('Error in selective export:', error);
+      showNotification('Failed to generate selective export', 'error');
+    }
+  };
+
+  /**
+   * Closes the selective export dialog
+   */
+  const handleSelectiveExportClose = () => {
+    setSelectiveExportDialogOpen(false);
   };
 
   // Lightweight client-side Markdown assembler mirroring backend structure
@@ -464,6 +528,7 @@ const useLearningPathActions = (
     // States
     saveDialogOpen,
     setSaveDialogOpen,
+    selectiveExportDialogOpen,
     tags,
     setTags,
     newTag,
@@ -476,6 +541,9 @@ const useLearningPathActions = (
     handleDownloadJSON,
     handleDownloadPDF,
     handleDownloadMarkdown,
+    handleSelectiveMarkdownExport,
+    handleSelectiveExport,
+    handleSelectiveExportClose,
     handleHomeClick,
     handleNewLearningPathClick,
     handleSaveToHistory,

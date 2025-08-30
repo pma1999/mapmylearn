@@ -35,6 +35,7 @@ import { motion } from 'framer-motion';
 import InfoTooltip from '../../shared/InfoTooltip';
 import { helpTexts } from '../../../constants/helpTexts';
 import ArticleIcon from '@mui/icons-material/Article';
+import TuneIcon from '@mui/icons-material/Tune';
 
 /**
  * Header component for course display
@@ -65,6 +66,7 @@ import ArticleIcon from '@mui/icons-material/Article';
  * @param {string} [props.viewMode='overview'] Current view mode ('overview' or 'focus')
  * @param {Function} [props.onBackToOverview] Handler to go back to overview mode
  * @param {Function} [props.onDownloadMarkdown] Handler for Markdown download
+ * @param {Function} [props.onSelectiveMarkdownExport] Handler for selective Markdown export
  * @returns {JSX.Element} Header component
  */
 const LearningPathHeader = ({ 
@@ -92,7 +94,8 @@ const LearningPathHeader = ({
   isCopying = false,
   viewMode = 'overview',
   onBackToOverview,
-  onDownloadMarkdown
+  onDownloadMarkdown,
+  onSelectiveMarkdownExport
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -349,7 +352,7 @@ const LearningPathHeader = ({
                           </Tooltip>
                         </motion.div>
                       </Grid>
-                      <Grid item xs={6}>
+                      <Grid item xs={3}>
                         <motion.div variants={buttonVariants}>
                           <Tooltip title="Download as Markdown">
                             <Button
@@ -359,7 +362,23 @@ const LearningPathHeader = ({
                               onClick={onDownloadMarkdown}
                               size={isMobile ? "small" : "medium"}
                             >
-                              Markdown
+                              MD
+                            </Button>
+                          </Tooltip>
+                        </motion.div>
+                      </Grid>
+                      <Grid item xs={3}>
+                        <motion.div variants={buttonVariants}>
+                          <Tooltip title="Selective Markdown Export">
+                            <Button
+                              variant="outlined"
+                              fullWidth
+                              startIcon={<TuneIcon />}
+                              onClick={onSelectiveMarkdownExport}
+                              size={isMobile ? "small" : "medium"}
+                              disabled={!onSelectiveMarkdownExport}
+                            >
+                              Select
                             </Button>
                           </Tooltip>
                         </motion.div>
@@ -485,6 +504,27 @@ const LearningPathHeader = ({
                 </motion.div>
 
                 <motion.div variants={buttonVariants}>
+                  <Tooltip title="Selective Markdown Export">
+                    <Button
+                      variant="outlined"
+                      startIcon={<TuneIcon />}
+                      onClick={onSelectiveMarkdownExport}
+                      disabled={!onSelectiveMarkdownExport}
+                      sx={{
+                        borderColor: theme.palette.secondary.main,
+                        color: theme.palette.secondary.main,
+                        '&:hover': {
+                          backgroundColor: theme.palette.secondary.main,
+                          color: theme.palette.secondary.contrastText
+                        }
+                      }}
+                    >
+                      Selective Export
+                    </Button>
+                  </Tooltip>
+                </motion.div>
+
+                <motion.div variants={buttonVariants}>
                   <Tooltip title="Save for offline use">
                     <Button
                       variant="outlined"
@@ -595,6 +635,7 @@ LearningPathHeader.propTypes = {
   viewMode: PropTypes.string,
   onBackToOverview: PropTypes.func,
   onDownloadMarkdown: PropTypes.func,
+  onSelectiveMarkdownExport: PropTypes.func,
 };
 
 export default LearningPathHeader;
