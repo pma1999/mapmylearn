@@ -140,7 +140,8 @@ export const buildSelectiveMarkdown = (pathData, options = {}) => {
 
       // Use original module number (1-based) for display
       const originalModuleNumber = originalModuleIndex + 1;
-      const moduleTitle = module?.title || `Módulo ${originalModuleNumber}`;
+      const baseTitle = module?.title || `Módulo ${originalModuleNumber}`;
+      const moduleTitle = module?.title ? `Módulo ${originalModuleNumber}: ${baseTitle}` : `Módulo ${originalModuleNumber}`;
       lines.push(`${displayModuleNumber}. [${moduleTitle}](#${sanitizeString(moduleTitle).toLowerCase()})`);
       
       // Add submodules to TOC
@@ -150,7 +151,8 @@ export const buildSelectiveMarkdown = (pathData, options = {}) => {
         const submoduleKey = `module_${originalModuleIndex}_sub_${submoduleIndex}`;
         if (selectedItems[submoduleKey]) {
           const originalSubmoduleNumber = submoduleIndex + 1;
-          const submoduleTitle = submodule?.title || `Submódulo ${originalSubmoduleNumber}`;
+          const baseSubTitle = submodule?.title || `Submódulo ${originalSubmoduleNumber}`;
+          const submoduleTitle = submodule?.title ? `${originalModuleNumber}.${originalSubmoduleNumber} ${baseSubTitle}` : `${originalModuleNumber}.${originalSubmoduleNumber} Submódulo ${originalSubmoduleNumber}`;
           lines.push(`   ${displayModuleNumber}.${displaySubmoduleNumber}. [${submoduleTitle}](#${sanitizeString(submoduleTitle).toLowerCase()})`);
           displaySubmoduleNumber++;
         }
@@ -170,7 +172,8 @@ export const buildSelectiveMarkdown = (pathData, options = {}) => {
 
     // Use original module number (1-based) for display
     const originalModuleNumber = originalModuleIndex + 1;
-    const moduleTitle = module?.title || `Módulo ${originalModuleNumber}`;
+    const baseTitle = module?.title || `Módulo ${originalModuleNumber}`;
+    const moduleTitle = module?.title ? `Módulo ${originalModuleNumber}: ${baseTitle}` : `Módulo ${originalModuleNumber}`;
     
     // Module Header
     lines.push(`## ${moduleTitle}`);
@@ -217,7 +220,8 @@ export const buildSelectiveMarkdown = (pathData, options = {}) => {
 
       // Use original submodule number (1-based) for display
       const originalSubmoduleNumber = submoduleIndex + 1;
-      const submoduleTitle = submodule?.title || `Submódulo ${originalSubmoduleNumber}`;
+      const baseSubTitle = submodule?.title || `Submódulo ${originalSubmoduleNumber}`;
+      const submoduleTitle = submodule?.title ? `${originalModuleNumber}.${originalSubmoduleNumber} ${baseSubTitle}` : `${originalModuleNumber}.${originalSubmoduleNumber} Submódulo ${originalSubmoduleNumber}`;
       
       // Submodule Header
       lines.push(`### ${submoduleTitle}`);
