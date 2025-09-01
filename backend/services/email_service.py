@@ -1,4 +1,5 @@
 import smtplib
+import ssl
 import os
 import time
 import socket
@@ -22,16 +23,29 @@ SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 MAIL_SENDER_EMAIL = os.getenv("MAIL_SENDER_EMAIL", "info@mapmylearn.com")
 
 # Behavior controls
-SMTP_TIMEOUT_SECONDS = int(os.getenv("SMTP_TIMEOUT", 15))
-SMTP_RETRIES = int(os.getenv("SMTP_RETRIES", 2))
+SMTP_TIMEOUT_SECONDS = int(os.getenv("SMTP_TIMEOUT", 20))
+SMTP_RETRIES = int(os.getenv("SMTP_RETRIES", 3))
 SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
 SMTP_USE_SSL = os.getenv("SMTP_USE_SSL", "true").lower() == "true"
+SMTP_DEBUG = os.getenv("SMTP_DEBUG", "false").lower() == "true"
 
 def send_email(to_email: str, subject: str, html_content: str):
     """Sends an email using configured SMTP settings with retry and TLS/SSL fallback."""
     if not all([SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, MAIL_SENDER_EMAIL]):
         logger.error("SMTP settings not fully configured in environment variables. Cannot send email.")
         return False
+
+    # Warn if sender address differs from authenticated user, which some providers reject
+    try:
+        if MAIL_SENDER_EMAIL and SMTP_USER and MAIL_SENDER_EMAIL.lower() != SMTP_USER.lower():
+            logger.warning(
+                "MAIL_SENDER_EMAIL (%s) differs from SMTP_USER (%s). Some providers (incl. IONOS) may reject or rewrite From.",
+                MAIL_SENDER_EMAIL,
+                SMTP_USER,
+            )
+    except Exception:
+        # Do not fail sending due to logging issues
+        pass
 
     message = MIMEMultipart("alternative")
     message["Subject"] = subject
@@ -42,16 +56,23 @@ def send_email(to_email: str, subject: str, html_content: str):
     message.attach(MIMEText(html_content, "html"))
 
     def _try_send_via_tls() -> bool:
+        # Use a secure SSL context and prefer IPv4 by resolving first
+        ssl_context = ssl.create_default_context()
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT_SECONDS) as server:
+            if SMTP_DEBUG:
+                server.set_debuglevel(1)
             server.ehlo()
-            server.starttls()
+            server.starttls(context=ssl_context)
             server.ehlo()
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.sendmail(MAIL_SENDER_EMAIL, to_email, message.as_string())
             return True
 
     def _try_send_via_ssl() -> bool:
-        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_SSL_PORT, timeout=SMTP_TIMEOUT_SECONDS) as server:
+        ssl_context = ssl.create_default_context()
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_SSL_PORT, context=ssl_context, timeout=SMTP_TIMEOUT_SECONDS) as server:
+            if SMTP_DEBUG:
+                server.set_debuglevel(1)
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.sendmail(MAIL_SENDER_EMAIL, to_email, message.as_string())
             return True
@@ -91,7 +112,7 @@ def send_email(to_email: str, subject: str, html_content: str):
 
         # Backoff before next attempt if there will be one
         if attempt_number < SMTP_RETRIES:
-            sleep_seconds = min(2 ** (attempt_number - 1), 8)
+            sleep_seconds = min(2 ** (attempt_number - 1), 10)
             time.sleep(sleep_seconds)
 
     logger.error(
