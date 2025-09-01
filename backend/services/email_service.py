@@ -23,11 +23,27 @@ SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 MAIL_SENDER_EMAIL = os.getenv("MAIL_SENDER_EMAIL", "info@mapmylearn.com")
 
 # Behavior controls
-SMTP_TIMEOUT_SECONDS = int(os.getenv("SMTP_TIMEOUT", 20))
+SMTP_TIMEOUT_SECONDS = int(os.getenv("SMTP_TIMEOUT", 30))
 SMTP_RETRIES = int(os.getenv("SMTP_RETRIES", 3))
 SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
 SMTP_USE_SSL = os.getenv("SMTP_USE_SSL", "true").lower() == "true"
 SMTP_DEBUG = os.getenv("SMTP_DEBUG", "false").lower() == "true"
+SMTP_FORCE_IPV4 = os.getenv("SMTP_FORCE_IPV4", "true").lower() == "true"
+
+# Optionally force IPv4 resolution to avoid IPv6 egress issues on some hosts (e.g., PaaS)
+if SMTP_FORCE_IPV4:
+    _original_getaddrinfo = socket.getaddrinfo
+
+    def _ipv4_only_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        try:
+            results = _original_getaddrinfo(host, port, family, type, proto, flags)
+        except Exception:
+            return _original_getaddrinfo(host, port)
+        ipv4_results = [r for r in results if r and r[0] == socket.AF_INET]
+        return ipv4_results or results
+
+    socket.getaddrinfo = _ipv4_only_getaddrinfo  # type: ignore
+    logger.info("SMTP IPv4-only resolution enabled via SMTP_FORCE_IPV4=true")
 
 def send_email(to_email: str, subject: str, html_content: str):
     """Sends an email using configured SMTP settings with retry and TLS/SSL fallback."""
@@ -54,6 +70,20 @@ def send_email(to_email: str, subject: str, html_content: str):
 
     # Attach HTML content (could add a text alternative later)
     message.attach(MIMEText(html_content, "html"))
+
+    def _log_dns_resolution():
+        try:
+            addrinfo = socket.getaddrinfo(SMTP_HOST, SMTP_PORT, 0, socket.SOCK_STREAM)
+            resolved = []
+            for family, socktype, proto, canonname, sockaddr in addrinfo:
+                ip, _ = sockaddr
+                resolved.append(f"{ip}({"IPv4" if family == socket.AF_INET else 'IPv6'})")
+            if resolved:
+                logger.info("SMTP host %s resolved to: %s", SMTP_HOST, ", ".join(resolved))
+        except Exception as e:
+            logger.warning("Could not resolve SMTP host %s: %s", SMTP_HOST, e)
+
+    _log_dns_resolution()
 
     def _try_send_via_tls() -> bool:
         # Use a secure SSL context and prefer IPv4 by resolving first
@@ -87,7 +117,7 @@ def send_email(to_email: str, subject: str, html_content: str):
             except smtplib.SMTPAuthenticationError:
                 logger.error(f"SMTP authentication failed for user '{SMTP_USER}'. Check credentials.")
                 return False
-            except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError, socket.timeout, OSError) as e:
+            except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError, socket.timeout, OSError, TimeoutError) as e:
                 logger.warning(
                     f"Attempt {attempt_number}: TLS send failed to {to_email} via {SMTP_HOST}:{SMTP_PORT} — {type(e).__name__}: {e}"
                 )
@@ -103,7 +133,7 @@ def send_email(to_email: str, subject: str, html_content: str):
             except smtplib.SMTPAuthenticationError:
                 logger.error(f"SMTP authentication failed for user '{SMTP_USER}' (SSL). Check credentials.")
                 return False
-            except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError, socket.timeout, OSError) as e:
+            except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError, socket.timeout, OSError, TimeoutError) as e:
                 logger.warning(
                     f"Attempt {attempt_number}: SSL send failed to {to_email} via {SMTP_HOST}:{SMTP_SSL_PORT} — {type(e).__name__}: {e}"
                 )

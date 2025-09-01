@@ -8,7 +8,7 @@ ENV PYTHONPATH=.
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies for WeasyPrint
+# Install system dependencies for WeasyPrint and TLS/diagnostics
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     python3-dev \
@@ -34,6 +34,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libglib2.0-dev \
     ffmpeg \
+    ca-certificates \
+    openssl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -54,6 +56,7 @@ RUN echo '#!/bin/bash\n\
 echo "Starting application with environment:"\n\
 echo "PORT=$PORT"\n\
 echo "PYTHONPATH=$PYTHONPATH"\n\
+export GODEBUG=x509sha1=1\n\
 python bootstrap.py\n\
 ' > /app/startup.sh && chmod +x /app/startup.sh
 
