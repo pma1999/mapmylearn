@@ -1,5 +1,8 @@
 import smtplib
 import os
+import time
+import socket
+import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
@@ -7,18 +10,27 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# Module logger
+logger = logging.getLogger(__name__)
+
 # Get SMTP settings from environment variables
 SMTP_HOST = os.getenv("SMTP_HOST")
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587)) # Default to 587 (TLS)
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587))  # Default to 587 (TLS)
+SMTP_SSL_PORT = int(os.getenv("SMTP_SSL_PORT", 465))  # Default SSL port
 SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 MAIL_SENDER_EMAIL = os.getenv("MAIL_SENDER_EMAIL", "info@mapmylearn.com")
 
+# Behavior controls
+SMTP_TIMEOUT_SECONDS = int(os.getenv("SMTP_TIMEOUT", 15))
+SMTP_RETRIES = int(os.getenv("SMTP_RETRIES", 2))
+SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
+SMTP_USE_SSL = os.getenv("SMTP_USE_SSL", "true").lower() == "true"
+
 def send_email(to_email: str, subject: str, html_content: str):
-    """Sends an email using configured SMTP settings."""
+    """Sends an email using configured SMTP settings with retry and TLS/SSL fallback."""
     if not all([SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, MAIL_SENDER_EMAIL]):
-        print("ERROR: SMTP settings not fully configured in environment variables. Cannot send email.")
-        # In a real app, you might raise an exception or handle this more gracefully
+        logger.error("SMTP settings not fully configured in environment variables. Cannot send email.")
         return False
 
     message = MIMEMultipart("alternative")
@@ -26,25 +38,67 @@ def send_email(to_email: str, subject: str, html_content: str):
     message["From"] = MAIL_SENDER_EMAIL
     message["To"] = to_email
 
-    # Attach HTML content
-    # It's good practice to also include a plain text version, but keeping it simple for now
+    # Attach HTML content (could add a text alternative later)
     message.attach(MIMEText(html_content, "html"))
 
-    try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.ehlo() # Can be omitted
-            server.starttls() # Secure the connection
-            server.ehlo() # Can be omitted
+    def _try_send_via_tls() -> bool:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT_SECONDS) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.sendmail(MAIL_SENDER_EMAIL, to_email, message.as_string())
-            print(f"Email sent successfully to {to_email}")
             return True
-    except smtplib.SMTPAuthenticationError:
-        print(f"ERROR: SMTP Authentication failed for user {SMTP_USER}. Check credentials.")
-        return False
-    except Exception as e:
-        print(f"ERROR: Failed to send email to {to_email}: {e}")
-        return False
+
+    def _try_send_via_ssl() -> bool:
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_SSL_PORT, timeout=SMTP_TIMEOUT_SECONDS) as server:
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(MAIL_SENDER_EMAIL, to_email, message.as_string())
+            return True
+
+    for attempt_number in range(1, SMTP_RETRIES + 1):
+        # Try TLS first if enabled
+        if SMTP_USE_TLS:
+            try:
+                if _try_send_via_tls():
+                    logger.info(f"Email sent successfully to {to_email} via TLS ({SMTP_HOST}:{SMTP_PORT}) on attempt {attempt_number}")
+                    return True
+            except smtplib.SMTPAuthenticationError:
+                logger.error(f"SMTP authentication failed for user '{SMTP_USER}'. Check credentials.")
+                return False
+            except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError, socket.timeout, OSError) as e:
+                logger.warning(
+                    f"Attempt {attempt_number}: TLS send failed to {to_email} via {SMTP_HOST}:{SMTP_PORT} — {type(e).__name__}: {e}"
+                )
+            except Exception as e:
+                logger.error(f"Attempt {attempt_number}: Unexpected TLS error sending to {to_email}: {e}")
+
+        # Fallback to SSL if enabled
+        if SMTP_USE_SSL:
+            try:
+                if _try_send_via_ssl():
+                    logger.info(f"Email sent successfully to {to_email} via SSL ({SMTP_HOST}:{SMTP_SSL_PORT}) on attempt {attempt_number}")
+                    return True
+            except smtplib.SMTPAuthenticationError:
+                logger.error(f"SMTP authentication failed for user '{SMTP_USER}' (SSL). Check credentials.")
+                return False
+            except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError, socket.timeout, OSError) as e:
+                logger.warning(
+                    f"Attempt {attempt_number}: SSL send failed to {to_email} via {SMTP_HOST}:{SMTP_SSL_PORT} — {type(e).__name__}: {e}"
+                )
+            except Exception as e:
+                logger.error(f"Attempt {attempt_number}: Unexpected SSL error sending to {to_email}: {e}")
+
+        # Backoff before next attempt if there will be one
+        if attempt_number < SMTP_RETRIES:
+            sleep_seconds = min(2 ** (attempt_number - 1), 8)
+            time.sleep(sleep_seconds)
+
+    logger.error(
+        f"Failed to send email to {to_email} after {SMTP_RETRIES} attempts. "
+        f"Tried TLS({SMTP_USE_TLS}) on {SMTP_HOST}:{SMTP_PORT} and SSL({SMTP_USE_SSL}) on {SMTP_HOST}:{SMTP_SSL_PORT}."
+    )
+    return False
 
 def send_verification_email(to_email: str, verification_link: str):
     """Sends the email verification email."""
