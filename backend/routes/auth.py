@@ -23,6 +23,7 @@ from backend.utils.token_manager import (
     generate_password_reset_token, hash_token, get_password_reset_link, PASSWORD_RESET_TOKEN_EXPIRY_MINUTES
 )
 from backend.services.email_service import send_verification_email, send_password_reset_email, send_password_reset_confirmation_email
+from backend.services.email_providers import EmailSendError
 
 # Initialize logger for this file
 logger = logging.getLogger(__name__)
@@ -61,34 +62,40 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
     
     try:
         db.add(db_user)
-        db.commit()
-        db.refresh(db_user)
+        # Flush so db_user.id is assigned but not committed. This allows us to rollback
+        # the entire registration if email delivery fails.
+        db.flush()
     except IntegrityError as e:
         db.rollback()
         # Log the detailed IntegrityError
-        logging.error(f"IntegrityError during user registration: {e}", exc_info=True) # Add exc_info for traceback
-        # Also log the original exception if available
-        if hasattr(e, 'orig') and e.orig:
-             logging.error(f"Original DBAPIError: {e.orig}")
+        logging.error(f"IntegrityError during user registration: {e}", exc_info=True)
+        if hasattr(e, "orig") and e.orig:
+            logging.error(f"Original DBAPIError: {e.orig}")
 
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Could not register user", # Keep generic message for frontend
+            detail="Could not register user",
         )
-    
-    # Send verification email instead of creating token
+
+    # Attempt to send verification email before committing the new user.
     try:
         token = generate_verification_token(db_user.id)
         verification_link = get_verification_link(token)
-        email_sent = send_verification_email(db_user.email, verification_link)
-        if not email_sent:
-            # Log the error, but don't fail the registration
-            # User can use the resend endpoint later
-            print(f"WARNING: Failed to send verification email to {db_user.email} during registration.")
+        # send_verification_email now raises EmailSendError on unrecoverable failures.
+        send_verification_email(db_user.email, verification_link)
     except Exception as e:
-        # Catch potential errors during token generation or email sending
-        print(f"ERROR: Could not send verification email during registration for {db_user.email}: {e}")
-        # Again, don't fail registration, allow resend
+        # Rollback the user creation to avoid orphaned/unverified users if email cannot be delivered.
+        db.rollback()
+        logging.error(f"Failed to send verification email during registration for {db_user.email}: {e}", exc_info=True)
+        # Return a generic error to the client.
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not send verification email. Please try again later.",
+        )
+    else:
+        # Only commit after successful email send
+        db.commit()
+        db.refresh(db_user)
 
     # Return success message - NO TOKEN
     return MessageResponse(message="Registration successful. Please check your email to verify your account.")
@@ -381,25 +388,19 @@ async def resend_verification_email(request: ResendRequest, db: Session = Depend
         try:
             token = generate_verification_token(user.id)
             verification_link = get_verification_link(token)
-            email_sent = send_verification_email(user.email, verification_link)
-            if not email_sent:
-                print(f"WARNING: Failed to resend verification email to {user.email}.")
-                # Don't expose detailed error to user
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-                    detail="Could not send verification email. Please try again later."
-                )
-            print(f"Resent verification email to {user.email}")
-            # Return generic success message even if email failed, for security
-        except HTTPException as http_exc:
-             raise http_exc # Re-raise HTTP exceptions from send_email failure
+            try:
+                send_verification_email(user.email, verification_link)
+                logger.info("Resent verification email to %s", user.email)
+            except EmailSendError as ese:
+                # Log the error server-side but don't reveal to the client to prevent enumeration.
+                logger.error("EmailSendError while resending verification email to %s: %s", user.email, ese)
+            except Exception as exc:
+                logger.exception("Unexpected error while resending verification email to %s: %s", user.email, exc)
         except Exception as e:
-            print(f"ERROR: Failed to resend verification email for {request.email}: {e}")
-            # Don't expose detailed error
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-                detail="Could not send verification email. Please try again later."
-            )
+            logger.exception("Failed to prepare/resend verification email for %s: %s", request.email, e)
+            # Do not reveal whether the email exists; fall through to generic response.
+    # Always return a generic message to prevent email enumeration
+    return MessageResponse(message="If an account with that email exists and requires verification, a new email has been sent.") 
 
     # Always return a generic message to prevent email enumeration
     return MessageResponse(message="If an account with that email exists and requires verification, a new email has been sent.") 
@@ -422,14 +423,18 @@ async def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(
             
             user.password_reset_token_hash = token_hash
             user.password_reset_token_expires_at = expiry_time
-            db.commit()
-            
-            reset_link = get_password_reset_link(raw_token)
-            email_sent = send_password_reset_email(user.email, reset_link)
-            if not email_sent:
-                # Log failure but don't expose error to user
-                logging.error(f"Failed to send password reset email to {user.email}")
-                # Note: DB changes are already committed, user can try again later.
+            try:
+                # Flush the change so we have a persisted token hash without committing.
+                db.flush()
+                reset_link = get_password_reset_link(raw_token)
+                # send_password_reset_email raises EmailSendError on unrecoverable failures.
+                send_password_reset_email(user.email, reset_link)
+                # Commit only after the email provider accepted the request.
+                db.commit()
+            except Exception as e:
+                # Rollback so we don't leave a usable token if email couldn't be delivered.
+                db.rollback()
+                logging.error(f"Failed to generate/send password reset email for {user.email}: {e}", exc_info=True)
 
         except Exception as e:
             db.rollback() # Rollback DB changes if anything fails during token/email process
@@ -504,4 +509,4 @@ async def reset_password(request: ResetPasswordRequest, db: Session = Depends(ge
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while resetting the password. Please try again.",
-        ) 
+        )

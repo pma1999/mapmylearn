@@ -1,56 +1,56 @@
-import smtplib
+"""
+Central email service coordinator.
+
+Replaces the previous SMTP-only helper with a provider-agnostic coordinator that:
+- Uses backend.services.email_providers.get_email_provider to obtain a provider
+- Relies on provider implementations to perform retries/timeouts
+- Raises EmailSendError on unrecoverable failure so callers (routes) can make transaction decisions
+
+Note: callers should expect EmailSendError on failure. This file keeps the previous helper function names
+(send_email, send_verification_email, send_password_reset_email, send_password_reset_confirmation_email)
+but now raises on failure instead of returning False.
+"""
+from __future__ import annotations
+
 import os
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import logging
 from dotenv import load_dotenv
 
-# Load environment variables
+from backend.services.email_providers import get_email_provider, EmailSendError
+
 load_dotenv()
+logger = logging.getLogger(__name__)
 
-# Get SMTP settings from environment variables
-SMTP_HOST = os.getenv("SMTP_HOST")
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587)) # Default to 587 (TLS)
-SMTP_USER = os.getenv("SMTP_USER")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
-MAIL_SENDER_EMAIL = os.getenv("MAIL_SENDER_EMAIL", "info@mapmylearn.com")
 
-def send_email(to_email: str, subject: str, html_content: str):
-    """Sends an email using configured SMTP settings."""
-    if not all([SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, MAIL_SENDER_EMAIL]):
-        print("ERROR: SMTP settings not fully configured in environment variables. Cannot send email.")
-        # In a real app, you might raise an exception or handle this more gracefully
-        return False
+def _get_provider():
+    # Lazily instantiate provider from environment. Tests can call get_email_provider directly if needed.
+    return get_email_provider()
 
-    message = MIMEMultipart("alternative")
-    message["Subject"] = subject
-    message["From"] = MAIL_SENDER_EMAIL
-    message["To"] = to_email
 
-    # Attach HTML content
-    # It's good practice to also include a plain text version, but keeping it simple for now
-    message.attach(MIMEText(html_content, "html"))
+def send_email(to_email: str, subject: str, html_content: str, headers: dict | None = None) -> None:
+    """
+    Send an email using configured provider.
 
+    Raises:
+        EmailSendError: when sending fails after provider retries.
+    """
+    provider = _get_provider()
     try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.ehlo() # Can be omitted
-            server.starttls() # Secure the connection
-            server.ehlo() # Can be omitted
-            server.login(SMTP_USER, SMTP_PASSWORD)
-            server.sendmail(MAIL_SENDER_EMAIL, to_email, message.as_string())
-            print(f"Email sent successfully to {to_email}")
-            return True
-    except smtplib.SMTPAuthenticationError:
-        print(f"ERROR: SMTP Authentication failed for user {SMTP_USER}. Check credentials.")
-        return False
-    except Exception as e:
-        print(f"ERROR: Failed to send email to {to_email}: {e}")
-        return False
+        provider.send_email(to_email=to_email, subject=subject, html_content=html_content, headers=headers)
+        logger.info("Email successfully sent to %s via provider", to_email)
+    except EmailSendError:
+        # Re-raise to allow upstream logic (e.g., registration flow) to rollback transactions.
+        logger.exception("EmailSendError while sending email to %s", to_email)
+        raise
+    except Exception as exc:
+        # Wrap unexpected exceptions to EmailSendError so callers get a consistent exception type.
+        logger.exception("Unexpected error while sending email to %s: %s", to_email, exc)
+        raise EmailSendError(str(exc)) from exc
 
-def send_verification_email(to_email: str, verification_link: str):
-    """Sends the email verification email."""
+
+def send_verification_email(to_email: str, verification_link: str) -> None:
+    """Sends the email verification email. Raises EmailSendError on failure."""
     subject = "Verify Your Email Address for MapMyLearn"
-    
-    # Simple HTML email template
     html_content = f"""
     <html>
     <head></head>
@@ -66,13 +66,12 @@ def send_verification_email(to_email: str, verification_link: str):
     </body>
     </html>
     """
-    
-    return send_email(to_email, subject, html_content)
+    send_email(to_email=to_email, subject=subject, html_content=html_content)
 
-def send_password_reset_email(to_email: str, reset_link: str):
-    """Sends the password reset email."""
+
+def send_password_reset_email(to_email: str, reset_link: str) -> None:
+    """Sends the password reset email. Raises EmailSendError on failure."""
     subject = "Reset Your MapMyLearn Password"
-    # Simple HTML email template for password reset
     html_content = f"""
     <html>
     <head></head>
@@ -89,12 +88,12 @@ def send_password_reset_email(to_email: str, reset_link: str):
     </body>
     </html>
     """
-    return send_email(to_email, subject, html_content)
+    send_email(to_email=to_email, subject=subject, html_content=html_content)
 
-def send_password_reset_confirmation_email(to_email: str):
-    """Sends an email confirming the password has been reset."""
+
+def send_password_reset_confirmation_email(to_email: str) -> None:
+    """Sends an email confirming the password has been reset. Raises EmailSendError on failure."""
     subject = "Your MapMyLearn Password Has Been Changed"
-    # Simple HTML email template for confirmation
     html_content = f"""
     <html>
     <head></head>
@@ -108,4 +107,4 @@ def send_password_reset_confirmation_email(to_email: str):
     </body>
     </html>
     """
-    return send_email(to_email, subject, html_content) 
+    send_email(to_email=to_email, subject=subject, html_content=html_content)
