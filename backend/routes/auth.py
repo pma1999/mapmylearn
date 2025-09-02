@@ -120,6 +120,12 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
             db.refresh(db_user)
 
     # Return success message - NO TOKEN
+    if _email_verification_disabled():
+        # When email verification is disabled we explicitly inform the client that the account
+        # is considered verified so they can log in immediately.
+        return MessageResponse(
+            message="Registration successful. Email verification is temporarily disabled — your account is verified and you can log in now."
+        )
     return MessageResponse(message="Registration successful. Please check your email to verify your account.")
 
 
