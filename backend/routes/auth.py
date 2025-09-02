@@ -30,6 +30,13 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
+def _email_verification_disabled() -> bool:
+    """
+    Returns True when the DISABLE_EMAIL_VERIFICATION env var is set to a truthy value.
+    Accepts "1", "true", "yes" (case-insensitive).
+    """
+    return os.getenv("DISABLE_EMAIL_VERIFICATION", "false").lower() in ("1", "true", "yes")
+
 @router.post("/register", response_model=MessageResponse, status_code=status.HTTP_201_CREATED,
              dependencies=[Depends(RateLimiter(times=5, minutes=1))])
 async def register(user: UserCreate, db: Session = Depends(get_db)):
@@ -78,24 +85,39 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
         )
 
     # Attempt to send verification email before committing the new user.
-    try:
-        token = generate_verification_token(db_user.id)
-        verification_link = get_verification_link(token)
-        # send_verification_email now raises EmailSendError on unrecoverable failures.
-        send_verification_email(db_user.email, verification_link)
-    except Exception as e:
-        # Rollback the user creation to avoid orphaned/unverified users if email cannot be delivered.
-        db.rollback()
-        logging.error(f"Failed to send verification email during registration for {db_user.email}: {e}", exc_info=True)
-        # Return a generic error to the client.
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Could not send verification email. Please try again later.",
-        )
+    if _email_verification_disabled():
+        # Bypass email verification: mark user verified and commit without sending email.
+        db_user.is_email_verified = True
+        try:
+            db.commit()
+            db.refresh(db_user)
+            logger.info("DISABLE_EMAIL_VERIFICATION set: user %s marked verified and registration committed", db_user.email)
+        except Exception as e:
+            db.rollback()
+            logging.error(f"Failed to commit user when email verification is disabled for {db_user.email}: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Could not complete registration. Please try again later.",
+            )
     else:
-        # Only commit after successful email send
-        db.commit()
-        db.refresh(db_user)
+        try:
+            token = generate_verification_token(db_user.id)
+            verification_link = get_verification_link(token)
+            # send_verification_email now raises EmailSendError on unrecoverable failures.
+            send_verification_email(db_user.email, verification_link)
+        except Exception as e:
+            # Rollback the user creation to avoid orphaned/unverified users if email cannot be delivered.
+            db.rollback()
+            logging.error(f"Failed to send verification email during registration for {db_user.email}: {e}", exc_info=True)
+            # Return a generic error to the client.
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Could not send verification email. Please try again later.",
+            )
+        else:
+            # Only commit after successful email send
+            db.commit()
+            db.refresh(db_user)
 
     # Return success message - NO TOKEN
     return MessageResponse(message="Registration successful. Please check your email to verify your account.")
@@ -116,13 +138,15 @@ async def login(response: Response, request: Request, user_credentials: UserLogi
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Check if email is verified
-    if not user.is_email_verified:
+    # Check if email is verified (allow bypass via DISABLE_EMAIL_VERIFICATION)
+    if not user.is_email_verified and not _email_verification_disabled():
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Account not verified. Please check your email.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    if not user.is_email_verified and _email_verification_disabled():
+        logger.info("DISABLE_EMAIL_VERIFICATION set: allowing login for unverified user %s", user.email)
     
     # Update last login
     user.last_login = datetime.utcnow()
@@ -384,6 +408,11 @@ async def resend_verification_email(request: ResendRequest, db: Session = Depend
     """Resends the verification email to a user if their account is not yet verified."""
     user = db.query(User).filter(User.email == request.email).first()
 
+    if _email_verification_disabled():
+        logger.info("DISABLE_EMAIL_VERIFICATION set: skipping resend verification email for %s", request.email)
+        # Return generic response to avoid email enumeration
+        return MessageResponse(message="If an account with that email exists and requires verification, a new email has been sent.")
+
     if user and not user.is_email_verified:
         try:
             token = generate_verification_token(user.id)
@@ -415,8 +444,8 @@ async def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(
     """
     user = db.query(User).filter(User.email == request.email).first()
 
-    # Security: Only proceed if user exists AND email is verified
-    if user and user.is_email_verified:
+    # Security: Only proceed if user exists AND email is verified (or bypass enabled)
+    if user and (user.is_email_verified or _email_verification_disabled()):
         try:
             raw_token, token_hash = generate_password_reset_token()
             expiry_time = datetime.utcnow() + timedelta(minutes=PASSWORD_RESET_TOKEN_EXPIRY_MINUTES)
