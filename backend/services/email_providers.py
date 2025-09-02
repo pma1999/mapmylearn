@@ -48,14 +48,22 @@ class EmailProvider:
 
 
 def _get_retry_decorator():
-    """Create a tenacity retry decorator based on env settings."""
-    max_attempts = int(os.getenv("EMAIL_RETRY_MAX_ATTEMPTS", "3"))
-    base_backoff = float(os.getenv("EMAIL_RETRY_BACKOFF_SECONDS", "2"))
+    """Create a tenacity retry decorator based on env settings.
+
+    Defaults have been increased to be more tolerant of intermittent network issues:
+    - Default max attempts: 5 (was 3)
+    - Default base backoff multiplier: 4s (was 2s)
+    - Default max wait cap: 120s (was 60s)
+    These can still be tuned via environment variables.
+    """
+    max_attempts = int(os.getenv("EMAIL_RETRY_MAX_ATTEMPTS", "5"))
+    base_backoff = float(os.getenv("EMAIL_RETRY_BACKOFF_SECONDS", "4"))
 
     return retry(
         reraise=True,
         stop=stop_after_attempt(max_attempts),
-        wait=wait_exponential(multiplier=base_backoff, max=60),
+        # larger max and multiplier to tolerate transient network blips
+        wait=wait_exponential(multiplier=base_backoff, max=120),
         retry=retry_if_exception_type((EmailSendError, requests.RequestException, smtplib.SMTPException)),
     )
 
@@ -63,7 +71,11 @@ def _get_retry_decorator():
 class SMTPEmailProvider(EmailProvider):
     """Email provider that sends over SMTP."""
 
-    def __init__(self, host: str, port: int, username: Optional[str], password: Optional[str], use_tls: bool = True, timeout: int = 10, default_from: Optional[str] = None):
+    def __init__(self, host: str, port: int, username: Optional[str], password: Optional[str], use_tls: bool = True, timeout: int = 30, default_from: Optional[str] = None):
+        """
+        Increased default timeout (30s) to reduce false timeouts caused by transient network issues.
+        Note: the factory get_email_provider still passes EMAIL_TIMEOUT_SECONDS when present.
+        """
         self.host = host
         self.port = port
         self.username = username
@@ -115,6 +127,37 @@ class SMTPEmailProvider(EmailProvider):
         start_ts = time.time()
         server = None
         try:
+            # Before attempting smtplib connection, resolve the host and probe addresses.
+            # This gives actionable logs for intermittent DNS/routing issues.
+            try:
+                addrs = []
+                for af, socktype, proto, canonname, sa in socket.getaddrinfo(self.host, self.port, 0, socket.SOCK_STREAM):
+                    addrs.append(sa)
+                logger.debug("Resolved SMTP host %s to addresses: %s", self.host, addrs)
+            except Exception as exc:
+                logger.warning("Failed to resolve SMTP host %s: %s", self.host, exc)
+                addrs = []
+
+            # Try to connect to each resolved IP with a short probe to detect network reachability
+            probe_timeout = min(5, max(2, int(self.timeout / 2)))
+            probe_success = False
+            probe_errors = []
+            if addrs:
+                for sa in addrs:
+                    try:
+                        logger.debug("Probing SMTP address %s (timeout=%s)", sa, probe_timeout)
+                        sock = socket.create_connection(sa, probe_timeout)
+                        sock.close()
+                        probe_success = True
+                        logger.debug("Probe succeeded for %s", sa)
+                        break
+                    except Exception as pexc:
+                        probe_errors.append((sa, str(pexc)))
+                        logger.debug("Probe failed for %s: %s", sa, pexc)
+            else:
+                # If resolution failed or returned nothing, still attempt connection via hostname (may succeed via alternate DNS)
+                logger.debug("No resolved addresses to probe; will attempt direct smtplib connect to host")
+
             # Use SMTP or SMTP_SSL depending on port and use_tls
             if self.use_tls and self.port in (587, 25):
                 logger.debug("Connecting to SMTP (STARTTLS) %s:%s", self.host, self.port)
@@ -122,7 +165,9 @@ class SMTPEmailProvider(EmailProvider):
                     server = smtplib.SMTP(self.host, self.port, timeout=self.timeout)
                 except Exception as exc:
                     logger.exception("Failed to establish SMTP connection (STARTTLS) to %s:%s", self.host, self.port)
-                    raise EmailSendError(f"Connection failed: {exc}") from exc
+                    # Add probe info into the error message for debugging
+                    probe_info = "; ".join([f"{sa}:{err}" for sa, err in probe_errors]) if probe_errors else "no-probe-info"
+                    raise EmailSendError(f"Connection failed: {exc} (probe:{probe_info})") from exc
                 try:
                     server.ehlo()
                     server.starttls()
@@ -136,7 +181,8 @@ class SMTPEmailProvider(EmailProvider):
                     server = smtplib.SMTP(self.host, self.port, timeout=self.timeout)
                 except Exception as exc:
                     logger.exception("Failed to establish plain SMTP connection to %s:%s", self.host, self.port)
-                    raise EmailSendError(f"Connection failed: {exc}") from exc
+                    probe_info = "; ".join([f"{sa}:{err}" for sa, err in probe_errors]) if probe_errors else "no-probe-info"
+                    raise EmailSendError(f"Connection failed: {exc} (probe:{probe_info})") from exc
             else:
                 # For SMTPS explicit SSL (commonly 465)
                 logger.debug("Connecting to SMTP SSL %s:%s", self.host, self.port)
@@ -144,7 +190,8 @@ class SMTPEmailProvider(EmailProvider):
                     server = smtplib.SMTP_SSL(self.host, self.port, timeout=self.timeout)
                 except Exception as exc:
                     logger.exception("Failed to establish SMTPS (SSL) connection to %s:%s", self.host, self.port)
-                    raise EmailSendError(f"Connection failed: {exc}") from exc
+                    probe_info = "; ".join([f"{sa}:{err}" for sa, err in probe_errors]) if probe_errors else "no-probe-info"
+                    raise EmailSendError(f"Connection failed: {exc} (probe:{probe_info})") from exc
 
             # At this point server is connected (or exception raised)
             try:
