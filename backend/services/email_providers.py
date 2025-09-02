@@ -74,6 +74,11 @@ class SMTPEmailProvider(EmailProvider):
 
     @_get_retry_decorator()
     def send_email(self, to_email: str, subject: str, html_content: str, headers: Optional[Dict[str, str]] = None) -> None:
+        # Local imports so file-level imports remain minimal and safe for test envs
+        import socket
+        import time
+        import traceback
+
         msg = EmailMessage()
         msg["Subject"] = subject
         msg["From"] = self.default_from
@@ -85,35 +90,100 @@ class SMTPEmailProvider(EmailProvider):
         msg.set_content("This message contains HTML content. Enable an HTML-capable client to view it.")
         msg.add_alternative(html_content, subtype="html")
 
+        # Mask username for logs to avoid leaking secrets
+        masked_user = None
+        if self.username:
+            try:
+                if "@" in self.username:
+                    local, domain = self.username.split("@", 1)
+                    masked_user = f"{local[:1]}***@{domain}"
+                else:
+                    masked_user = f"{self.username[:1]}***"
+            except Exception:
+                masked_user = "***"
+
+        logger.debug(
+            "SMTP send attempt: to=%s host=%s port=%s timeout=%s user=%s provider_use_tls=%s",
+            to_email,
+            self.host,
+            self.port,
+            self.timeout,
+            masked_user,
+            self.use_tls,
+        )
+
+        start_ts = time.time()
+        server = None
         try:
             # Use SMTP or SMTP_SSL depending on port and use_tls
             if self.use_tls and self.port in (587, 25):
                 logger.debug("Connecting to SMTP (STARTTLS) %s:%s", self.host, self.port)
-                server = smtplib.SMTP(self.host, self.port, timeout=self.timeout)
-                server.ehlo()
-                server.starttls()
-                server.ehlo()
+                try:
+                    server = smtplib.SMTP(self.host, self.port, timeout=self.timeout)
+                except Exception as exc:
+                    logger.exception("Failed to establish SMTP connection (STARTTLS) to %s:%s", self.host, self.port)
+                    raise EmailSendError(f"Connection failed: {exc}") from exc
+                try:
+                    server.ehlo()
+                    server.starttls()
+                    server.ehlo()
+                except Exception as exc:
+                    logger.exception("STARTTLS negotiation failed with %s:%s", self.host, self.port)
+                    raise EmailSendError(f"STARTTLS negotiation failed: {exc}") from exc
             elif not self.use_tls and self.port in (25, 1025, 587):
                 logger.debug("Connecting to SMTP (no TLS) %s:%s", self.host, self.port)
-                server = smtplib.SMTP(self.host, self.port, timeout=self.timeout)
+                try:
+                    server = smtplib.SMTP(self.host, self.port, timeout=self.timeout)
+                except Exception as exc:
+                    logger.exception("Failed to establish plain SMTP connection to %s:%s", self.host, self.port)
+                    raise EmailSendError(f"Connection failed: {exc}") from exc
             else:
                 # For SMTPS explicit SSL (commonly 465)
                 logger.debug("Connecting to SMTP SSL %s:%s", self.host, self.port)
-                server = smtplib.SMTP_SSL(self.host, self.port, timeout=self.timeout)
+                try:
+                    server = smtplib.SMTP_SSL(self.host, self.port, timeout=self.timeout)
+                except Exception as exc:
+                    logger.exception("Failed to establish SMTPS (SSL) connection to %s:%s", self.host, self.port)
+                    raise EmailSendError(f"Connection failed: {exc}") from exc
 
+            # At this point server is connected (or exception raised)
             try:
                 if self.username and self.password:
-                    server.login(self.username, self.password)
-                server.send_message(msg)
-                logger.info("SMTP email sent to %s", to_email)
+                    logger.debug("Attempting SMTP login for user=%s", masked_user)
+                    try:
+                        server.login(self.username, self.password)
+                        logger.debug("SMTP login successful for user=%s", masked_user)
+                    except smtplib.SMTPAuthenticationError as auth_exc:
+                        logger.error("SMTP authentication failed for user=%s: %s", masked_user, auth_exc)
+                        raise EmailSendError(f"Authentication failed: {auth_exc}") from auth_exc
+                    except Exception as exc:
+                        logger.exception("Unexpected error during SMTP login for user=%s", masked_user)
+                        raise EmailSendError(f"Login error: {exc}") from exc
+
+                # Send the message and capture any low-level socket errors separately
+                try:
+                    server.send_message(msg)
+                    elapsed = time.time() - start_ts
+                    logger.info("SMTP email sent to %s (elapsed=%.2fs)", to_email, elapsed)
+                except (smtplib.SMTPException, socket.timeout, OSError) as send_exc:
+                    logger.exception("Failed to send message to %s via %s:%s", to_email, self.host, self.port)
+                    raise EmailSendError(f"Send failed: {send_exc}") from send_exc
             finally:
+                # Best-effort server shutdown
                 try:
                     server.quit()
-                except Exception:
-                    server.close()
+                except Exception as close_exc:
+                    logger.debug("Failed to quit SMTP server cleanly: %s", close_exc)
+                    try:
+                        server.close()
+                    except Exception:
+                        logger.debug("Failed to close SMTP connection cleanly")
+        except EmailSendError:
+            # Re-raise EmailSendError as-is so tenacity can handle retries
+            raise
         except Exception as exc:
-            logger.exception("SMTP send failure for %s", to_email)
-            # Wrap in EmailSendError to allow retry logic to trigger
+            # Log full traceback for investigation and wrap in EmailSendError
+            logger.error("SMTP send failure for %s\nException: %s\nTraceback:\n%s", to_email, exc, traceback.format_exc())
             raise EmailSendError(str(exc)) from exc
 
 

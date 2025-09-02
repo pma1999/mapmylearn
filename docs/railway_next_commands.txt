@@ -1,0 +1,50 @@
+Instrucciones rápidas: comandos Railway CLI a ejecutar ahora
+
+1) Prueba TCP desde Railway (Python one-liner) — recomendado cuando nc no está disponible
+------------------------------------------------------------------------------------------------
+Sustituye SMTP_HOST y SMTP_PORT por tus valores (por ejemplo smtp.ionos.es y 587).
+
+railway run -- python -c "import socket,sys; \
+host='SMTP_HOST'; port=int('SMTP_PORT'); \
+socket.create_connection((host,port),10); print('OK')"
+
+Ejemplo concreto para tu caso:
+railway run -- python -c "import socket,sys; host='smtp.ionos.es'; port=587; socket.create_connection((host,port),10); print('OK')"
+
+Interpretación rápida:
+- Imprime "OK" → la conexión TCP desde el contenedor Railway hacia smtp.ionos.es:587 funciona.
+- Levanta socket.timeout → la conexión se agota (bloqueo/filtrado de red).
+- Levanta ConnectionRefusedError → puerto cerrado en el host remoto.
+
+2) Si openssl está disponible en el contenedor, prueba STARTTLS (mejor para diagnosticar TLS)
+----------------------------------------------------------------------------------------------
+STARTTLS (puerto 587):
+railway run -- openssl s_client -starttls smtp -connect SMTP_HOST:SMTP_PORT -crlf -brief
+
+Ejemplo:
+railway run -- openssl s_client -starttls smtp -connect smtp.ionos.es:587 -crlf -brief
+
+Si openssl se conecta verás datos del certificado; escribe manualmente:
+EHLO localhost
+y observa respuestas que empiecen por "250-".
+
+3) Si prefieres reintentar netcat y obtuviste "nc no se reconoce", prueba desde Railway otra vez:
+-----------------------------------------------------------------------------------------------
+railway run -- bash -lc "which nc || which netcat || echo 'nc not found'"
+
+Si netcat existe, vuelve a ejecutar:
+railway run -- nc -vz SMTP_HOST SMTP_PORT
+
+4) Qué pegar aquí después de ejecutar
+-------------------------------------
+- Si ejecutas el Python one-liner: pega la salida completa (OK o el traceback).
+- Si ejecutas openssl: pega la salida completa (incluye posibles errores o el bloque del certificado).
+- Si ejecutas nc: pega la salida completa (succeeded / timed out / connection refused).
+
+5) Recomendación según resultados
+---------------------------------
+- Si TIMEOUT desde Railway → es muy probable que Railway (o la red donde corre tu contenedor) esté bloqueando salida SMTP. En ese caso recomiendo cambiar a SendGrid (API) o pedir a Railway que permita el tráfico saliente al host/puerto (si aplica).
+- Si Connection refused → revisa SMTP_HOST/PORT y contacta con el proveedor SMTP.
+- Si openssl conecta pero falla en login → revisa credenciales (y para Gmail, comprueba app-passwords/OAuth).
+
+Ejecuta el comando Python one-liner y pega la salida aquí; la analizo y doy el siguiente paso.
