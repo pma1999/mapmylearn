@@ -1,0 +1,28 @@
+diff --git a/node_modules/schema-utils/dist/index.js b/node_modules/schema-utils/dist/index.js
+index 99d316c..b4277e8 100644
+--- a/node_modules/schema-utils/dist/index.js
++++ b/node_modules/schema-utils/dist/index.js
+@@ -14,10 +14,18 @@ const {
+   disableValidation,
+   needValidate
+ } = require("./validate");
+-module.exports = {
++
++// Create a function that can be called directly (for backward compatibility with babel-loader)
++const validateOptions = validate;
++
++// Attach all exports as properties to the function
++Object.assign(validateOptions, {
+   validate,
+   ValidationError,
+   enableValidation,
+   disableValidation,
+-  needValidate
+-};
+\ No newline at end of file
++  needValidate,
++  validateOptions: validate
++});
++
++module.exports = validateOptions;
+\ No newline at end of file
