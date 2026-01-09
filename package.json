@@ -32,5 +32,8 @@
   "bugs": {
     "url": "https://github.com/pma1999/mapmylearn/issues"
   },
-  "homepage": "https://github.com/pma1999/mapmylearn#readme"
+  "homepage": "https://github.com/pma1999/mapmylearn#readme",
+  "overrides": {
+    "mdast-util-to-hast": ">=13.2.1"
+  }
 }
