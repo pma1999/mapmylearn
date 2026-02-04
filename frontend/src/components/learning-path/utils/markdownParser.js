@@ -82,7 +82,9 @@ export const stripMarkdownFormatting = (text) => {
     // Collapse whitespace
     .replace(/\s+/g, ' ')
     // Clean up any remaining whitespace
-    .trim();
+    .trim()
+    // Remove any remaining markdown markers that weren't paired
+    .replace(/[*_~`]/g, '');
 };
 
 /**
