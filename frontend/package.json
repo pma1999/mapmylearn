@@ -88,7 +88,8 @@
     "express": "^4.22.0",
     "@isaacs/brace-expansion": ">=5.0.1",
     "qs": ">=6.14.1",
-    "mdast-util-to-hast": ">=13.2.1"
+    "mdast-util-to-hast": ">=13.2.1",
+    "webpack-dev-server": ">=5.2.1"
   },
   "jest": {
     "transformIgnorePatterns": [
