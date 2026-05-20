@@ -230,7 +230,6 @@ async def get_llm(key_provider=None, user=None):
             model=model,
             temperature=0.2,
             google_api_key=google_api_key,
-            max_tokens=8192,
         )
     except Exception as e:
         logger.error(f"Error initializing ChatGoogleGenerativeAI: {str(e)}")
@@ -282,7 +281,6 @@ async def get_llm_for_evaluation(key_provider=None, user=None):
             model=model,
             temperature=0.2,
             google_api_key=google_api_key,
-            max_tokens=8192,
         )
     except Exception as e:
         logger.error(f"Error initializing ChatGoogleGenerativeAI for evaluation: {str(e)}")
@@ -329,7 +327,6 @@ async def get_llm_flash_lite(key_provider=None, user=None):
             model=model,
             temperature=0.3,
             google_api_key=google_api_key,
-            max_tokens=4096,
         )
     except Exception as e:
         logger.error(f"Error initializing ChatGoogleGenerativeAI for flash-lite: {str(e)}")
