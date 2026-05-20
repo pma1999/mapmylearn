@@ -10,7 +10,6 @@ import threading # Added for thread-safe rate limiting
 import time # Added for thread-safe rate limiting
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_community.tools import BraveSearch # Replaced TavilySearch
 from langchain_core.messages import AIMessage
 from typing import Optional, Union, Tuple, Any, Dict, List
 from bs4 import BeautifulSoup
@@ -1738,58 +1737,59 @@ async def perform_search_and_scrape(
         fetch_count = max_results + FETCH_BUFFER
         logger.debug(f"Requesting {fetch_count} search results (max_results={max_results}, buffer={FETCH_BUFFER}) for query: '{query}'")
 
-        # Use BraveSearch.from_api_key and pass fetch_count via search_kwargs
-        brave_search = BraveSearch.from_api_key(
-            api_key=api_key,
-            search_kwargs={"count": fetch_count} # Use fetch_count here
-        )
-
-        # --- Thread-safe Rate Limiting --- 
-        global _last_brave_call_time # Needed to modify the global variable
-        required_delay = 0.0 # Initialize delay
-        wait_until_time = 0.0 # Initialize scheduled start time
+        # --- Thread-safe Rate Limiting ---
+        global _last_brave_call_time
+        required_delay = 0.0
+        wait_until_time = 0.0
 
         logger.debug(f"Acquiring thread lock for Brave search rate limit check: '{query}'")
-        with _brave_search_lock: # Acquire thread-safe lock only for time check/update
+        with _brave_search_lock:
             current_time = time.monotonic()
-            # Calculate the earliest time this call can start (1.05s after the last scheduled start)
-            wait_until_time = max(current_time, _last_brave_call_time + 1.05) # Added 50ms buffer
-            # Calculate the delay needed from the current time
+            wait_until_time = max(current_time, _last_brave_call_time + 1.05)
             required_delay = wait_until_time - current_time
-            # Update the global last call time to reserve the slot for *this* call
             _last_brave_call_time = wait_until_time
             logger.debug(f"Rate limit: Current time: {current_time:.2f}, Last scheduled: {_last_brave_call_time:.2f}, Wait until: {wait_until_time:.2f}, Delay: {required_delay:.2f}s. Lock released.")
-        # --- Lock is released --- 
+        # --- Lock is released ---
 
-        # Perform wait *outside* the lock using asyncio.sleep
         if required_delay > 0:
             logger.info(f"Rate limiting Brave search. Waiting {required_delay:.2f} seconds...")
-            await asyncio.sleep(required_delay) # Use asyncio.sleep for cooperative multitasking
+            await asyncio.sleep(required_delay)
 
-        # --- Make the actual call (no lock held here) ---
+        # --- Direct Brave API call via aiohttp (bypasses langchain-community wrapper
+        #     which hardcodes extra_snippets=True, causing HTTP 422 on current Brave API) ---
         logger.debug(f"Rate limit wait complete. Invoking Brave search: '{query}'")
         try:
-            brave_response_str = await brave_search.ainvoke({"query": query})
+            brave_headers = {
+                "X-Subscription-Token": api_key,
+                "Accept": "application/json",
+            }
+            brave_params = {"q": query, "count": fetch_count}
+            async with aiohttp.ClientSession() as brave_session:
+                async with brave_session.get(
+                    "https://api.search.brave.com/res/v1/web/search",
+                    headers=brave_headers,
+                    params=brave_params,
+                    timeout=aiohttp.ClientTimeout(total=15),
+                ) as brave_resp:
+                    if not brave_resp.ok:
+                        raise Exception(f"HTTP error {brave_resp.status}")
+                    brave_data = await brave_resp.json()
+            raw_results = brave_data.get("web", {}).get("results", [])
+            brave_results_list = [
+                {
+                    "title": r.get("title", ""),
+                    "link": r.get("url", ""),
+                    "snippet": r.get("description", ""),
+                }
+                for r in raw_results
+            ]
         except Exception as invoke_err:
-             logger.error(f"Error during brave_search.ainvoke for '{query}': {invoke_err}", exc_info=True)
-             # Add error to result and return, or raise depending on desired behavior
-             service_result.search_provider_error = f"Invoke Error: {str(invoke_err)}"
-             return service_result # Example: return error result
-             # raise # Alternatively, re-raise the exception
-        # --- End Rate Limiting Logic & Call ---
-
-        logger.debug(f"Received Brave response for: '{query}'")
-
-        # Parse the JSON string response from Brave
-        try:
-            brave_results_list = json.loads(brave_response_str)
-            if not isinstance(brave_results_list, list):
-                 raise ValueError("Brave search response is not a list")
-        except (json.JSONDecodeError, ValueError, TypeError) as e:
-            error_msg = f"Brave search returned invalid JSON or unexpected format: {e}. Response: {brave_response_str[:500]}..."
-            logger.error(error_msg)
-            service_result.search_provider_error = error_msg
+            logger.error(f"Error during Brave search for '{query}': {invoke_err}", exc_info=True)
+            service_result.search_provider_error = f"Invoke Error: {str(invoke_err)}"
             return service_result
+        # --- End Brave API call ---
+
+        logger.debug(f"Received Brave response for: '{query}' ({len(brave_results_list)} results)")
 
         scrape_tasks = []
         # Process the parsed list from Brave
@@ -2010,26 +2010,24 @@ async def validate_brave_key(api_key: str) -> Tuple[bool, Optional[str]]: # Rena
     # No standard prefix check for Brave keys based on docs
 
     try:
-        # Minimal test call to Brave Search API
-        search = BraveSearch.from_api_key(api_key=api_key) # Use BraveSearch
-        # Use a simple, common query
-        await search.ainvoke({"query": "test"}) 
+        # Minimal direct call to Brave Search API to validate the key
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                "https://api.search.brave.com/res/v1/web/search",
+                headers={"X-Subscription-Token": api_key, "Accept": "application/json"},
+                params={"q": "test", "count": 1},
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                if resp.status == 401:
+                    return False, "API key error: Unauthorized. The Brave Search API key is likely invalid or revoked."
+                if resp.status == 429:
+                    return False, "API key error: Rate limit exceeded."
+                if not resp.ok:
+                    return False, f"API key validation returned HTTP {resp.status}."
         return True, None
+    except aiohttp.ClientConnectorError:
+        return False, "Network error during API key validation. Check connectivity."
     except Exception as e:
         error_str = str(e)
-        logger.warning(f"Brave Search API key validation failed: {error_str}") # Updated message
-
-        # Provide clearer error messages based on common issues for Brave (adapt as needed)
-        # Langchain might wrap HTTP errors, check the error message content
-        if "401" in error_str or "Unauthorized" in error_str or "invalid api key" in error_str.lower():
-            return False, "API key error: Unauthorized. The Brave Search API key is likely invalid or revoked." # Updated message
-        # Add checks for other potential Brave errors if known (e.g., 400, rate limits)
-        # if "400" in error_str ... :
-        #     return False, "API key validation returned Bad Request (400). Check Brave API status or query format."
-        if "rate limit" in error_str.lower():
-            return False, "API key error: Rate limit exceeded."
-        if "connection error" in error_str.lower() or "cannot connect" in error_str.lower():
-            return False, "Network error during API key validation. Check connectivity."
-
-        # Default error message for other exceptions
-        return False, f"API key validation failed: {type(e).__name__}. Check key and Brave Search service status." # Updated message
+        logger.warning(f"Brave Search API key validation failed: {error_str}")
+        return False, f"API key validation failed: {type(e).__name__}. Check key and Brave Search service status."

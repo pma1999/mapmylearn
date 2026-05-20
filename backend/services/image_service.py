@@ -7,6 +7,10 @@ import httpx
 logger = logging.getLogger("image_service.wikimedia")
 
 WIKIMEDIA_API_URL = "https://commons.wikimedia.org/w/api.php"
+# Must include bot id + contact URL per https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_User-Agent_Policy
+WIKIMEDIA_USER_AGENT = (
+    "Mozilla/5.0 (compatible; LearniBot/1.0; +https://learni.com/bot; image-enrichment)"
+)
 
 class ImageResult(Dict[str, Any]):
     """Simple dictionary-based container for image search results.
@@ -29,8 +33,17 @@ async def _fetch_json(client: httpx.AsyncClient, params: Dict[str, Any], timeout
         resp = await client.get(WIKIMEDIA_API_URL, params=params, timeout=timeout)
         resp.raise_for_status()
         return resp.json()
+    except httpx.HTTPStatusError as e:
+        body = (e.response.text or "")[:200]
+        logger.warning(
+            "Wikimedia API HTTP %s for gsrsearch=%r: %s",
+            e.response.status_code,
+            params.get("gsrsearch"),
+            body,
+        )
+        return None
     except Exception as e:
-        logger.debug(f"Wikimedia API request failed: {e}")
+        logger.debug("Wikimedia API request failed for gsrsearch=%r: %s", params.get("gsrsearch"), e)
         return None
 
 
@@ -120,7 +133,7 @@ async def search_wikimedia_images(
         "uselang": language,
     }
 
-    async with httpx.AsyncClient(headers={"User-Agent": "Learni/1.0 (image enrichment)"}) as client:
+    async with httpx.AsyncClient(headers={"User-Agent": WIKIMEDIA_USER_AGENT}) as client:
         data = await _fetch_json(client, params, timeout_seconds)
         if not data:
             return []
