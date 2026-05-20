@@ -309,15 +309,21 @@ is_production = environment == "production"
 if is_production:
     # Entorno de producción - usar lista explícita de dominios permitidos
     allowed_origins = [
-        "https://mapmylearn.vercel.app",               # Producción principal
-        "https://mapmylearn-pablos-projects-d80d0b2f.vercel.app",       # Despliegue específico
-        "https://mapmylearn-git-main-pablos-projects-d80d0b2f.vercel.app",  # Rama principal
-        "https://web-production-62f88.up.railway.app",     # Backend (para posibles solicitudes cross-origin)
-        "https://mapmylearn.com"                     # Nuevo front (Removed trailing slash)
+        "https://learny-peach.vercel.app",             # Frontend actual (Vercel)
+        "https://mapmylearn.vercel.app",
+        "https://mapmylearn-pablos-projects-d80d0b2f.vercel.app",
+        "https://mapmylearn-git-main-pablos-projects-d80d0b2f.vercel.app",
+        "https://web-production-62f88.up.railway.app",  # Backend (solicitudes cross-origin)
+        "https://mapmylearn.com",                       # Dominio anterior
     ]
-    
-    # Añadir orígenes adicionales desde la variable de entorno si existe
-    frontend_url = os.getenv("FRONTEND_URL")
+
+    # Orígenes adicionales desde Railway (ALLOWED_ORIGINS) o despliegues extra
+    for origin in os.getenv("ALLOWED_ORIGINS", "").split(","):
+        origin = origin.strip().rstrip("/")
+        if origin and origin not in allowed_origins:
+            allowed_origins.append(origin)
+
+    frontend_url = os.getenv("FRONTEND_URL", "").strip().rstrip("/")
     if frontend_url and frontend_url not in allowed_origins:
         allowed_origins.append(frontend_url)
         
