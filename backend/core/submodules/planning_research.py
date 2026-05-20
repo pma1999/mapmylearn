@@ -4,7 +4,7 @@ import logging
 from typing import List, Optional, Any, Tuple
 
 from langchain_core.prompts import ChatPromptTemplate
-from langchain.output_parsers import PydanticOutputParser
+from langchain_core.output_parsers import PydanticOutputParser
 
 from backend.models.models import (
     LearningPathState,

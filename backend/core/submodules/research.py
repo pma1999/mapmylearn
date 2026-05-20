@@ -4,7 +4,7 @@ import logging
 from typing import List, Optional
 
 from langchain_core.prompts import ChatPromptTemplate
-from langchain.output_parsers import PydanticOutputParser
+from langchain_core.output_parsers import PydanticOutputParser
 
 from backend.models.models import SearchQuery, LearningPathState, EnhancedModule, Submodule, SearchServiceResult
 from backend.services.services import get_llm

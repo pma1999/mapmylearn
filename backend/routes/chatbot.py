@@ -428,7 +428,7 @@ async def handle_chat(
                             search_queries=search_queries,
                             sources_count=grounding_data.get('grounding_sources_count', len(sources)),
                             sources=sources[:8],  # Limit to first 8 sources for UI performance
-                            model_used=getattr(llm, 'model', 'gemini-2.5-flash-preview-05-20')
+                            model_used=getattr(llm, 'model', 'gemini-3.1-flash-lite')
                         )
                         
                         logger.info(f"Extracted grounding metadata for user {user.email}: {len(sources)} sources, {len(search_queries)} queries")
@@ -460,7 +460,7 @@ async def handle_chat(
                                 search_queries=search_queries,
                                 sources_count=len(sources),
                                 sources=sources[:8],
-                                model_used=getattr(llm, 'model', 'gemini-2.5-flash-preview-05-20')
+                                model_used=getattr(llm, 'model', 'gemini-3.1-flash-lite')
                             )
                             logger.info(f"Extracted grounding metadata from LLM wrapper for user {user.email}: {len(sources)} sources")
                     
@@ -471,7 +471,7 @@ async def handle_chat(
                             search_queries=[],
                             sources_count=0,
                             sources=[],
-                            model_used=getattr(llm, 'model', 'gemini-2.5-flash-preview-05-20')
+                            model_used=getattr(llm, 'model', 'gemini-3.1-flash-lite')
                         )
                         logger.info(f"Created fallback grounding metadata for premium user {user.email}")
                     

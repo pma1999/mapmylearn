@@ -1248,7 +1248,7 @@ async def regenerate_resource_query(state: LearningPathState, failed_query: Reso
 async def _generate_curiosity_items_parallel(state: LearningPathState, search_service_results: List[SearchServiceResult]):
     """
     Generate a batch of high-quality curiosity items from accumulated search results
-    using gemini-2.0-flash-lite. Runs in parallel with course structuring and streams
+    using gemini-3.1-flash-lite. Runs in parallel with course structuring and streams
     items to the frontend via progress_callback as a single payload for drip display.
     """
     try:
@@ -1331,7 +1331,7 @@ async def _generate_curiosity_items_parallel(state: LearningPathState, search_se
 async def _generate_engagement_questions_parallel(state: LearningPathState, search_service_results: List[SearchServiceResult]):
     """
     Generate a batch of interactive engagement questions from accumulated search results
-    using gemini-2.0-flash-lite. Runs in parallel with course structuring and streams
+    using gemini-3.1-flash-lite. Runs in parallel with course structuring and streams
     questions to the frontend via progress_callback for immediate user engagement.
     """
     try:

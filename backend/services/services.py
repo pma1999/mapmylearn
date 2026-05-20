@@ -230,7 +230,7 @@ async def get_llm(key_provider=None, user=None):
             model=model,
             temperature=0.2,
             google_api_key=google_api_key,
-            max_output_tokens=8192,
+            max_tokens=8192,
         )
     except Exception as e:
         logger.error(f"Error initializing ChatGoogleGenerativeAI: {str(e)}")
@@ -239,14 +239,14 @@ async def get_llm(key_provider=None, user=None):
 async def get_llm_for_evaluation(key_provider=None, user=None):
     """
     Initialize the Google Gemini LLM specifically for evaluations (research and content).
-    Always uses gemini-2.0-flash regardless of user to ensure consistent evaluation quality.
-    
+    Always uses gemini-3.1-flash-lite for consistent evaluation quality.
+
     Args:
         key_provider: KeyProvider object for Google API key (or direct API key as string)
         user: User object (optional, not used for model selection in evaluations)
-        
+
     Returns:
-        Initialized ChatGoogleGenerativeAI instance with gemini-2.0-flash
+        Initialized ChatGoogleGenerativeAI instance with gemini-3.1-flash-lite
     """
     google_api_key = None
     
@@ -274,16 +274,15 @@ async def get_llm_for_evaluation(key_provider=None, user=None):
     if not google_api_key:
         raise ValueError("No Google API key available from any source")
     
-    # Always use gemini-2.0-flash for evaluations for consistency
-    model = "gemini-2.0-flash"
-    logger.info(f"Using gemini-2.0-flash for evaluation (user: {getattr(user, 'email', 'unknown')})")
-    
+    model = "gemini-3.1-flash-lite"
+    logger.info(f"Using {model} for evaluation (user: {getattr(user, 'email', 'unknown')})")
+
     try:
         return ChatGoogleGenerativeAI(
             model=model,
             temperature=0.2,
             google_api_key=google_api_key,
-            max_output_tokens=8192,
+            max_tokens=8192,
         )
     except Exception as e:
         logger.error(f"Error initializing ChatGoogleGenerativeAI for evaluation: {str(e)}")
@@ -292,14 +291,14 @@ async def get_llm_for_evaluation(key_provider=None, user=None):
 async def get_llm_flash_lite(key_provider=None, user=None):
     """
     Initialize the Google Gemini LLM specifically for lightweight, fast generation of curiosity items.
-    Forces the model to gemini-2.0-flash-lite regardless of user for speed and cost efficiency.
+    Uses gemini-3.1-flash-lite for speed and cost efficiency.
 
     Args:
         key_provider: KeyProvider object for Google API key (or direct API key as string)
         user: Optional user (unused for model selection here)
 
     Returns:
-        ChatGoogleGenerativeAI configured with gemini-2.0-flash-lite
+        ChatGoogleGenerativeAI configured with gemini-3.1-flash-lite
     """
     google_api_key = None
     if hasattr(key_provider, 'get_key') and callable(key_provider.get_key):
@@ -322,7 +321,7 @@ async def get_llm_flash_lite(key_provider=None, user=None):
     if not google_api_key:
         raise ValueError("No Google API key available from any source")
 
-    model = "gemini-2.0-flash-lite"
+    model = "gemini-3.1-flash-lite"
     logger.info(f"Using {model} for curiosity generation (user: {getattr(user, 'email', 'unknown')})")
 
     try:
@@ -330,7 +329,7 @@ async def get_llm_flash_lite(key_provider=None, user=None):
             model=model,
             temperature=0.3,
             google_api_key=google_api_key,
-            max_output_tokens=4096,
+            max_tokens=4096,
         )
     except Exception as e:
         logger.error(f"Error initializing ChatGoogleGenerativeAI for flash-lite: {str(e)}")
@@ -339,24 +338,15 @@ async def get_llm_flash_lite(key_provider=None, user=None):
 def _get_model_for_user(user):
     """
     Determine the appropriate Gemini model based on user.
-    
+
     Args:
         user: User object containing id and email fields
-        
+
     Returns:
         str: Model name to use
     """
-    # Check if user is one of the special users who should get the preview model
-    if user and (
-        (hasattr(user, 'email') and user.email in ["pablomiguelargudo@gmail.com", "oscarvlc98@gmail.com"]) or
-        (hasattr(user, 'id') and user.id in [1, 13])
-    ):
-        logger.info(f"Using special model gemini-2.5-flash-preview-05-20 for user {getattr(user, 'email', 'unknown')} (ID: {getattr(user, 'id', 'unknown')})")
-        return "gemini-2.5-flash-preview-05-20"
-    
-    # Default model for all other users
-    logger.debug(f"Using default model gemini-2.0-flash for user {getattr(user, 'email', 'unknown')} (ID: {getattr(user, 'id', 'unknown')})")
-    return "gemini-2.0-flash"
+    logger.debug(f"Using model gemini-3.1-flash-lite for user {getattr(user, 'email', 'unknown')} (ID: {getattr(user, 'id', 'unknown')})")
+    return "gemini-3.1-flash-lite"
 
 def _is_premium_search_user(user):
     """
@@ -1992,9 +1982,9 @@ def validate_google_key(api_key):
         # Minimal test to validate key functionality
         llm = ChatGoogleGenerativeAI(
             temperature=0,
-            model="gemini-2.0-flash",
+            model="gemini-3.1-flash-lite",
             google_api_key=api_key,
-            max_output_tokens=5
+            max_tokens=5
         )
         llm.invoke("test")
         return True, None
